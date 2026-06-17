@@ -167,6 +167,27 @@
     });
   }
 
+  // ===== Settings tabs =====
+  var settingsTabProfile = document.getElementById("tab-profile");
+  var settingsTabTransactions = document.getElementById("tab-transactions");
+  if (settingsTabProfile && settingsTabTransactions) {
+    var panelProfile = document.getElementById("panel-profile");
+    var panelTransactions = document.getElementById("panel-transactions");
+
+    function showSettingsTab(tab) {
+      var isProfile = tab === "profile";
+      settingsTabProfile.classList.toggle("active", isProfile);
+      settingsTabTransactions.classList.toggle("active", !isProfile);
+      settingsTabProfile.setAttribute("aria-selected", String(isProfile));
+      settingsTabTransactions.setAttribute("aria-selected", String(!isProfile));
+      panelProfile.hidden = !isProfile;
+      panelTransactions.hidden = isProfile;
+    }
+
+    settingsTabProfile.addEventListener("click", function () { showSettingsTab("profile"); });
+    settingsTabTransactions.addEventListener("click", function () { showSettingsTab("transactions"); });
+  }
+
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
   if (form) {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dashboard — Wealthfolio</title>
+<title>Settings — Wealthfolio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 <body>
   <header class="site-header">
     <div class="container header-inner">
-      <a href="index.html" class="logo" aria-label="Wealthfolio home">
+      <a href="dashboard.html" class="logo" aria-label="Wealthfolio dashboard">
         <span class="logo-mark" aria-hidden="true">
           <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="26" height="26" rx="7" fill="currentColor" class="logo-bg"/>
@@ -26,15 +26,31 @@
           <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
-        <a href="settings.html" class="btn btn-ghost">Settings</a>
+        <a href="dashboard.html" class="btn btn-ghost">Back to Dashboard</a>
         <a href="index.html" class="btn btn-ghost">Log out</a>
       </div>
     </div>
   </header>
 
-  <main class="container" style="padding: 80px 24px; text-align: center;">
-    <h1>Dashboard coming soon</h1>
-    <p class="muted">You're logged in. Dashboard content will be added here next.</p>
+  <main class="container settings-main">
+    <h1>Settings</h1>
+
+    <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+      <button type="button" class="settings-tab active" id="tab-profile" role="tab" aria-selected="true" aria-controls="panel-profile">Profile</button>
+      <button type="button" class="settings-tab" id="tab-transactions" role="tab" aria-selected="false" aria-controls="panel-transactions">Transaction Details</button>
+    </div>
+
+    <section id="panel-profile" class="settings-panel" role="tabpanel" aria-labelledby="tab-profile">
+      <h2>Profile</h2>
+      <p class="muted">Manage your personal information.</p>
+      <p class="muted small" style="margin-top:24px;">Profile fields coming soon.</p>
+    </section>
+
+    <section id="panel-transactions" class="settings-panel" role="tabpanel" aria-labelledby="tab-transactions" hidden>
+      <h2>Transaction Details</h2>
+      <p class="muted">View and manage your transaction history.</p>
+      <p class="muted small" style="margin-top:24px;">Transaction details coming soon.</p>
+    </section>
   </main>
 
   <script src="script.js"></script>
