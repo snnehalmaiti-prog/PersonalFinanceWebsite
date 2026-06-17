@@ -205,30 +205,56 @@
       return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : "0" };
     }
 
-    function parseCSV(text) {
-      var rows = [];
-      var row = [];
-      var field = "";
-      var inQuotes = false;
-      for (var i = 0; i < text.length; i++) {
-        var ch = text[i];
-        if (inQuotes) {
-          if (ch === '"') {
-            if (text[i + 1] === '"') { field += '"'; i++; }
-            else inQuotes = false;
-          } else field += ch;
-        } else {
-          if (ch === '"') inQuotes = true;
-          else if (ch === ",") { row.push(field); field = ""; }
-          else if (ch === "\n" || ch === "\r") {
-            if (ch === "\r" && text[i + 1] === "\n") i++;
-            row.push(field); field = "";
-            rows.push(row); row = [];
-          } else field += ch;
-        }
+    function gvizRowsFromResponse(data) {
+      var cols = data.table.cols.map(function (c) { return c.label || c.id || ""; });
+      var rows = [cols];
+      (data.table.rows || []).forEach(function (r) {
+        var row = (r.c || []).map(function (cell) {
+          if (!cell) return "";
+          if (cell.f != null) return cell.f;
+          return cell.v != null ? String(cell.v) : "";
+        });
+        rows.push(row);
+      });
+      return rows;
+    }
+
+    function fetchSheetJSONP(id, gid, onData, onError) {
+      var callbackName = "__wfSheetCallback_" + Date.now();
+      var script = document.createElement("script");
+      var timeoutId;
+
+      function cleanup() {
+        clearTimeout(timeoutId);
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
       }
-      if (field.length || row.length) { row.push(field); rows.push(row); }
-      return rows.filter(function (r) { return r.length > 1 || r[0] !== ""; });
+
+      window[callbackName] = function (data) {
+        cleanup();
+        if (data.status === "error") {
+          onError();
+        } else {
+          onData(data);
+        }
+      };
+
+      script.onerror = function () {
+        cleanup();
+        onError();
+      };
+
+      script.src =
+        "https://docs.google.com/spreadsheets/d/" + id +
+        "/gviz/tq?gid=" + gid +
+        "&tqx=out:json;responseHandler:" + callbackName;
+
+      timeoutId = setTimeout(function () {
+        cleanup();
+        onError();
+      }, 12000);
+
+      document.head.appendChild(script);
     }
 
     function renderTable(rows) {
@@ -271,16 +297,13 @@
         return;
       }
       setStatus("Loading sheet data…", false);
-      var csvUrl = "https://docs.google.com/spreadsheets/d/" + parsed.id + "/gviz/tq?tqx=out:csv&gid=" + parsed.gid;
 
-      fetch(csvUrl)
-        .then(function (res) {
-          if (!res.ok) throw new Error("Request failed");
-          return res.text();
-        })
-        .then(function (text) {
-          var rows = parseCSV(text);
-          if (!rows.length) {
+      fetchSheetJSONP(
+        parsed.id,
+        parsed.gid,
+        function (data) {
+          var rows = gvizRowsFromResponse(data);
+          if (rows.length <= 1) {
             setStatus("The sheet appears to be empty.", true);
             sheetTableWrap.hidden = true;
             return;
@@ -289,11 +312,12 @@
           sheetTableWrap.hidden = false;
           sheetRefreshBtn.hidden = false;
           setStatus("Last updated: " + new Date().toLocaleTimeString(), false);
-        })
-        .catch(function () {
+        },
+        function () {
           setStatus("Couldn't load the sheet. Make sure it's shared as \"Anyone with the link can view.\"", true);
           sheetTableWrap.hidden = true;
-        });
+        }
+      );
     }
 
     var savedLink = localStorage.getItem(STORAGE_KEY);
