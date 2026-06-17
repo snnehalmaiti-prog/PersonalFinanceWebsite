@@ -225,6 +225,53 @@
     localStorage.setItem(SELECTED_PORTFOLIO_KEY, value);
     var portfolioLabel = document.getElementById("portfolio-label");
     if (portfolioLabel) portfolioLabel.textContent = label;
+    updateDashboardStats();
+  }
+
+  function sumInvestmentForRows(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var valueIdx = header.indexOf("value");
+    if (portfolioIdx === -1 || typeIdx === -1 || valueIdx === -1) return 0;
+
+    var total = 0;
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      var type = (row[typeIdx] || "").trim().toLowerCase();
+      var value = parseFloat(String(row[valueIdx]).replace(/,/g, "")) || 0;
+      total += type.indexOf("sell") !== -1 ? -value : value;
+    });
+    return total;
+  }
+
+  function computeTotalInvestment(portfolioFilter) {
+    var total = 0;
+    ["equity", "fixedincome"].forEach(function (prefix) {
+      var raw = localStorage.getItem("wf-" + prefix + "-data");
+      if (!raw) return;
+      try {
+        total += sumInvestmentForRows(JSON.parse(raw), portfolioFilter);
+      } catch (e) {}
+    });
+    return total;
+  }
+
+  function formatCurrency(amount) {
+    var sign = amount < 0 ? "-" : "";
+    return sign + "₹" + Math.abs(amount).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  }
+
+  function updateDashboardStats() {
+    var overviewEl = document.getElementById("overview-total-investment");
+    var equityEl = document.getElementById("equity-total-investment");
+    if (!overviewEl && !equityEl) return;
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var text = formatCurrency(computeTotalInvestment(selected));
+    if (overviewEl) overviewEl.textContent = text;
+    if (equityEl) equityEl.textContent = text;
   }
 
   function populatePortfolioSelect() {
@@ -283,6 +330,8 @@
     portfolioMenu.hidden = false;
     portfolioToggle.setAttribute("aria-expanded", "true");
   }
+
+  updateDashboardStats();
 
   if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
@@ -470,6 +519,8 @@
             return;
           }
           addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
+          localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+          updateDashboardStats();
           rows = filterColumns(rows, options.fields);
           if (options.showTable === false) {
             sheetTableWrap.hidden = true;
