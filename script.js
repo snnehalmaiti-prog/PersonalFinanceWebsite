@@ -191,22 +191,31 @@
   // ===== Dashboard tabs =====
   var dashTabOverview = document.getElementById("tab-overview");
   var dashTabEquity = document.getElementById("tab-equity");
+  var dashTabFixedIncome = document.getElementById("tab-fixedincome");
   if (dashTabOverview && dashTabEquity) {
     var panelOverview = document.getElementById("panel-overview");
     var panelEquity = document.getElementById("panel-equity");
+    var panelFixedIncome = document.getElementById("panel-fixedincome");
+    var dashTabs = [
+      { tab: dashTabOverview, panel: panelOverview, key: "overview" },
+      { tab: dashTabEquity, panel: panelEquity, key: "equity" },
+      { tab: dashTabFixedIncome, panel: panelFixedIncome, key: "fixedincome" }
+    ];
 
     function showDashboardTab(tab) {
-      var isOverview = tab === "overview";
-      dashTabOverview.classList.toggle("active", isOverview);
-      dashTabEquity.classList.toggle("active", !isOverview);
-      dashTabOverview.setAttribute("aria-selected", String(isOverview));
-      dashTabEquity.setAttribute("aria-selected", String(!isOverview));
-      panelOverview.hidden = !isOverview;
-      panelEquity.hidden = isOverview;
+      dashTabs.forEach(function (entry) {
+        if (!entry.tab) return;
+        var isActive = entry.key === tab;
+        entry.tab.classList.toggle("active", isActive);
+        entry.tab.setAttribute("aria-selected", String(isActive));
+        entry.panel.hidden = !isActive;
+      });
     }
 
-    dashTabOverview.addEventListener("click", function () { showDashboardTab("overview"); });
-    dashTabEquity.addEventListener("click", function () { showDashboardTab("equity"); });
+    dashTabs.forEach(function (entry) {
+      if (!entry.tab) return;
+      entry.tab.addEventListener("click", function () { showDashboardTab(entry.key); });
+    });
   }
 
   // ===== Portfolio selector =====
@@ -247,14 +256,21 @@
     return total;
   }
 
-  function computeTotalInvestment(portfolioFilter) {
+  function getSheetRows(prefix) {
+    var raw = localStorage.getItem("wf-" + prefix + "-data");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function computeTotalInvestment(portfolioFilter, prefixes) {
     var total = 0;
-    ["equity", "fixedincome"].forEach(function (prefix) {
-      var raw = localStorage.getItem("wf-" + prefix + "-data");
-      if (!raw) return;
-      try {
-        total += sumInvestmentForRows(JSON.parse(raw), portfolioFilter);
-      } catch (e) {}
+    prefixes.forEach(function (prefix) {
+      var rows = getSheetRows(prefix);
+      if (rows) total += sumInvestmentForRows(rows, portfolioFilter);
     });
     return total;
   }
@@ -267,11 +283,12 @@
   function updateDashboardStats() {
     var overviewEl = document.getElementById("overview-total-investment");
     var equityEl = document.getElementById("equity-total-investment");
-    if (!overviewEl && !equityEl) return;
+    var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
+    if (!overviewEl && !equityEl && !fixedIncomeEl) return;
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var text = formatCurrency(computeTotalInvestment(selected));
-    if (overviewEl) overviewEl.textContent = text;
-    if (equityEl) equityEl.textContent = text;
+    if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome"]));
+    if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
+    if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
   }
 
   function populatePortfolioSelect() {
