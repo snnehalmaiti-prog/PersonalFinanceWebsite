@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wealthfolio — Track, Analyze & Manage Every Investment</title>
+<meta name="description" content="Track stocks, mutual funds, PPF, fixed deposits and more across regions in one unified, premium portfolio dashboard." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header" id="header">
+    <div class="container header-inner">
+      <a href="#" class="logo" aria-label="Wealthfolio home">
+        <span class="logo-mark" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="26" height="26" rx="7" fill="currentColor" class="logo-bg"/>
+            <path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        Wealthfolio
+      </a>
+
+      <nav class="main-nav" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#assets">Asset Classes</a>
+        <a href="#how-it-works">How it Works</a>
+        <a href="#testimonials">Testimonials</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
+          <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+        <a href="#get-started" class="btn btn-ghost nav-only">Log in</a>
+        <a href="#get-started" class="btn btn-primary">Get Started</a>
+        <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+    <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile">
+      <a href="#features">Features</a>
+      <a href="#assets">Asset Classes</a>
+      <a href="#how-it-works">How it Works</a>
+      <a href="#testimonials">Testimonials</a>
+      <a href="#faq">FAQ</a>
+      <a href="#get-started" class="btn btn-primary">Get Started</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container hero-inner">
+        <div class="hero-copy" data-animate="fade-up">
+          <span class="eyebrow">All your wealth. One clear view.</span>
+          <h1>Track, analyze &amp; grow every investment — <span class="text-gradient">in one place.</span></h1>
+          <p class="hero-sub">
+            Stocks, mutual funds, PPF, fixed deposits, ETFs, real estate, and more —
+            unified across regions and brokers into a single, beautifully clear portfolio dashboard.
+          </p>
+          <div class="hero-cta">
+            <a href="#get-started" class="btn btn-primary btn-lg">Start Tracking Free</a>
+            <a href="#how-it-works" class="btn btn-outline btn-lg">See how it works</a>
+          </div>
+          <div class="hero-trust">
+            <div class="avatars" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <p><strong>12,000+</strong> investors managing <strong>$480M+</strong> in tracked assets</p>
+          </div>
+        </div>
+
+        <div class="hero-visual" data-animate="fade-up" data-delay="150">
+          <div class="dashboard-card glass">
+            <div class="dashboard-card-header">
+              <div>
+                <span class="muted small">Total Portfolio Value</span>
+                <h3 class="portfolio-value">$284,910<span class="cents">.42</span></h3>
+              </div>
+              <span class="pill pill-positive">▲ 12.4% YTD</span>
+            </div>
+
+            <div class="mini-chart" aria-hidden="true">
+              <svg viewBox="0 0 320 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.35"/>
+                    <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,80 C20,75 35,55 55,58 C75,61 85,40 110,38 C135,36 150,52 175,45 C200,38 215,15 240,20 C265,25 280,10 320,5 L320,100 L0,100 Z" fill="url(#chartFill)"/>
+                <path d="M0,80 C20,75 35,55 55,58 C75,61 85,40 110,38 C135,36 150,52 175,45 C200,38 215,15 240,20 C265,25 280,10 320,5" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" class="chart-line"/>
+              </svg>
+            </div>
+
+            <ul class="asset-rows">
+              <li>
+                <span class="asset-dot dot-stocks" aria-hidden="true"></span>
+                <span class="asset-name">Stocks &amp; ETFs</span>
+                <span class="asset-amount">$118,420</span>
+                <span class="asset-change up">+8.2%</span>
+              </li>
+              <li>
+                <span class="asset-dot dot-mf" aria-hidden="true"></span>
+                <span class="asset-name">Mutual Funds</span>
+                <span class="asset-amount">$76,210</span>
+                <span class="asset-change up">+5.6%</span>
+              </li>
+              <li>
+                <span class="asset-dot dot-ppf" aria-hidden="true"></span>
+                <span class="asset-name">PPF</span>
+                <span class="asset-amount">$42,880</span>
+                <span class="asset-change up">+7.1%</span>
+              </li>
+              <li>
+                <span class="asset-dot dot-fd" aria-hidden="true"></span>
+                <span class="asset-name">Fixed Deposits</span>
+                <span class="asset-amount">$47,400</span>
+                <span class="asset-change up">+6.3%</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="floating-badge badge-top glass" data-animate="float">
+            <span class="badge-icon">🌍</span>
+            <div>
+              <strong>Multi-region</strong>
+              <span class="muted small">US · IN · UK · EU</span>
+            </div>
+          </div>
+          <div class="floating-badge badge-bottom glass" data-animate="float" data-delay="400">
+            <span class="badge-icon">🔒</span>
+            <div>
+              <strong>Bank-grade security</strong>
+              <span class="muted small">256-bit encryption</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="logo-strip container">
+        <span class="muted small">Trusted with data from</span>
+        <div class="logo-strip-items">
+          <span>NSE</span><span>NYSE</span><span>LSE</span><span>NASDAQ</span><span>BSE</span><span>Vanguard</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section class="stats container">
+      <div class="stat" data-animate="fade-up">
+        <h3><span data-counter="480">0</span>M+</h3>
+        <p>Assets tracked globally</p>
+      </div>
+      <div class="stat" data-animate="fade-up" data-delay="100">
+        <h3><span data-counter="12">0</span>K+</h3>
+        <p>Active investors</p>
+      </div>
+      <div class="stat" data-animate="fade-up" data-delay="200">
+        <h3><span data-counter="14">0</span>+</h3>
+        <p>Asset classes supported</p>
+      </div>
+      <div class="stat" data-animate="fade-up" data-delay="300">
+        <h3><span data-counter="35">0</span>+</h3>
+        <p>Countries &amp; regions</p>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="features container">
+      <div class="section-head" data-animate="fade-up">
+        <span class="eyebrow">Why Wealthfolio</span>
+        <h2>Everything you need to master your money</h2>
+        <p>From real-time tracking to deep portfolio analytics — built for serious investors who want clarity, not clutter.</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card" data-animate="fade-up">
+          <div class="feature-icon icon-blue" aria-hidden="true">📊</div>
+          <h3>Unified Portfolio View</h3>
+          <p>See every holding — equities, funds, deposits, retirement accounts — consolidated into one live dashboard.</p>
+        </article>
+        <article class="feature-card" data-animate="fade-up" data-delay="80">
+          <div class="feature-icon icon-green" aria-hidden="true">🌍</div>
+          <h3>Multi-Region Support</h3>
+          <p>Track assets across the US, India, UK, EU and beyond — with automatic currency conversion and local tax context.</p>
+        </article>
+        <article class="feature-card" data-animate="fade-up" data-delay="160">
+          <div class="feature-icon icon-sky" aria-hidden="true">📈</div>
+          <h3>Deep Performance Analytics</h3>
+          <p>Benchmark returns, analyze risk, and visualize asset allocation with institutional-grade charting tools.</p>
+        </article>
+        <article class="feature-card" data-animate="fade-up">
+          <div class="feature-icon icon-blue" aria-hidden="true">🔔</div>
+          <h3>Smart Alerts</h3>
+          <p>Get notified on maturity dates, rebalancing opportunities, dividend payouts, and price targets.</p>
+        </article>
+        <article class="feature-card" data-animate="fade-up" data-delay="80">
+          <div class="feature-icon icon-green" aria-hidden="true">🔒</div>
+          <h3>Bank-Grade Security</h3>
+          <p>256-bit encryption, read-only connections, and SOC2-aligned infrastructure keep your data locked down.</p>
+        </article>
+        <article class="feature-card" data-animate="fade-up" data-delay="160">
+          <div class="feature-icon icon-sky" aria-hidden="true">🧮</div>
+          <h3>Goal-Based Planning</h3>
+          <p>Map investments to life goals — retirement, education, home — and track progress in real time.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ASSET CLASSES -->
+    <section id="assets" class="assets">
+      <div class="container">
+        <div class="section-head" data-animate="fade-up">
+          <span class="eyebrow">Built for every asset</span>
+          <h2>One dashboard for your entire net worth</h2>
+          <p>Whether it's a brokerage account or a government savings scheme, Wealthfolio brings it all together.</p>
+        </div>
+
+        <div class="asset-grid">
+          <div class="asset-pill" data-animate="fade-up">📈 Stocks &amp; Equities</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="40">🧺 Mutual Funds</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="80">🏦 Fixed Deposits</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="120">🛡️ PPF / EPF</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="160">🏠 Real Estate</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="200">💰 Bonds &amp; T-Bills</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="240">🪙 Gold &amp; Commodities</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="280">🌐 ETFs &amp; Index Funds</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="320">₿ Crypto Assets</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="360">🧾 NPS &amp; Retirement</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="400">🏢 REITs</div>
+          <div class="asset-pill" data-animate="fade-up" data-delay="440">💵 Cash &amp; Savings</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how-it-works" class="how-it-works container">
+      <div class="section-head" data-animate="fade-up">
+        <span class="eyebrow">Simple by design</span>
+        <h2>Get a complete view in three steps</h2>
+      </div>
+
+      <ol class="steps">
+        <li class="step" data-animate="fade-up">
+          <span class="step-num">01</span>
+          <h3>Connect your accounts</h3>
+          <p>Securely link brokers, banks, and savings schemes — or add holdings manually in seconds.</p>
+        </li>
+        <li class="step" data-animate="fade-up" data-delay="120">
+          <span class="step-num">02</span>
+          <h3>Let Wealthfolio sync &amp; organize</h3>
+          <p>Every asset is automatically categorized, valued, and converted to your home currency.</p>
+        </li>
+        <li class="step" data-animate="fade-up" data-delay="240">
+          <span class="step-num">03</span>
+          <h3>Analyze &amp; act with confidence</h3>
+          <p>Spot trends, rebalance allocations, and track progress toward every financial goal.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- TESTIMONIALS -->
+    <section id="testimonials" class="testimonials">
+      <div class="container">
+        <div class="section-head" data-animate="fade-up">
+          <span class="eyebrow">Loved by investors</span>
+          <h2>Trusted by people managing real wealth</h2>
+        </div>
+
+        <div class="testimonial-grid">
+          <figure class="testimonial-card" data-animate="fade-up">
+            <blockquote>"Finally, one place to see my US stocks, Indian PPF and UK pension together. It changed how I plan."</blockquote>
+            <figcaption><strong>Aditi R.</strong><span class="muted small">Product Manager, London</span></figcaption>
+          </figure>
+          <figure class="testimonial-card" data-animate="fade-up" data-delay="100">
+            <blockquote>"The analytics are genuinely institutional-grade. I dropped two paid tools after switching."</blockquote>
+            <figcaption><strong>Marcus T.</strong><span class="muted small">Independent Investor, NYC</span></figcaption>
+          </figure>
+          <figure class="testimonial-card" data-animate="fade-up" data-delay="200">
+            <blockquote>"Clean, fast, and the multi-currency support just works. Exactly what NRIs needed."</blockquote>
+            <figcaption><strong>Priya S.</strong><span class="muted small">Software Engineer, Dubai</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="faq container">
+      <div class="section-head" data-animate="fade-up">
+        <span class="eyebrow">Questions</span>
+        <h2>Frequently asked questions</h2>
+      </div>
+
+      <div class="accordion">
+        <details class="accordion-item" open>
+          <summary>Is my financial data secure?</summary>
+          <p>Yes. All data is encrypted in transit and at rest with 256-bit encryption, and connections to financial institutions are read-only.</p>
+        </details>
+        <details class="accordion-item">
+          <summary>Can I track investments from multiple countries?</summary>
+          <p>Absolutely — Wealthfolio supports multi-currency, multi-region portfolios including the US, India, UK, EU, and more.</p>
+        </details>
+        <details class="accordion-item">
+          <summary>Which asset types are supported?</summary>
+          <p>Stocks, ETFs, mutual funds, PPF/EPF, fixed deposits, bonds, real estate, gold, crypto, REITs, and retirement accounts.</p>
+        </details>
+        <details class="accordion-item">
+          <summary>Is there a free plan?</summary>
+          <p>Yes, you can start tracking your portfolio for free with no credit card required.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section id="get-started" class="cta">
+      <div class="container cta-inner" data-animate="fade-up">
+        <h2>Start seeing your whole portfolio today</h2>
+        <p>Join thousands of investors who track, analyze, and grow their wealth with Wealthfolio.</p>
+        <form class="cta-form" id="signup-form">
+          <label for="email" class="sr-only">Email address</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required />
+          <button type="submit" class="btn btn-primary btn-lg">Get Started Free</button>
+        </form>
+        <p class="cta-note muted small">No credit card required · Free forever plan available</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <a href="#" class="logo">
+          <span class="logo-mark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="26" height="26" rx="7" fill="currentColor" class="logo-bg"/>
+              <path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          Wealthfolio
+        </a>
+        <p class="muted small">Track, analyze, and manage your global investments in one premium dashboard.</p>
+      </div>
+
+      <div class="footer-links">
+        <div>
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#assets">Asset Classes</a>
+          <a href="#how-it-works">How it Works</a>
+        </div>
+        <div>
+          <h4>Company</h4>
+          <a href="#">About</a>
+          <a href="#">Careers</a>
+          <a href="#">Contact</a>
+        </div>
+        <div>
+          <h4>Legal</h4>
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+          <a href="#">Security</a>
+        </div>
+      </div>
+    </div>
+    <div class="container footer-bottom">
+      <p class="muted small">© 2026 Wealthfolio. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
