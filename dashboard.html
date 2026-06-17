@@ -26,10 +26,16 @@
           <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
-        <label for="portfolio-select" class="sr-only">Select portfolio</label>
-        <select id="portfolio-select" class="portfolio-select">
-          <option value="all">All Portfolios</option>
-        </select>
+        <div class="portfolio-dropdown">
+          <button type="button" id="portfolio-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
+            <svg class="portfolio-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h3.5l1.5 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+            <span id="portfolio-label">All Portfolios</span>
+            <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <ul id="portfolio-menu" class="portfolio-menu" role="listbox" aria-label="Select portfolio" hidden>
+            <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
+          </ul>
+        </div>
         <a href="settings.html" class="btn btn-ghost">Settings</a>
         <a href="index.html" class="btn btn-ghost">Log out</a>
       </div>

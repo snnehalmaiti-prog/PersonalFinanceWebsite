@@ -221,26 +221,42 @@
     }
   }
 
+  function selectPortfolio(value, label) {
+    localStorage.setItem(SELECTED_PORTFOLIO_KEY, value);
+    var portfolioLabel = document.getElementById("portfolio-label");
+    if (portfolioLabel) portfolioLabel.textContent = label;
+  }
+
   function populatePortfolioSelect() {
-    var select = document.getElementById("portfolio-select");
-    if (!select) return;
+    var menu = document.getElementById("portfolio-menu");
+    if (!menu) return;
     var names = getStoredPortfolioNames();
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    if (selected !== "all" && names.indexOf(selected) === -1) selected = "all";
 
-    select.innerHTML = "";
-    var allOption = document.createElement("option");
-    allOption.value = "all";
-    allOption.textContent = "All Portfolios";
-    select.appendChild(allOption);
+    menu.innerHTML = "";
+    var allItems = [{ value: "all", label: "All Portfolios" }].concat(
+      names.map(function (name) { return { value: name, label: name }; })
+    );
 
-    names.forEach(function (name) {
-      var option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      select.appendChild(option);
+    allItems.forEach(function (item) {
+      var li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.dataset.value = item.value;
+      li.textContent = item.label;
+      var isSelected = item.value === selected;
+      li.className = "portfolio-option" + (isSelected ? " selected" : "");
+      li.setAttribute("aria-selected", String(isSelected));
+      li.addEventListener("click", function () {
+        selectPortfolio(item.value, item.label);
+        populatePortfolioSelect();
+        closePortfolioMenu();
+      });
+      menu.appendChild(li);
     });
 
-    select.value = names.indexOf(selected) !== -1 || selected === "all" ? selected : "all";
+    var selectedItem = allItems.filter(function (item) { return item.value === selected; })[0];
+    if (selectedItem) selectPortfolio(selectedItem.value, selectedItem.label);
   }
 
   function addPortfolioNames(names) {
@@ -253,11 +269,41 @@
     populatePortfolioSelect();
   }
 
-  var portfolioSelect = document.getElementById("portfolio-select");
-  if (portfolioSelect) {
+  var portfolioToggle = document.getElementById("portfolio-toggle");
+  var portfolioMenu = document.getElementById("portfolio-menu");
+
+  function closePortfolioMenu() {
+    if (!portfolioMenu) return;
+    portfolioMenu.hidden = true;
+    portfolioToggle.setAttribute("aria-expanded", "false");
+  }
+
+  function openPortfolioMenu() {
+    if (!portfolioMenu) return;
+    portfolioMenu.hidden = false;
+    portfolioToggle.setAttribute("aria-expanded", "true");
+  }
+
+  if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
-    portfolioSelect.addEventListener("change", function () {
-      localStorage.setItem(SELECTED_PORTFOLIO_KEY, portfolioSelect.value);
+
+    portfolioToggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (portfolioMenu.hidden) openPortfolioMenu();
+      else closePortfolioMenu();
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!portfolioMenu.hidden && !portfolioMenu.contains(e.target) && e.target !== portfolioToggle) {
+        closePortfolioMenu();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !portfolioMenu.hidden) {
+        closePortfolioMenu();
+        portfolioToggle.focus();
+      }
     });
   }
 
