@@ -209,6 +209,58 @@
     dashTabEquity.addEventListener("click", function () { showDashboardTab("equity"); });
   }
 
+  // ===== Portfolio selector =====
+  var PORTFOLIO_NAMES_KEY = "wf-portfolio-names";
+  var SELECTED_PORTFOLIO_KEY = "wf-selected-portfolio";
+
+  function getStoredPortfolioNames() {
+    try {
+      return JSON.parse(localStorage.getItem(PORTFOLIO_NAMES_KEY)) || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function populatePortfolioSelect() {
+    var select = document.getElementById("portfolio-select");
+    if (!select) return;
+    var names = getStoredPortfolioNames();
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+
+    select.innerHTML = "";
+    var allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "All Portfolios";
+    select.appendChild(allOption);
+
+    names.forEach(function (name) {
+      var option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+
+    select.value = names.indexOf(selected) !== -1 || selected === "all" ? selected : "all";
+  }
+
+  function addPortfolioNames(names) {
+    if (!names || !names.length) return;
+    var existing = getStoredPortfolioNames();
+    names.forEach(function (name) {
+      if (name && existing.indexOf(name) === -1) existing.push(name);
+    });
+    localStorage.setItem(PORTFOLIO_NAMES_KEY, JSON.stringify(existing));
+    populatePortfolioSelect();
+  }
+
+  var portfolioSelect = document.getElementById("portfolio-select");
+  if (portfolioSelect) {
+    populatePortfolioSelect();
+    portfolioSelect.addEventListener("change", function () {
+      localStorage.setItem(SELECTED_PORTFOLIO_KEY, portfolioSelect.value);
+    });
+  }
+
   // ===== Google Sheet transaction cards (Equity, Fixed Income, etc.) =====
   function parseSheetUrl(url) {
     var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
@@ -280,6 +332,20 @@
     return rows.map(function (row) {
       return indices.map(function (i) { return row[i]; });
     });
+  }
+
+  function extractColumnValues(rows, fieldName) {
+    var header = rows[0];
+    var normalized = header.map(function (h) { return h.trim().toLowerCase(); });
+    var index = normalized.indexOf(fieldName.toLowerCase());
+    if (index === -1) return [];
+
+    var values = [];
+    rows.slice(1).forEach(function (row) {
+      var value = (row[index] || "").trim();
+      if (value && values.indexOf(value) === -1) values.push(value);
+    });
+    return values;
   }
 
   function initSheetCard(prefix, options) {
@@ -357,6 +423,7 @@
             setConnected(false);
             return;
           }
+          addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
           rows = filterColumns(rows, options.fields);
           if (options.showTable === false) {
             sheetTableWrap.hidden = true;
