@@ -101,6 +101,62 @@
     counters.forEach(animateCounter);
   }
 
+  // ===== Login modal =====
+  var loginOverlay = document.getElementById("login-overlay");
+  var openLoginBtn = document.getElementById("open-login");
+  var closeLoginBtn = document.getElementById("close-login");
+  var tabLogin = document.getElementById("tab-login");
+  var tabSignup = document.getElementById("tab-signup");
+  var loginHeading = document.querySelector(".modal-heading");
+  var loginSub = document.querySelector(".modal-sub");
+  var lastFocusedEl = null;
+
+  function openModal() {
+    lastFocusedEl = document.activeElement;
+    loginOverlay.hidden = false;
+    document.body.style.overflow = "hidden";
+    closeLoginBtn.focus();
+  }
+
+  function closeModal() {
+    loginOverlay.hidden = true;
+    document.body.style.overflow = "";
+    if (lastFocusedEl) lastFocusedEl.focus();
+  }
+
+  function setMode(mode) {
+    var isLogin = mode === "login";
+    tabLogin.classList.toggle("active", isLogin);
+    tabSignup.classList.toggle("active", !isLogin);
+    tabLogin.setAttribute("aria-selected", String(isLogin));
+    tabSignup.setAttribute("aria-selected", String(!isLogin));
+    loginHeading.textContent = isLogin ? "Welcome back" : "Create your account";
+    loginSub.textContent = isLogin ? "Access your portfolio dashboard" : "Start tracking your investments in minutes";
+  }
+
+  if (openLoginBtn) {
+    openLoginBtn.addEventListener("click", openModal);
+    closeLoginBtn.addEventListener("click", closeModal);
+    loginOverlay.addEventListener("click", function (e) {
+      if (e.target === loginOverlay) closeModal();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !loginOverlay.hidden) closeModal();
+    });
+    tabLogin.addEventListener("click", function () { setMode("login"); });
+    tabSignup.addEventListener("click", function () { setMode("signup"); });
+
+    document.getElementById("google-login").addEventListener("click", function () {
+      // Placeholder: wire up real Google Identity Services here with a Client ID.
+      alert("Google Sign-In is a UI placeholder in this demo. Connect a Google OAuth Client ID to enable real authentication.");
+    });
+
+    document.getElementById("login-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      alert("This is a demo form — no backend is connected yet.");
+    });
+  }
+
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
   if (form) {
