@@ -33,9 +33,13 @@
   </header>
 
   <main class="container settings-main">
-    <h1>Overview</h1>
+    <div class="settings-tabs" role="tablist" aria-label="Dashboard sections">
+      <button type="button" class="settings-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Overview</button>
+      <button type="button" class="settings-tab" id="tab-equity" role="tab" aria-selected="false" aria-controls="panel-equity">Equity</button>
+    </div>
 
-    <section class="settings-panel">
+    <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
+      <h2>Overview</h2>
       <p class="muted">A snapshot of all your investments across asset classes.</p>
 
       <div class="overview-stats">
@@ -58,6 +62,12 @@
       </div>
 
       <p class="muted small" style="margin-top:24px;">Connect your transaction sheets in <a href="settings.html">Settings</a> to populate this overview.</p>
+    </section>
+
+    <section id="panel-equity" class="settings-panel" role="tabpanel" aria-labelledby="tab-equity" hidden>
+      <h2>Equity</h2>
+      <p class="muted">A breakdown of your equity holdings.</p>
+      <p class="muted small" style="margin-top:24px;">Connect your equity transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
     </section>
   </main>
 

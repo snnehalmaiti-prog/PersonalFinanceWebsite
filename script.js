@@ -188,6 +188,27 @@
     settingsTabTransactions.addEventListener("click", function () { showSettingsTab("transactions"); });
   }
 
+  // ===== Dashboard tabs =====
+  var dashTabOverview = document.getElementById("tab-overview");
+  var dashTabEquity = document.getElementById("tab-equity");
+  if (dashTabOverview && dashTabEquity) {
+    var panelOverview = document.getElementById("panel-overview");
+    var panelEquity = document.getElementById("panel-equity");
+
+    function showDashboardTab(tab) {
+      var isOverview = tab === "overview";
+      dashTabOverview.classList.toggle("active", isOverview);
+      dashTabEquity.classList.toggle("active", !isOverview);
+      dashTabOverview.setAttribute("aria-selected", String(isOverview));
+      dashTabEquity.setAttribute("aria-selected", String(!isOverview));
+      panelOverview.hidden = !isOverview;
+      panelEquity.hidden = isOverview;
+    }
+
+    dashTabOverview.addEventListener("click", function () { showDashboardTab("overview"); });
+    dashTabEquity.addEventListener("click", function () { showDashboardTab("equity"); });
+  }
+
   // ===== Google Sheet transaction cards (Equity, Fixed Income, etc.) =====
   function parseSheetUrl(url) {
     var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
