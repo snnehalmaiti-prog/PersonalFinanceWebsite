@@ -156,13 +156,12 @@
     tabSignup.addEventListener("click", function () { setMode("signup"); });
 
     document.getElementById("google-login").addEventListener("click", function () {
-      // Placeholder: wire up real Google Identity Services here with a Client ID.
-      alert("Google Sign-In is a UI placeholder in this demo. Connect a Google OAuth Client ID to enable real authentication.");
+      closeModal();
     });
 
     document.getElementById("login-form").addEventListener("submit", function (e) {
       e.preventDefault();
-      alert("This is a demo form — no backend is connected yet.");
+      closeModal();
     });
   }
 
