@@ -104,6 +104,7 @@
   // ===== Login modal =====
   var loginOverlay = document.getElementById("login-overlay");
   var openLoginBtn = document.getElementById("open-login");
+  var openLoginMobileBtn = document.getElementById("open-login-mobile");
   var closeLoginBtn = document.getElementById("close-login");
   var tabLogin = document.getElementById("tab-login");
   var tabSignup = document.getElementById("tab-signup");
@@ -136,6 +137,14 @@
 
   if (openLoginBtn) {
     openLoginBtn.addEventListener("click", openModal);
+    if (openLoginMobileBtn) {
+      openLoginMobileBtn.addEventListener("click", function () {
+        mobileNav.classList.remove("open");
+        menuToggle.classList.remove("open");
+        menuToggle.setAttribute("aria-expanded", "false");
+        openModal();
+      });
+    }
     closeLoginBtn.addEventListener("click", closeModal);
     loginOverlay.addEventListener("click", function (e) {
       if (e.target === loginOverlay) closeModal();
