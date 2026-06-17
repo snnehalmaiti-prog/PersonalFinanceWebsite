@@ -50,15 +50,29 @@
       <h2>Transaction Details</h2>
       <p class="muted">View and manage your transaction history.</p>
 
-      <div class="settings-subsection">
-        <h3>Equity</h3>
-        <label for="equity-sheet-link" class="sr-only">Google Sheets link</label>
-        <div class="sheet-link-row">
-          <input type="url" id="equity-sheet-link" placeholder="Paste your Google Sheets link here" />
-          <button type="button" class="btn btn-primary" id="equity-sheet-add">Add</button>
-          <button type="button" class="btn btn-outline" id="equity-sheet-refresh" hidden>Refresh</button>
+      <div class="equity-card">
+        <div class="equity-card-header">
+          <h3><span class="equity-icon" aria-hidden="true">🔗</span> Equity Transactions</h3>
+          <span class="status-pill" id="equity-status-pill">Not connected</span>
         </div>
-        <p class="muted small" style="margin-top:10px;">Make sure the sheet is shared as "Anyone with the link can view," then paste the link above.</p>
+        <p class="muted small equity-desc">Buy/sell trades for stocks, equity ETFs and equity mutual funds.</p>
+
+        <label for="equity-sheet-link" class="sr-only">Google Sheets link</label>
+        <div class="equity-link-row">
+          <input type="url" id="equity-sheet-link" placeholder="Paste your Google Sheets link here" />
+          <button type="button" class="btn btn-outline" id="equity-sheet-save">Save</button>
+          <button type="button" class="btn btn-primary" id="equity-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
+        </div>
+
+        <div class="equity-meta muted small" id="equity-meta" hidden>
+          <span id="equity-last-sync">Last sync: —</span>
+          <span class="dot-sep" aria-hidden="true">&bull;</span>
+          <span id="equity-row-count">0 rows</span>
+          <span class="dot-sep" aria-hidden="true">&bull;</span>
+          <a href="#" id="equity-open-sheet" target="_blank" rel="noopener">Open sheet &#8599;</a>
+        </div>
 
         <p id="equity-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
         <div id="equity-sheet-table-wrap" class="sheet-table-wrap" hidden>

@@ -191,11 +191,16 @@
   // ===== Equity Google Sheet import =====
   var sheetLinkInput = document.getElementById("equity-sheet-link");
   if (sheetLinkInput) {
-    var sheetAddBtn = document.getElementById("equity-sheet-add");
-    var sheetRefreshBtn = document.getElementById("equity-sheet-refresh");
+    var sheetSaveBtn = document.getElementById("equity-sheet-save");
+    var sheetSyncBtn = document.getElementById("equity-sheet-sync");
     var sheetStatus = document.getElementById("equity-sheet-status");
     var sheetTableWrap = document.getElementById("equity-sheet-table-wrap");
     var sheetTable = document.getElementById("equity-sheet-table");
+    var statusPill = document.getElementById("equity-status-pill");
+    var equityMeta = document.getElementById("equity-meta");
+    var equityLastSync = document.getElementById("equity-last-sync");
+    var equityRowCount = document.getElementById("equity-row-count");
+    var equityOpenSheet = document.getElementById("equity-open-sheet");
     var STORAGE_KEY = "wf-equity-sheet-link";
 
     function parseSheetUrl(url) {
@@ -289,14 +294,20 @@
       sheetStatus.style.color = isError ? "#EF4444" : "";
     }
 
-    function loadSheet(url) {
+    function setConnected(isConnected) {
+      statusPill.textContent = isConnected ? "Connected" : "Not connected";
+      statusPill.classList.toggle("connected", isConnected);
+    }
+
+    function syncSheet(url) {
       var parsed = parseSheetUrl(url);
       if (!parsed) {
         setStatus("That doesn't look like a valid Google Sheets link.", true);
         sheetTableWrap.hidden = true;
+        setConnected(false);
         return;
       }
-      setStatus("Loading sheet data…", false);
+      setStatus("Verifying and syncing…", false);
 
       fetchSheetJSONP(
         parsed.id,
@@ -306,16 +317,24 @@
           if (rows.length <= 1) {
             setStatus("The sheet appears to be empty.", true);
             sheetTableWrap.hidden = true;
+            setConnected(false);
             return;
           }
           renderTable(rows);
           sheetTableWrap.hidden = false;
-          sheetRefreshBtn.hidden = false;
-          setStatus("Last updated: " + new Date().toLocaleTimeString(), false);
+          setStatus("", false);
+          setConnected(true);
+
+          var rowCount = rows.length - 1;
+          equityRowCount.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
+          equityLastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
+          equityOpenSheet.href = url;
+          equityMeta.hidden = false;
         },
         function () {
           setStatus("Couldn't load the sheet. Make sure it's shared as \"Anyone with the link can view.\"", true);
           sheetTableWrap.hidden = true;
+          setConnected(false);
         }
       );
     }
@@ -323,20 +342,21 @@
     var savedLink = localStorage.getItem(STORAGE_KEY);
     if (savedLink) {
       sheetLinkInput.value = savedLink;
-      loadSheet(savedLink);
+      syncSheet(savedLink);
     }
 
-    sheetAddBtn.addEventListener("click", function () {
+    sheetSaveBtn.addEventListener("click", function () {
       var url = sheetLinkInput.value.trim();
       if (!url) return;
       localStorage.setItem(STORAGE_KEY, url);
-      loadSheet(url);
+      setStatus("Link saved.", false);
     });
 
-    sheetRefreshBtn.addEventListener("click", function () {
+    sheetSyncBtn.addEventListener("click", function () {
       var url = sheetLinkInput.value.trim();
       if (!url) return;
-      loadSheet(url);
+      localStorage.setItem(STORAGE_KEY, url);
+      syncSheet(url);
     });
   }
 
