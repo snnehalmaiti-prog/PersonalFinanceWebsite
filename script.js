@@ -188,6 +188,134 @@
     settingsTabTransactions.addEventListener("click", function () { showSettingsTab("transactions"); });
   }
 
+  // ===== Equity Google Sheet import =====
+  var sheetLinkInput = document.getElementById("equity-sheet-link");
+  if (sheetLinkInput) {
+    var sheetAddBtn = document.getElementById("equity-sheet-add");
+    var sheetRefreshBtn = document.getElementById("equity-sheet-refresh");
+    var sheetStatus = document.getElementById("equity-sheet-status");
+    var sheetTableWrap = document.getElementById("equity-sheet-table-wrap");
+    var sheetTable = document.getElementById("equity-sheet-table");
+    var STORAGE_KEY = "wf-equity-sheet-link";
+
+    function parseSheetUrl(url) {
+      var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (!idMatch) return null;
+      var gidMatch = url.match(/[#&?]gid=([0-9]+)/);
+      return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : "0" };
+    }
+
+    function parseCSV(text) {
+      var rows = [];
+      var row = [];
+      var field = "";
+      var inQuotes = false;
+      for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else inQuotes = false;
+          } else field += ch;
+        } else {
+          if (ch === '"') inQuotes = true;
+          else if (ch === ",") { row.push(field); field = ""; }
+          else if (ch === "\n" || ch === "\r") {
+            if (ch === "\r" && text[i + 1] === "\n") i++;
+            row.push(field); field = "";
+            rows.push(row); row = [];
+          } else field += ch;
+        }
+      }
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+      return rows.filter(function (r) { return r.length > 1 || r[0] !== ""; });
+    }
+
+    function renderTable(rows) {
+      sheetTable.innerHTML = "";
+      if (!rows.length) return;
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      rows[0].forEach(function (cell) {
+        var th = document.createElement("th");
+        th.textContent = cell;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      sheetTable.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      rows.slice(1).forEach(function (r) {
+        var tr = document.createElement("tr");
+        r.forEach(function (cell) {
+          var td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      sheetTable.appendChild(tbody);
+    }
+
+    function setStatus(message, isError) {
+      sheetStatus.hidden = !message;
+      sheetStatus.textContent = message || "";
+      sheetStatus.style.color = isError ? "#EF4444" : "";
+    }
+
+    function loadSheet(url) {
+      var parsed = parseSheetUrl(url);
+      if (!parsed) {
+        setStatus("That doesn't look like a valid Google Sheets link.", true);
+        sheetTableWrap.hidden = true;
+        return;
+      }
+      setStatus("Loading sheet data…", false);
+      var csvUrl = "https://docs.google.com/spreadsheets/d/" + parsed.id + "/gviz/tq?tqx=out:csv&gid=" + parsed.gid;
+
+      fetch(csvUrl)
+        .then(function (res) {
+          if (!res.ok) throw new Error("Request failed");
+          return res.text();
+        })
+        .then(function (text) {
+          var rows = parseCSV(text);
+          if (!rows.length) {
+            setStatus("The sheet appears to be empty.", true);
+            sheetTableWrap.hidden = true;
+            return;
+          }
+          renderTable(rows);
+          sheetTableWrap.hidden = false;
+          sheetRefreshBtn.hidden = false;
+          setStatus("Last updated: " + new Date().toLocaleTimeString(), false);
+        })
+        .catch(function () {
+          setStatus("Couldn't load the sheet. Make sure it's shared as \"Anyone with the link can view.\"", true);
+          sheetTableWrap.hidden = true;
+        });
+    }
+
+    var savedLink = localStorage.getItem(STORAGE_KEY);
+    if (savedLink) {
+      sheetLinkInput.value = savedLink;
+      loadSheet(savedLink);
+    }
+
+    sheetAddBtn.addEventListener("click", function () {
+      var url = sheetLinkInput.value.trim();
+      if (!url) return;
+      localStorage.setItem(STORAGE_KEY, url);
+      loadSheet(url);
+    });
+
+    sheetRefreshBtn.addEventListener("click", function () {
+      var url = sheetLinkInput.value.trim();
+      if (!url) return;
+      loadSheet(url);
+    });
+  }
+
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
   if (form) {

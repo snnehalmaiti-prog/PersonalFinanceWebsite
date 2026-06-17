@@ -55,9 +55,15 @@
         <label for="equity-sheet-link" class="sr-only">Google Sheets link</label>
         <div class="sheet-link-row">
           <input type="url" id="equity-sheet-link" placeholder="Paste your Google Sheets link here" />
-          <button type="button" class="btn btn-primary">Add</button>
+          <button type="button" class="btn btn-primary" id="equity-sheet-add">Add</button>
+          <button type="button" class="btn btn-outline" id="equity-sheet-refresh" hidden>Refresh</button>
         </div>
-        <p class="muted small" style="margin-top:10px;">Connect a Google Sheet to import your equity transactions.</p>
+        <p class="muted small" style="margin-top:10px;">Make sure the sheet is shared as "Anyone with the link can view," then paste the link above.</p>
+
+        <p id="equity-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
+        <div id="equity-sheet-table-wrap" class="sheet-table-wrap" hidden>
+          <table id="equity-sheet-table" class="sheet-table"></table>
+        </div>
       </div>
     </section>
   </main>

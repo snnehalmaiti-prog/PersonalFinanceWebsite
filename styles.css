@@ -817,3 +817,24 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-size: 0.95rem;
 }
 .sheet-link-row input:focus { outline: 2px solid var(--sky); border-color: transparent; }
+
+.sheet-table-wrap {
+  margin-top: 20px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.sheet-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.sheet-table th, .sheet-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.sheet-table th {
+  background: var(--surface-alt);
+  font-weight: 700;
+  color: var(--text);
+}
+.sheet-table tbody tr:last-child td { border-bottom: none; }
+.sheet-table tbody tr:hover { background: var(--surface-alt); }
