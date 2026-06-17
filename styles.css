@@ -869,9 +869,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-weight: 700;
   padding: 5px 12px;
   border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--muted);
+  background: color-mix(in srgb, #EF4444 14%, transparent);
+  border: 1px solid transparent;
+  color: #EF4444;
   white-space: nowrap;
 }
 .status-pill.connected {
