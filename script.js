@@ -30,20 +30,22 @@
   var menuToggle = document.getElementById("menu-toggle");
   var mobileNav = document.getElementById("mobile-nav");
 
-  menuToggle.addEventListener("click", function () {
-    var open = mobileNav.classList.toggle("open");
-    menuToggle.classList.toggle("open", open);
-    menuToggle.setAttribute("aria-expanded", String(open));
-    menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
-  });
-
-  mobileNav.querySelectorAll("a").forEach(function (link) {
-    link.addEventListener("click", function () {
-      mobileNav.classList.remove("open");
-      menuToggle.classList.remove("open");
-      menuToggle.setAttribute("aria-expanded", "false");
+  if (menuToggle && mobileNav) {
+    menuToggle.addEventListener("click", function () {
+      var open = mobileNav.classList.toggle("open");
+      menuToggle.classList.toggle("open", open);
+      menuToggle.setAttribute("aria-expanded", String(open));
+      menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
     });
-  });
+
+    mobileNav.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", function () {
+        mobileNav.classList.remove("open");
+        menuToggle.classList.remove("open");
+        menuToggle.setAttribute("aria-expanded", "false");
+      });
+    });
+  }
 
   // ===== Scroll-reveal animation =====
   var animatedEls = document.querySelectorAll("[data-animate]");
@@ -156,12 +158,12 @@
     tabSignup.addEventListener("click", function () { setMode("signup"); });
 
     document.getElementById("google-login").addEventListener("click", function () {
-      closeModal();
+      window.location.href = "dashboard.html";
     });
 
     document.getElementById("login-form").addEventListener("submit", function (e) {
       e.preventDefault();
-      closeModal();
+      window.location.href = "dashboard.html";
     });
   }
 
