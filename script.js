@@ -248,7 +248,21 @@
     document.head.appendChild(script);
   }
 
-  function initSheetCard(prefix) {
+  function filterColumns(rows, allowedFields) {
+    if (!allowedFields) return rows;
+    var header = rows[0];
+    var normalized = header.map(function (h) { return h.trim().toLowerCase(); });
+    var indices = allowedFields
+      .map(function (field) { return normalized.indexOf(field.toLowerCase()); })
+      .filter(function (i) { return i !== -1; });
+
+    return rows.map(function (row) {
+      return indices.map(function (i) { return row[i]; });
+    });
+  }
+
+  function initSheetCard(prefix, options) {
+    options = options || {};
     var sheetLinkInput = document.getElementById(prefix + "-sheet-link");
     if (!sheetLinkInput) return;
 
@@ -322,8 +336,13 @@
             setConnected(false);
             return;
           }
-          renderTable(rows);
-          sheetTableWrap.hidden = false;
+          rows = filterColumns(rows, options.fields);
+          if (options.showTable === false) {
+            sheetTableWrap.hidden = true;
+          } else {
+            renderTable(rows);
+            sheetTableWrap.hidden = false;
+          }
           setStatus("", false);
           setConnected(true);
 
@@ -362,7 +381,22 @@
     });
   }
 
-  initSheetCard("equity");
+  initSheetCard("equity", {
+    fields: [
+      "Transaction Date",
+      "Portfolio Name",
+      "Instrument Name",
+      "Instrument Category",
+      "Instrument Sub Category",
+      "Market Segment",
+      "Region",
+      "Transaction Type",
+      "Units",
+      "Price",
+      "Value"
+    ],
+    showTable: false
+  });
   initSheetCard("fixedincome");
 
   // ===== Signup form (demo only, no backend) =====
