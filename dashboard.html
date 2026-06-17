@@ -32,9 +32,38 @@
     </div>
   </header>
 
-  <main class="container" style="padding: 80px 24px; text-align: center;">
-    <h1>Dashboard coming soon</h1>
-    <p class="muted">You're logged in. Dashboard content will be added here next.</p>
+  <main class="container settings-main">
+    <h1>Dashboard</h1>
+
+    <div class="settings-tabs" role="tablist" aria-label="Dashboard sections">
+      <button type="button" class="settings-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Overview</button>
+    </div>
+
+    <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
+      <h2>Overview</h2>
+      <p class="muted">A snapshot of all your investments across asset classes.</p>
+
+      <div class="overview-stats">
+        <div class="overview-stat-card">
+          <span class="overview-stat-label">Total Portfolio Value</span>
+          <span class="overview-stat-value">—</span>
+        </div>
+        <div class="overview-stat-card">
+          <span class="overview-stat-label">Equity</span>
+          <span class="overview-stat-value">—</span>
+        </div>
+        <div class="overview-stat-card">
+          <span class="overview-stat-label">Fixed Income</span>
+          <span class="overview-stat-value">—</span>
+        </div>
+        <div class="overview-stat-card">
+          <span class="overview-stat-label">Connected Sheets</span>
+          <span class="overview-stat-value">—</span>
+        </div>
+      </div>
+
+      <p class="muted small" style="margin-top:24px;">Connect your transaction sheets in <a href="settings.html">Settings</a> to populate this overview.</p>
+    </section>
   </main>
 
   <script src="script.js"></script>
