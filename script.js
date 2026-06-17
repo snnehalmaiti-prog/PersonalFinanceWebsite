@@ -188,79 +188,81 @@
     settingsTabTransactions.addEventListener("click", function () { showSettingsTab("transactions"); });
   }
 
-  // ===== Equity Google Sheet import =====
-  var sheetLinkInput = document.getElementById("equity-sheet-link");
-  if (sheetLinkInput) {
-    var sheetSaveBtn = document.getElementById("equity-sheet-save");
-    var sheetSyncBtn = document.getElementById("equity-sheet-sync");
-    var sheetStatus = document.getElementById("equity-sheet-status");
-    var sheetTableWrap = document.getElementById("equity-sheet-table-wrap");
-    var sheetTable = document.getElementById("equity-sheet-table");
-    var statusPill = document.getElementById("equity-status-pill");
-    var equityMeta = document.getElementById("equity-meta");
-    var equityLastSync = document.getElementById("equity-last-sync");
-    var equityRowCount = document.getElementById("equity-row-count");
-    var equityOpenSheet = document.getElementById("equity-open-sheet");
-    var STORAGE_KEY = "wf-equity-sheet-link";
+  // ===== Google Sheet transaction cards (Equity, Fixed Income, etc.) =====
+  function parseSheetUrl(url) {
+    var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!idMatch) return null;
+    var gidMatch = url.match(/[#&?]gid=([0-9]+)/);
+    return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : "0" };
+  }
 
-    function parseSheetUrl(url) {
-      var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-      if (!idMatch) return null;
-      var gidMatch = url.match(/[#&?]gid=([0-9]+)/);
-      return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : "0" };
-    }
-
-    function gvizRowsFromResponse(data) {
-      var cols = data.table.cols.map(function (c) { return c.label || c.id || ""; });
-      var rows = [cols];
-      (data.table.rows || []).forEach(function (r) {
-        var row = (r.c || []).map(function (cell) {
-          if (!cell) return "";
-          if (cell.f != null) return cell.f;
-          return cell.v != null ? String(cell.v) : "";
-        });
-        rows.push(row);
+  function gvizRowsFromResponse(data) {
+    var cols = data.table.cols.map(function (c) { return c.label || c.id || ""; });
+    var rows = [cols];
+    (data.table.rows || []).forEach(function (r) {
+      var row = (r.c || []).map(function (cell) {
+        if (!cell) return "";
+        if (cell.f != null) return cell.f;
+        return cell.v != null ? String(cell.v) : "";
       });
-      return rows;
+      rows.push(row);
+    });
+    return rows;
+  }
+
+  function fetchSheetJSONP(id, gid, onData, onError) {
+    var callbackName = "__wfSheetCallback_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
+    var script = document.createElement("script");
+    var timeoutId;
+
+    function cleanup() {
+      clearTimeout(timeoutId);
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
     }
 
-    function fetchSheetJSONP(id, gid, onData, onError) {
-      var callbackName = "__wfSheetCallback_" + Date.now();
-      var script = document.createElement("script");
-      var timeoutId;
-
-      function cleanup() {
-        clearTimeout(timeoutId);
-        delete window[callbackName];
-        if (script.parentNode) script.parentNode.removeChild(script);
+    window[callbackName] = function (data) {
+      cleanup();
+      if (data.status === "error") {
+        onError();
+      } else {
+        onData(data);
       }
+    };
 
-      window[callbackName] = function (data) {
-        cleanup();
-        if (data.status === "error") {
-          onError();
-        } else {
-          onData(data);
-        }
-      };
+    script.onerror = function () {
+      cleanup();
+      onError();
+    };
 
-      script.onerror = function () {
-        cleanup();
-        onError();
-      };
+    script.src =
+      "https://docs.google.com/spreadsheets/d/" + id +
+      "/gviz/tq?gid=" + gid +
+      "&tqx=out:json;responseHandler:" + callbackName;
 
-      script.src =
-        "https://docs.google.com/spreadsheets/d/" + id +
-        "/gviz/tq?gid=" + gid +
-        "&tqx=out:json;responseHandler:" + callbackName;
+    timeoutId = setTimeout(function () {
+      cleanup();
+      onError();
+    }, 12000);
 
-      timeoutId = setTimeout(function () {
-        cleanup();
-        onError();
-      }, 12000);
+    document.head.appendChild(script);
+  }
 
-      document.head.appendChild(script);
-    }
+  function initSheetCard(prefix) {
+    var sheetLinkInput = document.getElementById(prefix + "-sheet-link");
+    if (!sheetLinkInput) return;
+
+    var sheetSaveBtn = document.getElementById(prefix + "-sheet-save");
+    var sheetSyncBtn = document.getElementById(prefix + "-sheet-sync");
+    var sheetStatus = document.getElementById(prefix + "-sheet-status");
+    var sheetTableWrap = document.getElementById(prefix + "-sheet-table-wrap");
+    var sheetTable = document.getElementById(prefix + "-sheet-table");
+    var statusPill = document.getElementById(prefix + "-status-pill");
+    var meta = document.getElementById(prefix + "-meta");
+    var lastSync = document.getElementById(prefix + "-last-sync");
+    var rowCountEl = document.getElementById(prefix + "-row-count");
+    var openSheetLink = document.getElementById(prefix + "-open-sheet");
+    var storageKey = "wf-" + prefix + "-sheet-link";
 
     function renderTable(rows) {
       sheetTable.innerHTML = "";
@@ -326,10 +328,10 @@
           setConnected(true);
 
           var rowCount = rows.length - 1;
-          equityRowCount.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
-          equityLastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
-          equityOpenSheet.href = url;
-          equityMeta.hidden = false;
+          rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
+          lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
+          openSheetLink.href = url;
+          meta.hidden = false;
         },
         function () {
           setStatus("Couldn't load the sheet. Make sure it's shared as \"Anyone with the link can view.\"", true);
@@ -339,7 +341,7 @@
       );
     }
 
-    var savedLink = localStorage.getItem(STORAGE_KEY);
+    var savedLink = localStorage.getItem(storageKey);
     if (savedLink) {
       sheetLinkInput.value = savedLink;
       syncSheet(savedLink);
@@ -348,17 +350,20 @@
     sheetSaveBtn.addEventListener("click", function () {
       var url = sheetLinkInput.value.trim();
       if (!url) return;
-      localStorage.setItem(STORAGE_KEY, url);
+      localStorage.setItem(storageKey, url);
       setStatus("Link saved.", false);
     });
 
     sheetSyncBtn.addEventListener("click", function () {
       var url = sheetLinkInput.value.trim();
       if (!url) return;
-      localStorage.setItem(STORAGE_KEY, url);
+      localStorage.setItem(storageKey, url);
       syncSheet(url);
     });
   }
+
+  initSheetCard("equity");
+  initSheetCard("fixedincome");
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");

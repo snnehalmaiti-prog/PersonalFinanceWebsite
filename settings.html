@@ -79,6 +79,36 @@
           <table id="equity-sheet-table" class="sheet-table"></table>
         </div>
       </div>
+
+      <div class="equity-card">
+        <div class="equity-card-header">
+          <h3><span class="equity-icon" aria-hidden="true">🔗</span> Fixed Income Transactions</h3>
+          <span class="status-pill" id="fixedincome-status-pill">Not connected</span>
+        </div>
+        <p class="muted small equity-desc">Buy/sell and maturity records for PPF, fixed deposits, bonds and other fixed-income holdings.</p>
+
+        <label for="fixedincome-sheet-link" class="sr-only">Google Sheets link</label>
+        <div class="equity-link-row">
+          <input type="url" id="fixedincome-sheet-link" placeholder="Paste your Google Sheets link here" />
+          <button type="button" class="btn btn-outline" id="fixedincome-sheet-save">Save</button>
+          <button type="button" class="btn btn-primary" id="fixedincome-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
+        </div>
+
+        <div class="equity-meta muted small" id="fixedincome-meta" hidden>
+          <span id="fixedincome-last-sync">Last sync: —</span>
+          <span class="dot-sep" aria-hidden="true">&bull;</span>
+          <span id="fixedincome-row-count">0 rows</span>
+          <span class="dot-sep" aria-hidden="true">&bull;</span>
+          <a href="#" id="fixedincome-open-sheet" target="_blank" rel="noopener">Open sheet &#8599;</a>
+        </div>
+
+        <p id="fixedincome-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
+        <div id="fixedincome-sheet-table-wrap" class="sheet-table-wrap" hidden>
+          <table id="fixedincome-sheet-table" class="sheet-table"></table>
+        </div>
+      </div>
     </section>
   </main>
 
