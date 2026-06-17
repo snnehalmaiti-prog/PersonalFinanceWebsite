@@ -397,7 +397,22 @@
     ],
     showTable: false
   });
-  initSheetCard("fixedincome");
+  initSheetCard("fixedincome", {
+    fields: [
+      "Transaction Date",
+      "Portfolio Name",
+      "Instrument Name",
+      "Instrument Category",
+      "Instrument Sub Category",
+      "Market Segment",
+      "Region",
+      "Transaction Type",
+      "Units",
+      "Price",
+      "Value"
+    ],
+    showTable: false
+  });
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
