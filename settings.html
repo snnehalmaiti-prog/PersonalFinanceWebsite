@@ -49,7 +49,16 @@
     <section id="panel-transactions" class="settings-panel" role="tabpanel" aria-labelledby="tab-transactions" hidden>
       <h2>Transaction Details</h2>
       <p class="muted">View and manage your transaction history.</p>
-      <p class="muted small" style="margin-top:24px;">Transaction details coming soon.</p>
+
+      <div class="settings-subsection">
+        <h3>Equity</h3>
+        <label for="equity-sheet-link" class="sr-only">Google Sheets link</label>
+        <div class="sheet-link-row">
+          <input type="url" id="equity-sheet-link" placeholder="Paste your Google Sheets link here" />
+          <button type="button" class="btn btn-primary">Add</button>
+        </div>
+        <p class="muted small" style="margin-top:10px;">Connect a Google Sheet to import your equity transactions.</p>
+      </div>
     </section>
   </main>
 
