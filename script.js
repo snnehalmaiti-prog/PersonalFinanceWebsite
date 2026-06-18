@@ -237,6 +237,11 @@
     updateDashboardStats();
   }
 
+  function parseNumber(value) {
+    var cleaned = String(value == null ? "" : value).replace(/[^0-9.-]/g, "");
+    return parseFloat(cleaned) || 0;
+  }
+
   function sumInvestmentForRows(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
@@ -250,7 +255,7 @@
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
       var type = (row[typeIdx] || "").trim().toLowerCase();
-      var value = parseFloat(String(row[valueIdx]).replace(/,/g, "")) || 0;
+      var value = parseNumber(row[valueIdx]);
       total += type.indexOf("sell") !== -1 ? -value : value;
     });
     return total;
@@ -273,8 +278,8 @@
       var category = (row[categoryIdx] || "").trim().toLowerCase();
       var type = (row[typeIdx] || "").trim().toLowerCase();
       if (category !== "equity" || type !== "buy") return;
-      var units = parseFloat(String(row[unitsIdx]).replace(/,/g, "")) || 0;
-      var price = parseFloat(String(row[priceIdx]).replace(/,/g, "")) || 0;
+      var units = parseNumber(row[unitsIdx]);
+      var price = parseNumber(row[priceIdx]);
       total += units * price;
     });
     return total;
