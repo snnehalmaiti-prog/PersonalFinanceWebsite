@@ -382,6 +382,46 @@
 
   updateDashboardStats();
 
+  var refreshAllBtn = document.getElementById("refresh-all");
+  if (refreshAllBtn) {
+    refreshAllBtn.addEventListener("click", function () {
+      var prefixes = ["equity", "fixedincome"];
+      var pending = 0;
+
+      function done() {
+        pending -= 1;
+        if (pending <= 0) {
+          refreshAllBtn.classList.remove("spinning");
+          updateDashboardStats();
+        }
+      }
+
+      prefixes.forEach(function (prefix) {
+        var url = localStorage.getItem("wf-" + prefix + "-sheet-link");
+        if (!url) return;
+        var parsed = parseSheetUrl(url);
+        if (!parsed) return;
+        pending += 1;
+        refreshAllBtn.classList.add("spinning");
+        fetchSheetJSONP(
+          parsed.id,
+          parsed.gid,
+          function (data) {
+            var rows = gvizRowsFromResponse(data);
+            if (rows.length > 1) {
+              addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
+              localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+            }
+            done();
+          },
+          done
+        );
+      });
+
+      if (pending === 0) updateDashboardStats();
+    });
+  }
+
   if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
 
