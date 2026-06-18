@@ -256,6 +256,30 @@
     return total;
   }
 
+  function sumEquityBuyInvestment(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var categoryIdx = header.indexOf("instrument category");
+    var unitsIdx = header.indexOf("units");
+    var priceIdx = header.indexOf("price");
+    if (portfolioIdx === -1 || typeIdx === -1 || categoryIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
+
+    var total = 0;
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      var category = (row[categoryIdx] || "").trim().toLowerCase();
+      var type = (row[typeIdx] || "").trim().toLowerCase();
+      if (category !== "equity" || type !== "buy") return;
+      var units = parseFloat(String(row[unitsIdx]).replace(/,/g, "")) || 0;
+      var price = parseFloat(String(row[priceIdx]).replace(/,/g, "")) || 0;
+      total += units * price;
+    });
+    return total;
+  }
+
   function getSheetRows(prefix) {
     var raw = localStorage.getItem("wf-" + prefix + "-data");
     if (!raw) return null;
@@ -270,7 +294,10 @@
     var total = 0;
     prefixes.forEach(function (prefix) {
       var rows = getSheetRows(prefix);
-      if (rows) total += sumInvestmentForRows(rows, portfolioFilter);
+      if (!rows) return;
+      total += prefix === "equity"
+        ? sumEquityBuyInvestment(rows, portfolioFilter)
+        : sumInvestmentForRows(rows, portfolioFilter);
     });
     return total;
   }
