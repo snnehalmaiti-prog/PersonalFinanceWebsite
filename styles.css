@@ -868,6 +868,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .settings-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 
+#tab-overview.active { background: var(--navy); color: #fff; }
+#tab-equity.active { background: var(--emerald); color: #fff; }
+#tab-fixedincome.active { background: var(--sky); color: #fff; }
+
 .settings-panel {
   background: var(--surface);
   border: 1px solid var(--border);
