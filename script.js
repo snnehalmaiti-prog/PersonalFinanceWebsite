@@ -323,6 +323,19 @@
     if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
   }
 
+  function updateRefreshButtonStatus() {
+    var refreshBtn = document.getElementById("refresh-all");
+    if (!refreshBtn) return;
+    var connectedCount = ["equity", "fixedincome"].filter(function (prefix) {
+      return !!getSheetRows(prefix);
+    }).length;
+
+    refreshBtn.classList.remove("status-connected", "status-partial", "status-disconnected");
+    if (connectedCount === 2) refreshBtn.classList.add("status-connected");
+    else if (connectedCount === 0) refreshBtn.classList.add("status-disconnected");
+    else refreshBtn.classList.add("status-partial");
+  }
+
   function populatePortfolioSelect() {
     var menu = document.getElementById("portfolio-menu");
     if (!menu) return;
@@ -393,6 +406,7 @@
         if (pending <= 0) {
           refreshAllBtn.classList.remove("spinning");
           updateDashboardStats();
+          updateRefreshButtonStatus();
         }
       }
 
@@ -421,6 +435,8 @@
       if (pending === 0) updateDashboardStats();
     });
   }
+
+  updateRefreshButtonStatus();
 
   if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
@@ -610,6 +626,7 @@
           addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
           updateDashboardStats();
+          updateRefreshButtonStatus();
           rows = filterColumns(rows, options.fields);
           if (options.showTable === false) {
             sheetTableWrap.hidden = true;

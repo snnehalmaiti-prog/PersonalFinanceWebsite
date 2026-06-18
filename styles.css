@@ -209,6 +209,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 #refresh-all.spinning svg { animation: wf-spin 0.8s linear infinite; }
 @keyframes wf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+#refresh-all.status-connected { border-color: var(--emerald); color: var(--emerald); }
+#refresh-all.status-partial { border-color: #F59E0B; color: #F59E0B; }
+#refresh-all.status-disconnected { border-color: #EF4444; color: #EF4444; }
+
 .portfolio-dropdown { position: relative; }
 
 .portfolio-toggle {
