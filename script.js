@@ -241,6 +241,7 @@
     var portfolioLabel = document.getElementById("portfolio-label");
     if (portfolioLabel) portfolioLabel.textContent = label;
     updateDashboardStats();
+    renderValueChart();
   }
 
   function parseNumber(value) {
@@ -465,6 +466,7 @@
   }
 
   updateDashboardStats();
+  renderValueChart();
 
   var refreshAllBtn = document.getElementById("refresh-all");
   if (refreshAllBtn) {
@@ -478,6 +480,7 @@
           refreshAllBtn.classList.remove("spinning");
           updateDashboardStats();
           updateRefreshButtonStatus();
+          renderValueChart();
         }
       }
 
@@ -793,6 +796,217 @@
     showTable: false
   });
   initSheetCard("mfmapping");
+
+  // ===== Current Value Over Time chart =====
+  var NAV_CACHE_PREFIX = "wf-nav-cache-";
+  var NAV_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+  function parseMfApiDate(d) {
+    var parts = String(d || "").split("-");
+    if (parts.length !== 3) return null;
+    return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+  }
+
+  function dateKey(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function fetchNavHistory(schemeCode) {
+    var cacheKey = NAV_CACHE_PREFIX + schemeCode;
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey));
+      if (cached && Date.now() - cached.fetchedAt < NAV_CACHE_MAX_AGE_MS) {
+        return Promise.resolve(cached.data);
+      }
+    } catch (e) {}
+
+    return fetch("https://api.mfapi.in/mf/" + schemeCode)
+      .then(function (res) { return res.json(); })
+      .then(function (json) {
+        var data = (json.data || [])
+          .map(function (entry) { return { date: parseMfApiDate(entry.date), nav: parseNumber(entry.nav) }; })
+          .filter(function (entry) { return entry.date; })
+          .sort(function (a, b) { return a.date - b.date; });
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), data: data }));
+        } catch (e) {}
+        return data;
+      })
+      .catch(function () { return []; });
+  }
+
+  function buildInstrumentSchemeMap() {
+    var rows = getSheetRows("mfmapping");
+    var map = {};
+    if (!rows || !rows.length) return map;
+    var header = rows[0].map(normalizeText);
+    var instrumentIdx = header.indexOf("instrument name");
+    var codeIdx = header.findIndex(function (h) { return h.indexOf("code") !== -1; });
+    if (instrumentIdx === -1 || codeIdx === -1) return map;
+    rows.slice(1).forEach(function (row) {
+      var instrument = (row[instrumentIdx] || "").trim();
+      var code = (row[codeIdx] || "").trim();
+      if (instrument && code) map[instrument] = code;
+    });
+    return map;
+  }
+
+  function buildInstrumentUnitEvents(portfolioFilter) {
+    var rows = getSheetRows("equity");
+    var events = {};
+    if (!rows || !rows.length) return events;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx = header.indexOf("instrument category");
+    var typeIdx = header.indexOf("transaction type");
+    var unitsIdx = header.indexOf("units");
+    var dateIdx = header.indexOf("transaction date");
+    if ([portfolioIdx, instrumentIdx, categoryIdx, typeIdx, unitsIdx, dateIdx].indexOf(-1) !== -1) return events;
+
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      var category = normalizeText(row[categoryIdx]);
+      if (category.indexOf("equity") === -1) return;
+      var instrument = (row[instrumentIdx] || "").trim();
+      var date = new Date(row[dateIdx]);
+      if (isNaN(date)) return;
+      var type = normalizeText(row[typeIdx]);
+      var units = parseNumber(row[unitsIdx]);
+      var delta = type.indexOf("buy") !== -1 ? units : (type.indexOf("sell") !== -1 ? -units : 0);
+      if (!events[instrument]) events[instrument] = [];
+      events[instrument].push({ date: date, delta: delta });
+    });
+
+    Object.keys(events).forEach(function (instrument) {
+      events[instrument].sort(function (a, b) { return a.date - b.date; });
+      var running = 0;
+      events[instrument].forEach(function (e) { running += e.delta; e.cumulativeUnits = running; });
+    });
+    return events;
+  }
+
+  function lastAtOrBefore(sortedEvents, targetDate, valueKey) {
+    var lo = 0, hi = sortedEvents.length - 1, result = null;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (sortedEvents[mid].date <= targetDate) {
+        result = sortedEvents[mid][valueKey];
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return result;
+  }
+
+  function renderValueChart() {
+    var canvas = document.getElementById("value-chart");
+    var statusEl = document.getElementById("value-chart-status");
+    var rangeEl = document.getElementById("value-chart-range");
+    var resetBtn = document.getElementById("value-chart-reset");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    var schemeMap = buildInstrumentSchemeMap();
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
+    var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
+    var skipped = Object.keys(unitEvents).length - instruments.length;
+
+    if (!instruments.length) {
+      statusEl.textContent = skipped
+        ? "No Instrument Name in your Equity sheet matched a Scheme Code in the Mutual Fund Mapping sheet."
+        : "Connect your Equity Transactions and Mutual Fund Mapping sheets to see this chart.";
+      return;
+    }
+
+    statusEl.textContent = "Fetching NAV history for " + instruments.length + " instrument(s)…";
+
+    Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+      .then(function (navHistories) {
+        var navByInstrument = {};
+        instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
+
+        var allDates = {};
+        instruments.forEach(function (name) {
+          (navByInstrument[name] || []).forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        });
+        var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
+        var today = new Date();
+        timeline = timeline.filter(function (d) { return d <= today; });
+
+        if (!timeline.length) {
+          statusEl.textContent = "No NAV history available yet for your mapped instruments.";
+          return;
+        }
+
+        var points = timeline.map(function (date) {
+          var total = 0;
+          instruments.forEach(function (name) {
+            var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
+            var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
+            if (units > 0 && nav) total += units * nav;
+          });
+          return { x: date, y: total };
+        });
+
+        statusEl.textContent = instruments.length + " instrument(s) plotted" + (skipped ? " (" + skipped + " unmapped instrument(s) skipped)" : "") + ".";
+
+        var first = timeline[0], last = timeline[timeline.length - 1];
+        if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
+
+        if (window.__wfValueChart) window.__wfValueChart.destroy();
+        window.__wfValueChart = new Chart(canvas.getContext("2d"), {
+          type: "line",
+          data: {
+            datasets: [{
+              label: "Current Value",
+              data: points,
+              borderColor: "#10B981",
+              backgroundColor: "rgba(16,185,129,0.12)",
+              fill: true,
+              tension: 0.15,
+              pointRadius: 0,
+              borderWidth: 2
+            }]
+          },
+          options: {
+            maintainAspectRatio: false,
+            scales: {
+              x: { type: "time", time: { unit: "month" } },
+              y: { ticks: { callback: function (v) { return formatCurrency(v); } } }
+            },
+            plugins: {
+              legend: { display: false },
+              zoom: {
+                pan: { enabled: true, mode: "x" },
+                zoom: {
+                  wheel: { enabled: true },
+                  pinch: { enabled: true },
+                  mode: "x",
+                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); }
+                }
+              }
+            }
+          }
+        });
+
+        function updateVisibleRangeLabel(chart) {
+          var xScale = chart.scales.x;
+          if (rangeEl) rangeEl.textContent = new Date(xScale.min).toLocaleDateString() + " – " + new Date(xScale.max).toLocaleDateString();
+        }
+      });
+
+    if (resetBtn && !resetBtn.dataset.bound) {
+      resetBtn.dataset.bound = "1";
+      resetBtn.addEventListener("click", function () {
+        if (window.__wfValueChart) window.__wfValueChart.resetZoom();
+      });
+    }
+  }
+
+  renderValueChart();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");

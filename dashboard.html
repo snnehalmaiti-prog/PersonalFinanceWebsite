@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -84,6 +87,21 @@
       </div>
 
       <p class="muted small" style="margin-top:24px;">Connect your transaction sheets in <a href="settings.html">Settings</a> to populate this overview.</p>
+
+      <div class="value-chart-card">
+        <div class="value-chart-header">
+          <h3>Current Value Over Time</h3>
+          <div class="value-chart-actions">
+            <span class="muted small" id="value-chart-range">—</span>
+            <button type="button" class="btn btn-outline btn-sm" id="value-chart-reset">Reset zoom</button>
+          </div>
+        </div>
+        <p class="muted small" id="value-chart-status">Loading NAV history…</p>
+        <div class="value-chart-wrap">
+          <canvas id="value-chart" height="320"></canvas>
+        </div>
+        <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
+      </div>
     </section>
 
     <section id="panel-equity" class="settings-panel" role="tabpanel" aria-labelledby="tab-equity" hidden>

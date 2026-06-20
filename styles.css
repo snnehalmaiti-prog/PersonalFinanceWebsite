@@ -1039,3 +1039,23 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .equity-meta a { color: var(--emerald); font-weight: 600; }
 .equity-meta a:hover { text-decoration: underline; }
 .dot-sep { color: var(--border); }
+
+.value-chart-card {
+  margin-top: 22px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 14px);
+}
+.value-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.value-chart-header h3 { margin: 0; font-size: 1rem; }
+.value-chart-actions { display: flex; align-items: center; gap: 10px; }
+.btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+.value-chart-wrap { position: relative; height: 320px; margin-top: 12px; }
+.value-chart-hint { margin-top: 8px; }
