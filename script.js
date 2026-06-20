@@ -835,20 +835,68 @@
       .catch(function () { return []; });
   }
 
-  function buildInstrumentSchemeMap() {
+  function buildInstrumentIsinMap() {
     var rows = getSheetRows("mfmapping");
     var map = {};
     if (!rows || !rows.length) return map;
     var header = rows[0].map(normalizeText);
     var instrumentIdx = header.indexOf("instrument name");
-    var codeIdx = header.findIndex(function (h) { return h.indexOf("code") !== -1; });
-    if (instrumentIdx === -1 || codeIdx === -1) return map;
+    var isinIdx = header.findIndex(function (h) { return h.indexOf("identifier") !== -1 || h.indexOf("isin") !== -1; });
+    if (instrumentIdx === -1 || isinIdx === -1) return map;
     rows.slice(1).forEach(function (row) {
       var instrument = (row[instrumentIdx] || "").trim();
-      var code = (row[codeIdx] || "").trim();
-      if (instrument && code) map[instrument] = code;
+      var isin = (row[isinIdx] || "").trim();
+      if (instrument && isin) map[instrument] = isin;
     });
     return map;
+  }
+
+  var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
+  var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+  var AMFI_NAV_URL = "https://www.amfiindia.com/spages/NAVAll.txt";
+
+  function fetchAmfiIsinToSchemeMap() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(AMFI_ISIN_MAP_CACHE_KEY));
+      if (cached && Date.now() - cached.fetchedAt < AMFI_ISIN_MAP_MAX_AGE_MS) {
+        return Promise.resolve(cached.data);
+      }
+    } catch (e) {}
+
+    return fetch(AMFI_NAV_URL)
+      .then(function (res) { return res.text(); })
+      .then(function (text) {
+        var isinToCode = {};
+        text.split("\n").forEach(function (line) {
+          var parts = line.split(";");
+          if (parts.length < 6) return;
+          var schemeCode = parts[0].trim();
+          var isinPayout = parts[1].trim();
+          var isinReinvest = parts[2].trim();
+          if (!/^\d+$/.test(schemeCode)) return;
+          [isinPayout, isinReinvest].forEach(function (isin) {
+            if (isin && isin.toUpperCase() !== "NA") isinToCode[isin] = schemeCode;
+          });
+        });
+        try {
+          localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: isinToCode }));
+        } catch (e) {}
+        return isinToCode;
+      })
+      .catch(function () { return {}; });
+  }
+
+  function buildInstrumentSchemeMap() {
+    var isinMap = buildInstrumentIsinMap();
+    return fetchAmfiIsinToSchemeMap().then(function (isinToCode) {
+      var map = {};
+      Object.keys(isinMap).forEach(function (instrument) {
+        var isin = isinMap[instrument];
+        var code = isinToCode[isin];
+        if (code) map[instrument] = code;
+      });
+      return map;
+    });
   }
 
   function buildInstrumentUnitEvents(portfolioFilter) {
@@ -908,23 +956,25 @@
     var resetBtn = document.getElementById("value-chart-reset");
     if (!canvas || typeof Chart === "undefined") return;
 
-    var schemeMap = buildInstrumentSchemeMap();
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
-    var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
-    var skipped = Object.keys(unitEvents).length - instruments.length;
+    statusEl.textContent = "Resolving mutual fund scheme codes…";
 
-    if (!instruments.length) {
-      statusEl.textContent = skipped
-        ? "No Instrument Name in your Equity sheet matched a Scheme Code in the Mutual Fund Mapping sheet."
-        : "Connect your Equity Transactions and Mutual Fund Mapping sheets to see this chart.";
-      return;
-    }
+    buildInstrumentSchemeMap().then(function (schemeMap) {
+      var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+      var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
+      var skipped = Object.keys(unitEvents).length - instruments.length;
 
-    statusEl.textContent = "Fetching NAV history for " + instruments.length + " instrument(s)…";
+      if (!instruments.length) {
+        statusEl.textContent = skipped
+          ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
+          : "Connect your Equity Transactions and Mutual Fund Mapping sheets to see this chart.";
+        return;
+      }
 
-    Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
-      .then(function (navHistories) {
+      statusEl.textContent = "Fetching NAV history for " + instruments.length + " instrument(s)…";
+
+      Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+        .then(function (navHistories) {
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
@@ -997,6 +1047,7 @@
           if (rangeEl) rangeEl.textContent = new Date(xScale.min).toLocaleDateString() + " – " + new Date(xScale.max).toLocaleDateString();
         }
       });
+    });
 
     if (resetBtn && !resetBtn.dataset.bound) {
       resetBtn.dataset.bound = "1";
