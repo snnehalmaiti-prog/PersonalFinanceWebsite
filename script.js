@@ -317,6 +317,43 @@
     return total;
   }
 
+  function buildSyncDiagnostics(prefix, rows) {
+    if (prefix !== "equity" && prefix !== "fixedincome") return "";
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var valueIdx = header.indexOf("value");
+    var categoryIdx = header.indexOf("instrument category");
+    var unitsIdx = header.indexOf("units");
+    var priceIdx = header.indexOf("price");
+
+    var requiredIdx = prefix === "equity"
+      ? { "portfolio name": portfolioIdx, "transaction type": typeIdx, "instrument category": categoryIdx, units: unitsIdx, price: priceIdx }
+      : { "portfolio name": portfolioIdx, "transaction type": typeIdx, value: valueIdx };
+
+    var missing = Object.keys(requiredIdx).filter(function (key) { return requiredIdx[key] === -1; });
+    if (missing.length) {
+      return "Synced " + (rows.length - 1) + " rows, but couldn't find column(s): " + missing.join(", ") + ". Check the header row number and exact column names.";
+    }
+
+    var matched = 0;
+    rows.slice(1).forEach(function (row) {
+      if (prefix === "equity") {
+        var category = normalizeText(row[categoryIdx]);
+        var type = normalizeText(row[typeIdx]);
+        if (category.indexOf("equity") !== -1 && type.indexOf("buy") !== -1) matched += 1;
+      } else {
+        matched += 1;
+      }
+    });
+
+    var total = prefix === "equity"
+      ? sumEquityBuyInvestment(rows, "all")
+      : sumInvestmentForRows(rows, "all");
+
+    return "Synced " + (rows.length - 1) + " rows. " + matched + " row(s) counted toward Total Investment. Computed total: " + formatCurrency(total) + ".";
+  }
+
   function formatCurrency(amount) {
     var sign = amount < 0 ? "-" : "";
     return sign + "₹" + Math.abs(amount).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -648,17 +685,18 @@
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
           updateDashboardStats();
           updateRefreshButtonStatus();
-          rows = filterColumns(rows, options.fields);
+          var diagnostics = buildSyncDiagnostics(prefix, rows);
+          var displayRows = filterColumns(rows, options.fields);
           if (options.showTable === false) {
             sheetTableWrap.hidden = true;
           } else {
-            renderTable(rows);
+            renderTable(displayRows);
             sheetTableWrap.hidden = false;
           }
-          setStatus("", false);
+          setStatus(diagnostics, false);
           setConnected(true);
 
-          var rowCount = rows.length - 1;
+          var rowCount = displayRows.length - 1;
           rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
           lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
           openSheetLink.href = url;
