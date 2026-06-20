@@ -38,6 +38,7 @@
     <div class="settings-tabs" role="tablist" aria-label="Settings sections">
       <button type="button" class="settings-tab active" id="tab-profile" role="tab" aria-selected="true" aria-controls="panel-profile">Profile</button>
       <button type="button" class="settings-tab" id="tab-transactions" role="tab" aria-selected="false" aria-controls="panel-transactions">Transaction Details</button>
+      <button type="button" class="settings-tab" id="tab-mapping" role="tab" aria-selected="false" aria-controls="panel-mapping">Mapping</button>
     </div>
 
     <section id="panel-profile" class="settings-panel" role="tabpanel" aria-labelledby="tab-profile">
@@ -107,6 +108,41 @@
         <p id="fixedincome-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
         <div id="fixedincome-sheet-table-wrap" class="sheet-table-wrap" hidden>
           <table id="fixedincome-sheet-table" class="sheet-table"></table>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-mapping" class="settings-panel" role="tabpanel" aria-labelledby="tab-mapping" hidden>
+      <h2>Mapping</h2>
+      <p class="muted">Reference sheets used to map and enrich your transaction data.</p>
+
+      <div class="equity-card">
+        <div class="equity-card-header">
+          <h3><span class="equity-icon" aria-hidden="true">🔗</span> Mutual Fund Mapping</h3>
+          <span class="status-pill" id="mfmapping-status-pill">Not connected</span>
+        </div>
+        <p class="muted small equity-desc">Maps mutual fund scheme names from your transactions to scheme codes/NAV identifiers.</p>
+
+        <label for="mfmapping-sheet-link" class="sr-only">Google Sheets link</label>
+        <div class="equity-link-row">
+          <input type="url" id="mfmapping-sheet-link" placeholder="Paste your Google Sheets link here" />
+          <button type="button" class="btn btn-outline" id="mfmapping-sheet-save">Save</button>
+          <button type="button" class="btn btn-primary" id="mfmapping-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
+        </div>
+
+        <div class="equity-meta muted small" id="mfmapping-meta" hidden>
+          <span id="mfmapping-last-sync">Last sync: —</span>
+          <span class="dot-sep" aria-hidden="true">&bull;</span>
+          <span id="mfmapping-row-count">0 rows</span>
+          <span class="dot-sep" aria-hidden="true">&bull;</span>
+          <a href="#" id="mfmapping-open-sheet" target="_blank" rel="noopener">Open sheet &#8599;</a>
+        </div>
+
+        <p id="mfmapping-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
+        <div id="mfmapping-sheet-table-wrap" class="sheet-table-wrap" hidden>
+          <table id="mfmapping-sheet-table" class="sheet-table"></table>
         </div>
       </div>
     </section>

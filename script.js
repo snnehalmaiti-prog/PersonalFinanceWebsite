@@ -170,22 +170,28 @@
   // ===== Settings tabs =====
   var settingsTabProfile = document.getElementById("tab-profile");
   var settingsTabTransactions = document.getElementById("tab-transactions");
+  var settingsTabMapping = document.getElementById("tab-mapping");
   if (settingsTabProfile && settingsTabTransactions) {
-    var panelProfile = document.getElementById("panel-profile");
-    var panelTransactions = document.getElementById("panel-transactions");
+    var settingsTabs = [
+      { tab: settingsTabProfile, panel: document.getElementById("panel-profile"), key: "profile" },
+      { tab: settingsTabTransactions, panel: document.getElementById("panel-transactions"), key: "transactions" },
+      { tab: settingsTabMapping, panel: document.getElementById("panel-mapping"), key: "mapping" }
+    ];
 
     function showSettingsTab(tab) {
-      var isProfile = tab === "profile";
-      settingsTabProfile.classList.toggle("active", isProfile);
-      settingsTabTransactions.classList.toggle("active", !isProfile);
-      settingsTabProfile.setAttribute("aria-selected", String(isProfile));
-      settingsTabTransactions.setAttribute("aria-selected", String(!isProfile));
-      panelProfile.hidden = !isProfile;
-      panelTransactions.hidden = isProfile;
+      settingsTabs.forEach(function (entry) {
+        if (!entry.tab) return;
+        var isActive = entry.key === tab;
+        entry.tab.classList.toggle("active", isActive);
+        entry.tab.setAttribute("aria-selected", String(isActive));
+        entry.panel.hidden = !isActive;
+      });
     }
 
-    settingsTabProfile.addEventListener("click", function () { showSettingsTab("profile"); });
-    settingsTabTransactions.addEventListener("click", function () { showSettingsTab("transactions"); });
+    settingsTabs.forEach(function (entry) {
+      if (!entry.tab) return;
+      entry.tab.addEventListener("click", function () { showSettingsTab(entry.key); });
+    });
   }
 
   // ===== Dashboard tabs =====
@@ -704,6 +710,7 @@
     ],
     showTable: false
   });
+  initSheetCard("mfmapping");
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
