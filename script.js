@@ -275,22 +275,43 @@
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
     var categoryIdx = header.indexOf("instrument category");
     var unitsIdx = header.indexOf("units");
-    var priceIdx = header.indexOf("price");
-    if (portfolioIdx === -1 || typeIdx === -1 || categoryIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
+    var valueIdx = header.indexOf("value");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || categoryIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
 
-    var total = 0;
+    var byInstrument = {};
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       var category = normalizeText(row[categoryIdx]);
+      if (category.indexOf("equity") === -1) return;
+
+      var instrument = (row[instrumentIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
-      if (category.indexOf("equity") === -1 || type.indexOf("buy") === -1) return;
       var units = parseNumber(row[unitsIdx]);
-      var price = parseNumber(row[priceIdx]);
-      total += units * price;
+      var value = parseNumber(row[valueIdx]);
+
+      if (!byInstrument[instrument]) {
+        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0 };
+      }
+      if (type.indexOf("buy") !== -1) {
+        byInstrument[instrument].buyUnits += units;
+        byInstrument[instrument].buyValue += value;
+      } else if (type.indexOf("sell") !== -1) {
+        byInstrument[instrument].sellUnits += units;
+      }
+    });
+
+    var total = 0;
+    Object.keys(byInstrument).forEach(function (instrument) {
+      var entry = byInstrument[instrument];
+      if (entry.buyUnits <= 0) return;
+      var avgBuyPrice = entry.buyValue / entry.buyUnits;
+      var remainingUnits = Math.max(entry.buyUnits - entry.sellUnits, 0);
+      total += remainingUnits * avgBuyPrice;
     });
     return total;
   }
@@ -321,14 +342,14 @@
     if (prefix !== "equity" && prefix !== "fixedincome") return "";
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
     var valueIdx = header.indexOf("value");
     var categoryIdx = header.indexOf("instrument category");
     var unitsIdx = header.indexOf("units");
-    var priceIdx = header.indexOf("price");
 
     var requiredIdx = prefix === "equity"
-      ? { "portfolio name": portfolioIdx, "transaction type": typeIdx, "instrument category": categoryIdx, units: unitsIdx, price: priceIdx }
+      ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, "instrument category": categoryIdx, units: unitsIdx, value: valueIdx }
       : { "portfolio name": portfolioIdx, "transaction type": typeIdx, value: valueIdx };
 
     var missing = Object.keys(requiredIdx).filter(function (key) { return requiredIdx[key] === -1; });
@@ -337,21 +358,24 @@
     }
 
     var matched = 0;
-    rows.slice(1).forEach(function (row) {
-      if (prefix === "equity") {
+    if (prefix === "equity") {
+      var instruments = {};
+      rows.slice(1).forEach(function (row) {
         var category = normalizeText(row[categoryIdx]);
-        var type = normalizeText(row[typeIdx]);
-        if (category.indexOf("equity") !== -1 && type.indexOf("buy") !== -1) matched += 1;
-      } else {
-        matched += 1;
-      }
-    });
+        if (category.indexOf("equity") === -1) return;
+        instruments[(row[instrumentIdx] || "").trim()] = true;
+      });
+      matched = Object.keys(instruments).length;
+    } else {
+      matched = rows.length - 1;
+    }
 
     var total = prefix === "equity"
       ? sumEquityBuyInvestment(rows, "all")
       : sumInvestmentForRows(rows, "all");
 
-    return "Synced " + (rows.length - 1) + " rows. " + matched + " row(s) counted toward Total Investment. Computed total: " + formatCurrency(total) + ".";
+    var matchedLabel = prefix === "equity" ? " distinct equity instrument(s) counted." : " row(s) counted toward Total Investment.";
+    return "Synced " + (rows.length - 1) + " rows. " + matched + matchedLabel + " Computed total: " + formatCurrency(total) + ".";
   }
 
   function formatCurrency(amount) {
