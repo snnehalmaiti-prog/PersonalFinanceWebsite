@@ -388,11 +388,52 @@
     var overviewEl = document.getElementById("overview-total-investment");
     var equityEl = document.getElementById("equity-total-investment");
     var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
-    if (!overviewEl && !equityEl && !fixedIncomeEl) return;
+    if (overviewEl || equityEl || fixedIncomeEl) {
+      var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome"]));
+      if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
+      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
+    }
+    updateTotalCurrentValue();
+  }
+
+  // Total Current Value: Instrument Name -> ISIN (Mapping sheet) -> Scheme Code
+  // (AMFI NAVAll.txt) -> latest NAV (mfapi.in), multiplied by units currently held.
+  function updateTotalCurrentValue() {
+    var overviewEl = document.getElementById("overview-total-current-value");
+    var equityEl = document.getElementById("equity-total-current-value");
+    if (!overviewEl && !equityEl) return;
+
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome"]));
-    if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
-    if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
+    var unitEvents = buildInstrumentUnitEvents(selected);
+
+    buildInstrumentSchemeMap().then(function (schemeMap) {
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
+      if (!instruments.length) {
+        if (overviewEl) overviewEl.textContent = formatCurrency(0);
+        if (equityEl) equityEl.textContent = formatCurrency(0);
+        return;
+      }
+
+      Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+        .then(function (navHistories) {
+          var total = 0;
+          instruments.forEach(function (name, i) {
+            var navHistory = navHistories[i];
+            var events = unitEvents[name];
+            var units = events.length ? events[events.length - 1].cumulativeUnits : 0;
+            var nav = latest_nav_for(navHistory);
+            if (units > 0 && nav) total += units * nav;
+          });
+          if (overviewEl) overviewEl.textContent = formatCurrency(total);
+          if (equityEl) equityEl.textContent = formatCurrency(total);
+        });
+    });
+  }
+
+  function latest_nav_for(navHistory) {
+    if (!navHistory || !navHistory.length) return null;
+    return navHistory[navHistory.length - 1].nav;
   }
 
   function updateRefreshButtonStatus() {
