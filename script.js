@@ -248,9 +248,13 @@
     return parseFloat(cleaned) || 0;
   }
 
+  function normalizeText(value) {
+    return String(value == null ? "" : value).replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
   function sumInvestmentForRows(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+    var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var typeIdx = header.indexOf("transaction type");
     var valueIdx = header.indexOf("value");
@@ -269,7 +273,7 @@
 
   function sumEquityBuyInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+    var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var typeIdx = header.indexOf("transaction type");
     var categoryIdx = header.indexOf("instrument category");
@@ -280,10 +284,10 @@
     var total = 0;
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
-      var category = (row[categoryIdx] || "").trim().toLowerCase();
-      var type = (row[typeIdx] || "").trim().toLowerCase();
-      if (category !== "equity" || type !== "buy") return;
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      var category = normalizeText(row[categoryIdx]);
+      var type = normalizeText(row[typeIdx]);
+      if (category.indexOf("equity") === -1 || type.indexOf("buy") === -1) return;
       var units = parseNumber(row[unitsIdx]);
       var price = parseNumber(row[priceIdx]);
       total += units * price;
