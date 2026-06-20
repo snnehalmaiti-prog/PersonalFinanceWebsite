@@ -1020,6 +1020,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-size: 0.92rem;
 }
 .equity-link-row input:focus { outline: 2px solid var(--sky); border-color: transparent; }
+.equity-link-row input.header-row-input {
+  flex: 0 0 auto;
+  width: 76px;
+  min-width: 0;
+  text-align: center;
+}
 
 .refresh-icon { display: inline-block; }
 

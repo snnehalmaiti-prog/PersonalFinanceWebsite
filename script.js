@@ -438,7 +438,8 @@
             }
             done();
           },
-          done
+          done,
+          localStorage.getItem("wf-" + prefix + "-header-row") || 1
         );
       });
 
@@ -493,7 +494,7 @@
     return rows;
   }
 
-  function fetchSheetJSONP(id, gid, onData, onError) {
+  function fetchSheetJSONP(id, gid, onData, onError, headerRow) {
     var callbackName = "__wfSheetCallback_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
     var script = document.createElement("script");
     var timeoutId;
@@ -518,9 +519,15 @@
       onError();
     };
 
+    var rangeParam = "";
+    var startRow = parseInt(headerRow, 10);
+    if (startRow > 1) {
+      rangeParam = "&range=A" + startRow + "%3AZZ";
+    }
+
     script.src =
       "https://docs.google.com/spreadsheets/d/" + id +
-      "/gviz/tq?gid=" + gid +
+      "/gviz/tq?gid=" + gid + rangeParam +
       "&tqx=out:json;responseHandler:" + callbackName;
 
     timeoutId = setTimeout(function () {
@@ -573,7 +580,9 @@
     var lastSync = document.getElementById(prefix + "-last-sync");
     var rowCountEl = document.getElementById(prefix + "-row-count");
     var openSheetLink = document.getElementById(prefix + "-open-sheet");
+    var headerRowInput = document.getElementById(prefix + "-header-row");
     var storageKey = "wf-" + prefix + "-sheet-link";
+    var headerRowKey = "wf-" + prefix + "-header-row";
 
     function renderTable(rows) {
       sheetTable.innerHTML = "";
@@ -622,6 +631,8 @@
       }
       setStatus("Verifying and syncing…", false);
 
+      var headerRow = headerRowInput ? headerRowInput.value : 1;
+
       fetchSheetJSONP(
         parsed.id,
         parsed.gid,
@@ -657,11 +668,14 @@
           setStatus("Couldn't load the sheet. Make sure it's shared as \"Anyone with the link can view.\"", true);
           sheetTableWrap.hidden = true;
           setConnected(false);
-        }
+        },
+        headerRow
       );
     }
 
     var savedLink = localStorage.getItem(storageKey);
+    var savedHeaderRow = localStorage.getItem(headerRowKey);
+    if (savedHeaderRow && headerRowInput) headerRowInput.value = savedHeaderRow;
     if (savedLink) {
       sheetLinkInput.value = savedLink;
       syncSheet(savedLink);
@@ -671,6 +685,7 @@
       var url = sheetLinkInput.value.trim();
       if (!url) return;
       localStorage.setItem(storageKey, url);
+      if (headerRowInput) localStorage.setItem(headerRowKey, headerRowInput.value || "1");
       setStatus("Link saved.", false);
     });
 
@@ -678,6 +693,7 @@
       var url = sheetLinkInput.value.trim();
       if (!url) return;
       localStorage.setItem(storageKey, url);
+      if (headerRowInput) localStorage.setItem(headerRowKey, headerRowInput.value || "1");
       syncSheet(url);
     });
   }
