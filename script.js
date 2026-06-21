@@ -991,13 +991,14 @@
       return events;
     }
     var header = rows[0].map(normalizeText);
+    var dateColIdx = header.findIndex(function (h) { return h.indexOf("date") !== -1; });
     var required = {
       "portfolio name": header.indexOf("portfolio name"),
       "instrument name": header.indexOf("instrument name"),
       "instrument category": header.indexOf("instrument category"),
       "transaction type": header.indexOf("transaction type"),
       units: header.indexOf("units"),
-      "transaction date": header.indexOf("transaction date")
+      "a date column": dateColIdx
     };
     var missing = Object.keys(required).filter(function (key) { return required[key] === -1; });
     if (missing.length) {
@@ -1009,7 +1010,7 @@
     var categoryIdx = required["instrument category"];
     var typeIdx = required["transaction type"];
     var unitsIdx = required.units;
-    var dateIdx = required["transaction date"];
+    var dateIdx = required["a date column"];
 
     var equityRowCount = 0;
     var unparseableDateCount = 0;
