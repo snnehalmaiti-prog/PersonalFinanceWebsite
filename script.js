@@ -960,6 +960,26 @@
     });
   }
 
+  // Google Sheets gviz returns dates as locale-formatted strings (e.g. "21/06/2026"
+  // for DD/MM/YYYY, common in India). JS's native Date parser misreads slash-separated
+  // dates as MM/DD/YYYY, so "21/06/2026" comes out NaN. Parse DD/MM/YYYY and DD-MM-YYYY
+  // explicitly before falling back to native parsing.
+  function parseFlexibleDate(value) {
+    var str = String(value == null ? "" : value).trim();
+    if (!str) return null;
+    var match = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+    if (match) {
+      var day = Number(match[1]);
+      var month = Number(match[2]);
+      var year = Number(match[3]);
+      if (month > 12 && day <= 12) { var tmp = day; day = month; month = tmp; }
+      var parsed = new Date(year, month - 1, day);
+      return isNaN(parsed) ? null : parsed;
+    }
+    var native = new Date(str);
+    return isNaN(native) ? null : native;
+  }
+
   function buildInstrumentUnitEvents(portfolioFilter) {
     var rows = getSheetRows("equity");
     var events = {};
@@ -979,8 +999,8 @@
       var category = normalizeText(row[categoryIdx]);
       if (category.indexOf("equity") === -1) return;
       var instrument = (row[instrumentIdx] || "").trim();
-      var date = new Date(row[dateIdx]);
-      if (isNaN(date)) return;
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date) return;
       var type = normalizeText(row[typeIdx]);
       var units = parseNumber(row[unitsIdx]);
       var delta = type.indexOf("buy") !== -1 ? units : (type.indexOf("sell") !== -1 ? -units : 0);
