@@ -340,6 +340,24 @@
   }
 
   function buildSyncDiagnostics(prefix, rows) {
+    if (prefix === "mfmapping") {
+      var rawHeader = rows[0];
+      var header = rawHeader.map(normalizeText);
+      var instrumentIdx = header.indexOf("instrument name");
+      var isinIdx = header.findIndex(function (h) { return h.indexOf("identifier") !== -1 || h.indexOf("isin") !== -1; });
+      var headerPreview = rawHeader.map(function (h) { return "\"" + h + "\""; }).join(", ");
+      if (instrumentIdx === -1 || isinIdx === -1) {
+        return "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " +
+          (instrumentIdx === -1 ? "No \"Instrument Name\" column found. " : "") +
+          (isinIdx === -1 ? "No \"Identifier\"/\"ISIN\" column found. " : "") +
+          "Check the header row number.";
+      }
+      var mapped = 0;
+      rows.slice(1).forEach(function (row) {
+        if ((row[instrumentIdx] || "").trim() && (row[isinIdx] || "").trim()) mapped++;
+      });
+      return "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " + mapped + " row(s) have both Instrument Name and Identifier filled in.";
+    }
     if (prefix !== "equity" && prefix !== "fixedincome") return "";
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
