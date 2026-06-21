@@ -411,7 +411,7 @@
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
       if (!instruments.length) {
         var reason = !Object.keys(unitEvents).length
-          ? "No equity holdings found in the synced Equity Transactions sheet."
+          ? "No equity holdings found in the synced Equity Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
           : !Object.keys(schemeMap).length
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI."
           : "None of your equity instruments matched a resolved Scheme Code.";
@@ -980,33 +980,60 @@
     return isNaN(native) ? null : native;
   }
 
+  var lastUnitEventsDiagnostic = null;
+
   function buildInstrumentUnitEvents(portfolioFilter) {
     var rows = getSheetRows("equity");
     var events = {};
-    if (!rows || !rows.length) return events;
+    lastUnitEventsDiagnostic = null;
+    if (!rows || !rows.length) {
+      lastUnitEventsDiagnostic = "no synced Equity Transactions data";
+      return events;
+    }
     var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var instrumentIdx = header.indexOf("instrument name");
-    var categoryIdx = header.indexOf("instrument category");
-    var typeIdx = header.indexOf("transaction type");
-    var unitsIdx = header.indexOf("units");
-    var dateIdx = header.indexOf("transaction date");
-    if ([portfolioIdx, instrumentIdx, categoryIdx, typeIdx, unitsIdx, dateIdx].indexOf(-1) !== -1) return events;
+    var required = {
+      "portfolio name": header.indexOf("portfolio name"),
+      "instrument name": header.indexOf("instrument name"),
+      "instrument category": header.indexOf("instrument category"),
+      "transaction type": header.indexOf("transaction type"),
+      units: header.indexOf("units"),
+      "transaction date": header.indexOf("transaction date")
+    };
+    var missing = Object.keys(required).filter(function (key) { return required[key] === -1; });
+    if (missing.length) {
+      lastUnitEventsDiagnostic = "missing column(s): " + missing.join(", ");
+      return events;
+    }
+    var portfolioIdx = required["portfolio name"];
+    var instrumentIdx = required["instrument name"];
+    var categoryIdx = required["instrument category"];
+    var typeIdx = required["transaction type"];
+    var unitsIdx = required.units;
+    var dateIdx = required["transaction date"];
 
+    var equityRowCount = 0;
+    var unparseableDateCount = 0;
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       var category = normalizeText(row[categoryIdx]);
       if (category.indexOf("equity") === -1) return;
+      equityRowCount++;
       var instrument = (row[instrumentIdx] || "").trim();
       var date = parseFlexibleDate(row[dateIdx]);
-      if (!date) return;
+      if (!date) { unparseableDateCount++; return; }
       var type = normalizeText(row[typeIdx]);
       var units = parseNumber(row[unitsIdx]);
       var delta = type.indexOf("buy") !== -1 ? units : (type.indexOf("sell") !== -1 ? -units : 0);
       if (!events[instrument]) events[instrument] = [];
       events[instrument].push({ date: date, delta: delta });
     });
+
+    if (!Object.keys(events).length) {
+      lastUnitEventsDiagnostic = equityRowCount
+        ? equityRowCount + " equity row(s) found, but " + unparseableDateCount + " had an unparseable Transaction Date."
+        : "no rows matched Instrument Category containing \"equity\" for the selected portfolio.";
+    }
 
     Object.keys(events).forEach(function (instrument) {
       events[instrument].sort(function (a, b) { return a.date - b.date; });
