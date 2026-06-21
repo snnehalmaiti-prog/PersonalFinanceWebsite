@@ -968,33 +968,53 @@
       return !!text && text.indexOf(";") !== -1;
     }
 
-    function tryFetch(url) {
-      return fetch(url).then(function (res) {
-        if (!res.ok) throw new Error("fetch failed");
-        return res.text();
-      });
+    function tryFetch(url, isJsonWrapped) {
+      var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 10000) : null;
+      return fetch(url, controller ? { signal: controller.signal } : undefined)
+        .then(function (res) {
+          if (timeoutId) clearTimeout(timeoutId);
+          if (!res.ok) throw new Error("fetch failed");
+          return isJsonWrapped ? res.json().then(function (j) { return j.contents || ""; }) : res.text();
+        })
+        .catch(function (err) {
+          if (timeoutId) clearTimeout(timeoutId);
+          throw err;
+        });
     }
 
     // AMFI's NAVAll.txt does not send CORS headers for direct browser fetches,
-    // so fall back through a chain of CORS proxies if the direct request fails.
+    // and known free CORS proxies (allorigins, corsproxy.io, thingproxy) are
+    // frequently rate-limited, blocked by AMFI specifically, or offline, so try
+    // several before giving up.
     var sources = [
-      AMFI_NAV_URL,
-      "https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL),
-      "https://corsproxy.io/?url=" + encodeURIComponent(AMFI_NAV_URL),
-      "https://thingproxy.freeboard.io/fetch/" + AMFI_NAV_URL
+      { url: AMFI_NAV_URL },
+      { url: "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(AMFI_NAV_URL) },
+      { url: "https://api.allorigins.win/get?url=" + encodeURIComponent(AMFI_NAV_URL), jsonWrapped: true },
+      { url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL) },
+      { url: "https://corsproxy.io/?url=" + encodeURIComponent(AMFI_NAV_URL) }
     ];
 
+    lastAmfiFetchFailures = [];
     function attempt(index) {
       if (index >= sources.length) return Promise.resolve(null);
-      return tryFetch(sources[index])
-        .then(function (text) { return isValidNavText(text) ? text : attempt(index + 1); })
-        .catch(function () { return attempt(index + 1); });
+      return tryFetch(sources[index].url, sources[index].jsonWrapped)
+        .then(function (text) {
+          if (isValidNavText(text)) return text;
+          lastAmfiFetchFailures.push(sources[index].url + " (empty/invalid response)");
+          return attempt(index + 1);
+        })
+        .catch(function (err) {
+          lastAmfiFetchFailures.push(sources[index].url + " (" + (err && err.message ? err.message : "error") + ")");
+          return attempt(index + 1);
+        });
     }
 
     return attempt(0).then(function (text) {
       return text ? parseAndCache(text) : {};
     });
   }
+  var lastAmfiFetchFailures = [];
 
   var lastSchemeMapDiagnostic = null;
 
@@ -1012,7 +1032,7 @@
         if (lastIsinMapDiagnostic) {
           lastSchemeMapDiagnostic = lastIsinMapDiagnostic;
         } else if (!Object.keys(isinToCode).length) {
-          lastSchemeMapDiagnostic = "Could not fetch/parse AMFI's NAVAll.txt (likely blocked by CORS even via proxy).";
+          lastSchemeMapDiagnostic = "Could not fetch AMFI's NAVAll.txt via any source. Tried: " + lastAmfiFetchFailures.join(" | ");
         } else {
           var sampleIsins = Object.keys(isinMap).slice(0, 3).map(function (name) { return isinMap[name]; });
           lastSchemeMapDiagnostic = "AMFI NAV file loaded (" + Object.keys(isinToCode).length + " ISINs), but none of your mapped ISIN(s) matched (e.g. " + sampleIsins.join(", ") + ").";
