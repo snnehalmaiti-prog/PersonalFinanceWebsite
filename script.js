@@ -964,23 +964,36 @@
       return isinToCode;
     }
 
-    // AMFI's NAVAll.txt does not send CORS headers for direct browser fetches,
-    // so fall back to a CORS proxy if the direct request fails or returns nothing.
-    return fetch(AMFI_NAV_URL)
-      .then(function (res) {
-        if (!res.ok) throw new Error("direct fetch failed");
+    function isValidNavText(text) {
+      return !!text && text.indexOf(";") !== -1;
+    }
+
+    function tryFetch(url) {
+      return fetch(url).then(function (res) {
+        if (!res.ok) throw new Error("fetch failed");
         return res.text();
-      })
-      .then(function (text) {
-        if (!text || text.indexOf(";") === -1) throw new Error("empty response");
-        return parseAndCache(text);
-      })
-      .catch(function () {
-        return fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL))
-          .then(function (res) { return res.text(); })
-          .then(parseAndCache)
-          .catch(function () { return {}; });
       });
+    }
+
+    // AMFI's NAVAll.txt does not send CORS headers for direct browser fetches,
+    // so fall back through a chain of CORS proxies if the direct request fails.
+    var sources = [
+      AMFI_NAV_URL,
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL),
+      "https://corsproxy.io/?url=" + encodeURIComponent(AMFI_NAV_URL),
+      "https://thingproxy.freeboard.io/fetch/" + AMFI_NAV_URL
+    ];
+
+    function attempt(index) {
+      if (index >= sources.length) return Promise.resolve(null);
+      return tryFetch(sources[index])
+        .then(function (text) { return isValidNavText(text) ? text : attempt(index + 1); })
+        .catch(function () { return attempt(index + 1); });
+    }
+
+    return attempt(0).then(function (text) {
+      return text ? parseAndCache(text) : {};
+    });
   }
 
   var lastSchemeMapDiagnostic = null;
