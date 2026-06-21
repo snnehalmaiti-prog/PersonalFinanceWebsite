@@ -410,8 +410,13 @@
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
       if (!instruments.length) {
-        if (overviewEl) overviewEl.textContent = formatCurrency(0);
-        if (equityEl) equityEl.textContent = formatCurrency(0);
+        var reason = !Object.keys(unitEvents).length
+          ? "No equity holdings found in the synced Equity Transactions sheet."
+          : !Object.keys(schemeMap).length
+          ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI."
+          : "None of your equity instruments matched a resolved Scheme Code.";
+        if (overviewEl) { overviewEl.textContent = formatCurrency(0); overviewEl.title = reason; }
+        if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
         return;
       }
 
@@ -904,27 +909,42 @@
       }
     } catch (e) {}
 
-    return fetch(AMFI_NAV_URL)
-      .then(function (res) { return res.text(); })
-      .then(function (text) {
-        var isinToCode = {};
-        text.split("\n").forEach(function (line) {
-          var parts = line.split(";");
-          if (parts.length < 6) return;
-          var schemeCode = parts[0].trim();
-          var isinPayout = parts[1].trim();
-          var isinReinvest = parts[2].trim();
-          if (!/^\d+$/.test(schemeCode)) return;
-          [isinPayout, isinReinvest].forEach(function (isin) {
-            if (isin && isin.toUpperCase() !== "NA") isinToCode[isin] = schemeCode;
-          });
+    function parseAndCache(text) {
+      var isinToCode = {};
+      text.split("\n").forEach(function (line) {
+        var parts = line.split(";");
+        if (parts.length < 6) return;
+        var schemeCode = parts[0].trim();
+        var isinPayout = parts[1].trim();
+        var isinReinvest = parts[2].trim();
+        if (!/^\d+$/.test(schemeCode)) return;
+        [isinPayout, isinReinvest].forEach(function (isin) {
+          if (isin && isin.toUpperCase() !== "NA") isinToCode[isin] = schemeCode;
         });
-        try {
-          localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: isinToCode }));
-        } catch (e) {}
-        return isinToCode;
+      });
+      try {
+        localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: isinToCode }));
+      } catch (e) {}
+      return isinToCode;
+    }
+
+    // AMFI's NAVAll.txt does not send CORS headers for direct browser fetches,
+    // so fall back to a CORS proxy if the direct request fails or returns nothing.
+    return fetch(AMFI_NAV_URL)
+      .then(function (res) {
+        if (!res.ok) throw new Error("direct fetch failed");
+        return res.text();
       })
-      .catch(function () { return {}; });
+      .then(function (text) {
+        if (!text || text.indexOf(";") === -1) throw new Error("empty response");
+        return parseAndCache(text);
+      })
+      .catch(function () {
+        return fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL))
+          .then(function (res) { return res.text(); })
+          .then(parseAndCache)
+          .catch(function () { return {}; });
+      });
   }
 
   function buildInstrumentSchemeMap() {
