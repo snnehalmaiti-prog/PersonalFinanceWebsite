@@ -653,9 +653,13 @@
       rangeParam = "&range=A" + startRow + "%3AZZ";
     }
 
+    // Without &headers=1, gviz returns generic column labels (A, B, C…) instead of
+    // the actual text in the first row of the ranged data, even though the data
+    // itself starts at the right row. That breaks header-name matching downstream.
     script.src =
       "https://docs.google.com/spreadsheets/d/" + id +
       "/gviz/tq?gid=" + gid + rangeParam +
+      "&headers=1" +
       "&tqx=out:json;responseHandler:" + callbackName;
 
     timeoutId = setTimeout(function () {
