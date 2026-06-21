@@ -413,7 +413,7 @@
         var reason = !Object.keys(unitEvents).length
           ? "No equity holdings found in the synced Equity Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
           : !Object.keys(schemeMap).length
-          ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI."
+          ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
         if (overviewEl) { overviewEl.textContent = formatCurrency(0); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
@@ -884,18 +884,32 @@
   function buildInstrumentIsinMap() {
     var rows = getSheetRows("mfmapping");
     var map = {};
-    if (!rows || !rows.length) return map;
+    lastIsinMapDiagnostic = null;
+    if (!rows || !rows.length) {
+      lastIsinMapDiagnostic = "Mutual Fund Mapping sheet has no synced data.";
+      return map;
+    }
     var header = rows[0].map(normalizeText);
     var instrumentIdx = header.indexOf("instrument name");
     var isinIdx = header.findIndex(function (h) { return h.indexOf("identifier") !== -1 || h.indexOf("isin") !== -1; });
-    if (instrumentIdx === -1 || isinIdx === -1) return map;
+    if (instrumentIdx === -1 || isinIdx === -1) {
+      var missingCols = [];
+      if (instrumentIdx === -1) missingCols.push("Instrument Name");
+      if (isinIdx === -1) missingCols.push("Identifier/ISIN");
+      lastIsinMapDiagnostic = "Mutual Fund Mapping sheet is missing column(s): " + missingCols.join(", ") + ".";
+      return map;
+    }
     rows.slice(1).forEach(function (row) {
       var instrument = (row[instrumentIdx] || "").trim();
-      var isin = (row[isinIdx] || "").trim();
+      var isin = (row[isinIdx] || "").trim().toUpperCase();
       if (instrument && isin) map[instrument] = isin;
     });
+    if (!Object.keys(map).length) {
+      lastIsinMapDiagnostic = "Mutual Fund Mapping sheet has rows, but none had both Instrument Name and Identifier filled in.";
+    }
     return map;
   }
+  var lastIsinMapDiagnostic = null;
 
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -919,7 +933,7 @@
         var isinReinvest = parts[2].trim();
         if (!/^\d+$/.test(schemeCode)) return;
         [isinPayout, isinReinvest].forEach(function (isin) {
-          if (isin && isin.toUpperCase() !== "NA") isinToCode[isin] = schemeCode;
+          if (isin && isin.toUpperCase() !== "NA") isinToCode[isin.toUpperCase()] = schemeCode;
         });
       });
       try {
@@ -947,8 +961,11 @@
       });
   }
 
+  var lastSchemeMapDiagnostic = null;
+
   function buildInstrumentSchemeMap() {
     var isinMap = buildInstrumentIsinMap();
+    lastSchemeMapDiagnostic = null;
     return fetchAmfiIsinToSchemeMap().then(function (isinToCode) {
       var map = {};
       Object.keys(isinMap).forEach(function (instrument) {
@@ -956,6 +973,16 @@
         var code = isinToCode[isin];
         if (code) map[instrument] = code;
       });
+      if (!Object.keys(map).length) {
+        if (lastIsinMapDiagnostic) {
+          lastSchemeMapDiagnostic = lastIsinMapDiagnostic;
+        } else if (!Object.keys(isinToCode).length) {
+          lastSchemeMapDiagnostic = "Could not fetch/parse AMFI's NAVAll.txt (likely blocked by CORS even via proxy).";
+        } else {
+          var sampleIsins = Object.keys(isinMap).slice(0, 3).map(function (name) { return isinMap[name]; });
+          lastSchemeMapDiagnostic = "AMFI NAV file loaded (" + Object.keys(isinToCode).length + " ISINs), but none of your mapped ISIN(s) matched (e.g. " + sampleIsins.join(", ") + ").";
+        }
+      }
       return map;
     });
   }
