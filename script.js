@@ -941,6 +941,19 @@
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var AMFI_NAV_URL = "https://www.amfiindia.com/spages/NAVAll.txt";
 
+  var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
+
+  // The browser can't fetch AMFI's NAVAll.txt directly or via public CORS
+  // proxies (AMFI blocks both). fetch_amfi_isin_map.py fetches it server-side
+  // and writes amfi_isin_map.json into the repo; reading that same-origin
+  // file avoids CORS entirely. Re-run that script periodically to refresh it.
+  function fetchStaticAmfiIsinMap() {
+    return fetch(AMFI_ISIN_MAP_STATIC_FILE)
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (payload) { return payload && payload.data ? payload.data : null; })
+      .catch(function () { return null; });
+  }
+
   function fetchAmfiIsinToSchemeMap() {
     try {
       var cached = JSON.parse(localStorage.getItem(AMFI_ISIN_MAP_CACHE_KEY));
@@ -1015,8 +1028,17 @@
         });
     }
 
-    return attempt(0).then(function (text) {
-      return text ? parseAndCache(text) : {};
+    return fetchStaticAmfiIsinMap().then(function (staticData) {
+      if (staticData && Object.keys(staticData).length) {
+        try {
+          localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData }));
+        } catch (e) {}
+        return staticData;
+      }
+      lastAmfiFetchFailures.push("amfi_isin_map.json:missing/empty (run fetch_amfi_isin_map.py and commit it)");
+      return attempt(0).then(function (text) {
+        return text ? parseAndCache(text) : {};
+      });
     });
   }
   var lastAmfiFetchFailures = [];
