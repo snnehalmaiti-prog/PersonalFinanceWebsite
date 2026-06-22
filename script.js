@@ -988,11 +988,11 @@
     // frequently rate-limited, blocked by AMFI specifically, or offline, so try
     // several before giving up.
     var sources = [
-      { url: AMFI_NAV_URL },
-      { url: "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(AMFI_NAV_URL) },
-      { url: "https://api.allorigins.win/get?url=" + encodeURIComponent(AMFI_NAV_URL), jsonWrapped: true },
-      { url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL) },
-      { url: "https://corsproxy.io/?url=" + encodeURIComponent(AMFI_NAV_URL) }
+      { url: AMFI_NAV_URL, name: "direct" },
+      { url: "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(AMFI_NAV_URL), name: "codetabs" },
+      { url: "https://api.allorigins.win/get?url=" + encodeURIComponent(AMFI_NAV_URL), jsonWrapped: true, name: "allorigins-get" },
+      { url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL), name: "allorigins-raw" },
+      { url: "https://corsproxy.io/?url=" + encodeURIComponent(AMFI_NAV_URL), name: "corsproxy" }
     ];
 
     lastAmfiFetchFailures = [];
@@ -1001,11 +1001,12 @@
       return tryFetch(sources[index].url, sources[index].jsonWrapped)
         .then(function (text) {
           if (isValidNavText(text)) return text;
-          lastAmfiFetchFailures.push(sources[index].url + " (empty/invalid response)");
+          lastAmfiFetchFailures.push(sources[index].name + ":empty");
           return attempt(index + 1);
         })
         .catch(function (err) {
-          lastAmfiFetchFailures.push(sources[index].url + " (" + (err && err.message ? err.message : "error") + ")");
+          var code = err && err.name === "AbortError" ? "timeout" : (err && err.message ? err.message.slice(0, 20) : "error");
+          lastAmfiFetchFailures.push(sources[index].name + ":" + code);
           return attempt(index + 1);
         });
     }
@@ -1032,7 +1033,7 @@
         if (lastIsinMapDiagnostic) {
           lastSchemeMapDiagnostic = lastIsinMapDiagnostic;
         } else if (!Object.keys(isinToCode).length) {
-          lastSchemeMapDiagnostic = "Could not fetch AMFI's NAVAll.txt via any source. Tried: " + lastAmfiFetchFailures.join(" | ");
+          lastSchemeMapDiagnostic = "AMFI fetch failed. " + lastAmfiFetchFailures.join(", ");
         } else {
           var sampleIsins = Object.keys(isinMap).slice(0, 3).map(function (name) { return isinMap[name]; });
           lastSchemeMapDiagnostic = "AMFI NAV file loaded (" + Object.keys(isinToCode).length + " ISINs), but none of your mapped ISIN(s) matched (e.g. " + sampleIsins.join(", ") + ").";
