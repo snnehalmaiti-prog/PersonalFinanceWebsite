@@ -425,6 +425,10 @@
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var unitEvents = buildInstrumentUnitEvents(selected);
 
+    var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
+    if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
+    if (equityEl) { equityEl.textContent = "…"; equityEl.title = loadingMsg; }
+
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
       if (!instruments.length) {
@@ -970,7 +974,7 @@
 
     function tryFetch(url, isJsonWrapped) {
       var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-      var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 10000) : null;
+      var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 25000) : null;
       return fetch(url, controller ? { signal: controller.signal } : undefined)
         .then(function (res) {
           if (timeoutId) clearTimeout(timeoutId);
