@@ -447,7 +447,7 @@
         return;
       }
 
-      Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+      return Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
         .then(function (navHistories) {
           var total = 0;
           instruments.forEach(function (name, i) {
@@ -1122,7 +1122,7 @@
 
       statusEl.textContent = "Fetching NAV history for " + instruments.length + " instrument(s)…";
 
-      Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+      return Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
         .then(function (navHistories) {
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
