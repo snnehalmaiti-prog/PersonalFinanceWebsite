@@ -939,20 +939,20 @@
 
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-  var AMFI_NAV_URL = "https://www.amfiindia.com/spages/NAVAll.txt";
-
   var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
 
   // The browser can't fetch AMFI's NAVAll.txt directly or via public CORS
   // proxies (AMFI blocks both). fetch_amfi_isin_map.py fetches it server-side
   // and writes amfi_isin_map.json into the repo; reading that same-origin
-  // file avoids CORS entirely. Re-run that script periodically to refresh it.
+  // file avoids CORS entirely. A GitHub Actions workflow refreshes it daily.
   function fetchStaticAmfiIsinMap() {
-    return fetch(AMFI_ISIN_MAP_STATIC_FILE)
+    return fetch(AMFI_ISIN_MAP_STATIC_FILE, { cache: "no-store" })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (payload) { return payload && payload.data ? payload.data : null; })
       .catch(function () { return null; });
   }
+
+  var lastAmfiFetchFailures = [];
 
   function fetchAmfiIsinToSchemeMap() {
     try {
@@ -962,72 +962,7 @@
       }
     } catch (e) {}
 
-    function parseAndCache(text) {
-      var isinToCode = {};
-      text.split("\n").forEach(function (line) {
-        var parts = line.split(";");
-        if (parts.length < 6) return;
-        var schemeCode = parts[0].trim();
-        var isinPayout = parts[1].trim();
-        var isinReinvest = parts[2].trim();
-        if (!/^\d+$/.test(schemeCode)) return;
-        [isinPayout, isinReinvest].forEach(function (isin) {
-          if (isin && isin.toUpperCase() !== "NA") isinToCode[isin.toUpperCase()] = schemeCode;
-        });
-      });
-      try {
-        localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: isinToCode }));
-      } catch (e) {}
-      return isinToCode;
-    }
-
-    function isValidNavText(text) {
-      return !!text && text.indexOf(";") !== -1;
-    }
-
-    function tryFetch(url, isJsonWrapped) {
-      var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-      var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 25000) : null;
-      return fetch(url, controller ? { signal: controller.signal } : undefined)
-        .then(function (res) {
-          if (timeoutId) clearTimeout(timeoutId);
-          if (!res.ok) throw new Error("fetch failed");
-          return isJsonWrapped ? res.json().then(function (j) { return j.contents || ""; }) : res.text();
-        })
-        .catch(function (err) {
-          if (timeoutId) clearTimeout(timeoutId);
-          throw err;
-        });
-    }
-
-    // AMFI's NAVAll.txt does not send CORS headers for direct browser fetches,
-    // and known free CORS proxies (allorigins, corsproxy.io, thingproxy) are
-    // frequently rate-limited, blocked by AMFI specifically, or offline, so try
-    // several before giving up.
-    var sources = [
-      { url: AMFI_NAV_URL, name: "direct" },
-      { url: "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(AMFI_NAV_URL), name: "codetabs" },
-      { url: "https://api.allorigins.win/get?url=" + encodeURIComponent(AMFI_NAV_URL), jsonWrapped: true, name: "allorigins-get" },
-      { url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(AMFI_NAV_URL), name: "allorigins-raw" },
-      { url: "https://corsproxy.io/?url=" + encodeURIComponent(AMFI_NAV_URL), name: "corsproxy" }
-    ];
-
     lastAmfiFetchFailures = [];
-    function attempt(index) {
-      if (index >= sources.length) return Promise.resolve(null);
-      return tryFetch(sources[index].url, sources[index].jsonWrapped)
-        .then(function (text) {
-          if (isValidNavText(text)) return text;
-          lastAmfiFetchFailures.push(sources[index].name + ":empty");
-          return attempt(index + 1);
-        })
-        .catch(function (err) {
-          var code = err && err.name === "AbortError" ? "timeout" : (err && err.message ? err.message.slice(0, 20) : "error");
-          lastAmfiFetchFailures.push(sources[index].name + ":" + code);
-          return attempt(index + 1);
-        });
-    }
-
     return fetchStaticAmfiIsinMap().then(function (staticData) {
       if (staticData && Object.keys(staticData).length) {
         try {
@@ -1035,13 +970,10 @@
         } catch (e) {}
         return staticData;
       }
-      lastAmfiFetchFailures.push("amfi_isin_map.json:missing/empty (run fetch_amfi_isin_map.py and commit it)");
-      return attempt(0).then(function (text) {
-        return text ? parseAndCache(text) : {};
-      });
+      lastAmfiFetchFailures.push("amfi_isin_map.json missing or empty");
+      return {};
     });
   }
-  var lastAmfiFetchFailures = [];
 
   var lastSchemeMapDiagnostic = null;
 
