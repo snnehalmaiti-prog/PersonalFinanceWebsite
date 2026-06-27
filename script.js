@@ -7,6 +7,11 @@
   var storedTheme = localStorage.getItem("wf-theme");
   var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
+  var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
+  var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+  var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
+  var lastAmfiFetchFailures = [];
+
   function applyTheme(theme) {
     if (theme === "dark") {
       root.setAttribute("data-theme", "dark");
@@ -937,10 +942,6 @@
   }
   var lastIsinMapDiagnostic = null;
 
-  var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
-  var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-  var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
-
   // The browser can't fetch AMFI's NAVAll.txt directly or via public CORS
   // proxies (AMFI blocks both). fetch_amfi_isin_map.py fetches it server-side
   // and writes amfi_isin_map.json into the repo; reading that same-origin
@@ -951,8 +952,6 @@
       .then(function (payload) { return payload && payload.data ? payload.data : null; })
       .catch(function () { return null; });
   }
-
-  var lastAmfiFetchFailures = [];
 
   function fetchAmfiIsinToSchemeMap() {
     try {
