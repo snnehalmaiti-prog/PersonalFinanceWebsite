@@ -893,7 +893,8 @@
     try {
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && Date.now() - cached.fetchedAt < NAV_CACHE_MAX_AGE_MS) {
-        return Promise.resolve(cached.data);
+        var revived = (cached.data || []).map(function (entry) { return { date: new Date(entry.date), nav: entry.nav }; });
+        return Promise.resolve(revived);
       }
     } catch (e) {}
 
