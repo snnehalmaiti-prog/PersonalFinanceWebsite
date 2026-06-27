@@ -1184,8 +1184,8 @@
           options: {
             maintainAspectRatio: false,
             scales: {
-              x: { type: "time", time: { unit: "month" } },
-              y: { ticks: { callback: function (v) { return formatCurrency(v); } } }
+              x: { type: "time", time: { unit: "month" }, grid: { display: false } },
+              y: { ticks: { callback: function (v) { return formatCurrency(v); } }, grid: { display: false } }
             },
             plugins: {
               legend: { display: false },
