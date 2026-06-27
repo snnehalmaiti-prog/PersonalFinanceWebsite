@@ -1134,7 +1134,15 @@
         });
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
-        timeline = timeline.filter(function (d) { return d <= today; });
+        var firstTxnDate = null;
+        instruments.forEach(function (name) {
+          var events = unitEvents[name];
+          if (events && events.length) {
+            var earliest = events[0].date;
+            if (!firstTxnDate || earliest < firstTxnDate) firstTxnDate = earliest;
+          }
+        });
+        timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
           statusEl.textContent = "No NAV history available yet for your mapped instruments.";
