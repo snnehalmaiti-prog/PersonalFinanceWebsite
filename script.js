@@ -1134,12 +1134,14 @@
         });
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
-        var firstTxnDate = null;
+        var firstTxnDate = null, lastTxnDate = null;
         instruments.forEach(function (name) {
           var events = unitEvents[name];
           if (events && events.length) {
             var earliest = events[0].date;
+            var latest = events[events.length - 1].date;
             if (!firstTxnDate || earliest < firstTxnDate) firstTxnDate = earliest;
+            if (!lastTxnDate || latest > lastTxnDate) lastTxnDate = latest;
           }
         });
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
@@ -1188,6 +1190,12 @@
             plugins: {
               legend: { display: false },
               zoom: {
+                limits: {
+                  x: {
+                    min: firstTxnDate ? firstTxnDate.getTime() : undefined,
+                    max: lastTxnDate ? lastTxnDate.getTime() : undefined
+                  }
+                },
                 pan: { enabled: true, mode: "x" },
                 zoom: {
                   wheel: { enabled: true },
