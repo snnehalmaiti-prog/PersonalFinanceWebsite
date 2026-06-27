@@ -1196,6 +1196,8 @@
           if (rangeEl) rangeEl.textContent = new Date(xScale.min).toLocaleDateString() + " – " + new Date(xScale.max).toLocaleDateString();
         }
       });
+    }).catch(function (err) {
+      statusEl.textContent = "Couldn't render the chart: " + (err && err.message ? err.message : err);
     });
 
     if (resetBtn && !resetBtn.dataset.bound) {
