@@ -407,6 +407,15 @@
     return sign + "₹" + Math.abs(amount).toLocaleString("en-IN", { maximumFractionDigits: 0 });
   }
 
+  function formatCompactINR(amount) {
+    var sign = amount < 0 ? "-" : "";
+    var abs = Math.abs(amount);
+    if (abs >= 1e7) return sign + (abs / 1e7).toFixed(abs % 1e7 === 0 ? 0 : 1) + "Cr";
+    if (abs >= 1e5) return sign + (abs / 1e5).toFixed(abs % 1e5 === 0 ? 0 : 1) + "L";
+    if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs % 1e3 === 0 ? 0 : 1) + "K";
+    return sign + abs.toFixed(2);
+  }
+
   function updateDashboardStats() {
     var overviewEl = document.getElementById("overview-total-investment");
     var equityEl = document.getElementById("equity-total-investment");
@@ -1167,25 +1176,31 @@
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
 
         if (window.__wfValueChart) window.__wfValueChart.destroy();
-        window.__wfValueChart = new Chart(canvas.getContext("2d"), {
+        var ctx = canvas.getContext("2d");
+        var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
+        fillGradient.addColorStop(0, "rgba(59,130,246,0.25)");
+        fillGradient.addColorStop(1, "rgba(59,130,246,0)");
+        window.__wfValueChart = new Chart(ctx, {
           type: "line",
           data: {
             datasets: [{
               label: "Current Value",
               data: points,
-              borderColor: "#10B981",
-              backgroundColor: "rgba(16,185,129,0.12)",
+              borderColor: "#3B82F6",
+              backgroundColor: fillGradient,
               fill: true,
-              tension: 0.15,
+              tension: 0,
+              stepped: "before",
               pointRadius: 0,
-              borderWidth: 2
+              borderWidth: 1.5
             }]
           },
           options: {
             maintainAspectRatio: false,
+            interaction: { intersect: false, mode: "index" },
             scales: {
-              x: { type: "time", time: { unit: "quarter" }, grid: { display: false } },
-              y: { ticks: { callback: function (v) { return formatCurrency(v); } }, grid: { display: false } }
+              x: { type: "time", time: { unit: "month" }, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+              y: { ticks: { callback: function (v) { return formatCompactINR(v); } }, grid: { display: false } }
             },
             plugins: {
               legend: { display: false },
