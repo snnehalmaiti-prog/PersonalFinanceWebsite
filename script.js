@@ -322,6 +322,63 @@
     return total;
   }
 
+  function sumEquityRealizedReturn(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var typeIdx = header.indexOf("transaction type");
+    var categoryIdx = header.indexOf("instrument category");
+    var unitsIdx = header.indexOf("units");
+    var valueIdx = header.indexOf("value");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || categoryIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
+
+    var byInstrument = {};
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      var category = normalizeText(row[categoryIdx]);
+      if (category.indexOf("equity") === -1) return;
+
+      var instrument = (row[instrumentIdx] || "").trim();
+      var type = normalizeText(row[typeIdx]);
+      var units = parseNumber(row[unitsIdx]);
+      var value = parseNumber(row[valueIdx]);
+
+      if (!byInstrument[instrument]) {
+        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0, sellValue: 0 };
+      }
+      if (type.indexOf("buy") !== -1) {
+        byInstrument[instrument].buyUnits += units;
+        byInstrument[instrument].buyValue += value;
+      } else if (type.indexOf("sell") !== -1) {
+        byInstrument[instrument].sellUnits += units;
+        byInstrument[instrument].sellValue += value;
+      }
+    });
+
+    var total = 0;
+    Object.keys(byInstrument).forEach(function (instrument) {
+      var entry = byInstrument[instrument];
+      if (entry.buyUnits <= 0 || entry.sellUnits <= 0) return;
+      var avgBuyPrice = entry.buyValue / entry.buyUnits;
+      var soldUnits = Math.min(entry.sellUnits, entry.buyUnits);
+      total += entry.sellValue - soldUnits * avgBuyPrice;
+    });
+    return total;
+  }
+
+  function computeRealizedReturn(portfolioFilter, prefixes) {
+    var total = 0;
+    prefixes.forEach(function (prefix) {
+      if (prefix !== "equity") return;
+      var rows = getSheetRows(prefix);
+      if (!rows) return;
+      total += sumEquityRealizedReturn(rows, portfolioFilter);
+    });
+    return total;
+  }
+
   function getSheetRows(prefix) {
     var raw = localStorage.getItem("wf-" + prefix + "-data");
     if (!raw) return null;
@@ -416,15 +473,31 @@
     return sign + abs.toFixed(2);
   }
 
+  function setSignedCurrency(el, amount) {
+    if (!el) return;
+    el.textContent = (amount > 0 ? "+" : "") + formatCurrency(amount);
+    el.classList.remove("positive", "negative");
+    if (amount > 0) el.classList.add("positive");
+    else if (amount < 0) el.classList.add("negative");
+  }
+
   function updateDashboardStats() {
     var overviewEl = document.getElementById("overview-total-investment");
     var equityEl = document.getElementById("equity-total-investment");
     var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
+    var overviewRealizedEl = document.getElementById("overview-realized-return");
+    var equityRealizedEl = document.getElementById("equity-realized-return");
     if (overviewEl || equityEl || fixedIncomeEl) {
       var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
       if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome"]));
       if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
       if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
+    }
+    if (overviewRealizedEl || equityRealizedEl) {
+      var selectedForRealized = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+      var realized = computeRealizedReturn(selectedForRealized, ["equity"]);
+      setSignedCurrency(overviewRealizedEl, realized);
+      setSignedCurrency(equityRealizedEl, realized);
     }
     updateTotalCurrentValue();
   }
