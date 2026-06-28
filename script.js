@@ -408,18 +408,21 @@
       var isinIdx = header.findIndex(function (h) { return h.indexOf("identifier") !== -1 || h.indexOf("isin") !== -1; });
       var headerPreview = rawHeader.map(function (h) { return "\"" + h + "\""; }).join(", ");
       if (instrumentIdx === -1 || isinIdx === -1) {
-        return "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " +
-          (instrumentIdx === -1 ? "No \"Instrument Name\" column found. " : "") +
-          (isinIdx === -1 ? "No \"Identifier\"/\"ISIN\" column found. " : "") +
-          "Check the header row number.";
+        return {
+          missingColumns: true,
+          message: "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " +
+            (instrumentIdx === -1 ? "No \"Instrument Name\" column found. " : "") +
+            (isinIdx === -1 ? "No \"Identifier\"/\"ISIN\" column found. " : "") +
+            "Check the header row number."
+        };
       }
       var mapped = 0;
       rows.slice(1).forEach(function (row) {
         if ((row[instrumentIdx] || "").trim() && (row[isinIdx] || "").trim()) mapped++;
       });
-      return "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " + mapped + " row(s) have both Instrument Name and Identifier filled in.";
+      return { missingColumns: false, message: "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " + mapped + " row(s) have both Instrument Name and Identifier filled in." };
     }
-    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "stocksetf") return "";
+    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "stocksetf") return { missingColumns: false, message: "" };
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
@@ -433,7 +436,10 @@
 
     var missing = Object.keys(requiredIdx).filter(function (key) { return requiredIdx[key] === -1; });
     if (missing.length) {
-      return "Synced " + (rows.length - 1) + " rows, but couldn't find column(s): " + missing.join(", ") + ". Check the header row number and exact column names.";
+      return {
+        missingColumns: true,
+        message: "Synced " + (rows.length - 1) + " rows, but couldn't find column(s): " + missing.join(", ") + ". Check the header row number and exact column names."
+      };
     }
 
     var matched = 0;
@@ -452,7 +458,7 @@
       : sumInvestmentForRows(rows, "all");
 
     var matchedLabel = (prefix === "equity" || prefix === "stocksetf") ? " distinct instrument(s) counted." : " row(s) counted toward Total Investment.";
-    return "Synced " + (rows.length - 1) + " rows. " + matched + matchedLabel + " Computed total: " + formatCurrency(total) + ".";
+    return { missingColumns: false, message: "Synced " + (rows.length - 1) + " rows. " + matched + matchedLabel + " Computed total: " + formatCurrency(total) + "." };
   }
 
   function formatCurrency(amount) {
@@ -888,9 +894,17 @@
       sheetStatus.style.color = isError ? "#EF4444" : "";
     }
 
-    function setConnected(isConnected) {
-      statusPill.textContent = isConnected ? "Connected" : "Not connected";
-      statusPill.classList.toggle("connected", isConnected);
+    function setConnected(state) {
+      statusPill.classList.remove("connected", "warning");
+      if (state === "warning") {
+        statusPill.textContent = "Connected";
+        statusPill.classList.add("warning");
+      } else if (state) {
+        statusPill.textContent = "Connected";
+        statusPill.classList.add("connected");
+      } else {
+        statusPill.textContent = "Not connected";
+      }
     }
 
     function syncSheet(url) {
@@ -927,8 +941,8 @@
             renderTable(displayRows);
             sheetTableWrap.hidden = false;
           }
-          setStatus(diagnostics, false);
-          setConnected(true);
+          setStatus(diagnostics.message, diagnostics.missingColumns);
+          setConnected(diagnostics.missingColumns ? "warning" : true);
 
           var rowCount = displayRows.length - 1;
           rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
@@ -1030,9 +1044,17 @@
       sheetStatus.style.color = isError ? "#EF4444" : "";
     }
 
-    function setConnected(isConnected) {
-      statusPill.textContent = isConnected ? "Connected" : "Not connected";
-      statusPill.classList.toggle("connected", isConnected);
+    function setConnected(state) {
+      statusPill.classList.remove("connected", "warning");
+      if (state === "warning") {
+        statusPill.textContent = "Connected";
+        statusPill.classList.add("warning");
+      } else if (state) {
+        statusPill.textContent = "Connected";
+        statusPill.classList.add("connected");
+      } else {
+        statusPill.textContent = "Not connected";
+      }
     }
 
     function addRow(config) {
@@ -1111,8 +1133,8 @@
           sheetTableWrap.hidden = false;
         }
         var failureNote = failures ? " (" + failures + " sheet(s) failed to load)" : "";
-        setStatus(diagnostics + failureNote, !!failures);
-        setConnected(true);
+        setStatus(diagnostics.message + failureNote, !!failures || diagnostics.missingColumns);
+        setConnected(diagnostics.missingColumns ? "warning" : true);
 
         var rowCount = displayRows.length - 1;
         rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");

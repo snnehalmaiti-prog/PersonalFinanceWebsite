@@ -1032,6 +1032,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-color: transparent;
   color: var(--emerald);
 }
+.status-pill.warning {
+  background: color-mix(in srgb, #F59E0B 14%, transparent);
+  border-color: transparent;
+  color: #F59E0B;
+}
 
 .equity-desc { margin: 0 0 16px; }
 
