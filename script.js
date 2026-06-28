@@ -203,13 +203,16 @@
   var dashTabOverview = document.getElementById("tab-overview");
   var dashTabEquity = document.getElementById("tab-equity");
   var dashTabFixedIncome = document.getElementById("tab-fixedincome");
+  var dashTabStocksEtf = document.getElementById("tab-stocksetf");
   if (dashTabOverview && dashTabEquity) {
     var panelOverview = document.getElementById("panel-overview");
     var panelEquity = document.getElementById("panel-equity");
     var panelFixedIncome = document.getElementById("panel-fixedincome");
+    var panelStocksEtf = document.getElementById("panel-stocksetf");
     var dashTabs = [
       { tab: dashTabOverview, panel: panelOverview, key: "overview" },
       { tab: dashTabEquity, panel: panelEquity, key: "equity" },
+      { tab: dashTabStocksEtf, panel: panelStocksEtf, key: "stocksetf" },
       { tab: dashTabFixedIncome, panel: panelFixedIncome, key: "fixedincome" }
     ];
 
@@ -372,13 +375,98 @@
     return total;
   }
 
+  function sumStocksEtfBuyInvestment(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var typeIdx = header.indexOf("transaction type");
+    var unitsIdx = header.indexOf("units");
+    var valueIdx = header.indexOf("value");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
+
+    var byInstrument = {};
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+
+      var instrument = (row[instrumentIdx] || "").trim();
+      var type = normalizeText(row[typeIdx]);
+      var units = parseNumber(row[unitsIdx]);
+      var value = parseNumber(row[valueIdx]);
+
+      if (!byInstrument[instrument]) {
+        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0 };
+      }
+      if (type.indexOf("buy") !== -1) {
+        byInstrument[instrument].buyUnits += units;
+        byInstrument[instrument].buyValue += value;
+      } else if (type.indexOf("sell") !== -1) {
+        byInstrument[instrument].sellUnits += units;
+      }
+    });
+
+    var total = 0;
+    Object.keys(byInstrument).forEach(function (instrument) {
+      var entry = byInstrument[instrument];
+      if (entry.buyUnits <= 0) return;
+      var avgBuyPrice = entry.buyValue / entry.buyUnits;
+      var remainingUnits = Math.max(entry.buyUnits - entry.sellUnits, 0);
+      total += remainingUnits * avgBuyPrice;
+    });
+    return total;
+  }
+
+  function sumStocksEtfRealizedReturn(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var typeIdx = header.indexOf("transaction type");
+    var unitsIdx = header.indexOf("units");
+    var valueIdx = header.indexOf("value");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
+
+    var byInstrument = {};
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+
+      var instrument = (row[instrumentIdx] || "").trim();
+      var type = normalizeText(row[typeIdx]);
+      var units = parseNumber(row[unitsIdx]);
+      var value = parseNumber(row[valueIdx]);
+
+      if (!byInstrument[instrument]) {
+        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0, sellValue: 0 };
+      }
+      if (type.indexOf("buy") !== -1) {
+        byInstrument[instrument].buyUnits += units;
+        byInstrument[instrument].buyValue += value;
+      } else if (type.indexOf("sell") !== -1) {
+        byInstrument[instrument].sellUnits += units;
+        byInstrument[instrument].sellValue += value;
+      }
+    });
+
+    var total = 0;
+    Object.keys(byInstrument).forEach(function (instrument) {
+      var entry = byInstrument[instrument];
+      if (entry.buyUnits <= 0 || entry.sellUnits <= 0) return;
+      var avgBuyPrice = entry.buyValue / entry.buyUnits;
+      var soldUnits = Math.min(entry.sellUnits, entry.buyUnits);
+      total += entry.sellValue - soldUnits * avgBuyPrice;
+    });
+    return total;
+  }
+
   function computeRealizedReturn(portfolioFilter, prefixes) {
     var total = 0;
     prefixes.forEach(function (prefix) {
-      if (prefix !== "equity") return;
       var rows = getSheetRows(prefix);
       if (!rows) return;
-      total += sumEquityRealizedReturn(rows, portfolioFilter);
+      if (prefix === "equity") total += sumEquityRealizedReturn(rows, portfolioFilter);
+      else if (prefix === "stocksetf") total += sumStocksEtfRealizedReturn(rows, portfolioFilter);
     });
     return total;
   }
@@ -398,9 +486,9 @@
     prefixes.forEach(function (prefix) {
       var rows = getSheetRows(prefix);
       if (!rows) return;
-      total += prefix === "equity"
-        ? sumEquityBuyInvestment(rows, portfolioFilter)
-        : sumInvestmentForRows(rows, portfolioFilter);
+      if (prefix === "equity") total += sumEquityBuyInvestment(rows, portfolioFilter);
+      else if (prefix === "stocksetf") total += sumStocksEtfBuyInvestment(rows, portfolioFilter);
+      else total += sumInvestmentForRows(rows, portfolioFilter);
     });
     return total;
   }
@@ -424,7 +512,7 @@
       });
       return "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " + mapped + " row(s) have both Instrument Name and Identifier filled in.";
     }
-    if (prefix !== "equity" && prefix !== "fixedincome") return "";
+    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "stocksetf") return "";
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
@@ -435,6 +523,8 @@
 
     var requiredIdx = prefix === "equity"
       ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, "instrument category": categoryIdx, units: unitsIdx, value: valueIdx }
+      : prefix === "stocksetf"
+      ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, units: unitsIdx, value: valueIdx }
       : { "portfolio name": portfolioIdx, "transaction type": typeIdx, value: valueIdx };
 
     var missing = Object.keys(requiredIdx).filter(function (key) { return requiredIdx[key] === -1; });
@@ -451,15 +541,23 @@
         instruments[(row[instrumentIdx] || "").trim()] = true;
       });
       matched = Object.keys(instruments).length;
+    } else if (prefix === "stocksetf") {
+      var stockInstruments = {};
+      rows.slice(1).forEach(function (row) {
+        stockInstruments[(row[instrumentIdx] || "").trim()] = true;
+      });
+      matched = Object.keys(stockInstruments).length;
     } else {
       matched = rows.length - 1;
     }
 
     var total = prefix === "equity"
       ? sumEquityBuyInvestment(rows, "all")
+      : prefix === "stocksetf"
+      ? sumStocksEtfBuyInvestment(rows, "all")
       : sumInvestmentForRows(rows, "all");
 
-    var matchedLabel = prefix === "equity" ? " distinct equity instrument(s) counted." : " row(s) counted toward Total Investment.";
+    var matchedLabel = (prefix === "equity" || prefix === "stocksetf") ? " distinct instrument(s) counted." : " row(s) counted toward Total Investment.";
     return "Synced " + (rows.length - 1) + " rows. " + matched + matchedLabel + " Computed total: " + formatCurrency(total) + ".";
   }
 
@@ -489,19 +587,22 @@
     var overviewEl = document.getElementById("overview-total-investment");
     var equityEl = document.getElementById("equity-total-investment");
     var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
+    var stocksEtfEl = document.getElementById("stocksetf-total-investment");
     var overviewRealizedEl = document.getElementById("overview-realized-return");
     var equityRealizedEl = document.getElementById("equity-realized-return");
-    if (overviewEl || equityEl || fixedIncomeEl) {
+    var stocksEtfRealizedEl = document.getElementById("stocksetf-realized-return");
+    if (overviewEl || equityEl || fixedIncomeEl || stocksEtfEl) {
       var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome"]));
+      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome", "stocksetf"]));
       if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
       if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
+      if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(computeTotalInvestment(selected, ["stocksetf"]));
     }
-    if (overviewRealizedEl || equityRealizedEl) {
+    if (overviewRealizedEl || equityRealizedEl || stocksEtfRealizedEl) {
       var selectedForRealized = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      var realized = computeRealizedReturn(selectedForRealized, ["equity"]);
-      setSignedCurrency(overviewRealizedEl, realized);
-      setSignedCurrency(equityRealizedEl, realized);
+      setSignedCurrency(overviewRealizedEl, computeRealizedReturn(selectedForRealized, ["equity", "stocksetf"]));
+      setSignedCurrency(equityRealizedEl, computeRealizedReturn(selectedForRealized, ["equity"]));
+      setSignedCurrency(stocksEtfRealizedEl, computeRealizedReturn(selectedForRealized, ["stocksetf"]));
     }
     updateTotalCurrentValue();
   }
@@ -587,12 +688,12 @@
   function updateRefreshButtonStatus() {
     var refreshBtn = document.getElementById("refresh-all");
     if (!refreshBtn) return;
-    var connectedCount = ["equity", "fixedincome"].filter(function (prefix) {
+    var connectedCount = ["equity", "fixedincome", "stocksetf"].filter(function (prefix) {
       return !!getSheetRows(prefix);
     }).length;
 
     refreshBtn.classList.remove("status-connected", "status-partial", "status-disconnected");
-    if (connectedCount === 2) refreshBtn.classList.add("status-connected");
+    if (connectedCount === 3) refreshBtn.classList.add("status-connected");
     else if (connectedCount === 0) refreshBtn.classList.add("status-disconnected");
     else refreshBtn.classList.add("status-partial");
   }
@@ -660,7 +761,7 @@
   var refreshAllBtn = document.getElementById("refresh-all");
   if (refreshAllBtn) {
     refreshAllBtn.addEventListener("click", function () {
-      var prefixes = ["equity", "fixedincome"];
+      var prefixes = ["equity", "fixedincome", "stocksetf"];
       var pending = 0;
 
       function done() {
@@ -973,6 +1074,22 @@
     showTable: false
   });
   initSheetCard("fixedincome", {
+    fields: [
+      "Transaction Date",
+      "Portfolio Name",
+      "Instrument Name",
+      "Instrument Category",
+      "Instrument Sub Category",
+      "Market Segment",
+      "Region",
+      "Transaction Type",
+      "Units",
+      "Price",
+      "Value"
+    ],
+    showTable: false
+  });
+  initSheetCard("stocksetf", {
     fields: [
       "Transaction Date",
       "Portfolio Name",
