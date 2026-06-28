@@ -870,15 +870,21 @@
   }
 
   function fetchAndMergeSheets(configs, onComplete, canonicalFields) {
-    var validConfigs = configs.filter(function (c) { return c.link && parseSheetUrl(c.link); });
-    var failures = configs.length - validConfigs.length;
-    if (!validConfigs.length) {
-      onComplete(null, failures);
+    var perSheetStats = configs.map(function (c) {
+      return { link: c.link, rowCount: 0, error: c.link && parseSheetUrl(c.link) ? null : "query" };
+    });
+    var validIndexes = [];
+    configs.forEach(function (c, i) {
+      if (c.link && parseSheetUrl(c.link)) validIndexes.push(i);
+    });
+    var failures = configs.length - validIndexes.length;
+    if (!validIndexes.length) {
+      onComplete(null, failures, [], perSheetStats);
       return;
     }
 
-    var resultsByIndex = new Array(validConfigs.length);
-    var pending = validConfigs.length;
+    var resultsByIndex = new Array(validIndexes.length);
+    var pending = validIndexes.length;
     var failureReasons = [];
 
     function finish() {
@@ -894,22 +900,26 @@
           merged = merged.concat(realignRowsToHeader(rows, merged[0]));
         }
       });
-      onComplete(merged, failures, failureReasons);
+      onComplete(merged, failures, failureReasons, perSheetStats);
     }
 
-    validConfigs.forEach(function (config, index) {
+    validIndexes.forEach(function (origIndex, i) {
+      var config = configs[origIndex];
       var parsed = parseSheetUrl(config.link);
       fetchSheetJSONP(
         parsed.id,
         parsed.gid,
         function (data) {
-          resultsByIndex[index] = gvizRowsFromResponse(data);
+          var rows = gvizRowsFromResponse(data);
+          resultsByIndex[i] = rows;
+          perSheetStats[origIndex].rowCount = Math.max(rows.length - 1, 0);
           pending -= 1;
           if (pending <= 0) finish();
         },
         function (reason) {
           failures += 1;
           failureReasons.push(reason);
+          perSheetStats[origIndex].error = reason;
           pending -= 1;
           if (pending <= 0) finish();
         },
@@ -1105,10 +1115,6 @@
     var sheetTableWrap = document.getElementById(prefix + "-sheet-table-wrap");
     var sheetTable = document.getElementById(prefix + "-sheet-table");
     var statusPill = document.getElementById(prefix + "-status-pill");
-    var meta = document.getElementById(prefix + "-meta");
-    var lastSync = document.getElementById(prefix + "-last-sync");
-    var rowCountEl = document.getElementById(prefix + "-row-count");
-    var openSheetLink = document.getElementById(prefix + "-open-sheet");
     var sheetsKey = "wf-" + prefix + "-sheets";
 
     function renderTable(rows) {
@@ -1166,7 +1172,7 @@
     function addRow(config) {
       config = config || { link: "", headerRow: "1" };
       var row = document.createElement("div");
-      row.className = "equity-link-row sheet-row";
+      row.className = "sheet-row";
 
       var linkInput = document.createElement("input");
       linkInput.type = "url";
@@ -1194,9 +1200,43 @@
         autoSaveConfigs();
       });
 
-      row.appendChild(linkInput);
-      row.appendChild(headerInput);
-      row.appendChild(removeBtn);
+      var fields = document.createElement("div");
+      fields.className = "equity-link-row sheet-row-fields";
+      fields.appendChild(linkInput);
+      fields.appendChild(headerInput);
+      fields.appendChild(removeBtn);
+
+      var rowMeta = document.createElement("div");
+      rowMeta.className = "equity-meta muted small sheet-row-meta";
+      rowMeta.hidden = true;
+      var rowLastSync = document.createElement("span");
+      rowLastSync.className = "sheet-row-last-sync";
+      rowLastSync.textContent = "Last sync: —";
+      var dotSep = document.createElement("span");
+      dotSep.className = "dot-sep";
+      dotSep.setAttribute("aria-hidden", "true");
+      dotSep.innerHTML = "&bull;";
+      var rowCountSpan = document.createElement("span");
+      rowCountSpan.className = "sheet-row-count";
+      rowCountSpan.textContent = "0 rows";
+      var dotSep2 = document.createElement("span");
+      dotSep2.className = "dot-sep";
+      dotSep2.setAttribute("aria-hidden", "true");
+      dotSep2.innerHTML = "&bull;";
+      var rowOpenLink = document.createElement("a");
+      rowOpenLink.className = "sheet-row-open-link";
+      rowOpenLink.href = "#";
+      rowOpenLink.target = "_blank";
+      rowOpenLink.rel = "noopener";
+      rowOpenLink.innerHTML = "Open sheet &#8599;";
+      rowMeta.appendChild(rowLastSync);
+      rowMeta.appendChild(dotSep);
+      rowMeta.appendChild(rowCountSpan);
+      rowMeta.appendChild(dotSep2);
+      rowMeta.appendChild(rowOpenLink);
+
+      row.appendChild(fields);
+      row.appendChild(rowMeta);
       listEl.appendChild(row);
     }
 
@@ -1209,6 +1249,37 @@
       });
     }
 
+    function applyPerSheetStats(perSheetStats) {
+      var rowEls = Array.prototype.slice.call(listEl.querySelectorAll(".sheet-row"));
+      var now = new Date().toLocaleTimeString();
+      var statsByLink = {};
+      (perSheetStats || []).forEach(function (s) {
+        if (s && s.link) statsByLink[s.link] = s;
+      });
+      rowEls.forEach(function (rowEl) {
+        var link = rowEl.querySelector(".sheet-row-link").value.trim();
+        var rowMeta = rowEl.querySelector(".sheet-row-meta");
+        if (!rowMeta) return;
+        var stats = link ? statsByLink[link] : null;
+        if (!link || !stats) {
+          rowMeta.hidden = true;
+          return;
+        }
+        var lastSyncSpan = rowMeta.querySelector(".sheet-row-last-sync");
+        var rowCountSpan = rowMeta.querySelector(".sheet-row-count");
+        var openLink = rowMeta.querySelector(".sheet-row-open-link");
+        if (stats.error) {
+          lastSyncSpan.textContent = "Last sync failed";
+          rowCountSpan.textContent = sheetErrorMessage(stats.error);
+        } else {
+          lastSyncSpan.textContent = "Last sync: " + now;
+          rowCountSpan.textContent = stats.rowCount + (stats.rowCount === 1 ? " row" : " rows");
+        }
+        openLink.href = link;
+        rowMeta.hidden = false;
+      });
+    }
+
     function syncAll() {
       var configs = readRowConfigs().filter(function (c) { return c.link; });
       if (!configs.length) {
@@ -1218,9 +1289,9 @@
         return;
       }
       setStatus("Verifying and syncing " + configs.length + " sheet(s)…", false);
-      var lastUrl = configs[configs.length - 1].link;
 
-      fetchAndMergeSheets(configs, function (merged, failures, failureReasons) {
+      fetchAndMergeSheets(configs, function (merged, failures, failureReasons, perSheetStats) {
+        applyPerSheetStats(perSheetStats);
         if (!merged || merged.length <= 1) {
           var reasonMsg = failures
             ? (failureReasons.indexOf("private") !== -1
@@ -1249,12 +1320,6 @@
           : "";
         setStatus(diagnostics.message + failureNote, !!failures || diagnostics.missingColumns);
         setConnected(diagnostics.missingColumns ? "warning" : true);
-
-        var rowCount = displayRows.length - 1;
-        rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
-        lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
-        openSheetLink.href = lastUrl;
-        meta.hidden = false;
       }, options.fields);
     }
 
