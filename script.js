@@ -1923,7 +1923,7 @@
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
-      if (remainingUnits <= UNITS_EPSILON) return;
+      if (remainingUnits < 1) return;
       holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: investedCost / remainingUnits });
     });
 
