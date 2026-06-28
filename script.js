@@ -264,6 +264,17 @@
     return isParenNegative ? -Math.abs(parsed) : parsed;
   }
 
+  function validateNumericCell(value) {
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) return { ok: false, reason: "is blank" };
+    var hasDigit = /[0-9]/.test(raw);
+    if (!hasDigit) return { ok: false, reason: "is not a number (\"" + raw + "\")" };
+    var parsed = parseNumber(raw);
+    if (parsed === 0) return { ok: false, reason: "is zero" };
+    if (parsed < 0) return { ok: false, reason: "is negative (" + parsed + ")" };
+    return { ok: true, reason: "" };
+  }
+
   function normalizeText(value) {
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim().toLowerCase();
   }
@@ -466,14 +477,16 @@
       var portfolio = (row[portfolioIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
       var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1;
-      var units = parseNumber(row[unitsIdx]);
-      var price = parseNumber(row[priceIdx]);
       var issues = [];
       if (!portfolio) issues.push("Portfolio Name is blank");
       if ((prefix === "equity" || prefix === "stocksetf") && !(row[instrumentIdx] || "").trim()) issues.push("Instrument Name is blank");
       if (!type) issues.push("Transaction Type is blank");
-      if (isBuyOrSell && units <= 0) issues.push("Units is blank/zero");
-      if (isBuyOrSell && price <= 0) issues.push("Price is blank/zero");
+      if (isBuyOrSell) {
+        var unitsCheck = validateNumericCell(row[unitsIdx]);
+        if (!unitsCheck.ok) issues.push("Units " + unitsCheck.reason);
+        var priceCheck = validateNumericCell(row[priceIdx]);
+        if (!priceCheck.ok) issues.push("Price " + priceCheck.reason);
+      }
       if (issues.length) badRows.push("Row " + (i + 2) + " (" + (portfolio || "unknown portfolio") + "): " + issues.join(", "));
     });
 
