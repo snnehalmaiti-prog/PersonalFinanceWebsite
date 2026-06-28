@@ -2218,12 +2218,12 @@
 
       var avgNavTd = document.createElement("td");
       avgNavTd.className = "num";
-      avgNavTd.textContent = h.avgNav.toFixed(2);
+      avgNavTd.textContent = "₹" + h.avgNav.toFixed(2);
       tr.appendChild(avgNavTd);
 
       var currNavTd = document.createElement("td");
       currNavTd.className = "num";
-      currNavTd.textContent = h.currNav.toFixed(3);
+      currNavTd.textContent = "₹" + h.currNav.toFixed(3);
       tr.appendChild(currNavTd);
 
       var investedTd = document.createElement("td");
