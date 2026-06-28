@@ -682,20 +682,23 @@
 
   // Cash flows for XIRR: Buy = negative (money out), Sell = positive (money in).
   // Each transaction is kept as its own row — buys and sells on the same date are not netted.
-  function buildXirrCashFlows(rows, portfolioFilter) {
+  function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
     var unitsIdx = header.indexOf("units");
     var priceIdx = header.indexOf("price");
     var dateIdx = header.indexOf("transaction date");
     if (portfolioIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return [];
+    if (instrumentFilter && instrumentIdx === -1) return [];
 
     var flows = [];
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (instrumentFilter && normalizeText((row[instrumentIdx] || "").trim()) !== normalizeText(instrumentFilter)) return;
 
       var type = normalizeText(row[typeIdx]);
       var isBuy = type.indexOf("buy") !== -1;
@@ -2001,6 +2004,20 @@
             dayChgTd.className = "num " + (dayChgPct > 0 ? "positive" : (dayChgPct < 0 ? "negative" : ""));
             dayChgTd.textContent = (dayChgPct > 0 ? "+" : "") + dayChgPct.toFixed(2) + "%";
             tr.appendChild(dayChgTd);
+
+            var instrumentCashFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
+            if (current > UNITS_EPSILON) instrumentCashFlows.push({ date: new Date(), amount: current });
+            var instrumentXirr = calculateXIRR(instrumentCashFlows);
+            var xirrTd = document.createElement("td");
+            if (instrumentXirr === null || instrumentXirr === undefined || !isFinite(instrumentXirr)) {
+              xirrTd.className = "num";
+              xirrTd.textContent = "—";
+            } else {
+              var xirrPct = instrumentXirr * 100;
+              xirrTd.className = "num " + (xirrPct > 0 ? "positive" : (xirrPct < 0 ? "negative" : ""));
+              xirrTd.textContent = (xirrPct > 0 ? "+" : "") + xirrPct.toFixed(2) + "%";
+            }
+            tr.appendChild(xirrTd);
 
             tbody.appendChild(tr);
           });
