@@ -1642,7 +1642,9 @@
     if (!rows || !rows.length) return map;
     var header = rows[0].map(normalizeText);
     var instrumentIdx = header.indexOf("instrument name");
-    var segmentIdx = header.findIndex(function (h) { return h.indexOf("market segment") !== -1 || h.indexOf("segment") !== -1 || h.indexOf("category") !== -1; });
+    var segmentIdx = header.findIndex(function (h) { return h.indexOf("market segment") !== -1; });
+    if (segmentIdx === -1) segmentIdx = header.findIndex(function (h) { return h.indexOf("segment") !== -1; });
+    if (segmentIdx === -1) segmentIdx = header.findIndex(function (h) { return h.indexOf("category") !== -1; });
     if (instrumentIdx === -1 || segmentIdx === -1) return map;
     rows.slice(1).forEach(function (row) {
       var instrument = (row[instrumentIdx] || "").trim();
