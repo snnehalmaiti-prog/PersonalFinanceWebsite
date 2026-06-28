@@ -2162,6 +2162,124 @@
     });
   }
 
+  var equityHoldingsSortState = { key: null, dir: 1 };
+
+  function pnlChip(text, value) {
+    var span = document.createElement("span");
+    span.className = "pnl-chip " + (value > 0 ? "positive" : (value < 0 ? "negative" : "neutral"));
+    span.textContent = text;
+    return span;
+  }
+
+  function renderEquityHoldingsRows(tbody, rowsData) {
+    var key = equityHoldingsSortState.key;
+    var dir = equityHoldingsSortState.dir;
+    var sorted = rowsData.slice();
+    if (key) {
+      sorted.sort(function (a, b) {
+        var av = a[key], bv = b[key];
+        if (av === null || av === undefined) av = (typeof bv === "number") ? -Infinity : "";
+        if (bv === null || bv === undefined) bv = (typeof av === "number") ? -Infinity : "";
+        if (typeof av === "string" || typeof bv === "string") {
+          return String(av).localeCompare(String(bv)) * dir;
+        }
+        return (av - bv) * dir;
+      });
+    }
+
+    tbody.innerHTML = "";
+    sorted.forEach(function (h, idx) {
+      var tr = document.createElement("tr");
+      tr.style.animationDelay = (Math.min(idx, 12) * 25) + "ms";
+      tr.className = "row-enter";
+
+      var nameTd = document.createElement("td");
+      nameTd.className = "fund-name";
+      nameTd.textContent = h.instrument;
+      tr.appendChild(nameTd);
+
+      var qtyTd = document.createElement("td");
+      qtyTd.className = "num";
+      qtyTd.textContent = h.units.toFixed(3);
+      tr.appendChild(qtyTd);
+
+      var avgNavTd = document.createElement("td");
+      avgNavTd.className = "num";
+      avgNavTd.textContent = h.avgNav.toFixed(2);
+      tr.appendChild(avgNavTd);
+
+      var currNavTd = document.createElement("td");
+      currNavTd.className = "num";
+      currNavTd.textContent = h.currNav.toFixed(3);
+      tr.appendChild(currNavTd);
+
+      var investedTd = document.createElement("td");
+      investedTd.className = "num";
+      investedTd.textContent = formatCurrency(h.invested);
+      tr.appendChild(investedTd);
+
+      var currentTd = document.createElement("td");
+      currentTd.className = "num";
+      currentTd.textContent = formatCurrency(h.current);
+      tr.appendChild(currentTd);
+
+      var pnlTd = document.createElement("td");
+      pnlTd.className = "num";
+      pnlTd.appendChild(pnlChip((h.pnl > 0 ? "+" : "") + formatCurrency(h.pnl), h.pnl));
+      tr.appendChild(pnlTd);
+
+      var netChgTd = document.createElement("td");
+      netChgTd.className = "num";
+      netChgTd.appendChild(pnlChip((h.pnlPct > 0 ? "+" : "") + h.pnlPct.toFixed(2) + "%", h.pnlPct));
+      tr.appendChild(netChgTd);
+
+      var dayChgTd = document.createElement("td");
+      dayChgTd.className = "num";
+      dayChgTd.appendChild(pnlChip((h.dayChgPct > 0 ? "+" : "") + h.dayChgPct.toFixed(2) + "%", h.dayChgPct));
+      tr.appendChild(dayChgTd);
+
+      var xirrTd = document.createElement("td");
+      xirrTd.className = "num";
+      if (h.xirrPct === null) {
+        xirrTd.textContent = "—";
+      } else {
+        xirrTd.appendChild(pnlChip((h.xirrPct > 0 ? "+" : "") + h.xirrPct.toFixed(2) + "%", h.xirrPct));
+      }
+      tr.appendChild(xirrTd);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function attachEquityHoldingsSortHandlers(tbody, rowsData) {
+    var table = tbody.closest("table");
+    if (!table) return;
+    table.__wfRowsData = rowsData;
+    if (table.dataset.sortableBound) return;
+    table.dataset.sortableBound = "1";
+    var headers = table.querySelectorAll("th[data-sort]");
+    headers.forEach(function (th) {
+      th.classList.add("sortable");
+      var icon = document.createElement("span");
+      icon.className = "sort-icon";
+      th.appendChild(icon);
+      th.addEventListener("click", function () {
+        var key = th.getAttribute("data-sort");
+        if (equityHoldingsSortState.key === key) {
+          equityHoldingsSortState.dir *= -1;
+        } else {
+          equityHoldingsSortState.key = key;
+          equityHoldingsSortState.dir = 1;
+        }
+        headers.forEach(function (other) {
+          other.classList.remove("sort-asc", "sort-desc");
+        });
+        th.classList.add(equityHoldingsSortState.dir === 1 ? "sort-asc" : "sort-desc");
+        renderEquityHoldingsRows(tbody, table.__wfRowsData);
+      });
+    });
+  }
+
   function renderEquityHoldingsTable() {
     var statusEl = document.getElementById("equity-holdings-status");
     var tableWrap = document.getElementById("equity-holdings-table-wrap");
@@ -2224,7 +2342,7 @@
 
       return Promise.all(resolvable.map(function (h) { return h.units < 1 ? Promise.resolve([]) : fetchNavHistory(lookupSchemeCode(schemeMap, h.instrument)); }))
         .then(function (navHistories) {
-          tbody.innerHTML = "";
+          var rowsData = [];
           resolvable.forEach(function (h, i) {
             var isClosed = h.units < 1;
             var currNav, current, pnl, pnlPct, dayChgPct;
@@ -2248,69 +2366,27 @@
               dayChgPct = prev && prev.nav ? ((currNav - prev.nav) / prev.nav) * 100 : 0;
             }
 
-            var tr = document.createElement("tr");
-
-            var nameTd = document.createElement("td");
-            nameTd.className = "fund-name";
-            nameTd.textContent = h.instrument;
-            tr.appendChild(nameTd);
-
-            var qtyTd = document.createElement("td");
-            qtyTd.className = "num";
-            qtyTd.textContent = h.units.toFixed(3);
-            tr.appendChild(qtyTd);
-
-            var avgNavTd = document.createElement("td");
-            avgNavTd.className = "num";
-            avgNavTd.textContent = h.avgNav.toFixed(2);
-            tr.appendChild(avgNavTd);
-
-            var currNavTd = document.createElement("td");
-            currNavTd.className = "num";
-            currNavTd.textContent = currNav.toFixed(3);
-            tr.appendChild(currNavTd);
-
-            var investedTd = document.createElement("td");
-            investedTd.className = "num";
-            investedTd.textContent = formatCurrency(h.invested);
-            tr.appendChild(investedTd);
-
-            var currentTd = document.createElement("td");
-            currentTd.className = "num";
-            currentTd.textContent = formatCurrency(current);
-            tr.appendChild(currentTd);
-
-            var pnlTd = document.createElement("td");
-            pnlTd.className = "num " + (pnl > 0 ? "positive" : (pnl < 0 ? "negative" : ""));
-            pnlTd.textContent = (pnl > 0 ? "+" : "") + formatCurrency(pnl);
-            tr.appendChild(pnlTd);
-
-            var netChgTd = document.createElement("td");
-            netChgTd.className = "num " + (pnlPct > 0 ? "positive" : (pnlPct < 0 ? "negative" : ""));
-            netChgTd.textContent = (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + "%";
-            tr.appendChild(netChgTd);
-
-            var dayChgTd = document.createElement("td");
-            dayChgTd.className = "num " + (dayChgPct > 0 ? "positive" : (dayChgPct < 0 ? "negative" : ""));
-            dayChgTd.textContent = (dayChgPct > 0 ? "+" : "") + dayChgPct.toFixed(2) + "%";
-            tr.appendChild(dayChgTd);
-
             var instrumentCashFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
             if (!isClosed && current > UNITS_EPSILON) instrumentCashFlows.push({ date: new Date(), amount: current });
             var instrumentXirr = calculateXIRR(instrumentCashFlows);
-            var xirrTd = document.createElement("td");
-            if (instrumentXirr === null || instrumentXirr === undefined || !isFinite(instrumentXirr)) {
-              xirrTd.className = "num";
-              xirrTd.textContent = "—";
-            } else {
-              var xirrPct = instrumentXirr * 100;
-              xirrTd.className = "num " + (xirrPct > 0 ? "positive" : (xirrPct < 0 ? "negative" : ""));
-              xirrTd.textContent = (xirrPct > 0 ? "+" : "") + xirrPct.toFixed(2) + "%";
-            }
-            tr.appendChild(xirrTd);
+            var xirrPct = (instrumentXirr === null || instrumentXirr === undefined || !isFinite(instrumentXirr)) ? null : instrumentXirr * 100;
 
-            tbody.appendChild(tr);
+            rowsData.push({
+              instrument: h.instrument,
+              units: h.units,
+              avgNav: h.avgNav,
+              currNav: currNav,
+              invested: h.invested,
+              current: current,
+              pnl: pnl,
+              pnlPct: pnlPct,
+              dayChgPct: dayChgPct,
+              xirrPct: xirrPct
+            });
           });
+
+          renderEquityHoldingsRows(tbody, rowsData);
+          attachEquityHoldingsSortHandlers(tbody, rowsData);
 
           statusEl.textContent = resolvable.length + " holding(s) with unsold units" + (skipped ? " (" + skipped + " unmapped holding(s) skipped)" : "") + ".";
           tableWrap.hidden = false;

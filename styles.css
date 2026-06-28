@@ -1150,6 +1150,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .holdings-table-wrap {
   margin-top: 14px;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 520px;
   border: 1px solid var(--border);
   border-radius: 10px;
 }
@@ -1161,16 +1163,65 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   white-space: nowrap;
 }
 .holdings-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: var(--surface-alt);
   font-weight: 700;
   color: var(--text);
+  user-select: none;
 }
 .holdings-table th.num, .holdings-table td.num { text-align: right; }
 .holdings-table tbody tr:last-child td { border-bottom: none; }
-.holdings-table tbody tr:hover { background: var(--surface-alt); }
+.holdings-table tbody tr {
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.holdings-table tbody tr:hover {
+  background: var(--surface-alt);
+  transform: translateX(2px);
+}
 .holdings-table .fund-name { font-weight: 600; }
 .holdings-table .positive { color: var(--emerald); }
 .holdings-table .negative { color: var(--negative); }
+
+.holdings-table th.sortable {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.holdings-table th.sortable:hover { color: var(--accent, #1F9D6B); }
+.holdings-table th .sort-icon {
+  display: inline-block;
+  margin-left: 5px;
+  width: 9px;
+  font-size: 0.7rem;
+  opacity: 0.35;
+}
+.holdings-table th .sort-icon::after { content: "↕"; }
+.holdings-table th.sort-asc .sort-icon { opacity: 1; }
+.holdings-table th.sort-asc .sort-icon::after { content: "↑"; }
+.holdings-table th.sort-desc .sort-icon { opacity: 1; }
+.holdings-table th.sort-desc .sort-icon::after { content: "↓"; }
+
+.pnl-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.pnl-chip.positive { color: var(--emerald); background: rgba(31, 157, 107, 0.12); }
+.pnl-chip.negative { color: var(--negative); background: rgba(225, 96, 75, 0.12); }
+.pnl-chip.neutral { color: var(--muted); background: var(--surface-alt); }
+
+@keyframes wfRowEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.holdings-table tbody tr.row-enter {
+  animation: wfRowEnter 0.3s ease both;
+}
 
 .charts-row {
   display: flex;
