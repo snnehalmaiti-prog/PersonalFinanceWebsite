@@ -7,7 +7,114 @@
   var storedTheme = localStorage.getItem("wf-theme");
   var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-  var SPLIT_CHART_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16"];
+  var SPLIT_CHART_COLORS = ["#1F9D6B", "#F2A65A", "#6FA8DC", "#E1604B", "#9B8AFB", "#D9B44A", "#4FBDB0", "#C97FB0"];
+
+  function getCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  if (typeof Chart !== "undefined") {
+    Chart.register({
+      id: "wfCenterText",
+      afterDraw: function (chart) {
+        var opts = chart.config.options.plugins && chart.config.options.plugins.wfCenterText;
+        if (!opts || !opts.text) return;
+        var ctx = chart.ctx;
+        var area = chart.chartArea;
+        var centerX = (area.left + area.right) / 2;
+        var centerY = (area.top + area.bottom) / 2;
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = opts.color || "#23211D";
+        ctx.font = "700 17px Sora, Inter, sans-serif";
+        ctx.fillText(opts.text, centerX, centerY + (opts.subtext ? -9 : 0));
+        if (opts.subtext) {
+          ctx.font = "600 11px Inter, sans-serif";
+          ctx.fillStyle = opts.subColor || "#7A7568";
+          ctx.fillText(opts.subtext, centerX, centerY + 13);
+        }
+        ctx.restore();
+      }
+    });
+  }
+
+  function renderApplePieChart(canvas, opts) {
+    var labels = opts.labels;
+    var data = opts.data;
+    var total = opts.total;
+    var centerLabel = opts.centerLabel || "Current Value";
+    var formatLabel = opts.formatLabel;
+
+    if (window[opts.instanceKey]) window[opts.instanceKey].destroy();
+    var ctx = canvas.getContext("2d");
+    var surface = getCssVar("--surface") || "#FFFFFF";
+    var textColor = getCssVar("--text") || "#23211D";
+    var mutedColor = getCssVar("--muted") || "#7A7568";
+
+    var chart = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
+          borderColor: surface,
+          borderWidth: 3,
+          borderRadius: 8,
+          spacing: 3,
+          hoverOffset: 14,
+          hoverBorderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        animation: { animateRotate: true, animateScale: true, duration: 900, easing: "easeOutQuint" },
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              usePointStyle: true,
+              pointStyle: "circle",
+              padding: 14,
+              boxWidth: 8,
+              boxHeight: 8,
+              color: mutedColor,
+              font: { family: "Inter", size: 12, weight: "600" }
+            }
+          },
+          tooltip: {
+            backgroundColor: surface,
+            titleColor: textColor,
+            bodyColor: textColor,
+            borderColor: getCssVar("--border") || "#ECE7DC",
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 10,
+            displayColors: true,
+            boxPadding: 4,
+            callbacks: {
+              label: function (ctx) {
+                var value = ctx.parsed;
+                var pct = total > 0 ? (value / total) * 100 : 0;
+                return ctx.label + ": " + formatLabel(value) + " (" + pct.toFixed(1) + "%)";
+              }
+            }
+          },
+          wfCenterText: {
+            text: formatLabel(total),
+            subtext: centerLabel,
+            color: textColor,
+            subColor: mutedColor
+          }
+        }
+      }
+    });
+    window[opts.instanceKey] = chart;
+    return chart;
+  }
 
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -2032,34 +2139,13 @@
     var total = data.reduce(function (sum, v) { return sum + v; }, 0);
     statusEl.textContent = "Invested value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
 
-    if (window.__wfSplitChart) window.__wfSplitChart.destroy();
-    var ctx = canvas.getContext("2d");
-    window.__wfSplitChart = new Chart(ctx, {
-      type: "pie",
-      data: {
-        labels: labels,
-        datasets: [{
-          data: data,
-          backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "bottom" },
-          tooltip: {
-            callbacks: {
-              label: function (ctx) {
-                var value = ctx.parsed;
-                var pct = total > 0 ? (value / total) * 100 : 0;
-                return ctx.label + ": " + formatCurrency(value) + " (" + pct.toFixed(1) + "%)";
-              }
-            }
-          }
-        }
-      }
+    renderApplePieChart(canvas, {
+      instanceKey: "__wfSplitChart",
+      labels: labels,
+      data: data,
+      total: total,
+      centerLabel: "Invested",
+      formatLabel: formatCurrency
     });
   }
 
@@ -2292,34 +2378,13 @@
           statusEl.textContent = "Current value split across " + labels.length + " market segment(s), total " + formatCurrency(total) + "." +
             (hasUnclassified ? " Add a \"Market Segment\" column to your Mutual Fund Mapping sheet to classify all holdings." : "");
 
-          if (window.__wfSegmentChart) window.__wfSegmentChart.destroy();
-          var ctx = canvas.getContext("2d");
-          window.__wfSegmentChart = new Chart(ctx, {
-            type: "pie",
-            data: {
-              labels: labels,
-              datasets: [{
-                data: data,
-                backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
-                borderWidth: 1
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { position: "bottom" },
-                tooltip: {
-                  callbacks: {
-                    label: function (ctx) {
-                      var value = ctx.parsed;
-                      var pct = total > 0 ? (value / total) * 100 : 0;
-                      return ctx.label + ": " + formatCurrency(value) + " (" + pct.toFixed(1) + "%)";
-                    }
-                  }
-                }
-              }
-            }
+          renderApplePieChart(canvas, {
+            instanceKey: "__wfSegmentChart",
+            labels: labels,
+            data: data,
+            total: total,
+            centerLabel: "Current Value",
+            formatLabel: formatCurrency
           });
         });
     }).catch(function (err) {
@@ -2438,34 +2503,13 @@
 
           statusEl.textContent = "Current value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
 
-          if (window.__wfMfPortfolioSplitChart) window.__wfMfPortfolioSplitChart.destroy();
-          var ctx = canvas.getContext("2d");
-          window.__wfMfPortfolioSplitChart = new Chart(ctx, {
-            type: "pie",
-            data: {
-              labels: labels,
-              datasets: [{
-                data: data,
-                backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
-                borderWidth: 1
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { position: "bottom" },
-                tooltip: {
-                  callbacks: {
-                    label: function (ctx) {
-                      var value = ctx.parsed;
-                      var pct = total > 0 ? (value / total) * 100 : 0;
-                      return ctx.label + ": " + formatCurrency(value) + " (" + pct.toFixed(1) + "%)";
-                    }
-                  }
-                }
-              }
-            }
+          renderApplePieChart(canvas, {
+            instanceKey: "__wfMfPortfolioSplitChart",
+            labels: labels,
+            data: data,
+            total: total,
+            centerLabel: "Current Value",
+            formatLabel: formatCurrency
           });
         });
     }).catch(function (err) {
