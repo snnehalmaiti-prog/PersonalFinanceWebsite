@@ -13,6 +13,19 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  function sizePieBoxToFitOnce(canvas) {
+    var box = canvas.closest(".pie-chart-resize");
+    if (!box || box.dataset.autosized) return;
+    box.dataset.autosized = "1";
+    var card = box.closest(".value-chart-card");
+    var available = card ? card.clientWidth - 40 : 0;
+    if (available > 0) {
+      var size = Math.max(220, Math.round(available * 0.9));
+      box.style.width = size + "px";
+      box.style.height = size + "px";
+    }
+  }
+
   if (typeof Chart !== "undefined") {
     Chart.register({
       id: "wfCenterText",
@@ -2378,6 +2391,7 @@
           statusEl.textContent = "Current value split across " + labels.length + " market segment(s), total " + formatCurrency(total) + "." +
             (hasUnclassified ? " Add a \"Market Segment\" column to your Mutual Fund Mapping sheet to classify all holdings." : "");
 
+          sizePieBoxToFitOnce(canvas);
           renderApplePieChart(canvas, {
             instanceKey: "__wfSegmentChart",
             labels: labels,
@@ -2503,6 +2517,7 @@
 
           statusEl.textContent = "Current value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
 
+          sizePieBoxToFitOnce(canvas);
           renderApplePieChart(canvas, {
             instanceKey: "__wfMfPortfolioSplitChart",
             labels: labels,
