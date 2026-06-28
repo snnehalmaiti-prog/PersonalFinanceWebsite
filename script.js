@@ -1941,19 +1941,38 @@
 
   var SPLIT_CHART_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16"];
 
+  function collectPortfolioNamesFromSheets(prefixes) {
+    var names = [];
+    var seen = {};
+    prefixes.forEach(function (prefix) {
+      var rows = getSheetRows(prefix);
+      if (!rows || !rows.length) return;
+      var header = rows[0].map(normalizeText);
+      var portfolioIdx = header.indexOf("portfolio name");
+      if (portfolioIdx === -1) return;
+      rows.slice(1).forEach(function (row) {
+        var name = (row[portfolioIdx] || "").trim();
+        if (!name) return;
+        var key = normalizeText(name);
+        if (!seen[key]) { seen[key] = true; names.push(name); }
+      });
+    });
+    return names;
+  }
+
   function renderInvestmentSplitChart() {
     var canvas = document.getElementById("portfolio-split-chart");
     var statusEl = document.getElementById("portfolio-split-status");
     if (!canvas || !statusEl || typeof Chart === "undefined") return;
 
-    var names = getStoredPortfolioNames();
+    var prefixes = ["equity", "stocksetf", "fixedincome"];
+    var names = collectPortfolioNamesFromSheets(prefixes);
     if (!names.length) {
       statusEl.textContent = "No portfolios found yet. Connect your transaction sheets in Settings.";
       if (window.__wfSplitChart) { window.__wfSplitChart.destroy(); window.__wfSplitChart = null; }
       return;
     }
 
-    var prefixes = ["equity", "stocksetf", "fixedincome"];
     var labels = [];
     var data = [];
     names.forEach(function (name) {
