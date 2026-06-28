@@ -896,6 +896,7 @@
   updateDashboardStats();
   renderValueChart();
   renderEquityHoldingsTable();
+  renderInvestmentSplitChart();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
@@ -918,6 +919,7 @@
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); }
+        renderInvestmentSplitChart();
       }, TRANSACTION_SHEET_FIELDS);
     });
   });
@@ -1936,6 +1938,71 @@
   }
 
   renderValueChart();
+
+  var SPLIT_CHART_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16"];
+
+  function renderInvestmentSplitChart() {
+    var canvas = document.getElementById("portfolio-split-chart");
+    var statusEl = document.getElementById("portfolio-split-status");
+    if (!canvas || !statusEl || typeof Chart === "undefined") return;
+
+    var names = getStoredPortfolioNames();
+    if (!names.length) {
+      statusEl.textContent = "No portfolios found yet. Connect your transaction sheets in Settings.";
+      if (window.__wfSplitChart) { window.__wfSplitChart.destroy(); window.__wfSplitChart = null; }
+      return;
+    }
+
+    var prefixes = ["equity", "stocksetf", "fixedincome"];
+    var labels = [];
+    var data = [];
+    names.forEach(function (name) {
+      var invested = computeTotalInvestment(name, prefixes);
+      if (invested > UNITS_EPSILON) {
+        labels.push(name);
+        data.push(invested);
+      }
+    });
+
+    if (!labels.length) {
+      statusEl.textContent = "No invested amount found yet across your portfolios.";
+      if (window.__wfSplitChart) { window.__wfSplitChart.destroy(); window.__wfSplitChart = null; }
+      return;
+    }
+
+    var total = data.reduce(function (sum, v) { return sum + v; }, 0);
+    statusEl.textContent = "Invested value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
+
+    if (window.__wfSplitChart) window.__wfSplitChart.destroy();
+    var ctx = canvas.getContext("2d");
+    window.__wfSplitChart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var value = ctx.parsed;
+                var pct = total > 0 ? (value / total) * 100 : 0;
+                return ctx.label + ": " + formatCurrency(value) + " (" + pct.toFixed(1) + "%)";
+              }
+            }
+          }
+        }
+      }
+    });
+  }
 
   function renderEquityHoldingsTable() {
     var statusEl = document.getElementById("equity-holdings-status");

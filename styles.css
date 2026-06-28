@@ -1170,3 +1170,18 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .btn-sm { padding: 6px 12px; font-size: 0.82rem; }
 .value-chart-wrap { position: relative; height: 320px; margin-top: 12px; }
 .value-chart-hint { margin-top: 8px; }
+
+.pie-chart-resize {
+  position: relative;
+  height: 320px;
+  width: 320px;
+  max-width: 100%;
+  margin-top: 12px;
+  resize: both;
+  overflow: hidden;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 200px;
+  min-width: 200px;
+}

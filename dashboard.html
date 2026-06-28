@@ -100,6 +100,17 @@
         </div>
         <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
       </div>
+
+      <div class="value-chart-card">
+        <div class="value-chart-header">
+          <h3>Investment Split</h3>
+        </div>
+        <p class="muted small" id="portfolio-split-status">Loading portfolio split…</p>
+        <div class="pie-chart-resize" id="portfolio-split-resize">
+          <canvas id="portfolio-split-chart"></canvas>
+        </div>
+        <p class="muted small value-chart-hint">Drag the bottom-right corner of the chart to resize it.</p>
+      </div>
     </section>
 
     <section id="panel-equity" class="settings-panel" role="tabpanel" aria-labelledby="tab-equity" hidden>
