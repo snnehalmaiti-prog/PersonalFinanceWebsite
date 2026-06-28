@@ -257,8 +257,11 @@
   }
 
   function parseNumber(value) {
-    var cleaned = String(value == null ? "" : value).replace(/[^0-9.-]/g, "");
-    return parseFloat(cleaned) || 0;
+    var raw = String(value == null ? "" : value).trim();
+    var isParenNegative = /^\(.*\)$/.test(raw);
+    var cleaned = raw.replace(/[^0-9.-]/g, "");
+    var parsed = parseFloat(cleaned) || 0;
+    return isParenNegative ? -Math.abs(parsed) : parsed;
   }
 
   function normalizeText(value) {
