@@ -897,8 +897,6 @@
   renderValueChart();
   renderEquityHoldingsTable();
 
-  var equityHoldingsShowAll = document.getElementById("equity-holdings-show-all");
-  if (equityHoldingsShowAll) equityHoldingsShowAll.addEventListener("change", renderEquityHoldingsTable);
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
 
@@ -1960,8 +1958,6 @@
       return;
     }
 
-    var showAllCheckbox = document.getElementById("equity-holdings-show-all");
-    var showAll = !!(showAllCheckbox && showAllCheckbox.checked);
     var showClosedOnlyCheckbox = document.getElementById("equity-holdings-show-closed-only");
     var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
 
@@ -1972,7 +1968,7 @@
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
       if (showClosedOnly) {
         if (remainingUnits >= UNITS_EPSILON) return;
-      } else if (!showAll && remainingUnits < 1) {
+      } else if (remainingUnits < 1) {
         return;
       }
       var avgNav;
