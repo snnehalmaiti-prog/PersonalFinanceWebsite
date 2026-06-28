@@ -900,6 +900,47 @@
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
 
+  function makeTableColumnsResizable(table) {
+    if (!table || !table.id) return;
+    var storageKey = "colWidths:" + table.id;
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch (e) { saved = {}; }
+
+    var ths = table.querySelectorAll("thead th");
+    table.style.tableLayout = "fixed";
+    ths.forEach(function (th, idx) {
+      if (saved[idx]) th.style.width = saved[idx] + "px";
+      if (th.querySelector(".col-resizer")) return;
+
+      var resizer = document.createElement("span");
+      resizer.className = "col-resizer";
+      th.appendChild(resizer);
+
+      var startX = 0, startWidth = 0;
+      function onMouseMove(e) {
+        var newWidth = Math.max(50, startWidth + (e.pageX - startX));
+        th.style.width = newWidth + "px";
+      }
+      function onMouseUp() {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        document.body.style.cursor = "";
+        saved[idx] = th.offsetWidth;
+        try { localStorage.setItem(storageKey, JSON.stringify(saved)); } catch (e) {}
+      }
+      resizer.addEventListener("mousedown", function (e) {
+        startX = e.pageX;
+        startWidth = th.offsetWidth;
+        document.body.style.cursor = "col-resize";
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+        e.preventDefault();
+      });
+    });
+  }
+
+  makeTableColumnsResizable(document.getElementById("equity-holdings-table"));
+
   ["equity", "fixedincome", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
     updateRefreshButtonStatus(prefix);
