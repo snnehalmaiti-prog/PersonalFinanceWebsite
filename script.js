@@ -2023,14 +2023,19 @@
 
         var fullMinTime = first.getTime();
         var fullMaxTime = last.getTime();
-        var sixMonthsMs = 1000 * 60 * 60 * 24 * 182;
-        var initialMin = Math.max(fullMinTime, fullMaxTime - sixMonthsMs);
+        var threeYearsMs = 1000 * 60 * 60 * 24 * 365 * 3;
+        var initialMin = Math.max(fullMinTime, fullMaxTime - threeYearsMs);
         var initialMax = fullMaxTime;
+
+        var calloutEl = document.getElementById("value-chart-callout");
+        var calloutValueEl = document.getElementById("value-chart-callout-value");
+        var calloutDateEl = document.getElementById("value-chart-callout-date");
+        var rangePicker = document.getElementById("value-chart-range-picker");
 
         if (window.__wfValueChart) window.__wfValueChart.destroy();
         var ctx = canvas.getContext("2d");
         var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
-        fillGradient.addColorStop(0, "rgba(59,130,246,0.25)");
+        fillGradient.addColorStop(0, "rgba(59,130,246,0.28)");
         fillGradient.addColorStop(1, "rgba(59,130,246,0)");
         window.__wfValueChart = new Chart(ctx, {
           type: "line",
@@ -2041,14 +2046,19 @@
               borderColor: "#3B82F6",
               backgroundColor: fillGradient,
               fill: true,
-              tension: 0,
-              stepped: "before",
+              tension: 0.25,
+              cubicInterpolationMode: "monotone",
               pointRadius: 0,
-              borderWidth: 1.5
+              pointHoverRadius: 5,
+              pointHoverBackgroundColor: "#3B82F6",
+              pointHoverBorderColor: "#fff",
+              pointHoverBorderWidth: 2,
+              borderWidth: 2
             }]
           },
           options: {
             maintainAspectRatio: false,
+            animation: { duration: 350, easing: "easeOutQuart" },
             interaction: { intersect: false, mode: "index" },
             scales: {
               x: {
@@ -2068,10 +2078,11 @@
                   }
                 }
               },
-              y: { ticks: { callback: function (v) { return formatCompactINR(v); } }, grid: { display: false } }
+              y: { ticks: { callback: function (v) { return formatCompactINR(v); } }, grid: { color: "rgba(150,150,150,0.12)" } }
             },
             plugins: {
               legend: { display: false },
+              tooltip: { enabled: false },
               zoom: {
                 limits: {
                   x: {
@@ -2082,23 +2093,73 @@
                 pan: {
                   enabled: true,
                   mode: "x",
-                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); }
+                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
                 },
                 zoom: {
                   wheel: { enabled: true },
                   pinch: { enabled: true },
                   mode: "x",
-                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); }
+                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
                 }
               }
+            },
+            onHover: function (evt, activeEls, chart) {
+              if (!activeEls.length) {
+                if (calloutEl) calloutEl.hidden = true;
+                return;
+              }
+              var idx = activeEls[0].index;
+              var pt = points[idx];
+              if (!pt) return;
+              if (calloutEl) calloutEl.hidden = false;
+              if (calloutValueEl) calloutValueEl.textContent = formatCurrency(pt.y);
+              if (calloutDateEl) calloutDateEl.textContent = pt.x.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
             }
           }
+        });
+
+        canvas.addEventListener("mouseleave", function () {
+          if (calloutEl) calloutEl.hidden = true;
         });
 
         function updateVisibleRangeLabel(chart) {
           var xScale = chart.scales.x;
           if (rangeEl) rangeEl.textContent = new Date(xScale.min).toLocaleDateString() + " – " + new Date(xScale.max).toLocaleDateString();
         }
+
+        function clearActiveRangePill() {
+          if (!rangePicker) return;
+          Array.prototype.forEach.call(rangePicker.querySelectorAll(".range-pill"), function (btn) { btn.classList.remove("active"); });
+        }
+
+        function applyRange(key, btn) {
+          var chart = window.__wfValueChart;
+          if (!chart) return;
+          var spanMs;
+          if (key === "1M") spanMs = 1000 * 60 * 60 * 24 * 30;
+          else if (key === "6M") spanMs = 1000 * 60 * 60 * 24 * 182;
+          else if (key === "1Y") spanMs = 1000 * 60 * 60 * 24 * 365;
+          else if (key === "3Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 3;
+          else if (key === "5Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 5;
+          var min = key === "ALL" ? fullMinTime : Math.max(fullMinTime, fullMaxTime - spanMs);
+          chart.options.scales.x.min = min;
+          chart.options.scales.x.max = fullMaxTime;
+          chart.update();
+          updateVisibleRangeLabel(chart);
+          clearActiveRangePill();
+          if (btn) btn.classList.add("active");
+        }
+
+        if (rangePicker && !rangePicker.dataset.bound) {
+          rangePicker.dataset.bound = "1";
+          rangePicker.addEventListener("click", function (evt) {
+            var btn = evt.target.closest(".range-pill");
+            if (!btn) return;
+            applyRange(btn.dataset.range, btn);
+          });
+        }
+
+        updateVisibleRangeLabel(window.__wfValueChart);
       });
     }).catch(function (err) {
       statusEl.textContent = "Couldn't render the chart: " + (err && err.message ? err.message : err);
@@ -2108,6 +2169,12 @@
       resetBtn.dataset.bound = "1";
       resetBtn.addEventListener("click", function () {
         if (window.__wfValueChart) window.__wfValueChart.resetZoom();
+        var rangePicker = document.getElementById("value-chart-range-picker");
+        if (rangePicker) {
+          Array.prototype.forEach.call(rangePicker.querySelectorAll(".range-pill"), function (btn) { btn.classList.remove("active"); });
+          var threeY = rangePicker.querySelector('[data-range="3Y"]');
+          if (threeY) threeY.classList.add("active");
+        }
       });
     }
   }

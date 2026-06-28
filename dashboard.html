@@ -98,9 +98,21 @@
             <button type="button" class="btn btn-outline btn-sm" id="value-chart-reset">Reset zoom</button>
           </div>
         </div>
+        <div class="value-chart-callout" id="value-chart-callout" hidden>
+          <span class="value-chart-callout-value" id="value-chart-callout-value">—</span>
+          <span class="value-chart-callout-date" id="value-chart-callout-date">—</span>
+        </div>
         <p class="muted small" id="value-chart-status">Loading NAV history…</p>
         <div class="value-chart-wrap">
           <canvas id="value-chart" height="320"></canvas>
+        </div>
+        <div class="value-chart-range-picker" id="value-chart-range-picker" role="group" aria-label="Select time range">
+          <button type="button" class="range-pill" data-range="1M">1M</button>
+          <button type="button" class="range-pill" data-range="6M">6M</button>
+          <button type="button" class="range-pill" data-range="1Y">1Y</button>
+          <button type="button" class="range-pill active" data-range="3Y">3Y</button>
+          <button type="button" class="range-pill" data-range="5Y">5Y</button>
+          <button type="button" class="range-pill" data-range="ALL">All</button>
         </div>
         <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
       </div>
@@ -293,6 +305,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=df101dc"></script>
+  <script src="script.js?v=552ed18"></script>
 </body>
 </html>
