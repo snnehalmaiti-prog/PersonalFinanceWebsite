@@ -618,11 +618,14 @@
     var overviewPctEl = document.getElementById("overview-return-pct");
     var equityReturnEl = document.getElementById("equity-unrealized-return");
     var equityPctEl = document.getElementById("equity-return-pct");
-    if (!overviewEl && !equityEl && !overviewReturnEl && !equityReturnEl) return;
+    var overviewXirrEl = document.getElementById("overview-xirr");
+    var equityXirrEl = document.getElementById("equity-xirr");
+    if (!overviewEl && !equityEl && !overviewReturnEl && !equityReturnEl && !overviewXirrEl && !equityXirrEl) return;
 
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var unitEvents = buildInstrumentUnitEvents(selected);
     var investment = computeTotalInvestment(selected, ["equity"]);
+    var equityRows = getSheetRows("equity");
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
     if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
@@ -631,6 +634,8 @@
     if (overviewPctEl) overviewPctEl.textContent = "…";
     if (equityReturnEl) equityReturnEl.textContent = "…";
     if (equityPctEl) equityPctEl.textContent = "…";
+    if (overviewXirrEl) overviewXirrEl.textContent = "…";
+    if (equityXirrEl) equityXirrEl.textContent = "…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
@@ -644,6 +649,10 @@
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
         setUnrealizedReturn(overviewReturnEl, overviewPctEl, 0, investment);
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, investment);
+        var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
+        var xirrNoValue = calculateXIRR(xirrCashFlows);
+        setXirr(overviewXirrEl, xirrNoValue);
+        setXirr(equityXirrEl, xirrNoValue);
         return;
       }
 
@@ -661,8 +670,118 @@
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(overviewReturnEl, overviewPctEl, total, investment);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
+
+          var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
+          if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
+          var xirr = calculateXIRR(xirrCashFlows);
+          setXirr(overviewXirrEl, xirr);
+          setXirr(equityXirrEl, xirr);
         });
     });
+  }
+
+  // Cash flows for XIRR: Buy = negative (money out), Sell = positive (money in).
+  // Each transaction is kept as its own row — buys and sells on the same date are not netted.
+  function buildXirrCashFlows(rows, portfolioFilter) {
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var unitsIdx = header.indexOf("units");
+    var priceIdx = header.indexOf("price");
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return [];
+
+    var flows = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+
+      var type = normalizeText(row[typeIdx]);
+      var isBuy = type.indexOf("buy") !== -1;
+      var isSell = type.indexOf("sell") !== -1;
+      if (!isBuy && !isSell) return;
+
+      var units = parseNumber(row[unitsIdx]);
+      var price = parseNumber(row[priceIdx]);
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date || !units || !price) return;
+
+      var amount = units * price;
+      flows.push({ date: date, amount: isBuy ? -amount : amount });
+    });
+    return flows;
+  }
+
+  // Solves XIRR via Newton-Raphson on NPV(rate) = sum(amount / (1+rate)^(days/365)),
+  // falling back to bisection if Newton's method fails to converge.
+  function calculateXIRR(cashflows) {
+    if (!cashflows || cashflows.length < 2) return null;
+    var hasPositive = cashflows.some(function (c) { return c.amount > 0; });
+    var hasNegative = cashflows.some(function (c) { return c.amount < 0; });
+    if (!hasPositive || !hasNegative) return null;
+
+    var t0 = cashflows.reduce(function (min, c) {
+      return c.date.getTime() < min ? c.date.getTime() : min;
+    }, cashflows[0].date.getTime());
+
+    function yearsFromStart(date) {
+      return (date.getTime() - t0) / (1000 * 60 * 60 * 24 * 365);
+    }
+
+    function npv(rate) {
+      return cashflows.reduce(function (sum, c) {
+        return sum + c.amount / Math.pow(1 + rate, yearsFromStart(c.date));
+      }, 0);
+    }
+
+    function npvDerivative(rate) {
+      return cashflows.reduce(function (sum, c) {
+        var t = yearsFromStart(c.date);
+        if (t === 0) return sum;
+        return sum - (t * c.amount) / Math.pow(1 + rate, t + 1);
+      }, 0);
+    }
+
+    var rate = 0.1;
+    var converged = false;
+    for (var i = 0; i < 100; i++) {
+      var f = npv(rate);
+      var fp = npvDerivative(rate);
+      if (Math.abs(fp) < 1e-10) break;
+      var nextRate = rate - f / fp;
+      if (!isFinite(nextRate) || nextRate <= -0.999999) break;
+      if (Math.abs(nextRate - rate) < 1e-7) { rate = nextRate; converged = true; break; }
+      rate = nextRate;
+    }
+
+    if (!converged || !isFinite(rate) || Math.abs(npv(rate)) > 1) {
+      var low = -0.999999, high = 10;
+      var fLow = npv(low), fHigh = npv(high);
+      if (fLow * fHigh > 0) return converged ? rate : null;
+      for (var j = 0; j < 200; j++) {
+        var mid = (low + high) / 2;
+        var fMid = npv(mid);
+        if (Math.abs(fMid) < 1e-6) { rate = mid; break; }
+        if ((fMid > 0) === (fLow > 0)) { low = mid; fLow = fMid; } else { high = mid; }
+        rate = mid;
+      }
+    }
+    return rate;
+  }
+
+  function setXirr(el, rate) {
+    if (!el) return;
+    if (rate === null || rate === undefined || !isFinite(rate)) {
+      el.textContent = "—";
+      el.classList.remove("positive", "negative");
+      return;
+    }
+    var pct = rate * 100;
+    el.textContent = (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
+    el.classList.remove("positive", "negative");
+    if (pct > 0) el.classList.add("positive");
+    else if (pct < 0) el.classList.add("negative");
   }
 
   function latest_nav_for(navHistory) {
