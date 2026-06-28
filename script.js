@@ -229,6 +229,10 @@
     });
   }
 
+  // Treat residual fractional units below this as a fully closed-out position,
+  // to absorb floating-point rounding error from repeated cumulative +=/-=.
+  var UNITS_EPSILON = 1e-6;
+
   // ===== Portfolio selector =====
   var PORTFOLIO_NAMES_KEY = "wf-portfolio-names";
   var SELECTED_PORTFOLIO_KEY = "wf-selected-portfolio";
@@ -565,7 +569,7 @@
             var events = unitEvents[name];
             var units = events.length ? events[events.length - 1].cumulativeUnits : 0;
             var nav = latest_nav_for(navHistory);
-            if (units > 0 && nav) total += units * nav;
+            if (units > UNITS_EPSILON && nav) total += units * nav;
           });
           if (overviewEl) overviewEl.textContent = formatCurrency(total);
           if (equityEl) equityEl.textContent = formatCurrency(total);
@@ -1268,7 +1272,7 @@
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
-            if (units > 0 && nav) total += units * nav;
+            if (units > UNITS_EPSILON && nav) total += units * nav;
           });
           return { x: date, y: total };
         });
