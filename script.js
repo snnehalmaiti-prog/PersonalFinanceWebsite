@@ -1199,7 +1199,21 @@
             maintainAspectRatio: false,
             interaction: { intersect: false, mode: "index" },
             scales: {
-              x: { type: "time", time: { unit: "month" }, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+              x: {
+                type: "time",
+                time: { unit: "month", displayFormats: { month: "MMM" } },
+                grid: { display: false },
+                ticks: {
+                  maxRotation: 0,
+                  autoSkip: true,
+                  major: { enabled: true },
+                  font: function (ctx) { return ctx.tick && ctx.tick.major ? { weight: "bold" } : {}; },
+                  callback: function (value, index, ticks) {
+                    var d = new Date(value);
+                    return d.getMonth() === 0 ? String(d.getFullYear()) : d.toLocaleDateString("en-US", { month: "short" });
+                  }
+                }
+              },
               y: { ticks: { callback: function (v) { return formatCompactINR(v); } }, grid: { display: false } }
             },
             plugins: {
