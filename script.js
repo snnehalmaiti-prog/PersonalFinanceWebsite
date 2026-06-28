@@ -579,17 +579,11 @@
     return navHistory[navHistory.length - 1].nav;
   }
 
-  function updateRefreshButtonStatus() {
-    var refreshBtn = document.getElementById("refresh-all");
+  function updateRefreshButtonStatus(prefix) {
+    var refreshBtn = document.getElementById(prefix + "-refresh");
     if (!refreshBtn) return;
-    var connectedCount = ["equity", "fixedincome", "stocksetf"].filter(function (prefix) {
-      return !!getSheetRows(prefix);
-    }).length;
-
-    refreshBtn.classList.remove("status-connected", "status-partial", "status-disconnected");
-    if (connectedCount === 3) refreshBtn.classList.add("status-connected");
-    else if (connectedCount === 0) refreshBtn.classList.add("status-disconnected");
-    else refreshBtn.classList.add("status-partial");
+    refreshBtn.classList.remove("status-connected", "status-disconnected");
+    refreshBtn.classList.add(getSheetRows(prefix) ? "status-connected" : "status-disconnected");
   }
 
   function populatePortfolioSelect() {
@@ -652,50 +646,27 @@
   updateDashboardStats();
   renderValueChart();
 
-  var refreshAllBtn = document.getElementById("refresh-all");
-  if (refreshAllBtn) {
-    refreshAllBtn.addEventListener("click", function () {
-      var prefixes = ["equity", "fixedincome", "stocksetf"];
-      var pending = 0;
+  ["equity", "fixedincome", "stocksetf"].forEach(function (prefix) {
+    var refreshBtn = document.getElementById(prefix + "-refresh");
+    updateRefreshButtonStatus(prefix);
+    if (!refreshBtn) return;
 
-      function done() {
-        pending -= 1;
-        if (pending <= 0) {
-          refreshAllBtn.classList.remove("spinning");
-          updateDashboardStats();
-          updateRefreshButtonStatus();
-          renderValueChart();
+    refreshBtn.addEventListener("click", function () {
+      var configs = loadSheetConfigs(prefix);
+      if (!configs.length) return;
+      refreshBtn.classList.add("spinning");
+      fetchAndMergeSheets(configs, function (merged) {
+        refreshBtn.classList.remove("spinning");
+        if (merged && merged.length > 1) {
+          addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
+          localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
         }
-      }
-
-      prefixes.forEach(function (prefix) {
-        var url = localStorage.getItem("wf-" + prefix + "-sheet-link");
-        if (!url) return;
-        var parsed = parseSheetUrl(url);
-        if (!parsed) return;
-        pending += 1;
-        refreshAllBtn.classList.add("spinning");
-        fetchSheetJSONP(
-          parsed.id,
-          parsed.gid,
-          function (data) {
-            var rows = gvizRowsFromResponse(data);
-            if (rows.length > 1) {
-              addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
-              localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
-            }
-            done();
-          },
-          done,
-          localStorage.getItem("wf-" + prefix + "-header-row") || 1
-        );
+        updateDashboardStats();
+        updateRefreshButtonStatus(prefix);
+        if (prefix === "equity") renderValueChart();
       });
-
-      if (pending === 0) updateDashboardStats();
     });
-  }
-
-  updateRefreshButtonStatus();
+  });
 
   if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
@@ -788,6 +759,55 @@
     }, 12000);
 
     document.head.appendChild(script);
+  }
+
+  function loadSheetConfigs(prefix) {
+    var raw = localStorage.getItem("wf-" + prefix + "-sheets");
+    if (raw) {
+      try {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    var legacyLink = localStorage.getItem("wf-" + prefix + "-sheet-link");
+    if (legacyLink) {
+      return [{ link: legacyLink, headerRow: localStorage.getItem("wf-" + prefix + "-header-row") || "1" }];
+    }
+    return [];
+  }
+
+  function fetchAndMergeSheets(configs, onComplete) {
+    var validConfigs = configs.filter(function (c) { return c.link && parseSheetUrl(c.link); });
+    var failures = configs.length - validConfigs.length;
+    if (!validConfigs.length) {
+      onComplete(null, failures);
+      return;
+    }
+
+    var merged = null;
+    var pending = validConfigs.length;
+
+    validConfigs.forEach(function (config) {
+      var parsed = parseSheetUrl(config.link);
+      fetchSheetJSONP(
+        parsed.id,
+        parsed.gid,
+        function (data) {
+          var rows = gvizRowsFromResponse(data);
+          if (rows.length > 1) {
+            merged = merged ? merged.concat(rows.slice(1)) : rows;
+          }
+          pending -= 1;
+          if (pending <= 0) onComplete(merged, failures);
+        },
+        function () {
+          failures += 1;
+          pending -= 1;
+          if (pending <= 0) onComplete(merged, failures);
+        },
+        config.headerRow
+      );
+    });
   }
 
   function filterColumns(rows, allowedFields) {
@@ -899,7 +919,6 @@
           addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
           updateDashboardStats();
-          updateRefreshButtonStatus();
           var diagnostics = buildSyncDiagnostics(prefix, rows);
           var displayRows = filterColumns(rows, options.fields);
           if (options.showTable === false) {
@@ -961,9 +980,185 @@
     "Value"
   ];
 
-  initSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
-  initSheetCard("fixedincome", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
-  initSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  function initMultiSheetCard(prefix, options) {
+    options = options || {};
+    var listEl = document.getElementById(prefix + "-sheets-list");
+    if (!listEl) return;
+
+    var addBtn = document.getElementById(prefix + "-sheet-add");
+    var sheetSaveBtn = document.getElementById(prefix + "-sheet-save");
+    var sheetSyncBtn = document.getElementById(prefix + "-sheet-sync");
+    var sheetStatus = document.getElementById(prefix + "-sheet-status");
+    var sheetTableWrap = document.getElementById(prefix + "-sheet-table-wrap");
+    var sheetTable = document.getElementById(prefix + "-sheet-table");
+    var statusPill = document.getElementById(prefix + "-status-pill");
+    var meta = document.getElementById(prefix + "-meta");
+    var lastSync = document.getElementById(prefix + "-last-sync");
+    var rowCountEl = document.getElementById(prefix + "-row-count");
+    var openSheetLink = document.getElementById(prefix + "-open-sheet");
+    var sheetsKey = "wf-" + prefix + "-sheets";
+
+    function renderTable(rows) {
+      sheetTable.innerHTML = "";
+      if (!rows.length) return;
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      rows[0].forEach(function (cell) {
+        var th = document.createElement("th");
+        th.textContent = cell;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      sheetTable.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      rows.slice(1).forEach(function (r) {
+        var tr = document.createElement("tr");
+        r.forEach(function (cell) {
+          var td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      sheetTable.appendChild(tbody);
+    }
+
+    function setStatus(message, isError) {
+      sheetStatus.hidden = !message;
+      sheetStatus.textContent = message || "";
+      sheetStatus.style.color = isError ? "#EF4444" : "";
+    }
+
+    function setConnected(isConnected) {
+      statusPill.textContent = isConnected ? "Connected" : "Not connected";
+      statusPill.classList.toggle("connected", isConnected);
+    }
+
+    function addRow(config) {
+      config = config || { link: "", headerRow: "1" };
+      var row = document.createElement("div");
+      row.className = "equity-link-row sheet-row";
+
+      var linkInput = document.createElement("input");
+      linkInput.type = "url";
+      linkInput.className = "sheet-row-link";
+      linkInput.placeholder = "Paste your Google Sheets link here";
+      linkInput.value = config.link || "";
+
+      var headerInput = document.createElement("input");
+      headerInput.type = "number";
+      headerInput.className = "sheet-row-header-row header-row-input";
+      headerInput.min = "1";
+      headerInput.value = config.headerRow || "1";
+      headerInput.title = "Row number where column headers are";
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-ghost btn-sm sheet-row-remove";
+      removeBtn.setAttribute("aria-label", "Remove sheet");
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", function () {
+        row.remove();
+        if (!listEl.children.length) addRow();
+      });
+
+      row.appendChild(linkInput);
+      row.appendChild(headerInput);
+      row.appendChild(removeBtn);
+      listEl.appendChild(row);
+    }
+
+    function readRowConfigs() {
+      return Array.prototype.slice.call(listEl.querySelectorAll(".sheet-row")).map(function (row) {
+        return {
+          link: row.querySelector(".sheet-row-link").value.trim(),
+          headerRow: row.querySelector(".sheet-row-header-row").value || "1"
+        };
+      });
+    }
+
+    function syncAll() {
+      var configs = readRowConfigs().filter(function (c) { return c.link; });
+      if (!configs.length) {
+        setStatus("Add at least one Google Sheets link.", true);
+        sheetTableWrap.hidden = true;
+        setConnected(false);
+        return;
+      }
+      setStatus("Verifying and syncing " + configs.length + " sheet(s)…", false);
+      var lastUrl = configs[configs.length - 1].link;
+
+      fetchAndMergeSheets(configs, function (merged, failures) {
+        if (!merged || merged.length <= 1) {
+          setStatus(failures
+            ? "Couldn't load " + failures + " of " + configs.length + " sheet(s). Make sure they're shared as \"Anyone with the link can view.\""
+            : "The sheet(s) appear to be empty.", true);
+          sheetTableWrap.hidden = true;
+          setConnected(false);
+          return;
+        }
+        addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
+        localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        updateDashboardStats();
+        updateRefreshButtonStatus(prefix);
+        var diagnostics = buildSyncDiagnostics(prefix, merged);
+        var displayRows = filterColumns(merged, options.fields);
+        if (options.showTable === false) {
+          sheetTableWrap.hidden = true;
+        } else {
+          renderTable(displayRows);
+          sheetTableWrap.hidden = false;
+        }
+        var failureNote = failures ? " (" + failures + " sheet(s) failed to load)" : "";
+        setStatus(diagnostics + failureNote, !!failures);
+        setConnected(true);
+
+        var rowCount = displayRows.length - 1;
+        rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
+        lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
+        openSheetLink.href = lastUrl;
+        meta.hidden = false;
+      });
+    }
+
+    var savedConfigs = loadSheetConfigs(prefix);
+    if (savedConfigs.length) {
+      savedConfigs.forEach(function (c) { addRow(c); });
+    } else {
+      addRow();
+    }
+
+    if (addBtn) {
+      addBtn.addEventListener("click", function () { addRow(); });
+    }
+
+    if (sheetSaveBtn) {
+      sheetSaveBtn.addEventListener("click", function () {
+        var configs = readRowConfigs().filter(function (c) { return c.link; });
+        localStorage.setItem(sheetsKey, JSON.stringify(configs));
+        localStorage.removeItem("wf-" + prefix + "-sheet-link");
+        localStorage.removeItem("wf-" + prefix + "-header-row");
+        setStatus("Sheet links saved.", false);
+      });
+    }
+
+    if (sheetSyncBtn) {
+      sheetSyncBtn.addEventListener("click", function () {
+        var configs = readRowConfigs().filter(function (c) { return c.link; });
+        localStorage.setItem(sheetsKey, JSON.stringify(configs));
+        localStorage.removeItem("wf-" + prefix + "-sheet-link");
+        localStorage.removeItem("wf-" + prefix + "-header-row");
+        syncAll();
+      });
+    }
+
+    if (savedConfigs.length) syncAll();
+  }
+
+  initMultiSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("fixedincome", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initSheetCard("mfmapping");
   initSheetCard("stocksetfmapping");
 
