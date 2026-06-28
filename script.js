@@ -750,6 +750,16 @@
     return rows;
   }
 
+  function sheetErrorMessage(reason) {
+    if (reason === "private") {
+      return "This sheet appears to be private or restricted. Open it in Google Sheets, click \"Share\", and set access to \"Anyone with the link can view\", then sync again.";
+    }
+    if (reason === "timeout") {
+      return "Couldn't reach the sheet (request timed out). Check your internet connection and the link, then try again.";
+    }
+    return "Couldn't load the sheet. Double-check the link and that it's shared as \"Anyone with the link can view.\"";
+  }
+
   function fetchSheetJSONP(id, gid, onData, onError, headerRow) {
     var callbackName = "__wfSheetCallback_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
     var script = document.createElement("script");
@@ -764,7 +774,8 @@
     window[callbackName] = function (data) {
       cleanup();
       if (data.status === "error") {
-        onError();
+        var reasons = (data.errors || []).map(function (e) { return e.reason; });
+        onError(reasons.indexOf("access_denied") !== -1 ? "private" : "query");
       } else {
         onData(data);
       }
@@ -772,7 +783,7 @@
 
     script.onerror = function () {
       cleanup();
-      onError();
+      onError("private");
     };
 
     var rangeParam = "";
@@ -792,7 +803,7 @@
 
     timeoutId = setTimeout(function () {
       cleanup();
-      onError();
+      onError("timeout");
     }, 12000);
 
     document.head.appendChild(script);
@@ -852,6 +863,7 @@
 
     var resultsByIndex = new Array(validConfigs.length);
     var pending = validConfigs.length;
+    var failureReasons = [];
 
     function finish() {
       var merged = null;
@@ -866,7 +878,7 @@
           merged = merged.concat(realignRowsToHeader(rows, merged[0]));
         }
       });
-      onComplete(merged, failures);
+      onComplete(merged, failures, failureReasons);
     }
 
     validConfigs.forEach(function (config, index) {
@@ -879,8 +891,9 @@
           pending -= 1;
           if (pending <= 0) finish();
         },
-        function () {
+        function (reason) {
           failures += 1;
+          failureReasons.push(reason);
           pending -= 1;
           if (pending <= 0) finish();
         },
@@ -1022,8 +1035,8 @@
           openSheetLink.href = url;
           meta.hidden = false;
         },
-        function () {
-          setStatus("Couldn't load the sheet. Make sure it's shared as \"Anyone with the link can view.\"", true);
+        function (reason) {
+          setStatus(sheetErrorMessage(reason), true);
           sheetTableWrap.hidden = true;
           setConnected(false);
         },
@@ -1191,11 +1204,14 @@
       setStatus("Verifying and syncing " + configs.length + " sheet(s)…", false);
       var lastUrl = configs[configs.length - 1].link;
 
-      fetchAndMergeSheets(configs, function (merged, failures) {
+      fetchAndMergeSheets(configs, function (merged, failures, failureReasons) {
         if (!merged || merged.length <= 1) {
-          setStatus(failures
-            ? "Couldn't load " + failures + " of " + configs.length + " sheet(s). Make sure they're shared as \"Anyone with the link can view.\""
-            : "The sheet(s) appear to be empty.", true);
+          var reasonMsg = failures
+            ? (failureReasons.indexOf("private") !== -1
+                ? sheetErrorMessage("private")
+                : "Couldn't load " + failures + " of " + configs.length + " sheet(s). " + sheetErrorMessage(failureReasons[0]))
+            : "The sheet(s) appear to be empty.";
+          setStatus(reasonMsg, true);
           sheetTableWrap.hidden = true;
           setConnected(false);
           return;
@@ -1212,7 +1228,9 @@
           renderTable(displayRows);
           sheetTableWrap.hidden = false;
         }
-        var failureNote = failures ? " (" + failures + " sheet(s) failed to load)" : "";
+        var failureNote = failures
+          ? " (" + failures + " sheet(s) failed to load: " + sheetErrorMessage(failureReasons[0]) + ")"
+          : "";
         setStatus(diagnostics.message + failureNote, !!failures || diagnostics.missingColumns);
         setConnected(diagnostics.missingColumns ? "warning" : true);
 
