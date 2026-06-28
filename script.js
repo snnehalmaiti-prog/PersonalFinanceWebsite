@@ -788,6 +788,15 @@
     return [];
   }
 
+  function realignRowsToHeader(rows, canonicalHeader) {
+    var normalizedCanonical = canonicalHeader.map(normalizeText);
+    var ownHeader = rows[0].map(normalizeText);
+    var columnMap = normalizedCanonical.map(function (name) { return ownHeader.indexOf(name); });
+    return rows.slice(1).map(function (row) {
+      return columnMap.map(function (idx) { return idx === -1 ? "" : (row[idx] || ""); });
+    });
+  }
+
   function fetchAndMergeSheets(configs, onComplete) {
     var validConfigs = configs.filter(function (c) { return c.link && parseSheetUrl(c.link); });
     var failures = configs.length - validConfigs.length;
@@ -796,26 +805,36 @@
       return;
     }
 
-    var merged = null;
+    var resultsByIndex = new Array(validConfigs.length);
     var pending = validConfigs.length;
 
-    validConfigs.forEach(function (config) {
+    function finish() {
+      var merged = null;
+      resultsByIndex.forEach(function (rows) {
+        if (!rows || rows.length <= 1) return;
+        if (!merged) {
+          merged = rows;
+        } else {
+          merged = merged.concat(realignRowsToHeader(rows, merged[0]));
+        }
+      });
+      onComplete(merged, failures);
+    }
+
+    validConfigs.forEach(function (config, index) {
       var parsed = parseSheetUrl(config.link);
       fetchSheetJSONP(
         parsed.id,
         parsed.gid,
         function (data) {
-          var rows = gvizRowsFromResponse(data);
-          if (rows.length > 1) {
-            merged = merged ? merged.concat(rows.slice(1)) : rows;
-          }
+          resultsByIndex[index] = gvizRowsFromResponse(data);
           pending -= 1;
-          if (pending <= 0) onComplete(merged, failures);
+          if (pending <= 0) finish();
         },
         function () {
           failures += 1;
           pending -= 1;
-          if (pending <= 0) onComplete(merged, failures);
+          if (pending <= 0) finish();
         },
         config.headerRow
       );
