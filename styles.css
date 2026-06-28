@@ -1126,7 +1126,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .holdings-table .fund-name { font-weight: 600; }
 .holdings-table .positive { color: var(--emerald); }
 .holdings-table .negative { color: #EF4444; }
-.holdings-table .pnl-pct, .holdings-table .daychg-pct { display: block; font-size: 0.8em; font-weight: 500; }
 
 .value-chart-card {
   margin-top: 22px;

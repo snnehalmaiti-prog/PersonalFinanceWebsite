@@ -1953,7 +1953,6 @@
             var current = h.units * currNav;
             var pnl = current - h.invested;
             var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
-            var dayChg = prev ? (currNav - prev.nav) * h.units : 0;
             var dayChgPct = prev && prev.nav ? ((currNav - prev.nav) / prev.nav) * 100 : 0;
 
             var tr = document.createElement("tr");
@@ -1963,6 +1962,11 @@
             nameTd.textContent = h.instrument;
             tr.appendChild(nameTd);
 
+            var qtyTd = document.createElement("td");
+            qtyTd.className = "num";
+            qtyTd.textContent = h.units.toFixed(3);
+            tr.appendChild(qtyTd);
+
             var avgNavTd = document.createElement("td");
             avgNavTd.className = "num";
             avgNavTd.textContent = h.avgNav.toFixed(2);
@@ -1970,7 +1974,7 @@
 
             var currNavTd = document.createElement("td");
             currNavTd.className = "num";
-            currNavTd.textContent = currNav.toFixed(2);
+            currNavTd.textContent = currNav.toFixed(3);
             tr.appendChild(currNavTd);
 
             var investedTd = document.createElement("td");
@@ -1985,14 +1989,17 @@
 
             var pnlTd = document.createElement("td");
             pnlTd.className = "num " + (pnl > 0 ? "positive" : (pnl < 0 ? "negative" : ""));
-            pnlTd.innerHTML = (pnl > 0 ? "+" : "") + formatCurrency(pnl) +
-              "<span class=\"pnl-pct\">" + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + "%</span>";
+            pnlTd.textContent = (pnl > 0 ? "+" : "") + formatCurrency(pnl);
             tr.appendChild(pnlTd);
 
+            var netChgTd = document.createElement("td");
+            netChgTd.className = "num " + (pnlPct > 0 ? "positive" : (pnlPct < 0 ? "negative" : ""));
+            netChgTd.textContent = (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + "%";
+            tr.appendChild(netChgTd);
+
             var dayChgTd = document.createElement("td");
-            dayChgTd.className = "num " + (dayChg > 0 ? "positive" : (dayChg < 0 ? "negative" : ""));
-            dayChgTd.innerHTML = (dayChg > 0 ? "+" : "") + formatCurrency(dayChg) +
-              "<span class=\"daychg-pct\">" + (dayChgPct > 0 ? "+" : "") + dayChgPct.toFixed(2) + "%</span>";
+            dayChgTd.className = "num " + (dayChgPct > 0 ? "positive" : (dayChgPct < 0 ? "negative" : ""));
+            dayChgTd.textContent = (dayChgPct > 0 ? "+" : "") + dayChgPct.toFixed(2) + "%";
             tr.appendChild(dayChgTd);
 
             tbody.appendChild(tr);
