@@ -788,20 +788,32 @@
     return [];
   }
 
+  var CANONICAL_FIELD_KEYWORDS = {
+    "transaction date": ["date"],
+    "portfolio name": ["portfolio"],
+    "instrument name": ["instrument", "scheme", "fund"],
+    "transaction type": ["transaction type", "type"],
+    units: ["unit"],
+    price: ["price", "nav", "rate"]
+  };
+
+  function findHeaderIndex(ownHeader, canonicalName) {
+    var exact = ownHeader.indexOf(canonicalName);
+    if (exact !== -1) return exact;
+    var keywords = CANONICAL_FIELD_KEYWORDS[canonicalName] || [];
+    for (var k = 0; k < keywords.length; k++) {
+      var idx = ownHeader.findIndex(function (h) { return h.indexOf(keywords[k]) !== -1; });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
   function realignRowsToHeader(rows, canonicalHeader) {
     var normalizedCanonical = canonicalHeader.map(normalizeText);
     var ownHeader = rows[0].map(normalizeText);
-    var columnMap = normalizedCanonical.map(function (name) { return ownHeader.indexOf(name); });
+    var columnMap = normalizedCanonical.map(function (name) { return findHeaderIndex(ownHeader, name); });
     return rows.slice(1).map(function (row) {
       return columnMap.map(function (idx) { return idx === -1 ? "" : (row[idx] || ""); });
-    });
-  }
-
-  function takeColumnsByPosition(rows, columnCount) {
-    return rows.slice(1).map(function (row) {
-      var trimmed = [];
-      for (var i = 0; i < columnCount; i++) trimmed.push(row[i] || "");
-      return trimmed;
     });
   }
 
@@ -821,7 +833,7 @@
       resultsByIndex.forEach(function (rows) {
         if (!rows || rows.length <= 1) return;
         if (canonicalFields) {
-          var aligned = takeColumnsByPosition(rows, canonicalFields.length);
+          var aligned = realignRowsToHeader(rows, canonicalFields);
           merged = merged ? merged.concat(aligned) : [canonicalFields].concat(aligned);
         } else if (!merged) {
           merged = rows;
