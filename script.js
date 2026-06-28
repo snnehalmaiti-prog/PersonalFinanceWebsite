@@ -550,7 +550,7 @@
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
       if (!instruments.length) {
         var reason = !Object.keys(unitEvents).length
-          ? "No equity holdings found in the synced Equity Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
+          ? "No equity holdings found in the synced Mutual Fund Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
           : !Object.keys(schemeMap).length
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
@@ -1144,7 +1144,7 @@
     var events = {};
     lastUnitEventsDiagnostic = null;
     if (!rows || !rows.length) {
-      lastUnitEventsDiagnostic = "no synced Equity Transactions data";
+      lastUnitEventsDiagnostic = "no synced Mutual Fund Transactions data";
       return events;
     }
     var header = rows[0].map(normalizeText);
@@ -1233,7 +1233,7 @@
       if (!instruments.length) {
         statusEl.textContent = skipped
           ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
-          : "Connect your Equity Transactions and Mutual Fund Mapping sheets to see this chart.";
+          : "Connect your Mutual Fund Transactions and Mutual Fund Mapping sheets to see this chart.";
         return;
       }
 
