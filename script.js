@@ -2624,6 +2624,31 @@
 
   renderMutualFundPortfolioSplitChart();
 
+  function linkPieChartBoxSizes(boxIdA, boxIdB) {
+    var boxA = document.getElementById(boxIdA);
+    var boxB = document.getElementById(boxIdB);
+    if (!boxA || !boxB || boxA.dataset.linkedResize || typeof ResizeObserver === "undefined") return;
+    boxA.dataset.linkedResize = "1";
+    boxB.dataset.linkedResize = "1";
+
+    var syncing = false;
+    function mirror(source, target) {
+      if (syncing) return;
+      var rect = source.getBoundingClientRect();
+      var targetRect = target.getBoundingClientRect();
+      if (Math.abs(rect.width - targetRect.width) < 1 && Math.abs(rect.height - targetRect.height) < 1) return;
+      syncing = true;
+      target.style.width = Math.round(rect.width) + "px";
+      target.style.height = Math.round(rect.height) + "px";
+      requestAnimationFrame(function () { syncing = false; });
+    }
+
+    new ResizeObserver(function () { mirror(boxA, boxB); }).observe(boxA);
+    new ResizeObserver(function () { mirror(boxB, boxA); }).observe(boxB);
+  }
+
+  linkPieChartBoxSizes("market-segment-resize", "mf-portfolio-split-resize");
+
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
   if (form) {
