@@ -2087,7 +2087,7 @@
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
-      var resolvable = holdings.filter(function (h) { return !!schemeMap[h.instrument]; });
+      var resolvable = holdings.filter(function (h) { return h.units < 1 || !!schemeMap[h.instrument]; });
       var skipped = holdings.length - resolvable.length;
       if (!resolvable.length) {
         statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
@@ -2095,7 +2095,7 @@
         return;
       }
 
-      return Promise.all(resolvable.map(function (h) { return fetchNavHistory(schemeMap[h.instrument]); }))
+      return Promise.all(resolvable.map(function (h) { return h.units < 1 ? Promise.resolve([]) : fetchNavHistory(schemeMap[h.instrument]); }))
         .then(function (navHistories) {
           tbody.innerHTML = "";
           resolvable.forEach(function (h, i) {
