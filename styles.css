@@ -1094,6 +1094,40 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 .sheet-row-meta { margin-top: 6px; margin-left: 2px; }
 
+.holdings-card {
+  margin-top: 22px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 14px);
+}
+.holdings-card h3 { margin: 0 0 6px; font-size: 1rem; }
+.holdings-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.holdings-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.holdings-table th, .holdings-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.holdings-table th {
+  background: var(--surface-alt);
+  font-weight: 700;
+  color: var(--text);
+}
+.holdings-table th.num, .holdings-table td.num { text-align: right; }
+.holdings-table tbody tr:last-child td { border-bottom: none; }
+.holdings-table tbody tr:hover { background: var(--surface-alt); }
+.holdings-table .fund-name { font-weight: 600; }
+.holdings-table .positive { color: var(--emerald); }
+.holdings-table .negative { color: #EF4444; }
+.holdings-table .pnl-pct, .holdings-table .daychg-pct { display: block; font-size: 0.8em; font-weight: 500; }
+
 .value-chart-card {
   margin-top: 22px;
   padding: 18px 20px;

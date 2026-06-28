@@ -254,6 +254,7 @@
     if (portfolioLabel) portfolioLabel.textContent = label;
     updateDashboardStats();
     renderValueChart();
+    renderEquityHoldingsTable();
   }
 
   function parseNumber(value) {
@@ -735,6 +736,7 @@
 
   updateDashboardStats();
   renderValueChart();
+  renderEquityHoldingsTable();
 
   ["equity", "fixedincome", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
@@ -753,7 +755,7 @@
         }
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
-        if (prefix === "equity") renderValueChart();
+        if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); }
       }, TRANSACTION_SHEET_FIELDS);
     });
   });
@@ -1772,6 +1774,121 @@
   }
 
   renderValueChart();
+
+  function renderEquityHoldingsTable() {
+    var statusEl = document.getElementById("equity-holdings-status");
+    var tableWrap = document.getElementById("equity-holdings-table-wrap");
+    var tbody = document.getElementById("equity-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("equity");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Mutual Fund Transactions sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, selectedPortfolio);
+    if (!transactionsByInstrument) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var holdings = [];
+    Object.keys(transactionsByInstrument).forEach(function (instrument) {
+      var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
+      var remainingUnits = 0, investedCost = 0;
+      remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
+      if (remainingUnits <= UNITS_EPSILON) return;
+      holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: investedCost / remainingUnits });
+    });
+
+    if (!holdings.length) {
+      statusEl.textContent = "No mutual fund holdings with unsold units found.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    statusEl.textContent = "Resolving mutual fund scheme codes…";
+
+    buildInstrumentSchemeMap().then(function (schemeMap) {
+      var resolvable = holdings.filter(function (h) { return !!schemeMap[h.instrument]; });
+      var skipped = holdings.length - resolvable.length;
+      if (!resolvable.length) {
+        statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
+        tableWrap.hidden = true;
+        return;
+      }
+
+      return Promise.all(resolvable.map(function (h) { return fetchNavHistory(schemeMap[h.instrument]); }))
+        .then(function (navHistories) {
+          tbody.innerHTML = "";
+          resolvable.forEach(function (h, i) {
+            var navHistory = navHistories[i] || [];
+            if (!navHistory.length) return;
+            var latest = navHistory[navHistory.length - 1];
+            var prev = navHistory.length > 1 ? navHistory[navHistory.length - 2] : null;
+            var currNav = latest.nav;
+            var current = h.units * currNav;
+            var pnl = current - h.invested;
+            var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
+            var dayChg = prev ? (currNav - prev.nav) * h.units : 0;
+            var dayChgPct = prev && prev.nav ? ((currNav - prev.nav) / prev.nav) * 100 : 0;
+
+            var tr = document.createElement("tr");
+
+            var nameTd = document.createElement("td");
+            nameTd.className = "fund-name";
+            nameTd.textContent = h.instrument;
+            tr.appendChild(nameTd);
+
+            var avgNavTd = document.createElement("td");
+            avgNavTd.className = "num";
+            avgNavTd.textContent = h.avgNav.toFixed(2);
+            tr.appendChild(avgNavTd);
+
+            var currNavTd = document.createElement("td");
+            currNavTd.className = "num";
+            currNavTd.textContent = currNav.toFixed(2);
+            tr.appendChild(currNavTd);
+
+            var investedTd = document.createElement("td");
+            investedTd.className = "num";
+            investedTd.textContent = formatCurrency(h.invested);
+            tr.appendChild(investedTd);
+
+            var currentTd = document.createElement("td");
+            currentTd.className = "num";
+            currentTd.textContent = formatCurrency(current);
+            tr.appendChild(currentTd);
+
+            var pnlTd = document.createElement("td");
+            pnlTd.className = "num " + (pnl > 0 ? "positive" : (pnl < 0 ? "negative" : ""));
+            pnlTd.innerHTML = (pnl > 0 ? "+" : "") + formatCurrency(pnl) +
+              "<span class=\"pnl-pct\">" + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + "%</span>";
+            tr.appendChild(pnlTd);
+
+            var dayChgTd = document.createElement("td");
+            dayChgTd.className = "num " + (dayChg > 0 ? "positive" : (dayChg < 0 ? "negative" : ""));
+            dayChgTd.innerHTML = (dayChg > 0 ? "+" : "") + formatCurrency(dayChg) +
+              "<span class=\"daychg-pct\">" + (dayChgPct > 0 ? "+" : "") + dayChgPct.toFixed(2) + "%</span>";
+            tr.appendChild(dayChgTd);
+
+            tbody.appendChild(tr);
+          });
+
+          statusEl.textContent = resolvable.length + " holding(s) with unsold units" + (skipped ? " (" + skipped + " unmapped holding(s) skipped)" : "") + ".";
+          tableWrap.hidden = false;
+        });
+    }).catch(function (err) {
+      statusEl.textContent = "Couldn't load holdings: " + (err && err.message ? err.message : err);
+      tableWrap.hidden = true;
+    });
+  }
+
+  renderEquityHoldingsTable();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");

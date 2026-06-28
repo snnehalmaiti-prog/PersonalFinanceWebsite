@@ -139,6 +139,27 @@
       </div>
 
       <p class="muted small" style="margin-top:24px;">Connect your mutual fund transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
+
+      <div class="holdings-card">
+        <h3>Holdings</h3>
+        <p class="muted small" id="equity-holdings-status">Loading holdings…</p>
+        <div id="equity-holdings-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="equity-holdings-table" class="holdings-table">
+            <thead>
+              <tr>
+                <th>Fund</th>
+                <th class="num">Avg. NAV</th>
+                <th class="num">Curr. NAV</th>
+                <th class="num">Invested</th>
+                <th class="num">Current</th>
+                <th class="num">P&amp;L</th>
+                <th class="num">Day Chg.</th>
+              </tr>
+            </thead>
+            <tbody id="equity-holdings-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section id="panel-stocksetf" class="settings-panel" role="tabpanel" aria-labelledby="tab-stocksetf" hidden>
