@@ -2069,11 +2069,14 @@
     var showClosedOnlyCheckbox = document.getElementById("equity-holdings-show-closed-only");
     var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
 
+    console.warn("[wf] instruments detected in Mutual Fund Transactions sheet:", Object.keys(transactionsByInstrument));
+
     var holdings = [];
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
+      console.warn("[wf] instrument:", JSON.stringify(instrument), "remaining units:", remainingUnits);
       if (showClosedOnly) {
         if (remainingUnits >= UNITS_EPSILON) return;
       } else if (remainingUnits < 1) {
