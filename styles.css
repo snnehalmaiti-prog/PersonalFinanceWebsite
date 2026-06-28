@@ -1101,7 +1101,25 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 14px);
 }
-.holdings-card h3 { margin: 0 0 6px; font-size: 1rem; }
+.holdings-card h3 { margin: 0; font-size: 1rem; }
+.holdings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.holdings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.holdings-toggle input { cursor: pointer; }
 .holdings-table-wrap {
   margin-top: 14px;
   overflow-x: auto;

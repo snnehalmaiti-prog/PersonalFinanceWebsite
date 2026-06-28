@@ -860,6 +860,9 @@
   renderValueChart();
   renderEquityHoldingsTable();
 
+  var equityHoldingsShowAll = document.getElementById("equity-holdings-show-all");
+  if (equityHoldingsShowAll) equityHoldingsShowAll.addEventListener("change", renderEquityHoldingsTable);
+
   ["equity", "fixedincome", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
     updateRefreshButtonStatus(prefix);
@@ -1918,13 +1921,17 @@
       return;
     }
 
+    var showAllCheckbox = document.getElementById("equity-holdings-show-all");
+    var showAll = !!(showAllCheckbox && showAllCheckbox.checked);
+
     var holdings = [];
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
-      if (remainingUnits < 1) return;
-      holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: investedCost / remainingUnits });
+      if (!showAll && remainingUnits < 1) return;
+      var avgNav = remainingUnits > UNITS_EPSILON ? investedCost / remainingUnits : 0;
+      holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: avgNav });
     });
 
     if (!holdings.length) {

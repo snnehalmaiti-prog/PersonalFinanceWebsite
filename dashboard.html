@@ -141,7 +141,13 @@
       <p class="muted small" style="margin-top:24px;">Connect your mutual fund transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
 
       <div class="holdings-card">
-        <h3>Holdings</h3>
+        <div class="holdings-card-header">
+          <h3>Holdings</h3>
+          <label class="holdings-toggle">
+            <input type="checkbox" id="equity-holdings-show-all" />
+            Show closed positions (&lt; 1 unit)
+          </label>
+        </div>
         <p class="muted small" id="equity-holdings-status">Loading holdings…</p>
         <div id="equity-holdings-table-wrap" class="holdings-table-wrap" hidden>
           <table id="equity-holdings-table" class="holdings-table">
