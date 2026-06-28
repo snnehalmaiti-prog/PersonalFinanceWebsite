@@ -270,15 +270,16 @@
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var typeIdx = header.indexOf("transaction type");
-    var valueIdx = header.indexOf("value");
-    if (portfolioIdx === -1 || typeIdx === -1 || valueIdx === -1) return 0;
+    var unitsIdx = header.indexOf("units");
+    var priceIdx = header.indexOf("price");
+    if (portfolioIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
 
     var total = 0;
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
       var type = (row[typeIdx] || "").trim().toLowerCase();
-      var value = parseNumber(row[valueIdx]);
+      var value = parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]);
       total += type.indexOf("sell") !== -1 ? -value : value;
     });
     return total;
@@ -291,8 +292,8 @@
     var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
     var unitsIdx = header.indexOf("units");
-    var valueIdx = header.indexOf("value");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
+    var priceIdx = header.indexOf("price");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
 
     var byInstrument = {};
     rows.slice(1).forEach(function (row) {
@@ -302,7 +303,7 @@
       var instrument = (row[instrumentIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
       var units = parseNumber(row[unitsIdx]);
-      var value = parseNumber(row[valueIdx]);
+      var value = units * parseNumber(row[priceIdx]);
 
       if (!byInstrument[instrument]) {
         byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0 };
@@ -333,8 +334,8 @@
     var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
     var unitsIdx = header.indexOf("units");
-    var valueIdx = header.indexOf("value");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
+    var priceIdx = header.indexOf("price");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
 
     var byInstrument = {};
     rows.slice(1).forEach(function (row) {
@@ -344,7 +345,7 @@
       var instrument = (row[instrumentIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
       var units = parseNumber(row[unitsIdx]);
-      var value = parseNumber(row[valueIdx]);
+      var value = units * parseNumber(row[priceIdx]);
 
       if (!byInstrument[instrument]) {
         byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0, sellValue: 0 };
@@ -427,12 +428,12 @@
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
-    var valueIdx = header.indexOf("value");
+    var priceIdx = header.indexOf("price");
     var unitsIdx = header.indexOf("units");
 
     var requiredIdx = (prefix === "equity" || prefix === "stocksetf")
-      ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, units: unitsIdx, value: valueIdx }
-      : { "portfolio name": portfolioIdx, "transaction type": typeIdx, value: valueIdx };
+      ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, units: unitsIdx, price: priceIdx }
+      : { "portfolio name": portfolioIdx, "transaction type": typeIdx, units: unitsIdx, price: priceIdx };
 
     var missing = Object.keys(requiredIdx).filter(function (key) { return requiredIdx[key] === -1; });
     if (missing.length) {
@@ -994,8 +995,7 @@
     "Instrument Name",
     "Transaction Type",
     "Units",
-    "Price",
-    "Value"
+    "Price"
   ];
 
   function initMultiSheetCard(prefix, options) {
