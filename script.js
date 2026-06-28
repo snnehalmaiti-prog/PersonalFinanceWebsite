@@ -706,11 +706,16 @@
   }
 
   function gvizRowsFromResponse(data) {
+    var colTypes = data.table.cols.map(function (c) { return c.type || ""; });
     var cols = data.table.cols.map(function (c) { return c.label || c.id || ""; });
     var rows = [cols];
     (data.table.rows || []).forEach(function (r) {
-      var row = (r.c || []).map(function (cell) {
+      var row = (r.c || []).map(function (cell, i) {
         if (!cell) return "";
+        // Numeric columns: use the raw value, not the display-formatted string —
+        // cell.f can be "₹1,234.00" or "(1,234.00)" for negatives, which the
+        // numeric parser can't reliably reconstruct.
+        if (colTypes[i] === "number") return cell.v != null ? String(cell.v) : "";
         if (cell.f != null) return cell.f;
         return cell.v != null ? String(cell.v) : "";
       });
