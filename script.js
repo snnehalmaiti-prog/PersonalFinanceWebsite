@@ -407,6 +407,7 @@
     var buyLots = [];
     var costOfSoldUnits = 0;
     var saleProceeds = 0;
+    var unitsSold = 0;
     var lastSell = null;
     txns.forEach(function (txn) {
       if (txn.type === "buy") {
@@ -423,6 +424,7 @@
         if (lot.units <= 0) buyLots.shift();
       }
       saleProceeds += txn.units * txn.price;
+      unitsSold += txn.units;
       if (!lastSell || (txn.date && (!lastSell.date || txn.date.getTime() >= lastSell.date.getTime()))) {
         lastSell = txn;
       }
@@ -430,6 +432,8 @@
     return {
       costOfSoldUnits: costOfSoldUnits,
       saleProceeds: saleProceeds,
+      unitsSold: unitsSold,
+      avgBuyCost: unitsSold > 0 ? costOfSoldUnits / unitsSold : 0,
       realizedPnl: saleProceeds - costOfSoldUnits,
       lastSellPrice: lastSell ? lastSell.price : 0,
       lastSellDate: lastSell ? lastSell.date : null
@@ -1971,7 +1975,12 @@
       } else if (!showAll && remainingUnits < 1) {
         return;
       }
-      var avgNav = remainingUnits > UNITS_EPSILON ? investedCost / remainingUnits : 0;
+      var avgNav;
+      if (remainingUnits > UNITS_EPSILON) {
+        avgNav = investedCost / remainingUnits;
+      } else {
+        avgNav = computeInstrumentRealizedDetail(transactionsByInstrument[instrument]).avgBuyCost;
+      }
       holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: avgNav });
     });
 
