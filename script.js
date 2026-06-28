@@ -494,7 +494,7 @@
   }
 
   function buildSyncDiagnostics(prefix, rows) {
-    if (prefix === "mfmapping") {
+    if (prefix === "mfmapping" || prefix === "stocksetfmapping") {
       var rawHeader = rows[0];
       var header = rawHeader.map(normalizeText);
       var instrumentIdx = header.indexOf("instrument name");
@@ -1106,6 +1106,7 @@
     showTable: false
   });
   initSheetCard("mfmapping");
+  initSheetCard("stocksetfmapping");
 
   // ===== Current Value Over Time chart =====
   var NAV_CACHE_PREFIX = "wf-nav-cache-";
