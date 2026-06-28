@@ -183,13 +183,25 @@
         </div>
       </div>
 
-      <div class="value-chart-card">
-        <div class="value-chart-header">
-          <h3>Split by Market Segment</h3>
+      <div class="charts-row">
+        <div class="value-chart-card">
+          <div class="value-chart-header">
+            <h3>Split by Market Segment</h3>
+          </div>
+          <p class="muted small" id="market-segment-status">Loading market segment split…</p>
+          <div class="pie-chart-resize" id="market-segment-resize">
+            <canvas id="market-segment-chart"></canvas>
+          </div>
         </div>
-        <p class="muted small" id="market-segment-status">Loading market segment split…</p>
-        <div class="pie-chart-resize" id="market-segment-resize">
-          <canvas id="market-segment-chart"></canvas>
+
+        <div class="value-chart-card">
+          <div class="value-chart-header">
+            <h3>Split by Portfolio</h3>
+          </div>
+          <p class="muted small" id="mf-portfolio-split-status">Loading portfolio split…</p>
+          <div class="pie-chart-resize" id="mf-portfolio-split-resize">
+            <canvas id="mf-portfolio-split-chart"></canvas>
+          </div>
         </div>
       </div>
     </section>

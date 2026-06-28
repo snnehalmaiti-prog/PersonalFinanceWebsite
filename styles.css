@@ -1172,6 +1172,17 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .holdings-table .positive { color: var(--emerald); }
 .holdings-table .negative { color: var(--negative); }
 
+.charts-row {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.charts-row .value-chart-card {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
 .value-chart-card {
   margin-top: 22px;
   padding: 18px 20px;

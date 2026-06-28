@@ -923,7 +923,7 @@
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
-        if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); }
+        if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         renderInvestmentSplitChart();
       }, TRANSACTION_SHEET_FIELDS);
     });
@@ -2328,6 +2328,152 @@
   }
 
   renderMarketSegmentChart();
+
+  function groupUnitTransactionsByPortfolioAndInstrument(rows) {
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var typeIdx = header.indexOf("transaction type");
+    var unitsIdx = header.indexOf("units");
+    var priceIdx = header.indexOf("price");
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return null;
+
+    var byPortfolio = {};
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (!portfolio) return;
+
+      var type = normalizeText(row[typeIdx]);
+      var isBuy = type.indexOf("buy") !== -1;
+      var isSell = type.indexOf("sell") !== -1;
+      if (!isBuy && !isSell) return;
+
+      var instrument = (row[instrumentIdx] || "").trim();
+      if (!byPortfolio[portfolio]) byPortfolio[portfolio] = {};
+      if (!byPortfolio[portfolio][instrument]) byPortfolio[portfolio][instrument] = [];
+      byPortfolio[portfolio][instrument].push({
+        type: isBuy ? "buy" : "sell",
+        units: parseNumber(row[unitsIdx]),
+        price: parseNumber(row[priceIdx]),
+        date: parseFlexibleDate(row[dateIdx]),
+        order: byPortfolio[portfolio][instrument].length
+      });
+    });
+
+    Object.keys(byPortfolio).forEach(function (portfolio) {
+      Object.keys(byPortfolio[portfolio]).forEach(function (instrument) {
+        byPortfolio[portfolio][instrument].sort(function (a, b) {
+          var at = a.date ? a.date.getTime() : 0;
+          var bt = b.date ? b.date.getTime() : 0;
+          return at !== bt ? at - bt : a.order - b.order;
+        });
+      });
+    });
+    return byPortfolio;
+  }
+
+  function renderMutualFundPortfolioSplitChart() {
+    var canvas = document.getElementById("mf-portfolio-split-chart");
+    var statusEl = document.getElementById("mf-portfolio-split-status");
+    if (!canvas || !statusEl || typeof Chart === "undefined") return;
+
+    var rows = getSheetRows("equity");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Mutual Fund Transactions sheet in Settings to populate this chart.";
+      if (window.__wfMfPortfolioSplitChart) { window.__wfMfPortfolioSplitChart.destroy(); window.__wfMfPortfolioSplitChart = null; }
+      return;
+    }
+
+    var byPortfolio = groupUnitTransactionsByPortfolioAndInstrument(rows);
+    if (!byPortfolio) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      return;
+    }
+
+    var holdings = [];
+    Object.keys(byPortfolio).forEach(function (portfolio) {
+      Object.keys(byPortfolio[portfolio]).forEach(function (instrument) {
+        var remainingLots = fifoRemainingLots(byPortfolio[portfolio][instrument]);
+        var remainingUnits = 0, investedCost = 0;
+        remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
+        if (remainingUnits < 1) return;
+        holdings.push({ portfolio: portfolio, instrument: instrument, units: remainingUnits, invested: investedCost });
+      });
+    });
+
+    if (!holdings.length) {
+      statusEl.textContent = "No mutual fund holdings with unsold units found.";
+      if (window.__wfMfPortfolioSplitChart) { window.__wfMfPortfolioSplitChart.destroy(); window.__wfMfPortfolioSplitChart = null; }
+      return;
+    }
+
+    buildInstrumentSchemeMap().then(function (schemeMap) {
+      var resolvable = holdings.filter(function (h) { return !!lookupSchemeCode(schemeMap, h.instrument); });
+      if (!resolvable.length) {
+        statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
+        if (window.__wfMfPortfolioSplitChart) { window.__wfMfPortfolioSplitChart.destroy(); window.__wfMfPortfolioSplitChart = null; }
+        return;
+      }
+
+      return Promise.all(resolvable.map(function (h) { return fetchNavHistory(lookupSchemeCode(schemeMap, h.instrument)); }))
+        .then(function (navHistories) {
+          var totalsByPortfolio = {};
+          resolvable.forEach(function (h, i) {
+            var navHistory = navHistories[i] || [];
+            if (!navHistory.length) return;
+            var currNav = navHistory[navHistory.length - 1].nav;
+            var current = h.units * currNav;
+            totalsByPortfolio[h.portfolio] = (totalsByPortfolio[h.portfolio] || 0) + current;
+          });
+
+          var labels = Object.keys(totalsByPortfolio);
+          if (!labels.length) {
+            statusEl.textContent = "Couldn't determine current value for any holding yet.";
+            if (window.__wfMfPortfolioSplitChart) { window.__wfMfPortfolioSplitChart.destroy(); window.__wfMfPortfolioSplitChart = null; }
+            return;
+          }
+          var data = labels.map(function (l) { return totalsByPortfolio[l]; });
+          var total = data.reduce(function (sum, v) { return sum + v; }, 0);
+
+          statusEl.textContent = "Current value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
+
+          if (window.__wfMfPortfolioSplitChart) window.__wfMfPortfolioSplitChart.destroy();
+          var ctx = canvas.getContext("2d");
+          window.__wfMfPortfolioSplitChart = new Chart(ctx, {
+            type: "pie",
+            data: {
+              labels: labels,
+              datasets: [{
+                data: data,
+                backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: "bottom" },
+                tooltip: {
+                  callbacks: {
+                    label: function (ctx) {
+                      var value = ctx.parsed;
+                      var pct = total > 0 ? (value / total) * 100 : 0;
+                      return ctx.label + ": " + formatCurrency(value) + " (" + pct.toFixed(1) + "%)";
+                    }
+                  }
+                }
+              }
+            }
+          });
+        });
+    }).catch(function (err) {
+      statusEl.textContent = "Couldn't load the portfolio split: " + (err && err.message ? err.message : err);
+    });
+  }
+
+  renderMutualFundPortfolioSplitChart();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
