@@ -922,7 +922,7 @@
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
-        if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); }
+        if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); }
         renderInvestmentSplitChart();
       }, TRANSACTION_SHEET_FIELDS);
     });
@@ -1636,6 +1636,29 @@
   }
   var lastIsinMapDiagnostic = null;
 
+  function buildInstrumentSegmentMap() {
+    var rows = getSheetRows("mfmapping");
+    var map = {};
+    if (!rows || !rows.length) return map;
+    var header = rows[0].map(normalizeText);
+    var instrumentIdx = header.indexOf("instrument name");
+    var segmentIdx = header.findIndex(function (h) { return h.indexOf("market segment") !== -1 || h.indexOf("segment") !== -1 || h.indexOf("category") !== -1; });
+    if (instrumentIdx === -1 || segmentIdx === -1) return map;
+    rows.slice(1).forEach(function (row) {
+      var instrument = (row[instrumentIdx] || "").trim();
+      var segment = (row[segmentIdx] || "").trim();
+      if (instrument && segment) {
+        map[instrument] = segment;
+        map[normalizeText(instrument)] = segment;
+      }
+    });
+    return map;
+  }
+
+  function lookupSegment(segmentMap, instrumentName) {
+    return segmentMap[instrumentName] || segmentMap[normalizeText(instrumentName)] || "Unclassified";
+  }
+
   // The browser can't fetch AMFI's NAVAll.txt directly or via public CORS
   // proxies (AMFI blocks both). fetch_amfi_isin_map.py fetches it server-side
   // and writes amfi_isin_map.json into the repo; reading that same-origin
@@ -2197,6 +2220,111 @@
   }
 
   renderEquityHoldingsTable();
+
+  function renderMarketSegmentChart() {
+    var canvas = document.getElementById("market-segment-chart");
+    var statusEl = document.getElementById("market-segment-status");
+    if (!canvas || !statusEl || typeof Chart === "undefined") return;
+
+    var rows = getSheetRows("equity");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Mutual Fund Transactions sheet in Settings to populate this chart.";
+      if (window.__wfSegmentChart) { window.__wfSegmentChart.destroy(); window.__wfSegmentChart = null; }
+      return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, selectedPortfolio);
+    if (!transactionsByInstrument) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      return;
+    }
+
+    var holdings = [];
+    Object.keys(transactionsByInstrument).forEach(function (instrument) {
+      var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
+      var remainingUnits = 0, investedCost = 0;
+      remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
+      if (remainingUnits < 1) return;
+      holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost });
+    });
+
+    if (!holdings.length) {
+      statusEl.textContent = "No mutual fund holdings with unsold units found.";
+      if (window.__wfSegmentChart) { window.__wfSegmentChart.destroy(); window.__wfSegmentChart = null; }
+      return;
+    }
+
+    buildInstrumentSchemeMap().then(function (schemeMap) {
+      var segmentMap = buildInstrumentSegmentMap();
+      var resolvable = holdings.filter(function (h) { return !!lookupSchemeCode(schemeMap, h.instrument); });
+      if (!resolvable.length) {
+        statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
+        if (window.__wfSegmentChart) { window.__wfSegmentChart.destroy(); window.__wfSegmentChart = null; }
+        return;
+      }
+
+      return Promise.all(resolvable.map(function (h) { return fetchNavHistory(lookupSchemeCode(schemeMap, h.instrument)); }))
+        .then(function (navHistories) {
+          var totalsBySegment = {};
+          resolvable.forEach(function (h, i) {
+            var navHistory = navHistories[i] || [];
+            if (!navHistory.length) return;
+            var currNav = navHistory[navHistory.length - 1].nav;
+            var current = h.units * currNav;
+            var segment = lookupSegment(segmentMap, h.instrument);
+            totalsBySegment[segment] = (totalsBySegment[segment] || 0) + current;
+          });
+
+          var labels = Object.keys(totalsBySegment);
+          if (!labels.length) {
+            statusEl.textContent = "Couldn't determine current value for any holding yet.";
+            if (window.__wfSegmentChart) { window.__wfSegmentChart.destroy(); window.__wfSegmentChart = null; }
+            return;
+          }
+          var data = labels.map(function (l) { return totalsBySegment[l]; });
+          var total = data.reduce(function (sum, v) { return sum + v; }, 0);
+
+          var hasUnclassified = labels.indexOf("Unclassified") !== -1;
+          statusEl.textContent = "Current value split across " + labels.length + " market segment(s), total " + formatCurrency(total) + "." +
+            (hasUnclassified ? " Add a \"Market Segment\" column to your Mutual Fund Mapping sheet to classify all holdings." : "");
+
+          if (window.__wfSegmentChart) window.__wfSegmentChart.destroy();
+          var ctx = canvas.getContext("2d");
+          window.__wfSegmentChart = new Chart(ctx, {
+            type: "pie",
+            data: {
+              labels: labels,
+              datasets: [{
+                data: data,
+                backgroundColor: labels.map(function (_, i) { return SPLIT_CHART_COLORS[i % SPLIT_CHART_COLORS.length]; }),
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: "bottom" },
+                tooltip: {
+                  callbacks: {
+                    label: function (ctx) {
+                      var value = ctx.parsed;
+                      var pct = total > 0 ? (value / total) * 100 : 0;
+                      return ctx.label + ": " + formatCurrency(value) + " (" + pct.toFixed(1) + "%)";
+                    }
+                  }
+                }
+              }
+            }
+          });
+        });
+    }).catch(function (err) {
+      statusEl.textContent = "Couldn't load the market segment split: " + (err && err.message ? err.message : err);
+    });
+  }
+
+  renderMarketSegmentChart();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
