@@ -1949,16 +1949,25 @@
     var seen = {};
     prefixes.forEach(function (prefix) {
       var rows = getSheetRows(prefix);
-      if (!rows || !rows.length) return;
+      if (!rows || !rows.length) {
+        console.warn("[wf] collectPortfolioNamesFromSheets: no stored rows for prefix", prefix);
+        return;
+      }
       var header = rows[0].map(normalizeText);
-      var portfolioIdx = header.indexOf("portfolio name");
-      if (portfolioIdx === -1) return;
+      var portfolioIdx = findHeaderIndex(header, "portfolio name");
+      if (portfolioIdx === -1) {
+        console.warn("[wf] collectPortfolioNamesFromSheets: no portfolio column for prefix", prefix, "header:", rows[0]);
+        return;
+      }
+      var foundForPrefix = 0;
       rows.slice(1).forEach(function (row) {
-        var name = (row[portfolioIdx] || "").trim();
+        var name = (row[portfolioIdx] == null ? "" : String(row[portfolioIdx])).trim();
         if (!name) return;
+        foundForPrefix++;
         var key = normalizeText(name);
         if (!seen[key]) { seen[key] = true; names.push(name); }
       });
+      console.warn("[wf] collectPortfolioNamesFromSheets:", prefix, "rows:", rows.length - 1, "named rows:", foundForPrefix, "header:", rows[0]);
     });
     return names;
   }
