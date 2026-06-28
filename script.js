@@ -7,6 +7,8 @@
   var storedTheme = localStorage.getItem("wf-theme");
   var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
+  var SPLIT_CHART_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16"];
+
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
@@ -1941,8 +1943,6 @@
   }
 
   renderValueChart();
-
-  var SPLIT_CHART_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16"];
 
   function collectPortfolioNamesFromSheets(prefixes) {
     var names = [];
