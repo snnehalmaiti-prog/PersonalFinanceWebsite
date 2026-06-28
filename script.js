@@ -885,13 +885,14 @@
 
   function closePortfolioMenu() {
     if (!portfolioMenu) return;
-    portfolioMenu.hidden = true;
+    portfolioMenu.classList.remove("open");
     portfolioToggle.setAttribute("aria-expanded", "false");
   }
 
   function openPortfolioMenu() {
     if (!portfolioMenu) return;
     portfolioMenu.hidden = false;
+    portfolioMenu.classList.add("open");
     portfolioToggle.setAttribute("aria-expanded", "true");
   }
 
@@ -932,18 +933,18 @@
 
     portfolioToggle.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (portfolioMenu.hidden) openPortfolioMenu();
+      if (!portfolioMenu.classList.contains("open")) openPortfolioMenu();
       else closePortfolioMenu();
     });
 
     document.addEventListener("click", function (e) {
-      if (!portfolioMenu.hidden && !portfolioMenu.contains(e.target) && e.target !== portfolioToggle) {
+      if (portfolioMenu.classList.contains("open") && !portfolioMenu.contains(e.target) && e.target !== portfolioToggle) {
         closePortfolioMenu();
       }
     });
 
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !portfolioMenu.hidden) {
+      if (e.key === "Escape" && portfolioMenu.classList.contains("open")) {
         closePortfolioMenu();
         portfolioToggle.focus();
       }
