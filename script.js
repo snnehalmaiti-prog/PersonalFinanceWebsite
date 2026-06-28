@@ -431,17 +431,43 @@
 
   // Total Current Value: Instrument Name -> ISIN (Mapping sheet) -> Scheme Code
   // (AMFI NAVAll.txt) -> latest NAV (mfapi.in), multiplied by units currently held.
+  function setUnrealizedReturn(returnEl, pctEl, currentValue, investment) {
+    if (!returnEl && !pctEl) return;
+    var unrealized = currentValue - investment;
+    var pct = investment > 0 ? (unrealized / investment) * 100 : 0;
+    var cls = unrealized > 0 ? "positive" : (unrealized < 0 ? "negative" : "");
+    if (returnEl) {
+      returnEl.textContent = (unrealized > 0 ? "+" : "") + formatCurrency(unrealized);
+      returnEl.classList.remove("positive", "negative");
+      if (cls) returnEl.classList.add(cls);
+    }
+    if (pctEl) {
+      pctEl.textContent = (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
+      pctEl.classList.remove("positive", "negative");
+      if (cls) pctEl.classList.add(cls);
+    }
+  }
+
   function updateTotalCurrentValue() {
     var overviewEl = document.getElementById("overview-total-current-value");
     var equityEl = document.getElementById("equity-total-current-value");
-    if (!overviewEl && !equityEl) return;
+    var overviewReturnEl = document.getElementById("overview-unrealized-return");
+    var overviewPctEl = document.getElementById("overview-return-pct");
+    var equityReturnEl = document.getElementById("equity-unrealized-return");
+    var equityPctEl = document.getElementById("equity-return-pct");
+    if (!overviewEl && !equityEl && !overviewReturnEl && !equityReturnEl) return;
 
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var unitEvents = buildInstrumentUnitEvents(selected);
+    var investment = computeTotalInvestment(selected, ["equity"]);
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
     if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
     if (equityEl) { equityEl.textContent = "…"; equityEl.title = loadingMsg; }
+    if (overviewReturnEl) overviewReturnEl.textContent = "…";
+    if (overviewPctEl) overviewPctEl.textContent = "…";
+    if (equityReturnEl) equityReturnEl.textContent = "…";
+    if (equityPctEl) equityPctEl.textContent = "…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
@@ -453,6 +479,8 @@
           : "None of your equity instruments matched a resolved Scheme Code.";
         if (overviewEl) { overviewEl.textContent = formatCurrency(0); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
+        setUnrealizedReturn(overviewReturnEl, overviewPctEl, 0, investment);
+        setUnrealizedReturn(equityReturnEl, equityPctEl, 0, investment);
         return;
       }
 
@@ -468,6 +496,8 @@
           });
           if (overviewEl) overviewEl.textContent = formatCurrency(total);
           if (equityEl) equityEl.textContent = formatCurrency(total);
+          setUnrealizedReturn(overviewReturnEl, overviewPctEl, total, investment);
+          setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
         });
     });
   }
