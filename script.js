@@ -797,6 +797,14 @@
     });
   }
 
+  function takeColumnsByPosition(rows, columnCount) {
+    return rows.slice(1).map(function (row) {
+      var trimmed = [];
+      for (var i = 0; i < columnCount; i++) trimmed.push(row[i] || "");
+      return trimmed;
+    });
+  }
+
   function fetchAndMergeSheets(configs, onComplete, canonicalFields) {
     var validConfigs = configs.filter(function (c) { return c.link && parseSheetUrl(c.link); });
     var failures = configs.length - validConfigs.length;
@@ -813,7 +821,7 @@
       resultsByIndex.forEach(function (rows) {
         if (!rows || rows.length <= 1) return;
         if (canonicalFields) {
-          var aligned = realignRowsToHeader(rows, canonicalFields);
+          var aligned = takeColumnsByPosition(rows, canonicalFields.length);
           merged = merged ? merged.concat(aligned) : [canonicalFields].concat(aligned);
         } else if (!merged) {
           merged = rows;
