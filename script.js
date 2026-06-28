@@ -677,7 +677,7 @@
     if (equityXirrEl) equityXirrEl.textContent = "…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
-      var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       if (!instruments.length) {
         var reason = !Object.keys(unitEvents).length
           ? "No equity holdings found in the synced Mutual Fund Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
@@ -695,7 +695,7 @@
         return;
       }
 
-      return Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+      return Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         .then(function (navHistories) {
           var total = 0;
           instruments.forEach(function (name, i) {
@@ -1666,6 +1666,10 @@
 
   var lastSchemeMapDiagnostic = null;
 
+  function lookupSchemeCode(schemeMap, instrumentName) {
+    return schemeMap[instrumentName] || schemeMap[normalizeText(instrumentName)];
+  }
+
   function buildInstrumentSchemeMap() {
     var isinMap = buildInstrumentIsinMap();
     lastSchemeMapDiagnostic = null;
@@ -1674,7 +1678,10 @@
       Object.keys(isinMap).forEach(function (instrument) {
         var isin = isinMap[instrument];
         var code = isinToCode[isin];
-        if (code) map[instrument] = code;
+        if (code) {
+          map[instrument] = code;
+          map[normalizeText(instrument)] = code;
+        }
       });
       if (!Object.keys(map).length) {
         if (lastIsinMapDiagnostic) {
@@ -1796,7 +1803,7 @@
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
       var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
-      var instruments = Object.keys(unitEvents).filter(function (name) { return !!schemeMap[name]; });
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
 
       if (!instruments.length) {
@@ -1808,7 +1815,7 @@
 
       statusEl.textContent = "Fetching NAV history for " + instruments.length + " instrument(s)…";
 
-      return Promise.all(instruments.map(function (name) { return fetchNavHistory(schemeMap[name]); }))
+      return Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         .then(function (navHistories) {
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
@@ -2087,7 +2094,7 @@
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
-      var resolvable = holdings.filter(function (h) { return h.units < 1 || !!schemeMap[h.instrument]; });
+      var resolvable = holdings.filter(function (h) { return h.units < 1 || !!lookupSchemeCode(schemeMap, h.instrument); });
       var skipped = holdings.length - resolvable.length;
       if (!resolvable.length) {
         statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
@@ -2095,7 +2102,7 @@
         return;
       }
 
-      return Promise.all(resolvable.map(function (h) { return h.units < 1 ? Promise.resolve([]) : fetchNavHistory(schemeMap[h.instrument]); }))
+      return Promise.all(resolvable.map(function (h) { return h.units < 1 ? Promise.resolve([]) : fetchNavHistory(lookupSchemeCode(schemeMap, h.instrument)); }))
         .then(function (navHistories) {
           tbody.innerHTML = "";
           resolvable.forEach(function (h, i) {
