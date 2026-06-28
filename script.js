@@ -671,7 +671,7 @@
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         if (prefix === "equity") renderValueChart();
-      });
+      }, TRANSACTION_SHEET_FIELDS);
     });
   });
 
@@ -797,7 +797,7 @@
     });
   }
 
-  function fetchAndMergeSheets(configs, onComplete) {
+  function fetchAndMergeSheets(configs, onComplete, canonicalFields) {
     var validConfigs = configs.filter(function (c) { return c.link && parseSheetUrl(c.link); });
     var failures = configs.length - validConfigs.length;
     if (!validConfigs.length) {
@@ -812,7 +812,10 @@
       var merged = null;
       resultsByIndex.forEach(function (rows) {
         if (!rows || rows.length <= 1) return;
-        if (!merged) {
+        if (canonicalFields) {
+          var aligned = realignRowsToHeader(rows, canonicalFields);
+          merged = merged ? merged.concat(aligned) : [canonicalFields].concat(aligned);
+        } else if (!merged) {
           merged = rows;
         } else {
           merged = merged.concat(realignRowsToHeader(rows, merged[0]));
@@ -1173,7 +1176,7 @@
         lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
         openSheetLink.href = lastUrl;
         meta.hidden = false;
-      });
+      }, options.fields);
     }
 
     var savedConfigs = loadSheetConfigs(prefix);
