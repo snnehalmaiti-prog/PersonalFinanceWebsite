@@ -257,6 +257,7 @@
     updateDashboardStats();
     renderValueChart();
     renderEquityHoldingsTable();
+    renderMarketSegmentChart();
   }
 
   function parseNumber(value) {
