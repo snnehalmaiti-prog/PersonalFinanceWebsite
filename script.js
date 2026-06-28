@@ -438,7 +438,7 @@
     if (missing.length) {
       return {
         missingColumns: true,
-        message: "Synced " + (rows.length - 1) + " rows, but couldn't find column(s): " + missing.join(", ") + ". Check the header row number and exact column names."
+        message: "Header Row Number is Incorrect. Make Adjustments By adding correct header row number."
       };
     }
 
