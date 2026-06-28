@@ -1256,10 +1256,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 .pie-chart-resize {
   position: relative;
-  height: 320px;
-  width: 320px;
-  max-width: 100%;
-  margin-top: 12px;
+  width: 90%;
+  aspect-ratio: 1 / 1;
+  max-width: 480px;
+  margin: 12px auto 0;
   resize: both;
   overflow: hidden;
   border: 1px dashed var(--border);
