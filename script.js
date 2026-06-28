@@ -366,6 +366,7 @@
     renderValueChart();
     renderEquityHoldingsTable();
     renderMarketSegmentChart();
+    renderMutualFundPortfolioSplitChart();
   }
 
   function parseNumber(value) {
@@ -2559,6 +2560,15 @@
     if (!byPortfolio) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
       return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    if (selectedPortfolio !== "all") {
+      var filteredByPortfolio = {};
+      Object.keys(byPortfolio).forEach(function (portfolio) {
+        if (normalizeText(portfolio) === normalizeText(selectedPortfolio)) filteredByPortfolio[portfolio] = byPortfolio[portfolio];
+      });
+      byPortfolio = filteredByPortfolio;
     }
 
     var holdings = [];
