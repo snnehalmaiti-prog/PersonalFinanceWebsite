@@ -2239,6 +2239,33 @@
     });
   }
 
+  function attachInstrumentColumnResizer() {
+    var resizer = document.getElementById("equity-holdings-instrument-resizer");
+    var col = document.getElementById("equity-holdings-instrument-col");
+    if (!resizer || !col || resizer.dataset.bound) return;
+    resizer.dataset.bound = "1";
+
+    var startX, startWidth;
+    function onMouseMove(e) {
+      var delta = e.clientX - startX;
+      var newWidth = Math.max(140, Math.min(640, startWidth + delta));
+      col.style.width = newWidth + "px";
+    }
+    function onMouseUp() {
+      resizer.classList.remove("resizing");
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    }
+    resizer.addEventListener("mousedown", function (e) {
+      e.preventDefault();
+      startX = e.clientX;
+      startWidth = col.getBoundingClientRect().width;
+      resizer.classList.add("resizing");
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+  }
+
   function attachEquityHoldingsSortHandlers(tbody, rowsData) {
     var table = tbody.closest("table");
     if (!table) return;
@@ -2375,6 +2402,7 @@
 
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
+          attachInstrumentColumnResizer();
 
           statusEl.textContent = resolvable.length + " holding(s) with unsold units" + (skipped ? " (" + skipped + " unmapped holding(s) skipped)" : "") + ".";
           tableWrap.hidden = false;

@@ -164,9 +164,13 @@
         <p class="muted small" id="equity-holdings-status">Loading holdings…</p>
         <div id="equity-holdings-table-wrap" class="holdings-table-wrap" hidden>
           <table id="equity-holdings-table" class="holdings-table">
+            <colgroup>
+              <col id="equity-holdings-instrument-col" style="width: 280px;" />
+              <col span="9" />
+            </colgroup>
             <thead>
               <tr>
-                <th data-sort="instrument">Instrument</th>
+                <th data-sort="instrument" class="fund-name-col">Instrument<span class="col-resizer" id="equity-holdings-instrument-resizer"></span></th>
                 <th class="num" data-sort="units">Qty.</th>
                 <th class="num" data-sort="avgNav">Avg. cost</th>
                 <th class="num" data-sort="currNav">LTP</th>
