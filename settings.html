@@ -55,17 +55,14 @@
         <div class="equity-card-header">
           <h3><span class="equity-icon" aria-hidden="true">🔗</span> Mutual Fund Transactions</h3>
           <span class="status-pill" id="equity-status-pill">Not connected</span>
+          <button type="button" class="btn btn-primary" id="equity-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
         </div>
         <p class="muted small equity-desc">Buy/sell trades for stocks, equity ETFs and equity mutual funds. Add multiple sheets if your transactions are split across several brokers/accounts.</p>
 
         <div class="sheets-list" id="equity-sheets-list"></div>
         <button type="button" class="btn btn-outline btn-sm" id="equity-sheet-add">+ Add another sheet</button>
-        <div class="equity-link-row equity-link-actions">
-          <button type="button" class="btn btn-outline" id="equity-sheet-save">Save</button>
-          <button type="button" class="btn btn-primary" id="equity-sheet-sync">
-            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
-          </button>
-        </div>
 
         <div class="equity-meta muted small" id="equity-meta" hidden>
           <span id="equity-last-sync">Last sync: —</span>
@@ -85,17 +82,14 @@
         <div class="equity-card-header">
           <h3><span class="equity-icon" aria-hidden="true">🔗</span> Stocks/ETF Transactions</h3>
           <span class="status-pill" id="stocksetf-status-pill">Not connected</span>
+          <button type="button" class="btn btn-primary" id="stocksetf-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
         </div>
         <p class="muted small equity-desc">Buy/sell trades for individual stocks and exchange-traded funds. Add multiple sheets if your transactions are split across several brokers/accounts.</p>
 
         <div class="sheets-list" id="stocksetf-sheets-list"></div>
         <button type="button" class="btn btn-outline btn-sm" id="stocksetf-sheet-add">+ Add another sheet</button>
-        <div class="equity-link-row equity-link-actions">
-          <button type="button" class="btn btn-outline" id="stocksetf-sheet-save">Save</button>
-          <button type="button" class="btn btn-primary" id="stocksetf-sheet-sync">
-            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
-          </button>
-        </div>
 
         <div class="equity-meta muted small" id="stocksetf-meta" hidden>
           <span id="stocksetf-last-sync">Last sync: —</span>
@@ -115,17 +109,14 @@
         <div class="equity-card-header">
           <h3><span class="equity-icon" aria-hidden="true">🔗</span> Fixed Income Transactions</h3>
           <span class="status-pill" id="fixedincome-status-pill">Not connected</span>
+          <button type="button" class="btn btn-primary" id="fixedincome-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
         </div>
         <p class="muted small equity-desc">Buy/sell and maturity records for PPF, fixed deposits, bonds and other fixed-income holdings. Add multiple sheets if your transactions are split across several brokers/accounts.</p>
 
         <div class="sheets-list" id="fixedincome-sheets-list"></div>
         <button type="button" class="btn btn-outline btn-sm" id="fixedincome-sheet-add">+ Add another sheet</button>
-        <div class="equity-link-row equity-link-actions">
-          <button type="button" class="btn btn-outline" id="fixedincome-sheet-save">Save</button>
-          <button type="button" class="btn btn-primary" id="fixedincome-sheet-sync">
-            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
-          </button>
-        </div>
 
         <div class="equity-meta muted small" id="fixedincome-meta" hidden>
           <span id="fixedincome-last-sync">Last sync: —</span>
@@ -150,6 +141,9 @@
         <div class="equity-card-header">
           <h3><span class="equity-icon" aria-hidden="true">🔗</span> Mutual Fund Mapping</h3>
           <span class="status-pill" id="mfmapping-status-pill">Not connected</span>
+          <button type="button" class="btn btn-primary" id="mfmapping-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
         </div>
         <p class="muted small equity-desc">Maps mutual fund scheme names from your transactions to scheme codes/NAV identifiers.</p>
 
@@ -158,10 +152,6 @@
           <input type="url" id="mfmapping-sheet-link" placeholder="Paste your Google Sheets link here" />
           <label for="mfmapping-header-row" class="sr-only">Header row number</label>
           <input type="number" id="mfmapping-header-row" min="1" value="1" title="Row number where column headers are" class="header-row-input" />
-          <button type="button" class="btn btn-outline" id="mfmapping-sheet-save">Save</button>
-          <button type="button" class="btn btn-primary" id="mfmapping-sheet-sync">
-            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
-          </button>
         </div>
 
         <div class="equity-meta muted small" id="mfmapping-meta" hidden>
@@ -182,6 +172,9 @@
         <div class="equity-card-header">
           <h3><span class="equity-icon" aria-hidden="true">🔗</span> Stocks/ETF Mapping</h3>
           <span class="status-pill" id="stocksetfmapping-status-pill">Not connected</span>
+          <button type="button" class="btn btn-primary" id="stocksetfmapping-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
         </div>
         <p class="muted small equity-desc">Maps stock/ETF instrument names from your transactions to ticker symbols/identifiers.</p>
 
@@ -190,10 +183,6 @@
           <input type="url" id="stocksetfmapping-sheet-link" placeholder="Paste your Google Sheets link here" />
           <label for="stocksetfmapping-header-row" class="sr-only">Header row number</label>
           <input type="number" id="stocksetfmapping-header-row" min="1" value="1" title="Row number where column headers are" class="header-row-input" />
-          <button type="button" class="btn btn-outline" id="stocksetfmapping-sheet-save">Save</button>
-          <button type="button" class="btn btn-primary" id="stocksetfmapping-sheet-sync">
-            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
-          </button>
         </div>
 
         <div class="equity-meta muted small" id="stocksetfmapping-meta" hidden>

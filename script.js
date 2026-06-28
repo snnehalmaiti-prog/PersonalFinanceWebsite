@@ -848,7 +848,6 @@
     var sheetLinkInput = document.getElementById(prefix + "-sheet-link");
     if (!sheetLinkInput) return;
 
-    var sheetSaveBtn = document.getElementById(prefix + "-sheet-save");
     var sheetSyncBtn = document.getElementById(prefix + "-sheet-sync");
     var sheetStatus = document.getElementById(prefix + "-sheet-status");
     var sheetTableWrap = document.getElementById(prefix + "-sheet-table-wrap");
@@ -967,19 +966,19 @@
       syncSheet(savedLink);
     }
 
-    sheetSaveBtn.addEventListener("click", function () {
+    function autoSave() {
       var url = sheetLinkInput.value.trim();
-      if (!url) return;
-      localStorage.setItem(storageKey, url);
+      if (url) localStorage.setItem(storageKey, url);
       if (headerRowInput) localStorage.setItem(headerRowKey, headerRowInput.value || "1");
-      setStatus("Link saved.", false);
-    });
+    }
+
+    sheetLinkInput.addEventListener("change", autoSave);
+    if (headerRowInput) headerRowInput.addEventListener("change", autoSave);
 
     sheetSyncBtn.addEventListener("click", function () {
       var url = sheetLinkInput.value.trim();
       if (!url) return;
-      localStorage.setItem(storageKey, url);
-      if (headerRowInput) localStorage.setItem(headerRowKey, headerRowInput.value || "1");
+      autoSave();
       syncSheet(url);
     });
   }
@@ -1000,7 +999,6 @@
     if (!listEl) return;
 
     var addBtn = document.getElementById(prefix + "-sheet-add");
-    var sheetSaveBtn = document.getElementById(prefix + "-sheet-save");
     var sheetSyncBtn = document.getElementById(prefix + "-sheet-sync");
     var sheetStatus = document.getElementById(prefix + "-sheet-status");
     var sheetTableWrap = document.getElementById(prefix + "-sheet-table-wrap");
@@ -1057,6 +1055,13 @@
       }
     }
 
+    function autoSaveConfigs() {
+      var configs = readRowConfigs().filter(function (c) { return c.link; });
+      localStorage.setItem(sheetsKey, JSON.stringify(configs));
+      localStorage.removeItem("wf-" + prefix + "-sheet-link");
+      localStorage.removeItem("wf-" + prefix + "-header-row");
+    }
+
     function addRow(config) {
       config = config || { link: "", headerRow: "1" };
       var row = document.createElement("div");
@@ -1067,6 +1072,7 @@
       linkInput.className = "sheet-row-link";
       linkInput.placeholder = "Paste your Google Sheets link here";
       linkInput.value = config.link || "";
+      linkInput.addEventListener("change", autoSaveConfigs);
 
       var headerInput = document.createElement("input");
       headerInput.type = "number";
@@ -1074,6 +1080,7 @@
       headerInput.min = "1";
       headerInput.value = config.headerRow || "1";
       headerInput.title = "Row number where column headers are";
+      headerInput.addEventListener("change", autoSaveConfigs);
 
       var removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -1083,6 +1090,7 @@
       removeBtn.addEventListener("click", function () {
         row.remove();
         if (!listEl.children.length) addRow();
+        autoSaveConfigs();
       });
 
       row.appendChild(linkInput);
@@ -1152,25 +1160,12 @@
     }
 
     if (addBtn) {
-      addBtn.addEventListener("click", function () { addRow(); });
-    }
-
-    if (sheetSaveBtn) {
-      sheetSaveBtn.addEventListener("click", function () {
-        var configs = readRowConfigs().filter(function (c) { return c.link; });
-        localStorage.setItem(sheetsKey, JSON.stringify(configs));
-        localStorage.removeItem("wf-" + prefix + "-sheet-link");
-        localStorage.removeItem("wf-" + prefix + "-header-row");
-        setStatus("Sheet links saved.", false);
-      });
+      addBtn.addEventListener("click", function () { addRow(); autoSaveConfigs(); });
     }
 
     if (sheetSyncBtn) {
       sheetSyncBtn.addEventListener("click", function () {
-        var configs = readRowConfigs().filter(function (c) { return c.link; });
-        localStorage.setItem(sheetsKey, JSON.stringify(configs));
-        localStorage.removeItem("wf-" + prefix + "-sheet-link");
-        localStorage.removeItem("wf-" + prefix + "-header-row");
+        autoSaveConfigs();
         syncAll();
       });
     }
