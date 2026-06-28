@@ -839,7 +839,7 @@
   function populatePortfolioSelect() {
     var menu = document.getElementById("portfolio-menu");
     if (!menu) return;
-    var names = getStoredPortfolioNames();
+    var names = collectPortfolioNamesFromSheets(["equity", "stocksetf", "fixedincome"]);
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     if (selected !== "all" && names.indexOf(selected) === -1) selected = "all";
 
@@ -918,6 +918,7 @@
         }
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
+        populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); }
         renderInvestmentSplitChart();
       }, TRANSACTION_SHEET_FIELDS);
@@ -1252,6 +1253,7 @@
           addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
           updateDashboardStats();
+          populatePortfolioSelect();
           var diagnostics = buildSyncDiagnostics(prefix, rows);
           var displayRows = filterColumns(rows, options.fields);
           if (options.showTable === false) {
@@ -1515,6 +1517,7 @@
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
+        populatePortfolioSelect();
         var diagnostics = buildSyncDiagnostics(prefix, merged);
         var displayRows = filterColumns(merged, options.fields);
         if (options.showTable === false) {
