@@ -299,50 +299,7 @@
     return total;
   }
 
-  function sumUnitBasedBuyInvestment(rows, portfolioFilter) {
-    if (!rows || !rows.length) return 0;
-    var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var instrumentIdx = header.indexOf("instrument name");
-    var typeIdx = header.indexOf("transaction type");
-    var unitsIdx = header.indexOf("units");
-    var priceIdx = header.indexOf("price");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
-
-    var byInstrument = {};
-    rows.slice(1).forEach(function (row) {
-      var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
-
-      var instrument = (row[instrumentIdx] || "").trim();
-      var type = normalizeText(row[typeIdx]);
-      var units = parseNumber(row[unitsIdx]);
-      var value = units * parseNumber(row[priceIdx]);
-
-      if (!byInstrument[instrument]) {
-        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0 };
-      }
-      if (type.indexOf("buy") !== -1) {
-        byInstrument[instrument].buyUnits += units;
-        byInstrument[instrument].buyValue += value;
-      } else if (type.indexOf("sell") !== -1) {
-        byInstrument[instrument].sellUnits += units;
-      }
-    });
-
-    var total = 0;
-    Object.keys(byInstrument).forEach(function (instrument) {
-      var entry = byInstrument[instrument];
-      if (entry.buyUnits <= 0) return;
-      var avgBuyPrice = entry.buyValue / entry.buyUnits;
-      var remainingUnits = Math.max(entry.buyUnits - entry.sellUnits, 0);
-      total += remainingUnits * avgBuyPrice;
-    });
-    return total;
-  }
-
-  function sumUnitBasedRealizedReturn(rows, portfolioFilter) {
-    if (!rows || !rows.length) return 0;
+  function groupUnitTransactionsByInstrument(rows, portfolioFilter) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
@@ -350,7 +307,7 @@
     var unitsIdx = header.indexOf("units");
     var priceIdx = header.indexOf("price");
     var dateIdx = header.indexOf("transaction date");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return 0;
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return null;
 
     var transactionsByInstrument = {};
     rows.slice(1).forEach(function (row) {
@@ -373,16 +330,57 @@
       });
     });
 
-    var total = 0;
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
-      var txns = transactionsByInstrument[instrument].slice().sort(function (a, b) {
+      transactionsByInstrument[instrument].sort(function (a, b) {
         var at = a.date ? a.date.getTime() : 0;
         var bt = b.date ? b.date.getTime() : 0;
         return at !== bt ? at - bt : a.order - b.order;
       });
+    });
+    return transactionsByInstrument;
+  }
 
+  function fifoRemainingLots(txns) {
+    var buyLots = [];
+    txns.forEach(function (txn) {
+      if (txn.type === "buy") {
+        buyLots.push({ units: txn.units, price: txn.price });
+        return;
+      }
+      var unitsToMatch = txn.units;
+      while (unitsToMatch > 0 && buyLots.length) {
+        var lot = buyLots[0];
+        var matched = Math.min(unitsToMatch, lot.units);
+        lot.units -= matched;
+        unitsToMatch -= matched;
+        if (lot.units <= 0) buyLots.shift();
+      }
+    });
+    return buyLots;
+  }
+
+  function sumUnitBasedBuyInvestment(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!transactionsByInstrument) return 0;
+
+    var total = 0;
+    Object.keys(transactionsByInstrument).forEach(function (instrument) {
+      var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
+      remainingLots.forEach(function (lot) { total += lot.units * lot.price; });
+    });
+    return total;
+  }
+
+  function sumUnitBasedRealizedReturn(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!transactionsByInstrument) return 0;
+
+    var total = 0;
+    Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var buyLots = [];
-      txns.forEach(function (txn) {
+      transactionsByInstrument[instrument].forEach(function (txn) {
         if (txn.type === "buy") {
           buyLots.push({ units: txn.units, price: txn.price });
           return;
