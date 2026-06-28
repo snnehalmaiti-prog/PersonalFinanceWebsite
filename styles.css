@@ -880,7 +880,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .modal-note { text-align: center; margin: 18px 0 0; }
 
 /* ===== Settings page ===== */
-.settings-main { padding: 60px 24px 100px; max-width: 1440px; }
+.settings-main { padding: 60px 24px 100px; max-width: min(1800px, 96vw); width: 100%; margin: 0 auto; }
 .settings-main h1 { margin-bottom: 32px; }
 
 .settings-tabs {
