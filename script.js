@@ -1959,25 +1959,16 @@
     var seen = {};
     prefixes.forEach(function (prefix) {
       var rows = getSheetRows(prefix);
-      if (!rows || !rows.length) {
-        console.warn("[wf] collectPortfolioNamesFromSheets: no stored rows for prefix", prefix);
-        return;
-      }
+      if (!rows || !rows.length) return;
       var header = rows[0].map(normalizeText);
       var portfolioIdx = findHeaderIndex(header, "portfolio name");
-      if (portfolioIdx === -1) {
-        console.warn("[wf] collectPortfolioNamesFromSheets: no portfolio column for prefix", prefix, "header:", rows[0]);
-        return;
-      }
-      var foundForPrefix = 0;
+      if (portfolioIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         var name = (row[portfolioIdx] == null ? "" : String(row[portfolioIdx])).trim();
         if (!name) return;
-        foundForPrefix++;
         var key = normalizeText(name);
         if (!seen[key]) { seen[key] = true; names.push(name); }
       });
-      console.warn("[wf] collectPortfolioNamesFromSheets:", prefix, "rows:", rows.length - 1, "named rows:", foundForPrefix, "header:", rows[0]);
     });
     return names;
   }
@@ -2069,16 +2060,13 @@
     var showClosedOnlyCheckbox = document.getElementById("equity-holdings-show-closed-only");
     var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
 
-    console.warn("[wf] instruments detected in Mutual Fund Transactions sheet:", Object.keys(transactionsByInstrument));
-
     var holdings = [];
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
-      console.warn("[wf] instrument:", JSON.stringify(instrument), "remaining units:", remainingUnits);
       if (showClosedOnly) {
-        if (remainingUnits >= UNITS_EPSILON) return;
+        if (remainingUnits >= 1) return;
       } else if (remainingUnits < 1) {
         return;
       }
@@ -2100,13 +2088,7 @@
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
-      var isinMap = buildInstrumentIsinMap();
       var resolvable = holdings.filter(function (h) { return h.units < 1 || !!lookupSchemeCode(schemeMap, h.instrument); });
-      holdings.forEach(function (h) {
-        if (h.units < 1 || lookupSchemeCode(schemeMap, h.instrument)) return;
-        var isin = isinMap[h.instrument] || isinMap[normalizeText(h.instrument)];
-        console.warn("[wf] holding not resolved:", JSON.stringify(h.instrument), "ISIN in mapping sheet:", isin || "(not found in Mutual Fund Mapping sheet)");
-      });
       var skipped = holdings.length - resolvable.length;
       if (!resolvable.length) {
         statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
