@@ -284,98 +284,7 @@
     return total;
   }
 
-  function sumEquityBuyInvestment(rows, portfolioFilter) {
-    if (!rows || !rows.length) return 0;
-    var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var instrumentIdx = header.indexOf("instrument name");
-    var typeIdx = header.indexOf("transaction type");
-    var categoryIdx = header.indexOf("instrument category");
-    var unitsIdx = header.indexOf("units");
-    var valueIdx = header.indexOf("value");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || categoryIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
-
-    var byInstrument = {};
-    rows.slice(1).forEach(function (row) {
-      var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
-      var category = normalizeText(row[categoryIdx]);
-      if (category.indexOf("equity") === -1) return;
-
-      var instrument = (row[instrumentIdx] || "").trim();
-      var type = normalizeText(row[typeIdx]);
-      var units = parseNumber(row[unitsIdx]);
-      var value = parseNumber(row[valueIdx]);
-
-      if (!byInstrument[instrument]) {
-        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0 };
-      }
-      if (type.indexOf("buy") !== -1) {
-        byInstrument[instrument].buyUnits += units;
-        byInstrument[instrument].buyValue += value;
-      } else if (type.indexOf("sell") !== -1) {
-        byInstrument[instrument].sellUnits += units;
-      }
-    });
-
-    var total = 0;
-    Object.keys(byInstrument).forEach(function (instrument) {
-      var entry = byInstrument[instrument];
-      if (entry.buyUnits <= 0) return;
-      var avgBuyPrice = entry.buyValue / entry.buyUnits;
-      var remainingUnits = Math.max(entry.buyUnits - entry.sellUnits, 0);
-      total += remainingUnits * avgBuyPrice;
-    });
-    return total;
-  }
-
-  function sumEquityRealizedReturn(rows, portfolioFilter) {
-    if (!rows || !rows.length) return 0;
-    var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var instrumentIdx = header.indexOf("instrument name");
-    var typeIdx = header.indexOf("transaction type");
-    var categoryIdx = header.indexOf("instrument category");
-    var unitsIdx = header.indexOf("units");
-    var valueIdx = header.indexOf("value");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || categoryIdx === -1 || unitsIdx === -1 || valueIdx === -1) return 0;
-
-    var byInstrument = {};
-    rows.slice(1).forEach(function (row) {
-      var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
-      var category = normalizeText(row[categoryIdx]);
-      if (category.indexOf("equity") === -1) return;
-
-      var instrument = (row[instrumentIdx] || "").trim();
-      var type = normalizeText(row[typeIdx]);
-      var units = parseNumber(row[unitsIdx]);
-      var value = parseNumber(row[valueIdx]);
-
-      if (!byInstrument[instrument]) {
-        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0, sellValue: 0 };
-      }
-      if (type.indexOf("buy") !== -1) {
-        byInstrument[instrument].buyUnits += units;
-        byInstrument[instrument].buyValue += value;
-      } else if (type.indexOf("sell") !== -1) {
-        byInstrument[instrument].sellUnits += units;
-        byInstrument[instrument].sellValue += value;
-      }
-    });
-
-    var total = 0;
-    Object.keys(byInstrument).forEach(function (instrument) {
-      var entry = byInstrument[instrument];
-      if (entry.buyUnits <= 0 || entry.sellUnits <= 0) return;
-      var avgBuyPrice = entry.buyValue / entry.buyUnits;
-      var soldUnits = Math.min(entry.sellUnits, entry.buyUnits);
-      total += entry.sellValue - soldUnits * avgBuyPrice;
-    });
-    return total;
-  }
-
-  function sumStocksEtfBuyInvestment(rows, portfolioFilter) {
+  function sumUnitBasedBuyInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -417,7 +326,7 @@
     return total;
   }
 
-  function sumStocksEtfRealizedReturn(rows, portfolioFilter) {
+  function sumUnitBasedRealizedReturn(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -465,8 +374,7 @@
     prefixes.forEach(function (prefix) {
       var rows = getSheetRows(prefix);
       if (!rows) return;
-      if (prefix === "equity") total += sumEquityRealizedReturn(rows, portfolioFilter);
-      else if (prefix === "stocksetf") total += sumStocksEtfRealizedReturn(rows, portfolioFilter);
+      if (prefix === "equity" || prefix === "stocksetf") total += sumUnitBasedRealizedReturn(rows, portfolioFilter);
     });
     return total;
   }
@@ -486,8 +394,7 @@
     prefixes.forEach(function (prefix) {
       var rows = getSheetRows(prefix);
       if (!rows) return;
-      if (prefix === "equity") total += sumEquityBuyInvestment(rows, portfolioFilter);
-      else if (prefix === "stocksetf") total += sumStocksEtfBuyInvestment(rows, portfolioFilter);
+      if (prefix === "equity" || prefix === "stocksetf") total += sumUnitBasedBuyInvestment(rows, portfolioFilter);
       else total += sumInvestmentForRows(rows, portfolioFilter);
     });
     return total;
@@ -518,12 +425,9 @@
     var instrumentIdx = header.indexOf("instrument name");
     var typeIdx = header.indexOf("transaction type");
     var valueIdx = header.indexOf("value");
-    var categoryIdx = header.indexOf("instrument category");
     var unitsIdx = header.indexOf("units");
 
-    var requiredIdx = prefix === "equity"
-      ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, "instrument category": categoryIdx, units: unitsIdx, value: valueIdx }
-      : prefix === "stocksetf"
+    var requiredIdx = (prefix === "equity" || prefix === "stocksetf")
       ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, units: unitsIdx, value: valueIdx }
       : { "portfolio name": portfolioIdx, "transaction type": typeIdx, value: valueIdx };
 
@@ -533,28 +437,18 @@
     }
 
     var matched = 0;
-    if (prefix === "equity") {
+    if (prefix === "equity" || prefix === "stocksetf") {
       var instruments = {};
       rows.slice(1).forEach(function (row) {
-        var category = normalizeText(row[categoryIdx]);
-        if (category.indexOf("equity") === -1) return;
         instruments[(row[instrumentIdx] || "").trim()] = true;
       });
       matched = Object.keys(instruments).length;
-    } else if (prefix === "stocksetf") {
-      var stockInstruments = {};
-      rows.slice(1).forEach(function (row) {
-        stockInstruments[(row[instrumentIdx] || "").trim()] = true;
-      });
-      matched = Object.keys(stockInstruments).length;
     } else {
       matched = rows.length - 1;
     }
 
-    var total = prefix === "equity"
-      ? sumEquityBuyInvestment(rows, "all")
-      : prefix === "stocksetf"
-      ? sumStocksEtfBuyInvestment(rows, "all")
+    var total = (prefix === "equity" || prefix === "stocksetf")
+      ? sumUnitBasedBuyInvestment(rows, "all")
       : sumInvestmentForRows(rows, "all");
 
     var matchedLabel = (prefix === "equity" || prefix === "stocksetf") ? " distinct instrument(s) counted." : " row(s) counted toward Total Investment.";
@@ -1057,54 +951,19 @@
     });
   }
 
-  initSheetCard("equity", {
-    fields: [
-      "Transaction Date",
-      "Portfolio Name",
-      "Instrument Name",
-      "Instrument Category",
-      "Instrument Sub Category",
-      "Market Segment",
-      "Region",
-      "Transaction Type",
-      "Units",
-      "Price",
-      "Value"
-    ],
-    showTable: false
-  });
-  initSheetCard("fixedincome", {
-    fields: [
-      "Transaction Date",
-      "Portfolio Name",
-      "Instrument Name",
-      "Instrument Category",
-      "Instrument Sub Category",
-      "Market Segment",
-      "Region",
-      "Transaction Type",
-      "Units",
-      "Price",
-      "Value"
-    ],
-    showTable: false
-  });
-  initSheetCard("stocksetf", {
-    fields: [
-      "Transaction Date",
-      "Portfolio Name",
-      "Instrument Name",
-      "Instrument Category",
-      "Instrument Sub Category",
-      "Market Segment",
-      "Region",
-      "Transaction Type",
-      "Units",
-      "Price",
-      "Value"
-    ],
-    showTable: false
-  });
+  var TRANSACTION_SHEET_FIELDS = [
+    "Transaction Date",
+    "Portfolio Name",
+    "Instrument Name",
+    "Transaction Type",
+    "Units",
+    "Price",
+    "Value"
+  ];
+
+  initSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initSheetCard("fixedincome", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initSheetCard("mfmapping");
   initSheetCard("stocksetfmapping");
 
@@ -1270,7 +1129,6 @@
     var required = {
       "portfolio name": header.indexOf("portfolio name"),
       "instrument name": header.indexOf("instrument name"),
-      "instrument category": header.indexOf("instrument category"),
       "transaction type": header.indexOf("transaction type"),
       units: header.indexOf("units"),
       "a date column": dateColIdx
@@ -1282,7 +1140,6 @@
     }
     var portfolioIdx = required["portfolio name"];
     var instrumentIdx = required["instrument name"];
-    var categoryIdx = required["instrument category"];
     var typeIdx = required["transaction type"];
     var unitsIdx = required.units;
     var dateIdx = required["a date column"];
@@ -1292,8 +1149,6 @@
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
-      var category = normalizeText(row[categoryIdx]);
-      if (category.indexOf("equity") === -1) return;
       equityRowCount++;
       var instrument = (row[instrumentIdx] || "").trim();
       var date = parseFlexibleDate(row[dateIdx]);
@@ -1308,7 +1163,7 @@
     if (!Object.keys(events).length) {
       lastUnitEventsDiagnostic = equityRowCount
         ? equityRowCount + " equity row(s) found, but " + unparseableDateCount + " had an unparseable Transaction Date."
-        : "no rows matched Instrument Category containing \"equity\" for the selected portfolio.";
+        : "no rows matched the selected portfolio.";
     }
 
     Object.keys(events).forEach(function (instrument) {
