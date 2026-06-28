@@ -458,8 +458,33 @@
       ? sumUnitBasedBuyInvestment(rows, "all")
       : sumInvestmentForRows(rows, "all");
 
+    var badRows = [];
+    rows.slice(1).forEach(function (row, i) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      var type = normalizeText(row[typeIdx]);
+      var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1;
+      var units = parseNumber(row[unitsIdx]);
+      var price = parseNumber(row[priceIdx]);
+      var issues = [];
+      if (!portfolio) issues.push("Portfolio Name is blank");
+      if ((prefix === "equity" || prefix === "stocksetf") && !(row[instrumentIdx] || "").trim()) issues.push("Instrument Name is blank");
+      if (!type) issues.push("Transaction Type is blank");
+      if (isBuyOrSell && units <= 0) issues.push("Units is blank/zero");
+      if (isBuyOrSell && price <= 0) issues.push("Price is blank/zero");
+      if (issues.length) badRows.push("Row " + (i + 2) + " (" + (portfolio || "unknown portfolio") + "): " + issues.join(", "));
+    });
+
     var matchedLabel = (prefix === "equity" || prefix === "stocksetf") ? " distinct instrument(s) counted." : " row(s) counted toward Total Investment.";
-    return { missingColumns: false, message: "Synced " + (rows.length - 1) + " rows. " + matched + matchedLabel + " Computed total: " + formatCurrency(total) + "." };
+    var baseMessage = "Synced " + (rows.length - 1) + " rows. " + matched + matchedLabel + " Computed total: " + formatCurrency(total) + ".";
+    if (badRows.length) {
+      var preview = badRows.slice(0, 5).join(" | ");
+      var more = badRows.length > 5 ? " (+" + (badRows.length - 5) + " more)" : "";
+      return {
+        missingColumns: true,
+        message: baseMessage + " Found " + badRows.length + " row(s) with missing/invalid data: " + preview + more + ". Fix these cells in the sheet and sync again."
+      };
+    }
+    return { missingColumns: false, message: baseMessage };
   }
 
   function formatCurrency(amount) {
