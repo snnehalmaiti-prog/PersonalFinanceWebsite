@@ -1961,6 +1961,7 @@
     var resetBtn = document.getElementById("value-chart-reset");
     if (!canvas || typeof Chart === "undefined") return;
 
+    statusEl.hidden = false;
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
@@ -1970,6 +1971,7 @@
       var skipped = Object.keys(unitEvents).length - instruments.length;
 
       if (!instruments.length) {
+        statusEl.hidden = false;
         statusEl.textContent = skipped
           ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
           : "Connect your Mutual Fund Transactions and Mutual Fund Mapping sheets to see this chart.";
@@ -2002,6 +2004,7 @@
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
+          statusEl.hidden = false;
           statusEl.textContent = "No NAV history available yet for your mapped instruments.";
           return;
         }
@@ -2016,7 +2019,7 @@
           return { x: date, y: total };
         });
 
-        statusEl.textContent = instruments.length + " instrument(s) plotted" + (skipped ? " (" + skipped + " unmapped instrument(s) skipped)" : "") + ".";
+        statusEl.hidden = true;
 
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();

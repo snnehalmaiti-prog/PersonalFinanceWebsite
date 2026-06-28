@@ -92,17 +92,19 @@
 
       <div class="value-chart-card">
         <div class="value-chart-header">
-          <h3>Account Value</h3>
+          <div class="value-chart-title-group">
+            <h3>Account Value</h3>
+            <div class="value-chart-callout" id="value-chart-callout" hidden>
+              <span class="value-chart-callout-value" id="value-chart-callout-value">—</span>
+              <span class="value-chart-callout-date" id="value-chart-callout-date">—</span>
+            </div>
+          </div>
           <div class="value-chart-actions">
             <span class="muted small" id="value-chart-range">—</span>
             <button type="button" class="btn btn-outline btn-sm" id="value-chart-reset">Reset zoom</button>
           </div>
         </div>
-        <div class="value-chart-callout" id="value-chart-callout" hidden>
-          <span class="value-chart-callout-value" id="value-chart-callout-value">—</span>
-          <span class="value-chart-callout-date" id="value-chart-callout-date">—</span>
-        </div>
-        <p class="muted small" id="value-chart-status">Loading NAV history…</p>
+        <p class="muted small" id="value-chart-status" hidden>Loading NAV history…</p>
         <div class="value-chart-wrap">
           <canvas id="value-chart" height="320"></canvas>
         </div>
@@ -305,6 +307,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=552ed18"></script>
+  <script src="script.js?v=1063c82"></script>
 </body>
 </html>
