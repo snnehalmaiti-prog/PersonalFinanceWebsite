@@ -1184,4 +1184,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   padding: 10px;
   min-height: 200px;
   min-width: 200px;
+  box-sizing: border-box;
+}
+.pie-chart-resize canvas {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: calc(100% - 20px) !important;
+  height: calc(100% - 20px) !important;
 }
