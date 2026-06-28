@@ -760,6 +760,19 @@
     }
   }
 
+  function setDayChange(el, dayChange) {
+    if (!el) return;
+    var cls = dayChange > 0 ? "positive" : (dayChange < 0 ? "negative" : "");
+    el.textContent = (dayChange > 0 ? "+" : "") + formatCurrency(dayChange);
+    el.classList.remove("positive", "negative");
+    if (cls) el.classList.add(cls);
+  }
+
+  function previous_nav_for(navHistory) {
+    if (!navHistory || navHistory.length < 2) return null;
+    return navHistory[navHistory.length - 2].nav;
+  }
+
   function updateTotalCurrentValue() {
     var overviewEl = document.getElementById("overview-total-current-value");
     var equityEl = document.getElementById("equity-total-current-value");
@@ -769,7 +782,9 @@
     var equityPctEl = document.getElementById("equity-return-pct");
     var overviewXirrEl = document.getElementById("overview-xirr");
     var equityXirrEl = document.getElementById("equity-xirr");
-    if (!overviewEl && !equityEl && !overviewReturnEl && !equityReturnEl && !overviewXirrEl && !equityXirrEl) return;
+    var overviewDayChangeEl = document.getElementById("overview-day-change");
+    var equityDayChangeEl = document.getElementById("equity-day-change");
+    if (!overviewEl && !equityEl && !overviewReturnEl && !equityReturnEl && !overviewXirrEl && !equityXirrEl && !overviewDayChangeEl && !equityDayChangeEl) return;
 
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var unitEvents = buildInstrumentUnitEvents(selected);
@@ -785,6 +800,8 @@
     if (equityPctEl) equityPctEl.textContent = "…";
     if (overviewXirrEl) overviewXirrEl.textContent = "…";
     if (equityXirrEl) equityXirrEl.textContent = "…";
+    if (overviewDayChangeEl) overviewDayChangeEl.textContent = "…";
+    if (equityDayChangeEl) equityDayChangeEl.textContent = "…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
@@ -802,23 +819,30 @@
         var xirrNoValue = calculateXIRR(xirrCashFlows);
         setXirr(overviewXirrEl, xirrNoValue);
         setXirr(equityXirrEl, xirrNoValue);
+        setDayChange(overviewDayChangeEl, 0);
+        setDayChange(equityDayChangeEl, 0);
         return;
       }
 
       return Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         .then(function (navHistories) {
           var total = 0;
+          var yesterdayTotal = 0;
           instruments.forEach(function (name, i) {
             var navHistory = navHistories[i];
             var events = unitEvents[name];
             var units = events.length ? events[events.length - 1].cumulativeUnits : 0;
             var nav = latest_nav_for(navHistory);
+            var prevNav = previous_nav_for(navHistory);
             if (units > UNITS_EPSILON && nav) total += units * nav;
+            if (units > UNITS_EPSILON && prevNav) yesterdayTotal += units * prevNav;
           });
           if (overviewEl) overviewEl.textContent = formatCurrency(total);
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(overviewReturnEl, overviewPctEl, total, investment);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
+          setDayChange(overviewDayChangeEl, total - yesterdayTotal);
+          setDayChange(equityDayChangeEl, total - yesterdayTotal);
 
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
