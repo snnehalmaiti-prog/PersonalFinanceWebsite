@@ -1680,6 +1680,12 @@
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
 
+        var fullMinTime = first.getTime();
+        var fullMaxTime = last.getTime();
+        var sixMonthsMs = 1000 * 60 * 60 * 24 * 182;
+        var initialMin = Math.max(fullMinTime, fullMaxTime - sixMonthsMs);
+        var initialMax = fullMaxTime;
+
         if (window.__wfValueChart) window.__wfValueChart.destroy();
         var ctx = canvas.getContext("2d");
         var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
@@ -1707,6 +1713,8 @@
               x: {
                 type: "time",
                 time: { unit: "month", displayFormats: { month: "MMM" } },
+                min: initialMin,
+                max: initialMax,
                 grid: { display: false },
                 ticks: {
                   maxRotation: 0,
@@ -1730,7 +1738,11 @@
                     max: lastTxnDate ? lastTxnDate.getTime() : undefined
                   }
                 },
-                pan: { enabled: true, mode: "x" },
+                pan: {
+                  enabled: true,
+                  mode: "x",
+                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); }
+                },
                 zoom: {
                   wheel: { enabled: true },
                   pinch: { enabled: true },
