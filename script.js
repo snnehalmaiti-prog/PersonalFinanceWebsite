@@ -450,10 +450,34 @@
         };
       }
       var mapped = 0;
-      rows.slice(1).forEach(function (row) {
-        if ((row[instrumentIdx] || "").trim() && (row[isinIdx] || "").trim()) mapped++;
+      var badRows = [];
+      var seenInstruments = {};
+      rows.slice(1).forEach(function (row, i) {
+        var instrument = (row[instrumentIdx] || "").trim();
+        var identifier = (row[isinIdx] || "").trim();
+        if (instrument && identifier) mapped++;
+
+        var issues = [];
+        if (!instrument) issues.push("Instrument Name is blank");
+        if (!identifier) issues.push("Identifier/ISIN is blank");
+        if (instrument) {
+          var key = normalizeText(instrument);
+          if (seenInstruments[key]) issues.push("Instrument Name is a duplicate of row " + seenInstruments[key]);
+          else seenInstruments[key] = i + 2;
+        }
+        if (issues.length) badRows.push("Row " + (i + 2) + ": " + issues.join(", "));
       });
-      return { missingColumns: false, message: "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " + mapped + " row(s) have both Instrument Name and Identifier filled in." };
+
+      var baseMsg = "Synced " + (rows.length - 1) + " rows. Detected header columns: [" + headerPreview + "]. " + mapped + " row(s) have both Instrument Name and Identifier filled in.";
+      if (badRows.length) {
+        var mapPreview = badRows.slice(0, 5).join(" | ");
+        var mapMore = badRows.length > 5 ? " (+" + (badRows.length - 5) + " more)" : "";
+        return {
+          missingColumns: true,
+          message: baseMsg + " Found " + badRows.length + " row(s) with missing/duplicate data: " + mapPreview + mapMore + ". Fix these cells in the sheet and sync again."
+        };
+      }
+      return { missingColumns: false, message: baseMsg };
     }
     if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "stocksetf") return { missingColumns: false, message: "" };
     var header = rows[0].map(normalizeText);
