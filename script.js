@@ -403,6 +403,39 @@
     return total;
   }
 
+  function computeInstrumentRealizedDetail(txns) {
+    var buyLots = [];
+    var costOfSoldUnits = 0;
+    var saleProceeds = 0;
+    var lastSell = null;
+    txns.forEach(function (txn) {
+      if (txn.type === "buy") {
+        buyLots.push({ units: txn.units, price: txn.price });
+        return;
+      }
+      var unitsToMatch = txn.units;
+      while (unitsToMatch > 0 && buyLots.length) {
+        var lot = buyLots[0];
+        var matched = Math.min(unitsToMatch, lot.units);
+        costOfSoldUnits += matched * lot.price;
+        lot.units -= matched;
+        unitsToMatch -= matched;
+        if (lot.units <= 0) buyLots.shift();
+      }
+      saleProceeds += txn.units * txn.price;
+      if (!lastSell || (txn.date && (!lastSell.date || txn.date.getTime() >= lastSell.date.getTime()))) {
+        lastSell = txn;
+      }
+    });
+    return {
+      costOfSoldUnits: costOfSoldUnits,
+      saleProceeds: saleProceeds,
+      realizedPnl: saleProceeds - costOfSoldUnits,
+      lastSellPrice: lastSell ? lastSell.price : 0,
+      lastSellDate: lastSell ? lastSell.date : null
+    };
+  }
+
   function computeRealizedReturn(portfolioFilter, prefixes) {
     var total = 0;
     prefixes.forEach(function (prefix) {
@@ -1955,15 +1988,27 @@
         .then(function (navHistories) {
           tbody.innerHTML = "";
           resolvable.forEach(function (h, i) {
-            var navHistory = navHistories[i] || [];
-            if (!navHistory.length) return;
-            var latest = navHistory[navHistory.length - 1];
-            var prev = navHistory.length > 1 ? navHistory[navHistory.length - 2] : null;
-            var currNav = latest.nav;
-            var current = h.units * currNav;
-            var pnl = current - h.invested;
-            var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
-            var dayChgPct = prev && prev.nav ? ((currNav - prev.nav) / prev.nav) * 100 : 0;
+            var isClosed = h.units < 1;
+            var currNav, current, pnl, pnlPct, dayChgPct;
+
+            if (isClosed) {
+              var detail = computeInstrumentRealizedDetail(transactionsByInstrument[h.instrument]);
+              currNav = detail.lastSellPrice;
+              current = detail.saleProceeds;
+              pnl = detail.realizedPnl;
+              pnlPct = detail.costOfSoldUnits > 0 ? (pnl / detail.costOfSoldUnits) * 100 : 0;
+              dayChgPct = 0;
+            } else {
+              var navHistory = navHistories[i] || [];
+              if (!navHistory.length) return;
+              var latest = navHistory[navHistory.length - 1];
+              var prev = navHistory.length > 1 ? navHistory[navHistory.length - 2] : null;
+              currNav = latest.nav;
+              current = h.units * currNav;
+              pnl = current - h.invested;
+              pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
+              dayChgPct = prev && prev.nav ? ((currNav - prev.nav) / prev.nav) * 100 : 0;
+            }
 
             var tr = document.createElement("tr");
 
@@ -2013,7 +2058,7 @@
             tr.appendChild(dayChgTd);
 
             var instrumentCashFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
-            if (current > UNITS_EPSILON) instrumentCashFlows.push({ date: new Date(), amount: current });
+            if (!isClosed && current > UNITS_EPSILON) instrumentCashFlows.push({ date: new Date(), amount: current });
             var instrumentXirr = calculateXIRR(instrumentCashFlows);
             var xirrTd = document.createElement("td");
             if (instrumentXirr === null || instrumentXirr === undefined || !isFinite(instrumentXirr)) {
