@@ -1623,7 +1623,10 @@
     rows.slice(1).forEach(function (row) {
       var instrument = (row[instrumentIdx] || "").trim();
       var isin = (row[isinIdx] || "").trim().toUpperCase();
-      if (instrument && isin) map[instrument] = isin;
+      if (instrument && isin) {
+        map[instrument] = isin;
+        map[normalizeText(instrument)] = isin;
+      }
     });
     if (!Object.keys(map).length) {
       lastIsinMapDiagnostic = "Mutual Fund Mapping sheet has rows, but none had both Instrument Name and Identifier filled in.";
@@ -2094,7 +2097,13 @@
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
+      var isinMap = buildInstrumentIsinMap();
       var resolvable = holdings.filter(function (h) { return h.units < 1 || !!lookupSchemeCode(schemeMap, h.instrument); });
+      holdings.forEach(function (h) {
+        if (h.units < 1 || lookupSchemeCode(schemeMap, h.instrument)) return;
+        var isin = isinMap[h.instrument] || isinMap[normalizeText(h.instrument)];
+        console.warn("[wf] holding not resolved:", JSON.stringify(h.instrument), "ISIN in mapping sheet:", isin || "(not found in Mutual Fund Mapping sheet)");
+      });
       var skipped = holdings.length - resolvable.length;
       if (!resolvable.length) {
         statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
