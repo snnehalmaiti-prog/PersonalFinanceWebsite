@@ -438,7 +438,7 @@
     if (missing.length) {
       return {
         missingColumns: true,
-        message: "Header Row Number is Incorrect. Make Adjustments By adding correct header row number."
+        message: "Header row number is incorrect. Make adjustments by adding correct header row number."
       };
     }
 
