@@ -349,37 +349,57 @@
     var typeIdx = header.indexOf("transaction type");
     var unitsIdx = header.indexOf("units");
     var priceIdx = header.indexOf("price");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return 0;
 
-    var byInstrument = {};
+    var transactionsByInstrument = {};
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
 
-      var instrument = (row[instrumentIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
-      var units = parseNumber(row[unitsIdx]);
-      var value = units * parseNumber(row[priceIdx]);
+      var isBuy = type.indexOf("buy") !== -1;
+      var isSell = type.indexOf("sell") !== -1;
+      if (!isBuy && !isSell) return;
 
-      if (!byInstrument[instrument]) {
-        byInstrument[instrument] = { buyUnits: 0, buyValue: 0, sellUnits: 0, sellValue: 0 };
-      }
-      if (type.indexOf("buy") !== -1) {
-        byInstrument[instrument].buyUnits += units;
-        byInstrument[instrument].buyValue += value;
-      } else if (type.indexOf("sell") !== -1) {
-        byInstrument[instrument].sellUnits += units;
-        byInstrument[instrument].sellValue += value;
-      }
+      var instrument = (row[instrumentIdx] || "").trim();
+      if (!transactionsByInstrument[instrument]) transactionsByInstrument[instrument] = [];
+      transactionsByInstrument[instrument].push({
+        type: isBuy ? "buy" : "sell",
+        units: parseNumber(row[unitsIdx]),
+        price: parseNumber(row[priceIdx]),
+        date: parseFlexibleDate(row[dateIdx]),
+        order: transactionsByInstrument[instrument].length
+      });
     });
 
     var total = 0;
-    Object.keys(byInstrument).forEach(function (instrument) {
-      var entry = byInstrument[instrument];
-      if (entry.buyUnits <= 0 || entry.sellUnits <= 0) return;
-      var avgBuyPrice = entry.buyValue / entry.buyUnits;
-      var soldUnits = Math.min(entry.sellUnits, entry.buyUnits);
-      total += entry.sellValue - soldUnits * avgBuyPrice;
+    Object.keys(transactionsByInstrument).forEach(function (instrument) {
+      var txns = transactionsByInstrument[instrument].slice().sort(function (a, b) {
+        var at = a.date ? a.date.getTime() : 0;
+        var bt = b.date ? b.date.getTime() : 0;
+        return at !== bt ? at - bt : a.order - b.order;
+      });
+
+      var buyLots = [];
+      txns.forEach(function (txn) {
+        if (txn.type === "buy") {
+          buyLots.push({ units: txn.units, price: txn.price });
+          return;
+        }
+        var unitsToMatch = txn.units;
+        var costOfSoldUnits = 0;
+        while (unitsToMatch > 0 && buyLots.length) {
+          var lot = buyLots[0];
+          var matched = Math.min(unitsToMatch, lot.units);
+          costOfSoldUnits += matched * lot.price;
+          lot.units -= matched;
+          unitsToMatch -= matched;
+          if (lot.units <= 0) buyLots.shift();
+        }
+        var saleProceeds = txn.units * txn.price;
+        total += saleProceeds - costOfSoldUnits;
+      });
     });
     return total;
   }
