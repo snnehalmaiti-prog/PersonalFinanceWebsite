@@ -1110,6 +1110,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   flex-wrap: wrap;
   margin-bottom: 6px;
 }
+.holdings-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 .holdings-toggle {
   display: flex;
   align-items: center;

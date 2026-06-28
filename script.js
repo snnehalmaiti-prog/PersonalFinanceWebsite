@@ -895,6 +895,8 @@
 
   var equityHoldingsShowAll = document.getElementById("equity-holdings-show-all");
   if (equityHoldingsShowAll) equityHoldingsShowAll.addEventListener("change", renderEquityHoldingsTable);
+  var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
+  if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
 
   ["equity", "fixedincome", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
@@ -1956,13 +1958,19 @@
 
     var showAllCheckbox = document.getElementById("equity-holdings-show-all");
     var showAll = !!(showAllCheckbox && showAllCheckbox.checked);
+    var showClosedOnlyCheckbox = document.getElementById("equity-holdings-show-closed-only");
+    var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
 
     var holdings = [];
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
-      if (!showAll && remainingUnits < 1) return;
+      if (showClosedOnly) {
+        if (remainingUnits >= UNITS_EPSILON) return;
+      } else if (!showAll && remainingUnits < 1) {
+        return;
+      }
       var avgNav = remainingUnits > UNITS_EPSILON ? investedCost / remainingUnits : 0;
       holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: avgNav });
     });

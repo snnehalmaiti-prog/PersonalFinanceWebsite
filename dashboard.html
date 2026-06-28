@@ -143,10 +143,16 @@
       <div class="holdings-card">
         <div class="holdings-card-header">
           <h3>Holdings</h3>
-          <label class="holdings-toggle">
-            <input type="checkbox" id="equity-holdings-show-all" />
-            Show closed positions (&lt; 1 unit)
-          </label>
+          <div class="holdings-toggle-group">
+            <label class="holdings-toggle">
+              <input type="checkbox" id="equity-holdings-show-all" />
+              Include Closed Position
+            </label>
+            <label class="holdings-toggle">
+              <input type="checkbox" id="equity-holdings-show-closed-only" />
+              View Closed Position
+            </label>
+          </div>
         </div>
         <p class="muted small" id="equity-holdings-status">Loading holdings…</p>
         <div id="equity-holdings-table-wrap" class="holdings-table-wrap" hidden>
