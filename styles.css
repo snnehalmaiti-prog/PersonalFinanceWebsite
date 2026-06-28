@@ -1237,9 +1237,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   text-overflow: ellipsis;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.holdings-table .fund-name:hover {
-  background: rgba(31, 157, 107, 0.14);
-  color: var(--emerald);
+.holdings-table tbody tr:has(.fund-name:hover) {
+  background: rgba(242, 166, 90, 0.16);
+  box-shadow: inset 2px 0 0 var(--gold, #F2A65A);
+}
+.holdings-table tbody tr:has(.fund-name:hover) .fund-name {
+  color: #B8762E;
 }
 .holdings-table th, .holdings-table td {
   padding: 14px 16px;
