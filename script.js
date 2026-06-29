@@ -2685,6 +2685,52 @@
     return events;
   }
 
+  // Investment Corpus/Savings Account rows in the FD sheet are running-balance snapshots,
+  // not discrete cash flows — each row's Invested Amount replaces the prior balance for that
+  // Portfolio/Bank/Instrument. For the Account Value chart we convert consecutive balances
+  // into month-on-month deltas and accumulate them into a single timeline, mirroring how
+  // EPF deposit/interest events build a running cumulative value.
+  function buildFdValueEvents(portfolioFilter) {
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var bankIdx = header.indexOf("bank");
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var amountIdx = header.indexOf("invested amount");
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || bankIdx === -1 || instrumentIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1) return [];
+
+    var entries = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var subCategory = normalizeText(row[subCategoryIdx]);
+      if (subCategory !== "investment corpus" && subCategory !== "savings account") return;
+
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date) return;
+      var key = normalizeText(portfolio) + "||" + normalizeText(row[bankIdx]) + "||" + normalizeText(row[instrumentIdx]);
+      entries.push({ date: date, key: key, amount: parseNumber(row[amountIdx]) });
+    });
+
+    entries.sort(function (a, b) { return a.date - b.date; });
+    var lastByKey = {};
+    var events = [];
+    var running = 0;
+    entries.forEach(function (entry) {
+      var previous = lastByKey[entry.key] || 0;
+      var delta = entry.amount - previous;
+      lastByKey[entry.key] = entry.amount;
+      running += delta;
+      events.push({ date: entry.date, cumulativeValue: running });
+    });
+    return events;
+  }
+
   function lastAtOrBefore(sortedEvents, targetDate, valueKey) {
     var lo = 0, hi = sortedEvents.length - 1, result = null;
     while (lo <= hi) {
@@ -2715,8 +2761,9 @@
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
       var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
+      var fdValueEvents = isFixedIncomeExcluded() ? [] : buildFdValueEvents(selectedPortfolio);
 
-      if (!instruments.length && !epfEvents.length) {
+      if (!instruments.length && !epfEvents.length && !fdValueEvents.length) {
         statusEl.hidden = false;
         statusEl.textContent = skipped
           ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
@@ -2736,6 +2783,7 @@
           (navByInstrument[name] || []).forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         });
         epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        fdValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
         var firstTxnDate = null, lastTxnDate = null;
@@ -2754,6 +2802,12 @@
           if (!firstTxnDate || epfEarliest < firstTxnDate) firstTxnDate = epfEarliest;
           if (!lastTxnDate || epfLatest > lastTxnDate) lastTxnDate = epfLatest;
         }
+        if (fdValueEvents.length) {
+          var fdEarliest = fdValueEvents[0].date;
+          var fdLatest = fdValueEvents[fdValueEvents.length - 1].date;
+          if (!firstTxnDate || fdEarliest < firstTxnDate) firstTxnDate = fdEarliest;
+          if (!lastTxnDate || fdLatest > lastTxnDate) lastTxnDate = fdLatest;
+        }
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
@@ -2763,7 +2817,7 @@
         }
 
         var points = timeline.map(function (date) {
-          var total = lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0;
+          var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0) + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0);
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
