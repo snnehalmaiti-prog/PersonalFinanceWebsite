@@ -1874,7 +1874,17 @@
 
     function autoSave() {
       var url = sheetLinkInput.value.trim();
-      if (url) localStorage.setItem(storageKey, url);
+      if (url) {
+        localStorage.setItem(storageKey, url);
+      } else {
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem("wf-" + prefix + "-data");
+        sheetTableWrap.hidden = true;
+        setStatus("", false);
+        setConnected(false);
+        meta.hidden = true;
+        updateDashboardStats();
+      }
       if (headerRowInput) localStorage.setItem(headerRowKey, headerRowInput.value || "1");
     }
 
@@ -1883,7 +1893,10 @@
 
     sheetSyncBtn.addEventListener("click", function () {
       var url = sheetLinkInput.value.trim();
-      if (!url) return;
+      if (!url) {
+        autoSave();
+        return;
+      }
       autoSave();
       syncSheet(url);
     });
