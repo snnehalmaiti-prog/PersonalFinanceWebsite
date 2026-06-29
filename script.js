@@ -401,8 +401,8 @@
     var priceIdx = header.indexOf("price");
     var amountIdx = header.indexOf("amount");
     var categoryIdx = header.indexOf("instrument category");
-    var hasUnitsPrice = unitsIdx !== -1 && priceIdx !== -1;
-    if (portfolioIdx === -1 || typeIdx === -1 || (!hasUnitsPrice && amountIdx === -1)) return 0;
+    var isAmountBased = amountIdx !== -1;
+    if (portfolioIdx === -1 || typeIdx === -1 || (!isAmountBased && (unitsIdx === -1 || priceIdx === -1))) return 0;
 
     var total = 0;
     rows.slice(1).forEach(function (row) {
@@ -410,7 +410,7 @@
       if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var type = (row[typeIdx] || "").trim().toLowerCase();
-      var value = hasUnitsPrice ? parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]) : parseNumber(row[amountIdx]);
+      var value = isAmountBased ? parseNumber(row[amountIdx]) : parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]);
       total += type.indexOf("sell") !== -1 || type.indexOf("withdraw") !== -1 ? -value : value;
     });
     return total;
@@ -641,7 +641,7 @@
     var priceIdx = header.indexOf("price");
     var unitsIdx = header.indexOf("units");
     var amountIdx = header.indexOf("amount");
-    var isAmountBased = (prefix === "fixedincome" || prefix === "fd") && unitsIdx === -1 && priceIdx === -1 && amountIdx !== -1;
+    var isAmountBased = (prefix === "fixedincome" || prefix === "fd") && amountIdx !== -1;
 
     var requiredIdx = (prefix === "equity" || prefix === "stocksetf")
       ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, units: unitsIdx, price: priceIdx }
