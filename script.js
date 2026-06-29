@@ -530,6 +530,21 @@
     return flows;
   }
 
+  // Counts full 3-month periods completed between start and asOf — banks credit FD interest
+  // only at full quarter boundaries, not continuously, so a partial quarter earns nothing yet.
+  function countElapsedQuarters(start, asOf) {
+    if (!start || !asOf || asOf <= start) return 0;
+    var quarters = 0;
+    var cursor = start;
+    while (true) {
+      var next = new Date(cursor.getFullYear(), cursor.getMonth() + 3, cursor.getDate());
+      if (next > asOf) break;
+      cursor = next;
+      quarters++;
+    }
+    return quarters;
+  }
+
   // Fixed Deposit rows: Current Value = Invested Amount + interest accrued from Transaction
   // Date to today (capped at Maturity Date), compounded quarterly at Rate of Return.
   function sumFdMaturedCurrentValue(rows, portfolioFilter) {
@@ -559,12 +574,12 @@
       if (!principal || !startDate) return;
 
       var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
-      var years = (asOfDate - startDate) / (1000 * 60 * 60 * 24 * 365);
-      if (years <= 0 || !rate) {
+      var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
+      if (elapsedQuarters <= 0 || !rate) {
         total += principal;
         return;
       }
-      total += principal * Math.pow(1 + rate / 4, years * 4);
+      total += principal * Math.pow(1 + rate / 4, elapsedQuarters);
     });
     return total;
   }
