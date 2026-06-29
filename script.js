@@ -2014,6 +2014,11 @@
         row.remove();
         if (!listEl.children.length) addRow();
         autoSaveConfigs();
+        if (!readRowConfigs().filter(function (c) { return c.link; }).length) {
+          localStorage.removeItem("wf-" + prefix + "-data");
+          updateDashboardStats();
+          updateRefreshButtonStatus(prefix);
+        }
       });
 
       var fields = document.createElement("div");
@@ -2099,6 +2104,9 @@
     function syncAll() {
       var configs = readRowConfigs().filter(function (c) { return c.link; });
       if (!configs.length) {
+        localStorage.removeItem("wf-" + prefix + "-data");
+        updateDashboardStats();
+        updateRefreshButtonStatus(prefix);
         setStatus("Add at least one Google Sheets link.", true);
         sheetTableWrap.hidden = true;
         setConnected(false);
