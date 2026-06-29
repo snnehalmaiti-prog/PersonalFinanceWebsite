@@ -2254,6 +2254,12 @@
     return span;
   }
 
+  function truncateInstrumentNameToFund(name) {
+    if (!name) return name;
+    var match = /^(.*?\bfund\b)/i.exec(name);
+    return match ? match[1] : name;
+  }
+
   function renderEquityHoldingsRows(tbody, rowsData) {
     var key = equityHoldingsSortState.key;
     var dir = equityHoldingsSortState.dir;
@@ -2278,7 +2284,8 @@
 
       var nameTd = document.createElement("td");
       nameTd.className = "fund-name";
-      nameTd.textContent = h.instrument;
+      nameTd.textContent = truncateInstrumentNameToFund(h.instrument);
+      nameTd.title = h.instrument;
       tr.appendChild(nameTd);
 
       var qtyTd = document.createElement("td");
