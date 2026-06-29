@@ -629,7 +629,7 @@
       }
       return { missingColumns: false, message: baseMsg };
     }
-    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "stocksetf") return { missingColumns: false, message: "" };
+    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "fd" && prefix !== "stocksetf") return { missingColumns: false, message: "" };
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
@@ -727,9 +727,9 @@
     var stocksEtfRealizedEl = document.getElementById("stocksetf-realized-return");
     if (overviewEl || equityEl || fixedIncomeEl || stocksEtfEl) {
       var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome", "stocksetf"]));
+      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome", "fd", "stocksetf"]));
       if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
-      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome"]));
+      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome", "fd"]));
       if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(computeTotalInvestment(selected, ["stocksetf"]));
     }
     if (overviewRealizedEl || equityRealizedEl || stocksEtfRealizedEl) {
@@ -821,7 +821,7 @@
           : !Object.keys(schemeMap).length
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
-        var overviewInvestmentNoValue = computeTotalInvestment(selected, ["equity", "fixedincome", "stocksetf"]);
+        var overviewInvestmentNoValue = computeTotalInvestment(selected, ["equity", "fixedincome", "fd", "stocksetf"]);
         if (overviewEl) { overviewEl.textContent = formatCurrency(overviewInvestmentNoValue); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
         setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewInvestmentNoValue, overviewInvestmentNoValue);
@@ -851,7 +851,7 @@
           });
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
-          var overviewInvestment = computeTotalInvestment(selected, ["equity", "fixedincome", "stocksetf"]);
+          var overviewInvestment = computeTotalInvestment(selected, ["equity", "fixedincome", "fd", "stocksetf"]);
           var overviewCurrentValue = overviewInvestment + unrealizedProfit;
           if (overviewEl) overviewEl.textContent = formatCurrency(overviewCurrentValue);
           if (equityEl) equityEl.textContent = formatCurrency(total);
@@ -991,7 +991,7 @@
   function populatePortfolioSelect() {
     var menu = document.getElementById("portfolio-menu");
     if (!menu) return;
-    var names = collectPortfolioNamesFromSheets(["equity", "stocksetf", "fixedincome"]);
+    var names = collectPortfolioNamesFromSheets(["equity", "stocksetf", "fixedincome", "fd"]);
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     if (selected !== "all" && names.indexOf(selected) === -1) selected = "all";
 
@@ -1710,6 +1710,7 @@
 
   initMultiSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("fixedincome", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("fd", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initSheetCard("mfmapping");
   initSheetCard("stocksetfmapping");
@@ -2224,7 +2225,7 @@
     var statusEl = document.getElementById("portfolio-split-status");
     if (!canvas || !statusEl || typeof Chart === "undefined") return;
 
-    var prefixes = ["equity", "stocksetf", "fixedincome"];
+    var prefixes = ["equity", "stocksetf", "fixedincome", "fd"];
     var names = collectPortfolioNamesFromSheets(prefixes);
     if (!names.length) {
       statusEl.textContent = "No portfolios found yet. Connect your transaction sheets in Settings.";

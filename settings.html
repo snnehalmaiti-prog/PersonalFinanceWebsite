@@ -89,12 +89,12 @@
 
       <div class="equity-card">
         <div class="equity-card-header">
-          <h3><span class="equity-icon" aria-hidden="true">🔗</span> Fixed Income Transactions <span class="status-pill" id="fixedincome-status-pill">Not connected</span></h3>
+          <h3><span class="equity-icon" aria-hidden="true">🔗</span> EPF Transactions <span class="status-pill" id="fixedincome-status-pill">Not connected</span></h3>
           <button type="button" class="btn btn-primary" id="fixedincome-sheet-sync">
             <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
           </button>
         </div>
-        <p class="muted small equity-desc">Buy/sell and maturity records for PPF, fixed deposits, bonds and other fixed-income holdings. Add multiple sheets if your transactions are split across several brokers/accounts.</p>
+        <p class="muted small equity-desc">Contribution and balance records for your EPF account. Add multiple sheets if your transactions are split across several accounts.</p>
 
         <div class="sheets-list" id="fixedincome-sheets-list"></div>
         <button type="button" class="btn btn-outline btn-sm" id="fixedincome-sheet-add">+ Add another sheet</button>
@@ -102,6 +102,24 @@
         <p id="fixedincome-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
         <div id="fixedincome-sheet-table-wrap" class="sheet-table-wrap" hidden>
           <table id="fixedincome-sheet-table" class="sheet-table"></table>
+        </div>
+      </div>
+
+      <div class="equity-card">
+        <div class="equity-card-header">
+          <h3><span class="equity-icon" aria-hidden="true">🔗</span> Fixed Deposit/Savings Account <span class="status-pill" id="fd-status-pill">Not connected</span></h3>
+          <button type="button" class="btn btn-primary" id="fd-sheet-sync">
+            <span class="refresh-icon" aria-hidden="true">&#8635;</span> Verify &amp; sync
+          </button>
+        </div>
+        <p class="muted small equity-desc">Deposit and maturity records for fixed deposits and savings accounts. Add multiple sheets if your transactions are split across several banks/accounts.</p>
+
+        <div class="sheets-list" id="fd-sheets-list"></div>
+        <button type="button" class="btn btn-outline btn-sm" id="fd-sheet-add">+ Add another sheet</button>
+
+        <p id="fd-sheet-status" class="muted small" style="margin-top:14px;" hidden></p>
+        <div id="fd-sheet-table-wrap" class="sheet-table-wrap" hidden>
+          <table id="fd-sheet-table" class="sheet-table"></table>
         </div>
       </div>
     </section>
@@ -172,6 +190,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=81c9cd2"></script>
+  <script src="script.js?v=2b62115"></script>
 </body>
 </html>
