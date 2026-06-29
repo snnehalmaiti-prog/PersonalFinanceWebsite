@@ -399,15 +399,19 @@
     var typeIdx = header.indexOf("transaction type");
     var unitsIdx = header.indexOf("units");
     var priceIdx = header.indexOf("price");
-    if (portfolioIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1) return 0;
+    var amountIdx = header.indexOf("amount");
+    var categoryIdx = header.indexOf("instrument category");
+    var hasUnitsPrice = unitsIdx !== -1 && priceIdx !== -1;
+    if (portfolioIdx === -1 || typeIdx === -1 || (!hasUnitsPrice && amountIdx === -1)) return 0;
 
     var total = 0;
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var type = (row[typeIdx] || "").trim().toLowerCase();
-      var value = parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]);
-      total += type.indexOf("sell") !== -1 ? -value : value;
+      var value = hasUnitsPrice ? parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]) : parseNumber(row[amountIdx]);
+      total += type.indexOf("sell") !== -1 || type.indexOf("withdraw") !== -1 ? -value : value;
     });
     return total;
   }
@@ -636,9 +640,13 @@
     var typeIdx = header.indexOf("transaction type");
     var priceIdx = header.indexOf("price");
     var unitsIdx = header.indexOf("units");
+    var amountIdx = header.indexOf("amount");
+    var isAmountBased = (prefix === "fixedincome" || prefix === "fd") && unitsIdx === -1 && priceIdx === -1 && amountIdx !== -1;
 
     var requiredIdx = (prefix === "equity" || prefix === "stocksetf")
       ? { "portfolio name": portfolioIdx, "instrument name": instrumentIdx, "transaction type": typeIdx, units: unitsIdx, price: priceIdx }
+      : isAmountBased
+      ? { "portfolio name": portfolioIdx, "transaction type": typeIdx, amount: amountIdx }
       : { "portfolio name": portfolioIdx, "transaction type": typeIdx, units: unitsIdx, price: priceIdx };
 
     var missing = Object.keys(requiredIdx).filter(function (key) { return requiredIdx[key] === -1; });
@@ -668,12 +676,17 @@
     rows.slice(1).forEach(function (row, i) {
       var portfolio = (row[portfolioIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
-      var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1;
+      var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1 || type.indexOf("withdraw") !== -1 || type.indexOf("deposit") !== -1 || type.indexOf("contribut") !== -1;
       var issues = [];
       if (!portfolio) issues.push("Portfolio Name is blank");
       if ((prefix === "equity" || prefix === "stocksetf") && !(row[instrumentIdx] || "").trim()) issues.push("Instrument Name is blank");
       if (!type) issues.push("Transaction Type is blank");
-      if (isBuyOrSell) {
+      if (isAmountBased) {
+        if (isBuyOrSell) {
+          var amountCheck = validateNumericCell(row[amountIdx]);
+          if (!amountCheck.ok) issues.push("Amount " + amountCheck.reason);
+        }
+      } else if (isBuyOrSell) {
         var unitsCheck = validateNumericCell(row[unitsIdx]);
         if (!unitsCheck.ok) issues.push("Units " + unitsCheck.reason);
         var priceCheck = validateNumericCell(row[priceIdx]);
