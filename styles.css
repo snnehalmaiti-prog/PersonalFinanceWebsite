@@ -1103,6 +1103,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   flex-wrap: wrap;
 }
 .panel-title-row h2 { margin: 0; }
+.panel-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .nav-asof {
   display: flex;

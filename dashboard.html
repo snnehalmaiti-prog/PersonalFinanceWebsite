@@ -56,9 +56,13 @@
     <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
       <div class="panel-title-row">
         <h2>Overview</h2>
-        <button type="button" id="exclude-fixedincome-toggle" class="btn btn-outline btn-sm" aria-pressed="false">Exclude Fixed Income</button>
+        <div class="panel-title-actions">
+          <button type="button" id="exclude-fixedincome-toggle" class="btn btn-outline btn-sm" aria-pressed="false">Exclude Fixed Income</button>
+          <button type="button" id="exclude-savings-investment-toggle" class="btn btn-outline btn-sm" aria-pressed="false">Exclude Savings/Investment Holding</button>
+        </div>
       </div>
       <p class="muted">A snapshot of all your investments across asset classes.</p>
+      <p class="muted small">Note: Savings/Investment Holding is excluded from XIRR.</p>
 
       <div class="overview-stats">
         <div class="overview-stat-card">
@@ -343,6 +347,7 @@
         <div class="holdings-card-header">
           <h3>Savings/Investment Holding</h3>
         </div>
+        <p class="muted small">Note: these investments are assumed to be non-interest bearing, even though you might be earning interest.</p>
         <p class="muted small" id="fd-holdings-status">Loading holdings…</p>
         <div id="fd-holdings-table-wrap" class="holdings-table-wrap" hidden>
           <table id="fd-holdings-table" class="holdings-table">
@@ -385,6 +390,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=7bcb26b"></script>
+  <script src="script.js?v=ffbe250"></script>
 </body>
 </html>

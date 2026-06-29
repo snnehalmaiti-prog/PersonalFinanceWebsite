@@ -350,9 +350,18 @@
   var PORTFOLIO_NAMES_KEY = "wf-portfolio-names";
   var SELECTED_PORTFOLIO_KEY = "wf-selected-portfolio";
   var EXCLUDE_FIXED_INCOME_KEY = "wf-exclude-fixedincome";
+  var EXCLUDE_SAVINGS_INVESTMENT_KEY = "wf-exclude-savings-investment";
 
   function isFixedIncomeExcluded() {
     return localStorage.getItem(EXCLUDE_FIXED_INCOME_KEY) === "true";
+  }
+
+  // Investment Corpus/Savings Account holdings ("Savings/Investment Holding"). When excluded,
+  // their Invested Amount/Current Value are dropped from every dashboard aggregate (Overview,
+  // Fixed Income stats, Account Value chart) — separate from, and on top of, the always-on
+  // exclusion of these holdings from XIRR (see buildFdAtParXirrCashFlows callers).
+  function isSavingsInvestmentExcluded() {
+    return localStorage.getItem(EXCLUDE_SAVINGS_INVESTMENT_KEY) === "true";
   }
 
   function overviewInvestmentPrefixes() {
@@ -468,7 +477,10 @@
   // Portfolio/Bank/Instrument, Fixed Deposit rows summed standalone).
   function sumFdInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var holdings = buildFdHoldingsList(rows, portfolioFilter, function () { return true; });
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
+      if (isSavingsInvestmentExcluded() && (normSubCategory === "investment corpus" || normSubCategory === "savings account")) return false;
+      return true;
+    });
     if (!holdings) return 0;
     var total = 0;
     holdings.forEach(function (h) { total += h.invested; });
@@ -495,7 +507,7 @@
   // monthly at Rate of Return. Deduped to the latest transaction per Portfolio/Bank/Instrument,
   // matching the "Savings/Investment Holding" table.
   function sumFdCurrentValueAtPar(rows, portfolioFilter) {
-    if (!rows || !rows.length) return 0;
+    if (!rows || !rows.length || isSavingsInvestmentExcluded()) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
       return normSubCategory === "investment corpus" || normSubCategory === "savings account";
     });
@@ -1010,8 +1022,12 @@
     if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
     setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
     if (xirrEl) {
-      var epfCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdAtParXirrCashFlows(fdRows, selected)).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
-      if (currentValue > 0) epfCashFlows.push({ date: new Date(), amount: currentValue });
+      // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded from
+      // XIRR, regardless of the "Exclude Savings/Investment Holding" toggle — its running-balance
+      // updates aren't real cash-flow events.
+      var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
+      var epfCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
+      if (currentValueForXirr > 0) epfCashFlows.push({ date: new Date(), amount: currentValueForXirr });
       setXirr(xirrEl, calculateXIRR(epfCashFlows));
     }
   }
@@ -1403,11 +1419,11 @@
       if (!isFixedIncomeExcluded()) {
         var epfRows = getSheetRows("fixedincome");
         var fdRows = getSheetRows("fd");
+        // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded
+        // from XIRR — its running-balance updates aren't real cash-flow events.
         var fixedIncomeCurrentValue = (epfRows ? sumEpfAmount(epfRows, selected, true) : 0)
-          + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0)
           + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
         flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected))
-          .concat(buildFdAtParXirrCashFlows(fdRows, selected))
           .concat(buildFdMaturedXirrCashFlows(fdRows, selected));
         if (fixedIncomeCurrentValue > 0) flows.push({ date: new Date(), amount: fixedIncomeCurrentValue });
       }
@@ -1688,6 +1704,19 @@
       var nowExcluded = !isFixedIncomeExcluded();
       localStorage.setItem(EXCLUDE_FIXED_INCOME_KEY, nowExcluded ? "true" : "false");
       excludeFixedIncomeToggle.setAttribute("aria-pressed", nowExcluded ? "true" : "false");
+      updateDashboardStats();
+      renderValueChart();
+      renderInvestmentSplitChart();
+    });
+  }
+
+  var excludeSavingsInvestmentToggle = document.getElementById("exclude-savings-investment-toggle");
+  if (excludeSavingsInvestmentToggle) {
+    excludeSavingsInvestmentToggle.setAttribute("aria-pressed", isSavingsInvestmentExcluded() ? "true" : "false");
+    excludeSavingsInvestmentToggle.addEventListener("click", function () {
+      var nowExcluded = !isSavingsInvestmentExcluded();
+      localStorage.setItem(EXCLUDE_SAVINGS_INVESTMENT_KEY, nowExcluded ? "true" : "false");
+      excludeSavingsInvestmentToggle.setAttribute("aria-pressed", nowExcluded ? "true" : "false");
       updateDashboardStats();
       renderValueChart();
       renderInvestmentSplitChart();
@@ -2761,7 +2790,7 @@
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
       var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
-      var fdValueEvents = isFixedIncomeExcluded() ? [] : buildFdValueEvents(selectedPortfolio);
+      var fdValueEvents = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
 
       if (!instruments.length && !epfEvents.length && !fdValueEvents.length) {
         statusEl.hidden = false;
