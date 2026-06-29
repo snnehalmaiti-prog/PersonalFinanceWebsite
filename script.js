@@ -1838,7 +1838,9 @@
   var equityRefreshNavBtn = document.getElementById("equity-refresh-nav");
   if (equityRefreshNavBtn) {
     equityRefreshNavBtn.addEventListener("click", function () {
-      equityRefreshNavBtn.classList.add("spinning");
+      var originalLabel = equityRefreshNavBtn.textContent;
+      equityRefreshNavBtn.disabled = true;
+      equityRefreshNavBtn.textContent = "Refreshing…";
       Object.keys(localStorage).forEach(function (key) {
         if (key.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(key);
       });
@@ -1849,7 +1851,10 @@
       renderMarketSegmentChart();
       renderMutualFundPortfolioSplitChart();
       renderInvestmentSplitChart();
-      equityRefreshNavBtn.classList.remove("spinning");
+      setTimeout(function () {
+        equityRefreshNavBtn.disabled = false;
+        equityRefreshNavBtn.textContent = originalLabel;
+      }, 1500);
     });
   }
 
@@ -2569,7 +2574,10 @@
         } catch (e) {}
         return data;
       })
-      .catch(function () { return []; });
+      .catch(function (err) {
+        console.error("Failed to fetch NAV history for scheme " + schemeCode + ":", err);
+        return [];
+      });
   }
 
   function buildInstrumentIsinMap() {
