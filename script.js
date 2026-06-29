@@ -821,9 +821,10 @@
           : !Object.keys(schemeMap).length
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
-        if (overviewEl) { overviewEl.textContent = formatCurrency(0); overviewEl.title = reason; }
+        var overviewInvestmentNoValue = computeTotalInvestment(selected, ["equity", "fixedincome", "stocksetf"]);
+        if (overviewEl) { overviewEl.textContent = formatCurrency(overviewInvestmentNoValue); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
-        setUnrealizedReturn(overviewReturnEl, overviewPctEl, 0, 0);
+        setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewInvestmentNoValue, overviewInvestmentNoValue);
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
@@ -849,9 +850,12 @@
             if (units > UNITS_EPSILON && prevNav) yesterdayTotal += units * prevNav;
           });
           var investment = investedCostFor(heldInstruments);
-          if (overviewEl) overviewEl.textContent = formatCurrency(total);
+          var unrealizedProfit = total - investment;
+          var overviewInvestment = computeTotalInvestment(selected, ["equity", "fixedincome", "stocksetf"]);
+          var overviewCurrentValue = overviewInvestment + unrealizedProfit;
+          if (overviewEl) overviewEl.textContent = formatCurrency(overviewCurrentValue);
           if (equityEl) equityEl.textContent = formatCurrency(total);
-          setUnrealizedReturn(overviewReturnEl, overviewPctEl, total, investment);
+          setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValue, overviewInvestment);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
           setDayChange(overviewDayChangeEl, total - yesterdayTotal);
           setDayChange(equityDayChangeEl, total - yesterdayTotal);
