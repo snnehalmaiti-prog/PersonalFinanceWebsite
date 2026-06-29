@@ -1000,6 +1000,8 @@
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var rows = getSheetRows("fixedincome");
     var fdRows = getSheetRows("fd");
+    var connectHintEl = document.getElementById("fixedincome-connect-hint");
+    if (connectHintEl) connectHintEl.hidden = !!(rows && rows.length) || !!(fdRows && fdRows.length);
     var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0);
     var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
     if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
@@ -1019,7 +1021,7 @@
 
     var rows = getSheetRows("fixedincome");
     if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your EPF Transactions sheet in Settings to populate this view.";
+      statusEl.textContent = "Connect your Provident Fund (EPF) Transactions sheet in Settings to populate this view.";
       tableWrap.hidden = true;
       return;
     }
