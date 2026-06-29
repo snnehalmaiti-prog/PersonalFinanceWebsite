@@ -2021,6 +2021,37 @@
     return events;
   }
 
+  function buildEpfValueEvents(portfolioFilter) {
+    var rows = getSheetRows("fixedincome");
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var amountIdx = header.indexOf("amount");
+    var categoryIdx = header.indexOf("instrument category");
+    var dateIdx = header.findIndex(function (h) { return h.indexOf("date") !== -1; });
+    if (portfolioIdx === -1 || typeIdx === -1 || amountIdx === -1 || dateIdx === -1) return [];
+
+    var events = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var type = normalizeText(row[typeIdx]);
+      var isDeposit = type.indexOf("deposit") !== -1;
+      var isInterest = type.indexOf("interest") !== -1;
+      if (!isDeposit && !isInterest) return;
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date) return;
+      events.push({ date: date, delta: parseNumber(row[amountIdx]) });
+    });
+
+    events.sort(function (a, b) { return a.date - b.date; });
+    var running = 0;
+    events.forEach(function (e) { running += e.delta; e.cumulativeValue = running; });
+    return events;
+  }
+
   function lastAtOrBefore(sortedEvents, targetDate, valueKey) {
     var lo = 0, hi = sortedEvents.length - 1, result = null;
     while (lo <= hi) {
@@ -2050,8 +2081,9 @@
       var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
+      var epfEvents = buildEpfValueEvents(selectedPortfolio);
 
-      if (!instruments.length) {
+      if (!instruments.length && !epfEvents.length) {
         statusEl.hidden = false;
         statusEl.textContent = skipped
           ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
@@ -2059,7 +2091,7 @@
         return;
       }
 
-      statusEl.textContent = "Fetching NAV history for " + instruments.length + " instrument(s)…";
+      statusEl.textContent = instruments.length ? "Fetching NAV history for " + instruments.length + " instrument(s)…" : "Loading…";
 
       return Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         .then(function (navHistories) {
@@ -2070,6 +2102,7 @@
         instruments.forEach(function (name) {
           (navByInstrument[name] || []).forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         });
+        epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
         var firstTxnDate = null, lastTxnDate = null;
@@ -2082,6 +2115,12 @@
             if (!lastTxnDate || latest > lastTxnDate) lastTxnDate = latest;
           }
         });
+        if (epfEvents.length) {
+          var epfEarliest = epfEvents[0].date;
+          var epfLatest = epfEvents[epfEvents.length - 1].date;
+          if (!firstTxnDate || epfEarliest < firstTxnDate) firstTxnDate = epfEarliest;
+          if (!lastTxnDate || epfLatest > lastTxnDate) lastTxnDate = epfLatest;
+        }
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
@@ -2091,7 +2130,7 @@
         }
 
         var points = timeline.map(function (date) {
-          var total = 0;
+          var total = lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0;
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
