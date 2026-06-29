@@ -1373,9 +1373,14 @@
       var flows = equityFlows.slice();
       if (!isFixedIncomeExcluded()) {
         var epfRows = getSheetRows("fixedincome");
-        var epfCurrentValue = epfRows ? sumEpfAmount(epfRows, selected, true) : 0;
-        flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected));
-        if (epfCurrentValue > 0) flows.push({ date: new Date(), amount: epfCurrentValue });
+        var fdRows = getSheetRows("fd");
+        var fixedIncomeCurrentValue = (epfRows ? sumEpfAmount(epfRows, selected, true) : 0)
+          + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0)
+          + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
+        flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected))
+          .concat(buildFdAtParXirrCashFlows(fdRows, selected))
+          .concat(buildFdMaturedXirrCashFlows(fdRows, selected));
+        if (fixedIncomeCurrentValue > 0) flows.push({ date: new Date(), amount: fixedIncomeCurrentValue });
       }
       return flows;
     }
@@ -1383,8 +1388,12 @@
     function epfUnrealizedProfit() {
       if (isFixedIncomeExcluded()) return 0;
       var epfRows = getSheetRows("fixedincome");
-      if (!epfRows) return 0;
-      return sumEpfAmount(epfRows, selected, true) - sumEpfAmount(epfRows, selected, false);
+      var fdRows = getSheetRows("fd");
+      var epfProfit = epfRows ? sumEpfAmount(epfRows, selected, true) - sumEpfAmount(epfRows, selected, false) : 0;
+      var fdProfit = fdRows
+        ? (sumFdCurrentValueAtPar(fdRows, selected) + sumFdMaturedCurrentValue(fdRows, selected)) - sumFdInvestment(fdRows, selected)
+        : 0;
+      return epfProfit + fdProfit;
     }
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
