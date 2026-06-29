@@ -1067,7 +1067,7 @@
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
 
-  ["equity", "fixedincome", "stocksetf"].forEach(function (prefix) {
+  ["equity", "fixedincome", "fd", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
     updateRefreshButtonStatus(prefix);
     if (!refreshBtn) return;
@@ -1075,6 +1075,7 @@
     refreshBtn.addEventListener("click", function () {
       var configs = loadSheetConfigs(prefix);
       if (!configs.length) return;
+      var canonicalFields = (prefix === "fixedincome" || prefix === "fd") ? FIXED_INCOME_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
       refreshBtn.classList.add("spinning");
       fetchAndMergeSheets(configs, function (merged) {
         refreshBtn.classList.remove("spinning");
@@ -1087,7 +1088,7 @@
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         renderInvestmentSplitChart();
-      }, TRANSACTION_SHEET_FIELDS);
+      }, canonicalFields);
     });
   });
 
