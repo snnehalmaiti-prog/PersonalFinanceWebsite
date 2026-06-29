@@ -1102,6 +1102,16 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .panel-title-row h2 { margin: 0; }
 
+.nav-asof {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.nav-asof svg { flex-shrink: 0; opacity: 0.7; }
+.nav-asof.stale { color: #b45309; }
+.nav-asof.stale svg { opacity: 1; }
+
 .equity-meta {
   display: flex;
   align-items: center;

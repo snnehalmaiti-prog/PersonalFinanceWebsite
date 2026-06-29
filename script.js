@@ -2390,6 +2390,31 @@
     });
   }
 
+  function updateNavAsOf(navHistories) {
+    var asOfEl = document.getElementById("equity-nav-asof");
+    var asOfTextEl = document.getElementById("equity-nav-asof-text");
+    if (!asOfEl || !asOfTextEl) return;
+
+    var latestDate = null;
+    (navHistories || []).forEach(function (navHistory) {
+      if (!navHistory || !navHistory.length) return;
+      var d = navHistory[navHistory.length - 1].date;
+      if (!latestDate || d > latestDate) latestDate = d;
+    });
+
+    if (!latestDate) {
+      asOfEl.hidden = true;
+      return;
+    }
+
+    var today = new Date();
+    var isStale = (today - latestDate) > (1000 * 60 * 60 * 24 * 3);
+    asOfTextEl.textContent = "AMFI NAV data as of " + latestDate.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) +
+      (isStale ? " (may not reflect the latest trading day)" : "");
+    asOfEl.classList.toggle("stale", isStale);
+    asOfEl.hidden = false;
+  }
+
   function renderEquityHoldingsTable() {
     var statusEl = document.getElementById("equity-holdings-status");
     var tableWrap = document.getElementById("equity-holdings-table-wrap");
@@ -2501,6 +2526,7 @@
 
           statusEl.textContent = resolvable.length + " holding(s) with unsold units" + (skipped ? " (" + skipped + " unmapped holding(s) skipped)" : "") + ".";
           tableWrap.hidden = false;
+          updateNavAsOf(navHistories);
         });
     }).catch(function (err) {
       statusEl.textContent = "Couldn't load holdings: " + (err && err.message ? err.message : err);
