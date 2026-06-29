@@ -520,6 +520,70 @@
     return flows;
   }
 
+  // Fixed Deposit rows: Current Value = Investment Amount + interest accrued from Transaction
+  // Date to today (capped at Maturity Date), compounded quarterly at Rate of Return.
+  function sumFdMaturedCurrentValue(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var amountIdx = header.indexOf("investment amount");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var dateIdx = header.indexOf("transaction date");
+    var maturityIdx = header.indexOf("maturity date");
+    var rateIdx = header.indexOf("rate of return");
+    if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1 || maturityIdx === -1 || rateIdx === -1) return 0;
+
+    var today = new Date();
+    var total = 0;
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      if (normalizeText(row[subCategoryIdx]) !== "fixed deposit") return;
+
+      var principal = parseNumber(row[amountIdx]);
+      var rate = parseNumber(row[rateIdx]) / 100;
+      var startDate = parseFlexibleDate(row[dateIdx]);
+      var maturityDate = parseFlexibleDate(row[maturityIdx]);
+      if (!principal || !startDate) return;
+
+      var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
+      var years = (asOfDate - startDate) / (1000 * 60 * 60 * 24 * 365);
+      if (years <= 0 || !rate) {
+        total += principal;
+        return;
+      }
+      total += principal * Math.pow(1 + rate / 4, years * 4);
+    });
+    return total;
+  }
+
+  function buildFdMaturedXirrCashFlows(rows, portfolioFilter) {
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var amountIdx = header.indexOf("investment amount");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1) return [];
+
+    var flows = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      if (normalizeText(row[subCategoryIdx]) !== "fixed deposit") return;
+
+      var amount = parseNumber(row[amountIdx]);
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date || !amount) return;
+      flows.push({ date: date, amount: -amount });
+    });
+    return flows;
+  }
+
   function groupUnitTransactionsByInstrument(rows, portfolioFilter) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -937,11 +1001,11 @@
     var rows = getSheetRows("fixedincome");
     var fdRows = getSheetRows("fd");
     var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0);
-    var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0);
+    var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
     if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
     setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
     if (xirrEl) {
-      var epfCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdAtParXirrCashFlows(fdRows, selected));
+      var epfCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdAtParXirrCashFlows(fdRows, selected)).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
       if (currentValue > 0) epfCashFlows.push({ date: new Date(), amount: currentValue });
       setXirr(xirrEl, calculateXIRR(epfCashFlows));
     }
