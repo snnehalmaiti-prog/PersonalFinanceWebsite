@@ -1697,29 +1697,81 @@
     portfolioToggle.setAttribute("aria-expanded", "true");
   }
 
+  var exclusionsToggle = document.getElementById("exclusions-toggle");
+  var exclusionsMenu = document.getElementById("exclusions-menu");
+  var exclusionsLabel = document.getElementById("exclusions-label");
   var excludeFixedIncomeToggle = document.getElementById("exclude-fixedincome-toggle");
+  var excludeSavingsInvestmentToggle = document.getElementById("exclude-savings-investment-toggle");
+
+  function closeExclusionsMenu() {
+    if (!exclusionsMenu) return;
+    exclusionsMenu.classList.remove("open");
+    if (exclusionsToggle) exclusionsToggle.setAttribute("aria-expanded", "false");
+  }
+
+  function openExclusionsMenu() {
+    if (!exclusionsMenu) return;
+    exclusionsMenu.hidden = false;
+    exclusionsMenu.classList.add("open");
+    if (exclusionsToggle) exclusionsToggle.setAttribute("aria-expanded", "true");
+  }
+
+  function updateExclusionsLabel() {
+    if (!exclusionsLabel) return;
+    var count = (isFixedIncomeExcluded() ? 1 : 0) + (isSavingsInvestmentExcluded() ? 1 : 0);
+    exclusionsLabel.textContent = count ? "Exclusions (" + count + ")" : "Exclusions";
+  }
+
   if (excludeFixedIncomeToggle) {
-    excludeFixedIncomeToggle.setAttribute("aria-pressed", isFixedIncomeExcluded() ? "true" : "false");
+    excludeFixedIncomeToggle.classList.toggle("selected", isFixedIncomeExcluded());
+    excludeFixedIncomeToggle.setAttribute("aria-selected", isFixedIncomeExcluded() ? "true" : "false");
     excludeFixedIncomeToggle.addEventListener("click", function () {
       var nowExcluded = !isFixedIncomeExcluded();
       localStorage.setItem(EXCLUDE_FIXED_INCOME_KEY, nowExcluded ? "true" : "false");
-      excludeFixedIncomeToggle.setAttribute("aria-pressed", nowExcluded ? "true" : "false");
+      excludeFixedIncomeToggle.classList.toggle("selected", nowExcluded);
+      excludeFixedIncomeToggle.setAttribute("aria-selected", nowExcluded ? "true" : "false");
+      updateExclusionsLabel();
       updateDashboardStats();
       renderValueChart();
       renderInvestmentSplitChart();
     });
   }
 
-  var excludeSavingsInvestmentToggle = document.getElementById("exclude-savings-investment-toggle");
   if (excludeSavingsInvestmentToggle) {
-    excludeSavingsInvestmentToggle.setAttribute("aria-pressed", isSavingsInvestmentExcluded() ? "true" : "false");
+    excludeSavingsInvestmentToggle.classList.toggle("selected", isSavingsInvestmentExcluded());
+    excludeSavingsInvestmentToggle.setAttribute("aria-selected", isSavingsInvestmentExcluded() ? "true" : "false");
     excludeSavingsInvestmentToggle.addEventListener("click", function () {
       var nowExcluded = !isSavingsInvestmentExcluded();
       localStorage.setItem(EXCLUDE_SAVINGS_INVESTMENT_KEY, nowExcluded ? "true" : "false");
-      excludeSavingsInvestmentToggle.setAttribute("aria-pressed", nowExcluded ? "true" : "false");
+      excludeSavingsInvestmentToggle.classList.toggle("selected", nowExcluded);
+      excludeSavingsInvestmentToggle.setAttribute("aria-selected", nowExcluded ? "true" : "false");
+      updateExclusionsLabel();
       updateDashboardStats();
       renderValueChart();
       renderInvestmentSplitChart();
+    });
+  }
+
+  updateExclusionsLabel();
+
+  if (exclusionsToggle && exclusionsMenu) {
+    exclusionsToggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (!exclusionsMenu.classList.contains("open")) openExclusionsMenu();
+      else closeExclusionsMenu();
+    });
+
+    document.addEventListener("click", function (e) {
+      if (exclusionsMenu.classList.contains("open") && !exclusionsMenu.contains(e.target) && e.target !== exclusionsToggle) {
+        closeExclusionsMenu();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && exclusionsMenu.classList.contains("open")) {
+        closeExclusionsMenu();
+        exclusionsToggle.focus();
+      }
     });
   }
 

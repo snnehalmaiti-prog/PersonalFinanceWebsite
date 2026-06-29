@@ -304,6 +304,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-weight: 700;
 }
 
+.exclusions-dropdown .portfolio-menu {
+  min-width: 280px;
+}
+.exclusions-dropdown .portfolio-option {
+  white-space: normal;
+}
+
 .menu-toggle {
   display: none;
   flex-direction: column;
