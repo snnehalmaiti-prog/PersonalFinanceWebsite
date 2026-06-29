@@ -388,6 +388,16 @@
     return isParenNegative ? -Math.abs(parsed) : parsed;
   }
 
+  // Percentage-formatted Google Sheets cells come through gvizRowsFromResponse as the raw
+  // numeric value (e.g. 0.087 for a cell displaying "8.70%"), since the column type is
+  // "number" rather than text. Only divide by 100 when the cell text itself carries a "%".
+  function parsePercentRate(value) {
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) return 0;
+    if (raw.indexOf("%") !== -1) return parseNumber(raw) / 100;
+    return parseNumber(raw);
+  }
+
   function validateNumericCell(value) {
     var raw = String(value == null ? "" : value).trim();
     if (!raw) return { ok: false, reason: "is blank" };
@@ -543,7 +553,7 @@
       if (normalizeText(row[subCategoryIdx]) !== "fixed deposit") return;
 
       var principal = parseNumber(row[amountIdx]);
-      var rate = parseNumber(row[rateIdx]) / 100;
+      var rate = parsePercentRate(row[rateIdx]);
       var startDate = parseFlexibleDate(row[dateIdx]);
       var maturityDate = parseFlexibleDate(row[maturityIdx]);
       if (!principal || !startDate) return;
