@@ -1465,6 +1465,7 @@
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+      console.log("[NAV] instruments held:", Object.keys(unitEvents), "resolved scheme codes:", instruments.map(function (name) { return name + " -> " + lookupSchemeCode(schemeMap, name); }));
       if (!instruments.length) {
         var reason = !Object.keys(unitEvents).length
           ? "No equity holdings found in the synced Mutual Fund Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
@@ -2558,10 +2559,12 @@
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && Date.now() - cached.fetchedAt < NAV_CACHE_MAX_AGE_MS) {
         var revived = (cached.data || []).map(function (entry) { return { date: new Date(entry.date), nav: entry.nav }; });
+        console.log("[NAV] scheme " + schemeCode + ": using cached data, latest =", revived.length ? revived[revived.length - 1] : null, "fetched at", new Date(cached.fetchedAt));
         return Promise.resolve(revived);
       }
     } catch (e) {}
 
+    console.log("[NAV] scheme " + schemeCode + ": fetching fresh from api.mfapi.in");
     return fetch("https://api.mfapi.in/mf/" + schemeCode)
       .then(function (res) { return res.json(); })
       .then(function (json) {
@@ -2569,6 +2572,7 @@
           .map(function (entry) { return { date: parseMfApiDate(entry.date), nav: parseNumber(entry.nav) }; })
           .filter(function (entry) { return entry.date; })
           .sort(function (a, b) { return a.date - b.date; });
+        console.log("[NAV] scheme " + schemeCode + ": fetched, latest =", data.length ? data[data.length - 1] : null);
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), data: data }));
         } catch (e) {}
