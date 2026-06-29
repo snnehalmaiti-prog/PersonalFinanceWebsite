@@ -1094,6 +1094,7 @@
     var typeIdx = header.indexOf("transaction type");
     var amountIdx = header.indexOf("amount");
     var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
     if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || amountIdx === -1) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
       tableWrap.hidden = true;
@@ -1108,14 +1109,15 @@
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var instrument = (row[instrumentIdx] || "").trim();
       if (!instrument) return;
+      var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var type = normalizeText(row[typeIdx]);
       var isDeposit = type.indexOf("deposit") !== -1;
       var isInterest = type.indexOf("interest") !== -1;
       if (!isDeposit && !isInterest) return;
 
-      var key = portfolio + "||" + instrument;
+      var key = portfolio + "||" + instrument + "||" + subCategory;
       var amount = parseNumber(row[amountIdx]);
-      if (!byKey[key]) byKey[key] = { portfolio: portfolio, instrument: instrument, invested: 0, current: 0 };
+      if (!byKey[key]) byKey[key] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, invested: 0, current: 0 };
       if (isDeposit) { byKey[key].invested += amount; byKey[key].current += amount; }
       else byKey[key].current += amount;
     });
@@ -1124,7 +1126,7 @@
       var entry = byKey[key];
       var unrealized = entry.current - entry.invested;
       var pct = entry.invested > 0 ? (unrealized / entry.invested) * 100 : 0;
-      return { portfolio: entry.portfolio, instrument: entry.instrument, invested: entry.invested, current: entry.current, unrealized: unrealized, pct: pct };
+      return { portfolio: entry.portfolio, instrument: entry.instrument, subCategory: entry.subCategory, invested: entry.invested, current: entry.current, unrealized: unrealized, pct: pct };
     });
 
     if (!holdings.length) {
@@ -1146,6 +1148,10 @@
       nameTd.className = "fund-name";
       nameTd.textContent = h.instrument;
       tr.appendChild(nameTd);
+
+      var subCategoryTd = document.createElement("td");
+      subCategoryTd.textContent = h.subCategory;
+      tr.appendChild(subCategoryTd);
 
       var investedTd = document.createElement("td");
       investedTd.className = "num";
