@@ -2793,6 +2793,10 @@
       var fdValueEvents = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
 
       if (!instruments.length && !epfEvents.length && !fdValueEvents.length) {
+        if (window.__wfValueChart) {
+          window.__wfValueChart.destroy();
+          window.__wfValueChart = null;
+        }
         statusEl.hidden = false;
         statusEl.textContent = skipped
           ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
