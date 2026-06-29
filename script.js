@@ -676,7 +676,7 @@
     rows.slice(1).forEach(function (row, i) {
       var portfolio = (row[portfolioIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
-      var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1 || type.indexOf("withdraw") !== -1 || type.indexOf("deposit") !== -1 || type.indexOf("contribut") !== -1;
+      var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1 || type.indexOf("withdraw") !== -1 || type.indexOf("deposit") !== -1 || type.indexOf("contribut") !== -1 || type.indexOf("interest") !== -1;
       var issues = [];
       if (!portfolio) issues.push("Portfolio Name is blank");
       if ((prefix === "equity" || prefix === "stocksetf") && !(row[instrumentIdx] || "").trim()) issues.push("Instrument Name is blank");
