@@ -310,6 +310,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .exclusions-dropdown .portfolio-option {
   white-space: normal;
 }
+.exclusions-dropdown .portfolio-toggle {
+  max-width: none;
+  width: max-content;
+}
+#exclusions-label {
+  white-space: nowrap;
+}
 
 .menu-toggle {
   display: none;

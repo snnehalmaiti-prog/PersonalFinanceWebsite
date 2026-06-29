@@ -1702,6 +1702,7 @@
   var exclusionsLabel = document.getElementById("exclusions-label");
   var excludeFixedIncomeToggle = document.getElementById("exclude-fixedincome-toggle");
   var excludeSavingsInvestmentToggle = document.getElementById("exclude-savings-investment-toggle");
+  var exclusionsReset = document.getElementById("exclusions-reset");
 
   function closeExclusionsMenu() {
     if (!exclusionsMenu) return;
@@ -1727,12 +1728,16 @@
       excludeSavingsInvestmentToggle.classList.toggle("selected", savingsInvestmentOn);
       excludeSavingsInvestmentToggle.setAttribute("aria-selected", savingsInvestmentOn ? "true" : "false");
     }
+    if (exclusionsReset) {
+      exclusionsReset.classList.toggle("selected", !fixedIncomeOn && !savingsInvestmentOn);
+      exclusionsReset.setAttribute("aria-selected", !fixedIncomeOn && !savingsInvestmentOn ? "true" : "false");
+    }
     if (exclusionsLabel) {
       exclusionsLabel.textContent = fixedIncomeOn
         ? (excludeFixedIncomeToggle ? excludeFixedIncomeToggle.textContent : "Exclusions")
         : savingsInvestmentOn
         ? (excludeSavingsInvestmentToggle ? excludeSavingsInvestmentToggle.textContent : "Exclusions")
-        : "Exclusions";
+        : "No Exclusion";
     }
   }
 
@@ -1755,6 +1760,17 @@
   if (excludeSavingsInvestmentToggle) {
     excludeSavingsInvestmentToggle.addEventListener("click", function () {
       applyExclusion(EXCLUDE_SAVINGS_INVESTMENT_KEY, EXCLUDE_FIXED_INCOME_KEY);
+    });
+  }
+
+  if (exclusionsReset) {
+    exclusionsReset.addEventListener("click", function () {
+      localStorage.setItem(EXCLUDE_FIXED_INCOME_KEY, "false");
+      localStorage.setItem(EXCLUDE_SAVINGS_INVESTMENT_KEY, "false");
+      syncExclusionOptionState();
+      updateDashboardStats();
+      renderValueChart();
+      renderInvestmentSplitChart();
     });
   }
 
