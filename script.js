@@ -646,6 +646,7 @@
   }
 
   function groupUnitTransactionsByInstrument(rows, portfolioFilter) {
+    if (!rows || !rows.length) return null;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
