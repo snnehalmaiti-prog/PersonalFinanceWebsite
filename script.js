@@ -1324,8 +1324,8 @@
     tableWrap.hidden = false;
   }
 
-  // "Savings/Investment Holding": Fixed Deposit and Savings Account sub-categories.
-  // Investment Corpus has its own dedicated "Fixed Deposit Holding" table below.
+  // "Savings/Investment Holding": Investment Corpus and Savings Account sub-categories.
+  // Fixed Deposit has its own dedicated "Fixed Deposit Holding" table below.
   function renderFdHoldingsTable() {
     var statusEl = document.getElementById("fd-holdings-status");
     var tableWrap = document.getElementById("fd-holdings-table-wrap");
@@ -1340,7 +1340,7 @@
     }
 
     var holdings = buildFdHoldingsList(rows, function (normSubCategory) {
-      return normSubCategory === "fixed deposit" || normSubCategory === "savings account";
+      return normSubCategory === "investment corpus" || normSubCategory === "savings account";
     });
     if (holdings === null) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -1348,10 +1348,10 @@
       return;
     }
 
-    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit/Savings Account holdings found.");
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Investment Corpus/Savings Account holdings found.");
   }
 
-  // "Fixed Deposit Holding": Investment Corpus sub-category only.
+  // "Fixed Deposit Holding": Fixed Deposit sub-category only.
   function renderFixedDepositHoldingsTable() {
     var statusEl = document.getElementById("fixeddeposit-holdings-status");
     var tableWrap = document.getElementById("fixeddeposit-holdings-table-wrap");
@@ -1366,7 +1366,7 @@
     }
 
     var holdings = buildFdHoldingsList(rows, function (normSubCategory) {
-      return normSubCategory === "investment corpus";
+      return normSubCategory === "fixed deposit";
     });
     if (holdings === null) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -1374,7 +1374,7 @@
       return;
     }
 
-    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Investment Corpus holdings found.");
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.");
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
