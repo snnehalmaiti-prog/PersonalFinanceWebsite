@@ -451,12 +451,12 @@
   }
 
   // Fixed Deposit/Savings Account sheet: each row is a standalone holding (no Transaction
-  // Type/buy-sell concept) — Investment Amount is summed directly per row.
+  // Type/buy-sell concept) — Invested Amount is summed directly per row.
   function sumFdInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("investment amount");
+    var amountIdx = header.indexOf("invested amount");
     var categoryIdx = header.indexOf("instrument category");
     if (portfolioIdx === -1 || amountIdx === -1) return 0;
 
@@ -470,14 +470,14 @@
     return total;
   }
 
-  // Investment Corpus and Savings Account rows are held at par — their Investment Amount
+  // Investment Corpus and Savings Account rows are held at par — their Invested Amount
   // counts directly toward Current Value (unlike Fixed Deposit rows, which only count toward
   // Invested Amount until an accrual model is defined).
   function sumFdCurrentValueAtPar(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("investment amount");
+    var amountIdx = header.indexOf("invested amount");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
     if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1) return 0;
@@ -498,7 +498,7 @@
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("investment amount");
+    var amountIdx = header.indexOf("invested amount");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
     var dateIdx = header.indexOf("transaction date");
@@ -520,13 +520,13 @@
     return flows;
   }
 
-  // Fixed Deposit rows: Current Value = Investment Amount + interest accrued from Transaction
+  // Fixed Deposit rows: Current Value = Invested Amount + interest accrued from Transaction
   // Date to today (capped at Maturity Date), compounded quarterly at Rate of Return.
   function sumFdMaturedCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("investment amount");
+    var amountIdx = header.indexOf("invested amount");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
     var dateIdx = header.indexOf("transaction date");
@@ -563,7 +563,7 @@
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("investment amount");
+    var amountIdx = header.indexOf("invested amount");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
     var dateIdx = header.indexOf("transaction date");
@@ -813,7 +813,7 @@
         "instrument name": headerFd.indexOf("instrument name"),
         "instrument category": headerFd.indexOf("instrument category"),
         "instrument sub category": headerFd.indexOf("instrument sub category"),
-        "investment amount": headerFd.indexOf("investment amount"),
+        "invested amount": headerFd.indexOf("invested amount"),
         "maturity date": headerFd.indexOf("maturity date"),
         "rate of return": headerFd.indexOf("rate of return")
       };
@@ -844,8 +844,8 @@
         if (!category) issues.push("Instrument Category is blank");
         if (!subCategory) issues.push("Instrument Sub Category is blank");
         if (!parseFlexibleDate(row[fdIdx["transaction date"]])) issues.push("Transaction Date is blank or not a valid date");
-        var amountCheck = validateNumericCell(row[fdIdx["investment amount"]]);
-        if (!amountCheck.ok) issues.push("Investment Amount " + amountCheck.reason);
+        var amountCheck = validateNumericCell(row[fdIdx["invested amount"]]);
+        if (!amountCheck.ok) issues.push("Invested Amount " + amountCheck.reason);
 
         if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date is mandatory for Fixed Deposit rows but is blank");
         else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date is not a valid date");
@@ -1928,7 +1928,7 @@
     "Instrument Name",
     "Instrument Category",
     "Instrument Sub Category",
-    "Investment Amount",
+    "Invested Amount",
     "Maturity Date",
     "Rate of Return"
   ];
