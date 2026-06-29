@@ -450,6 +450,26 @@
     return total;
   }
 
+  // Fixed Deposit/Savings Account sheet: each row is a standalone holding (no Transaction
+  // Type/buy-sell concept) — Investment Amount is summed directly per row.
+  function sumFdInvestment(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var amountIdx = header.indexOf("investment amount");
+    var categoryIdx = header.indexOf("instrument category");
+    if (portfolioIdx === -1 || amountIdx === -1) return 0;
+
+    var total = 0;
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      total += parseNumber(row[amountIdx]);
+    });
+    return total;
+  }
+
   function groupUnitTransactionsByInstrument(rows, portfolioFilter) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -617,6 +637,7 @@
       if (!rows) return;
       if (prefix === "equity" || prefix === "stocksetf") total += sumUnitBasedBuyInvestment(rows, portfolioFilter);
       else if (prefix === "fixedincome") total += sumEpfAmount(rows, portfolioFilter, false);
+      else if (prefix === "fd") total += sumFdInvestment(rows, portfolioFilter);
       else total += sumInvestmentForRows(rows, portfolioFilter);
     });
     return total;
@@ -668,7 +689,71 @@
       }
       return { missingColumns: false, message: baseMsg };
     }
-    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "fd" && prefix !== "stocksetf") return { missingColumns: false, message: "" };
+    if (prefix === "fd") {
+      var rawHeaderFd = rows[0];
+      var headerFd = rawHeaderFd.map(normalizeText);
+      var fdIdx = {
+        "transaction date": headerFd.indexOf("transaction date"),
+        "portfolio name": headerFd.indexOf("portfolio name"),
+        bank: headerFd.indexOf("bank"),
+        "instrument name": headerFd.indexOf("instrument name"),
+        "instrument category": headerFd.indexOf("instrument category"),
+        "instrument sub category": headerFd.indexOf("instrument sub category"),
+        "investment amount": headerFd.indexOf("investment amount"),
+        "maturity date": headerFd.indexOf("maturity date"),
+        "rate of return": headerFd.indexOf("rate of return")
+      };
+      var missingFd = Object.keys(fdIdx).filter(function (key) { return fdIdx[key] === -1; });
+      if (missingFd.length) {
+        return {
+          missingColumns: true,
+          message: "Header row number is incorrect. Make adjustments by adding correct header row number. Missing column(s): " + missingFd.join(", ") + "."
+        };
+      }
+
+      var fdTotal = sumFdInvestment(rows, "all");
+      var fdBadRows = [];
+      rows.slice(1).forEach(function (row, i) {
+        var portfolio = (row[fdIdx["portfolio name"]] || "").trim();
+        var bank = (row[fdIdx.bank] || "").trim();
+        var instrument = (row[fdIdx["instrument name"]] || "").trim();
+        var category = (row[fdIdx["instrument category"]] || "").trim();
+        var subCategory = (row[fdIdx["instrument sub category"]] || "").trim();
+        var maturityRaw = (row[fdIdx["maturity date"]] || "").trim();
+        var rateRaw = (row[fdIdx["rate of return"]] || "").trim();
+        var isFixedDeposit = normalizeText(category) === "fixed income" && normalizeText(subCategory) === "fixed deposit";
+
+        var issues = [];
+        if (!portfolio) issues.push("Portfolio Name is blank");
+        if (!bank) issues.push("Bank is blank");
+        if (!instrument) issues.push("Instrument Name is blank");
+        if (!category) issues.push("Instrument Category is blank");
+        if (!subCategory) issues.push("Instrument Sub Category is blank");
+        if (!parseFlexibleDate(row[fdIdx["transaction date"]])) issues.push("Transaction Date is blank or not a valid date");
+        var amountCheck = validateNumericCell(row[fdIdx["investment amount"]]);
+        if (!amountCheck.ok) issues.push("Investment Amount " + amountCheck.reason);
+
+        if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date is mandatory for Fixed Deposit rows but is blank");
+        else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date is not a valid date");
+
+        if (isFixedDeposit && !rateRaw) issues.push("Rate of Return is mandatory for Fixed Deposit rows but is blank");
+        else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
+
+        if (issues.length) fdBadRows.push("Row " + (i + 2) + " (" + (portfolio || "unknown portfolio") + "): " + issues.join(", "));
+      });
+
+      var fdBaseMessage = "Synced " + (rows.length - 1) + " rows. Computed total: " + formatCurrency(fdTotal) + ".";
+      if (fdBadRows.length) {
+        var fdPreview = fdBadRows.slice(0, 5).join(" | ");
+        var fdMore = fdBadRows.length > 5 ? " (+" + (fdBadRows.length - 5) + " more)" : "";
+        return {
+          missingColumns: true,
+          message: fdBaseMessage + " Found " + fdBadRows.length + " row(s) with missing/invalid data: " + fdPreview + fdMore + ". Fix these cells in the sheet and sync again."
+        };
+      }
+      return { missingColumns: false, message: fdBaseMessage };
+    }
+    if (prefix !== "equity" && prefix !== "fixedincome" && prefix !== "stocksetf") return { missingColumns: false, message: "" };
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
@@ -1289,7 +1374,7 @@
     refreshBtn.addEventListener("click", function () {
       var configs = loadSheetConfigs(prefix);
       if (!configs.length) return;
-      var canonicalFields = (prefix === "fixedincome" || prefix === "fd") ? FIXED_INCOME_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
+      var canonicalFields = prefix === "fixedincome" ? FIXED_INCOME_SHEET_FIELDS : prefix === "fd" ? FD_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
       refreshBtn.classList.add("spinning");
       fetchAndMergeSheets(configs, function (merged) {
         refreshBtn.classList.remove("spinning");
@@ -1706,6 +1791,18 @@
     "Amount"
   ];
 
+  var FD_SHEET_FIELDS = [
+    "Transaction Date",
+    "Portfolio Name",
+    "Bank",
+    "Instrument Name",
+    "Instrument Category",
+    "Instrument Sub Category",
+    "Investment Amount",
+    "Maturity Date",
+    "Rate of Return"
+  ];
+
   function initMultiSheetCard(prefix, options) {
     options = options || {};
     var listEl = document.getElementById(prefix + "-sheets-list");
@@ -1949,7 +2046,7 @@
 
   initMultiSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("fixedincome", { fields: FIXED_INCOME_SHEET_FIELDS, showTable: false });
-  initMultiSheetCard("fd", { fields: FIXED_INCOME_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("fd", { fields: FD_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initSheetCard("mfmapping");
   initSheetCard("stocksetfmapping");
