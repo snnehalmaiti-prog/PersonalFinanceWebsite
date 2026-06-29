@@ -481,9 +481,24 @@
     return total;
   }
 
-  // Investment Corpus and Savings Account rows are held at par — their Invested Amount
-  // counts directly toward Current Value (unlike Fixed Deposit rows, which only count toward
-  // Invested Amount until an accrual model is defined).
+  // Counts full 1-month periods completed between start and asOf — used for monthly
+  // compounding on Investment Corpus/Savings Account rows.
+  function countElapsedMonths(start, asOf) {
+    if (!start || !asOf || asOf <= start) return 0;
+    var months = 0;
+    var cursor = start;
+    while (true) {
+      var next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
+      if (next > asOf) break;
+      cursor = next;
+      months++;
+    }
+    return months;
+  }
+
+  // Investment Corpus and Savings Account rows: Current Value = Invested Amount + interest
+  // accrued from Transaction Date to today (capped at Maturity Date, if any), compounded
+  // monthly at Rate of Return.
   function sumFdCurrentValueAtPar(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
@@ -491,8 +506,12 @@
     var amountIdx = header.indexOf("invested amount");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
+    var dateIdx = header.indexOf("transaction date");
+    var maturityIdx = header.indexOf("maturity date");
+    var rateIdx = header.indexOf("rate of return");
     if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1) return 0;
 
+    var today = new Date();
     var total = 0;
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
@@ -500,7 +519,23 @@
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var subCategory = normalizeText(row[subCategoryIdx]);
       if (subCategory !== "investment corpus" && subCategory !== "savings account") return;
-      total += parseNumber(row[amountIdx]);
+
+      var principal = parseNumber(row[amountIdx]);
+      var rate = rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0;
+      var startDate = dateIdx !== -1 ? parseFlexibleDate(row[dateIdx]) : null;
+      var maturityDate = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+      if (!startDate || !rate) {
+        total += principal;
+        return;
+      }
+
+      var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
+      var elapsedMonths = countElapsedMonths(startDate, asOfDate);
+      if (elapsedMonths <= 0) {
+        total += principal;
+        return;
+      }
+      total += principal * Math.pow(1 + rate / 12, elapsedMonths);
     });
     return total;
   }
@@ -1184,6 +1219,17 @@
           var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
           if (elapsedQuarters > 0 && rate) {
             current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
+          }
+        }
+      } else if (normSubCategory === "investment corpus" || normSubCategory === "savings account") {
+        var corpusRate = parsePercentRate(row[rateIdx]);
+        var corpusStartDate = parseFlexibleDate(row[dateIdx]);
+        var corpusMaturityDate = parseFlexibleDate(row[maturityIdx]);
+        if (corpusStartDate && corpusRate) {
+          var corpusAsOfDate = corpusMaturityDate && corpusMaturityDate < today ? corpusMaturityDate : today;
+          var elapsedMonths = countElapsedMonths(corpusStartDate, corpusAsOfDate);
+          if (elapsedMonths > 0) {
+            current = invested * Math.pow(1 + corpusRate / 12, elapsedMonths);
           }
         }
       }
