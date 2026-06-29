@@ -376,6 +376,7 @@
     renderValueChart();
     renderEquityHoldingsTable();
     renderFixedIncomeHoldingsTable();
+    renderFdHoldingsTable();
     renderMarketSegmentChart();
     renderMutualFundPortfolioSplitChart();
   }
@@ -1132,6 +1133,115 @@
     tableWrap.hidden = false;
   }
 
+  function renderFdHoldingsTable() {
+    var statusEl = document.getElementById("fd-holdings-status");
+    var tableWrap = document.getElementById("fd-holdings-table-wrap");
+    var tbody = document.getElementById("fd-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var bankIdx = header.indexOf("bank");
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var amountIdx = header.indexOf("invested amount");
+    var dateIdx = header.indexOf("transaction date");
+    var maturityIdx = header.indexOf("maturity date");
+    var rateIdx = header.indexOf("rate of return");
+    if (portfolioIdx === -1 || bankIdx === -1 || instrumentIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1 || maturityIdx === -1 || rateIdx === -1) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var today = new Date();
+    var holdings = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var subCategory = (row[subCategoryIdx] || "").trim();
+      var normSubCategory = normalizeText(subCategory);
+      if (!subCategory) return;
+
+      var invested = parseNumber(row[amountIdx]);
+      var current = invested;
+      if (normSubCategory === "fixed deposit") {
+        var rate = parsePercentRate(row[rateIdx]);
+        var startDate = parseFlexibleDate(row[dateIdx]);
+        var maturityDate = parseFlexibleDate(row[maturityIdx]);
+        if (startDate) {
+          var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
+          var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
+          if (elapsedQuarters > 0 && rate) {
+            current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
+          }
+        }
+      }
+
+      holdings.push({
+        portfolio: portfolio,
+        bank: (row[bankIdx] || "").trim(),
+        instrument: (row[instrumentIdx] || "").trim(),
+        subCategory: subCategory,
+        invested: invested,
+        current: current
+      });
+    });
+
+    if (!holdings.length) {
+      statusEl.textContent = "No Fixed Deposit/Savings Account holdings found.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    tbody.innerHTML = "";
+    holdings.forEach(function (h) {
+      var tr = document.createElement("tr");
+
+      var portfolioTd = document.createElement("td");
+      portfolioTd.textContent = h.portfolio;
+      tr.appendChild(portfolioTd);
+
+      var bankTd = document.createElement("td");
+      bankTd.textContent = h.bank;
+      tr.appendChild(bankTd);
+
+      var nameTd = document.createElement("td");
+      nameTd.className = "fund-name";
+      nameTd.textContent = h.instrument;
+      tr.appendChild(nameTd);
+
+      var subCategoryTd = document.createElement("td");
+      subCategoryTd.textContent = h.subCategory;
+      tr.appendChild(subCategoryTd);
+
+      var investedTd = document.createElement("td");
+      investedTd.className = "num";
+      investedTd.textContent = formatCurrency(h.invested);
+      tr.appendChild(investedTd);
+
+      var currentTd = document.createElement("td");
+      currentTd.className = "num";
+      currentTd.textContent = formatCurrency(h.current);
+      tr.appendChild(currentTd);
+
+      tbody.appendChild(tr);
+    });
+
+    statusEl.textContent = holdings.length + " holding(s).";
+    tableWrap.hidden = false;
+  }
+
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
   // excluded — they're accrued growth already reflected in the terminal balance, not
   // an external contribution. A terminal positive cash flow (current EPF balance) is
@@ -1503,6 +1613,7 @@
   renderValueChart();
   renderEquityHoldingsTable();
   renderFixedIncomeHoldingsTable();
+  renderFdHoldingsTable();
   renderInvestmentSplitChart();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
@@ -1529,6 +1640,7 @@
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         if (prefix === "fixedincome") { renderValueChart(); renderFixedIncomeHoldingsTable(); }
+        if (prefix === "fd") { renderValueChart(); renderFdHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });
