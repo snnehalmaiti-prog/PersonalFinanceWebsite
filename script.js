@@ -890,6 +890,17 @@
     var equityRows = getSheetRows("equity");
     var transactionsByInstrumentForInvestment = groupUnitTransactionsByInstrument(equityRows, selected) || {};
 
+    function overviewXirrCashFlows(equityFlows) {
+      var flows = equityFlows.slice();
+      if (!isFixedIncomeExcluded()) {
+        var epfRows = getSheetRows("fixedincome");
+        var epfCurrentValue = epfRows ? sumEpfAmount(epfRows, selected, true) : 0;
+        flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected));
+        if (epfCurrentValue > 0) flows.push({ date: new Date(), amount: epfCurrentValue });
+      }
+      return flows;
+    }
+
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
     if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
     if (equityEl) { equityEl.textContent = "…"; equityEl.title = loadingMsg; }
@@ -927,7 +938,7 @@
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
-        setXirr(overviewXirrEl, xirrNoValue);
+        setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows)));
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(overviewDayChangeEl, 0);
         setDayChange(equityDayChangeEl, 0);
@@ -962,7 +973,7 @@
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
           var xirr = calculateXIRR(xirrCashFlows);
-          setXirr(overviewXirrEl, xirr);
+          setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows)));
           setXirr(equityXirrEl, xirr);
         });
     });
