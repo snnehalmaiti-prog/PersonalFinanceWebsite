@@ -1835,6 +1835,24 @@
     });
   });
 
+  var equityRefreshNavBtn = document.getElementById("equity-refresh-nav");
+  if (equityRefreshNavBtn) {
+    equityRefreshNavBtn.addEventListener("click", function () {
+      equityRefreshNavBtn.classList.add("spinning");
+      Object.keys(localStorage).forEach(function (key) {
+        if (key.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(key);
+      });
+      localStorage.removeItem(AMFI_ISIN_MAP_CACHE_KEY);
+      updateDashboardStats();
+      renderValueChart();
+      renderEquityHoldingsTable();
+      renderMarketSegmentChart();
+      renderMutualFundPortfolioSplitChart();
+      renderInvestmentSplitChart();
+      equityRefreshNavBtn.classList.remove("spinning");
+    });
+  }
+
   if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
 
