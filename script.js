@@ -2409,8 +2409,7 @@
 
     var today = new Date();
     var isStale = (today - latestDate) > (1000 * 60 * 60 * 24 * 3);
-    asOfTextEl.textContent = "AMFI NAV data as of " + latestDate.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) +
-      (isStale ? " (may not reflect the latest trading day)" : "");
+    asOfTextEl.textContent = "NAV Data: " + latestDate.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
     asOfEl.classList.toggle("stale", isStale);
     asOfEl.hidden = false;
   }
