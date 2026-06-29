@@ -416,6 +416,29 @@
     return total;
   }
 
+  function sumEpfAmount(rows, portfolioFilter, includeInterest) {
+    if (!rows || !rows.length) return 0;
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var amountIdx = header.indexOf("amount");
+    var categoryIdx = header.indexOf("instrument category");
+    if (portfolioIdx === -1 || typeIdx === -1 || amountIdx === -1) return 0;
+
+    var total = 0;
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var type = normalizeText(row[typeIdx]);
+      var isDeposit = type.indexOf("deposit") !== -1;
+      var isInterest = type.indexOf("interest") !== -1;
+      if (!isDeposit && !(includeInterest && isInterest)) return;
+      total += parseNumber(row[amountIdx]);
+    });
+    return total;
+  }
+
   function groupUnitTransactionsByInstrument(rows, portfolioFilter) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -582,6 +605,7 @@
       var rows = getSheetRows(prefix);
       if (!rows) return;
       if (prefix === "equity" || prefix === "stocksetf") total += sumUnitBasedBuyInvestment(rows, portfolioFilter);
+      else if (prefix === "fixedincome") total += sumEpfAmount(rows, portfolioFilter, false);
       else total += sumInvestmentForRows(rows, portfolioFilter);
     });
     return total;
@@ -670,6 +694,8 @@
 
     var total = (prefix === "equity" || prefix === "stocksetf")
       ? sumUnitBasedBuyInvestment(rows, "all")
+      : prefix === "fixedincome"
+      ? sumEpfAmount(rows, "all", false)
       : sumInvestmentForRows(rows, "all");
 
     var badRows = [];
@@ -751,7 +777,21 @@
       setSignedCurrency(equityRealizedEl, computeRealizedReturn(selectedForRealized, ["equity"]));
       setSignedCurrency(stocksEtfRealizedEl, computeRealizedReturn(selectedForRealized, ["stocksetf"]));
     }
+    updateEpfStats();
     updateTotalCurrentValue();
+  }
+
+  function updateEpfStats() {
+    var currentValueEl = document.getElementById("fixedincome-current-value");
+    var profitEl = document.getElementById("fixedincome-unrealized-profit");
+    var pctEl = document.getElementById("fixedincome-return-pct");
+    if (!currentValueEl && !profitEl && !pctEl) return;
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var rows = getSheetRows("fixedincome");
+    var investment = rows ? sumEpfAmount(rows, selected, false) : 0;
+    var currentValue = rows ? sumEpfAmount(rows, selected, true) : 0;
+    if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
+    setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
   }
 
   // Total Current Value: Instrument Name -> ISIN (Mapping sheet) -> Scheme Code
