@@ -1,0 +1,37 @@
+name: Update AMFI NAV data
+
+on:
+  schedule:
+    - cron: "30 16 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch AMFI NAV data
+        run: python3 fetch_amfi_nav.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- amfi_nav.json; then
+            echo "No changes to amfi_nav.json"
+          else
+            git add amfi_nav.json
+            git commit -m "Update AMFI NAV data"
+            git push
+          fi

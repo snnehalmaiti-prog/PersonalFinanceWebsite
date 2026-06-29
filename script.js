@@ -120,6 +120,9 @@
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
+  var AMFI_NAV_MAP_CACHE_KEY = "wf-amfi-nav-map";
+  var AMFI_NAV_MAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+  var AMFI_NAV_MAP_STATIC_FILE = "amfi_nav.json";
   var lastAmfiFetchFailures = [];
 
   function applyTheme(theme) {
@@ -1846,6 +1849,7 @@
         if (key.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(key);
       });
       localStorage.removeItem(AMFI_ISIN_MAP_CACHE_KEY);
+      localStorage.removeItem(AMFI_NAV_MAP_CACHE_KEY);
       updateDashboardStats();
       renderValueChart();
       renderEquityHoldingsTable();
@@ -2553,6 +2557,20 @@
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
+  function withAmfiNavOverride(schemeCode, data) {
+    return fetchAmfiNavMap().then(function (navMap) {
+      var entry = navMap && navMap[schemeCode];
+      if (!entry) return data;
+      var amfiDate = parseAmfiNavDate(entry.date);
+      var amfiNav = parseNumber(entry.nav);
+      if (!amfiDate || !amfiNav) return data;
+      var latest = data.length ? data[data.length - 1] : null;
+      if (latest && latest.date.getTime() >= amfiDate.getTime()) return data;
+      console.log("[NAV] scheme " + schemeCode + ": applying newer AMFI NAV", { date: amfiDate, nav: amfiNav });
+      return data.concat([{ date: amfiDate, nav: amfiNav }]);
+    });
+  }
+
   function fetchNavHistory(schemeCode) {
     var cacheKey = NAV_CACHE_PREFIX + schemeCode;
     try {
@@ -2560,7 +2578,7 @@
       if (cached && Date.now() - cached.fetchedAt < NAV_CACHE_MAX_AGE_MS) {
         var revived = (cached.data || []).map(function (entry) { return { date: new Date(entry.date), nav: entry.nav }; });
         console.log("[NAV] scheme " + schemeCode + ": using cached data, latest =", revived.length ? revived[revived.length - 1] : null, "fetched at", new Date(cached.fetchedAt));
-        return Promise.resolve(revived);
+        return withAmfiNavOverride(schemeCode, revived);
       }
     } catch (e) {}
 
@@ -2581,7 +2599,8 @@
       .catch(function (err) {
         console.error("Failed to fetch NAV history for scheme " + schemeCode + ":", err);
         return [];
-      });
+      })
+      .then(function (data) { return withAmfiNavOverride(schemeCode, data); });
   }
 
   function buildInstrumentIsinMap() {
@@ -2651,6 +2670,43 @@
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (payload) { return payload && payload.data ? payload.data : null; })
       .catch(function () { return null; });
+  }
+
+  // AMFI's own daily NAV file (proxied server-side into amfi_nav.json by a GitHub Actions
+  // workflow), used to fill in NAV values api.mfapi.in hasn't ingested yet.
+  function parseAmfiNavDate(d) {
+    var months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    var parts = String(d || "").trim().split("-");
+    if (parts.length !== 3) return null;
+    var month = months[parts[1].toLowerCase().slice(0, 3)];
+    if (month === undefined) return null;
+    return new Date(Number(parts[2]), month, Number(parts[0]));
+  }
+
+  function fetchStaticAmfiNavMap() {
+    return fetch(AMFI_NAV_MAP_STATIC_FILE, { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (payload) { return payload && payload.data ? payload.data : null; })
+      .catch(function () { return null; });
+  }
+
+  function fetchAmfiNavMap() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(AMFI_NAV_MAP_CACHE_KEY));
+      if (cached && Date.now() - cached.fetchedAt < AMFI_NAV_MAP_MAX_AGE_MS) {
+        return Promise.resolve(cached.data);
+      }
+    } catch (e) {}
+
+    return fetchStaticAmfiNavMap().then(function (staticData) {
+      if (staticData && Object.keys(staticData).length) {
+        try {
+          localStorage.setItem(AMFI_NAV_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData }));
+        } catch (e) {}
+        return staticData;
+      }
+      return {};
+    });
   }
 
   function fetchAmfiIsinToSchemeMap() {
