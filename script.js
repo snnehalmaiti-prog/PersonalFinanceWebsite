@@ -795,13 +795,49 @@
     var currentValueEl = document.getElementById("fixedincome-current-value");
     var profitEl = document.getElementById("fixedincome-unrealized-profit");
     var pctEl = document.getElementById("fixedincome-return-pct");
-    if (!currentValueEl && !profitEl && !pctEl) return;
+    var xirrEl = document.getElementById("fixedincome-xirr");
+    if (!currentValueEl && !profitEl && !pctEl && !xirrEl) return;
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var rows = getSheetRows("fixedincome");
     var investment = rows ? sumEpfAmount(rows, selected, false) : 0;
     var currentValue = rows ? sumEpfAmount(rows, selected, true) : 0;
     if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
     setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
+    if (xirrEl) {
+      var epfCashFlows = buildEpfXirrCashFlows(rows, selected);
+      if (currentValue > 0) epfCashFlows.push({ date: new Date(), amount: currentValue });
+      setXirr(xirrEl, calculateXIRR(epfCashFlows));
+    }
+  }
+
+  // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
+  // excluded — they're accrued growth already reflected in the terminal balance, not
+  // an external contribution. A terminal positive cash flow (current EPF balance) is
+  // appended by the caller.
+  function buildEpfXirrCashFlows(rows, portfolioFilter) {
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var amountIdx = header.indexOf("amount");
+    var categoryIdx = header.indexOf("instrument category");
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || typeIdx === -1 || amountIdx === -1 || dateIdx === -1) return [];
+
+    var flows = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var type = normalizeText(row[typeIdx]);
+      if (type.indexOf("deposit") === -1) return;
+
+      var amount = parseNumber(row[amountIdx]);
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date || !amount) return;
+      flows.push({ date: date, amount: -amount });
+    });
+    return flows;
   }
 
   // Total Current Value: Instrument Name -> ISIN (Mapping sheet) -> Scheme Code
