@@ -1212,6 +1212,9 @@
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var today = new Date();
     var holdings = [];
+    // Investment Corpus/Savings Account rows represent a running balance, not standalone
+    // holdings — only the latest transaction per (Portfolio, Bank, Instrument) counts.
+    var latestCorpusByKey = {};
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
@@ -1219,6 +1222,19 @@
       var subCategory = (row[subCategoryIdx] || "").trim();
       var normSubCategory = normalizeText(subCategory);
       if (!subCategory) return;
+
+      var bank = (row[bankIdx] || "").trim();
+      var instrument = (row[instrumentIdx] || "").trim();
+
+      if (normSubCategory === "investment corpus" || normSubCategory === "savings account") {
+        var corpusDate = parseFlexibleDate(row[dateIdx]);
+        var key = normalizeText(portfolio) + "||" + normalizeText(bank) + "||" + normalizeText(instrument);
+        var existing = latestCorpusByKey[key];
+        if (!existing || (corpusDate && (!existing.date || corpusDate > existing.date))) {
+          latestCorpusByKey[key] = { row: row, date: corpusDate, portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory };
+        }
+        return;
+      }
 
       var invested = parseNumber(row[amountIdx]);
       var current = invested;
@@ -1233,24 +1249,38 @@
             current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
           }
         }
-      } else if (normSubCategory === "investment corpus" || normSubCategory === "savings account") {
-        var corpusRate = parsePercentRate(row[rateIdx]);
-        var corpusStartDate = parseFlexibleDate(row[dateIdx]);
-        var corpusMaturityDate = parseFlexibleDate(row[maturityIdx]);
-        if (corpusStartDate && corpusRate) {
-          var corpusAsOfDate = corpusMaturityDate && corpusMaturityDate < today ? corpusMaturityDate : today;
-          var elapsedMonths = countElapsedMonths(corpusStartDate, corpusAsOfDate);
-          if (elapsedMonths > 0) {
-            current = invested * Math.pow(1 + corpusRate / 12, elapsedMonths);
-          }
-        }
       }
 
       holdings.push({
         portfolio: portfolio,
-        bank: (row[bankIdx] || "").trim(),
-        instrument: (row[instrumentIdx] || "").trim(),
+        bank: bank,
+        instrument: instrument,
         subCategory: subCategory,
+        invested: invested,
+        current: current
+      });
+    });
+
+    Object.keys(latestCorpusByKey).forEach(function (key) {
+      var entry = latestCorpusByKey[key];
+      var row = entry.row;
+      var invested = parseNumber(row[amountIdx]);
+      var current = invested;
+      var rate = parsePercentRate(row[rateIdx]);
+      var startDate = entry.date;
+      var maturityDate = parseFlexibleDate(row[maturityIdx]);
+      if (startDate && rate) {
+        var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
+        var elapsedMonths = countElapsedMonths(startDate, asOfDate);
+        if (elapsedMonths > 0) {
+          current = invested * Math.pow(1 + rate / 12, elapsedMonths);
+        }
+      }
+      holdings.push({
+        portfolio: entry.portfolio,
+        bank: entry.bank,
+        instrument: entry.instrument,
+        subCategory: entry.subCategory,
         invested: invested,
         current: current
       });
