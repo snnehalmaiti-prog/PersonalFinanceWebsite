@@ -462,23 +462,16 @@
     return total;
   }
 
-  // Fixed Deposit/Savings Account sheet: each row is a standalone holding (no Transaction
-  // Type/buy-sell concept) — Invested Amount is summed directly per row.
+  // Fixed Deposit/Savings Account sheet: sums Invested Amount across the same deduped
+  // holdings shown in the "Savings/Investment Holding" and "Fixed Deposit Holding" tables
+  // (Investment Corpus/Savings Account collapsed to their latest transaction per
+  // Portfolio/Bank/Instrument, Fixed Deposit rows summed standalone).
   function sumFdInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("invested amount");
-    var categoryIdx = header.indexOf("instrument category");
-    if (portfolioIdx === -1 || amountIdx === -1) return 0;
-
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function () { return true; });
+    if (!holdings) return 0;
     var total = 0;
-    rows.slice(1).forEach(function (row) {
-      var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
-      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
-      total += parseNumber(row[amountIdx]);
-    });
+    holdings.forEach(function (h) { total += h.invested; });
     return total;
   }
 
@@ -499,45 +492,16 @@
 
   // Investment Corpus and Savings Account rows: Current Value = Invested Amount + interest
   // accrued from Transaction Date to today (capped at Maturity Date, if any), compounded
-  // monthly at Rate of Return.
+  // monthly at Rate of Return. Deduped to the latest transaction per Portfolio/Bank/Instrument,
+  // matching the "Savings/Investment Holding" table.
   function sumFdCurrentValueAtPar(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("invested amount");
-    var categoryIdx = header.indexOf("instrument category");
-    var subCategoryIdx = header.indexOf("instrument sub category");
-    var dateIdx = header.indexOf("transaction date");
-    var maturityIdx = header.indexOf("maturity date");
-    var rateIdx = header.indexOf("rate of return");
-    if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1) return 0;
-
-    var today = new Date();
-    var total = 0;
-    rows.slice(1).forEach(function (row) {
-      var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
-      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
-      var subCategory = normalizeText(row[subCategoryIdx]);
-      if (subCategory !== "investment corpus" && subCategory !== "savings account") return;
-
-      var principal = parseNumber(row[amountIdx]);
-      var rate = rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0;
-      var startDate = dateIdx !== -1 ? parseFlexibleDate(row[dateIdx]) : null;
-      var maturityDate = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
-      if (!startDate || !rate) {
-        total += principal;
-        return;
-      }
-
-      var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
-      var elapsedMonths = countElapsedMonths(startDate, asOfDate);
-      if (elapsedMonths <= 0) {
-        total += principal;
-        return;
-      }
-      total += principal * Math.pow(1 + rate / 12, elapsedMonths);
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
+      return normSubCategory === "investment corpus" || normSubCategory === "savings account";
     });
+    if (!holdings) return 0;
+    var total = 0;
+    holdings.forEach(function (h) { total += h.current; });
     return total;
   }
 
@@ -584,40 +548,16 @@
 
   // Fixed Deposit rows: Current Value = Invested Amount + interest accrued from Transaction
   // Date to today (capped at Maturity Date), compounded quarterly at Rate of Return.
+  // Fixed Deposit rows: Current Value via the same quarterly-compounding logic as the
+  // "Fixed Deposit Holding" table (each row stands alone, no dedup needed).
   function sumFdMaturedCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("invested amount");
-    var categoryIdx = header.indexOf("instrument category");
-    var subCategoryIdx = header.indexOf("instrument sub category");
-    var dateIdx = header.indexOf("transaction date");
-    var maturityIdx = header.indexOf("maturity date");
-    var rateIdx = header.indexOf("rate of return");
-    if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1 || maturityIdx === -1 || rateIdx === -1) return 0;
-
-    var today = new Date();
-    var total = 0;
-    rows.slice(1).forEach(function (row) {
-      var portfolio = (row[portfolioIdx] || "").trim();
-      if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
-      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
-      if (normalizeText(row[subCategoryIdx]) !== "fixed deposit") return;
-
-      var principal = parseNumber(row[amountIdx]);
-      var rate = parsePercentRate(row[rateIdx]);
-      var startDate = parseFlexibleDate(row[dateIdx]);
-      var maturityDate = parseFlexibleDate(row[maturityIdx]);
-      if (!principal || !startDate) return;
-
-      var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
-      var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
-      if (elapsedQuarters <= 0 || !rate) {
-        total += principal;
-        return;
-      }
-      total += principal * Math.pow(1 + rate / 4, elapsedQuarters);
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
+      return normSubCategory === "fixed deposit";
     });
+    if (!holdings) return 0;
+    var total = 0;
+    holdings.forEach(function (h) { total += h.current; });
     return total;
   }
 
@@ -1183,7 +1123,7 @@
 
   // Shared by the "Savings/Investment Holding" and "Fixed Deposit Holding" tables —
   // both read the same FD sheet but render mutually-exclusive Instrument Sub Category subsets.
-  function buildFdHoldingsList(rows, includeSubCategory) {
+  function buildFdHoldingsList(rows, portfolioFilter, includeSubCategory) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var bankIdx = header.indexOf("bank");
@@ -1198,7 +1138,6 @@
       return null;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var today = new Date();
     var holdings = [];
     // Investment Corpus/Savings Account rows represent a running balance, not standalone
@@ -1206,7 +1145,7 @@
     var latestCorpusByKey = {};
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
-      if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var subCategory = (row[subCategoryIdx] || "").trim();
       var normSubCategory = normalizeText(subCategory);
@@ -1339,7 +1278,8 @@
       return;
     }
 
-    var holdings = buildFdHoldingsList(rows, function (normSubCategory) {
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var holdings = buildFdHoldingsList(rows, selectedPortfolio, function (normSubCategory) {
       return normSubCategory === "investment corpus" || normSubCategory === "savings account";
     });
     if (holdings === null) {
@@ -1365,7 +1305,8 @@
       return;
     }
 
-    var holdings = buildFdHoldingsList(rows, function (normSubCategory) {
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var holdings = buildFdHoldingsList(rows, selectedPortfolio, function (normSubCategory) {
       return normSubCategory === "fixed deposit";
     });
     if (holdings === null) {
