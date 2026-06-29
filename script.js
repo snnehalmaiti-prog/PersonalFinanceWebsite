@@ -1101,7 +1101,7 @@
     }
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var byInstrument = {};
+    var byKey = {};
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
@@ -1113,17 +1113,18 @@
       var isInterest = type.indexOf("interest") !== -1;
       if (!isDeposit && !isInterest) return;
 
+      var key = portfolio + "||" + instrument;
       var amount = parseNumber(row[amountIdx]);
-      if (!byInstrument[instrument]) byInstrument[instrument] = { invested: 0, current: 0 };
-      if (isDeposit) { byInstrument[instrument].invested += amount; byInstrument[instrument].current += amount; }
-      else byInstrument[instrument].current += amount;
+      if (!byKey[key]) byKey[key] = { portfolio: portfolio, instrument: instrument, invested: 0, current: 0 };
+      if (isDeposit) { byKey[key].invested += amount; byKey[key].current += amount; }
+      else byKey[key].current += amount;
     });
 
-    var holdings = Object.keys(byInstrument).map(function (instrument) {
-      var entry = byInstrument[instrument];
+    var holdings = Object.keys(byKey).map(function (key) {
+      var entry = byKey[key];
       var unrealized = entry.current - entry.invested;
       var pct = entry.invested > 0 ? (unrealized / entry.invested) * 100 : 0;
-      return { instrument: instrument, invested: entry.invested, current: entry.current, unrealized: unrealized, pct: pct };
+      return { portfolio: entry.portfolio, instrument: entry.instrument, invested: entry.invested, current: entry.current, unrealized: unrealized, pct: pct };
     });
 
     if (!holdings.length) {
@@ -1136,6 +1137,10 @@
     holdings.forEach(function (h) {
       var tr = document.createElement("tr");
       var cls = h.unrealized > 0 ? "positive" : (h.unrealized < 0 ? "negative" : "");
+
+      var portfolioTd = document.createElement("td");
+      portfolioTd.textContent = h.portfolio;
+      tr.appendChild(portfolioTd);
 
       var nameTd = document.createElement("td");
       nameTd.className = "fund-name";
