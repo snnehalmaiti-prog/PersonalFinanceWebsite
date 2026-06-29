@@ -349,6 +349,16 @@
   // ===== Portfolio selector =====
   var PORTFOLIO_NAMES_KEY = "wf-portfolio-names";
   var SELECTED_PORTFOLIO_KEY = "wf-selected-portfolio";
+  var EXCLUDE_FIXED_INCOME_KEY = "wf-exclude-fixedincome";
+
+  function isFixedIncomeExcluded() {
+    return localStorage.getItem(EXCLUDE_FIXED_INCOME_KEY) === "true";
+  }
+
+  function overviewInvestmentPrefixes() {
+    var base = ["equity", "fixedincome", "fd", "stocksetf"];
+    return isFixedIncomeExcluded() ? base.filter(function (p) { return p !== "fixedincome" && p !== "fd"; }) : base;
+  }
 
   function getStoredPortfolioNames() {
     try {
@@ -766,7 +776,7 @@
     var stocksEtfRealizedEl = document.getElementById("stocksetf-realized-return");
     if (overviewEl || equityEl || fixedIncomeEl || stocksEtfEl) {
       var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity", "fixedincome", "fd", "stocksetf"]));
+      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, overviewInvestmentPrefixes()));
       if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
       if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome", "fd"]));
       if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(computeTotalInvestment(selected, ["stocksetf"]));
@@ -874,7 +884,7 @@
           : !Object.keys(schemeMap).length
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
-        var overviewInvestmentNoValue = computeTotalInvestment(selected, ["equity", "fixedincome", "fd", "stocksetf"]);
+        var overviewInvestmentNoValue = computeTotalInvestment(selected, overviewInvestmentPrefixes());
         if (overviewEl) { overviewEl.textContent = formatCurrency(overviewInvestmentNoValue); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
         setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewInvestmentNoValue, overviewInvestmentNoValue);
@@ -904,7 +914,7 @@
           });
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
-          var overviewInvestment = computeTotalInvestment(selected, ["equity", "fixedincome", "fd", "stocksetf"]);
+          var overviewInvestment = computeTotalInvestment(selected, overviewInvestmentPrefixes());
           var overviewCurrentValue = overviewInvestment + unrealizedProfit;
           if (overviewEl) overviewEl.textContent = formatCurrency(overviewCurrentValue);
           if (equityEl) equityEl.textContent = formatCurrency(total);
@@ -1097,6 +1107,19 @@
     portfolioMenu.hidden = false;
     portfolioMenu.classList.add("open");
     portfolioToggle.setAttribute("aria-expanded", "true");
+  }
+
+  var excludeFixedIncomeToggle = document.getElementById("exclude-fixedincome-toggle");
+  if (excludeFixedIncomeToggle) {
+    excludeFixedIncomeToggle.setAttribute("aria-pressed", isFixedIncomeExcluded() ? "true" : "false");
+    excludeFixedIncomeToggle.addEventListener("click", function () {
+      var nowExcluded = !isFixedIncomeExcluded();
+      localStorage.setItem(EXCLUDE_FIXED_INCOME_KEY, nowExcluded ? "true" : "false");
+      excludeFixedIncomeToggle.setAttribute("aria-pressed", nowExcluded ? "true" : "false");
+      updateDashboardStats();
+      renderValueChart();
+      renderInvestmentSplitChart();
+    });
   }
 
   updateDashboardStats();
@@ -2081,7 +2104,7 @@
       var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
-      var epfEvents = buildEpfValueEvents(selectedPortfolio);
+      var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
 
       if (!instruments.length && !epfEvents.length) {
         statusEl.hidden = false;
@@ -2328,7 +2351,7 @@
     var statusEl = document.getElementById("portfolio-split-status");
     if (!canvas || !statusEl || typeof Chart === "undefined") return;
 
-    var prefixes = ["equity", "stocksetf", "fixedincome", "fd"];
+    var prefixes = overviewInvestmentPrefixes();
     var names = collectPortfolioNamesFromSheets(prefixes);
     if (!names.length) {
       statusEl.textContent = "No portfolios found yet. Connect your transaction sheets in Settings.";

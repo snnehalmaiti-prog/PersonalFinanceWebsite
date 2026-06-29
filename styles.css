@@ -133,6 +133,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   color: var(--text);
 }
 .btn-outline:hover { border-color: var(--emerald); color: var(--emerald); }
+.btn-outline[aria-pressed="true"] { background: var(--emerald); border-color: var(--emerald); color: #fff; }
 
 .btn-ghost {
   background: transparent;
