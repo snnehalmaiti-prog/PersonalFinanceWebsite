@@ -1480,6 +1480,16 @@
     "Price"
   ];
 
+  var FIXED_INCOME_SHEET_FIELDS = [
+    "Transaction Date",
+    "Portfolio Name",
+    "Instrument Name",
+    "Instrument Category",
+    "Instrument Sub Category",
+    "Transaction Type",
+    "Amount"
+  ];
+
   function initMultiSheetCard(prefix, options) {
     options = options || {};
     var listEl = document.getElementById(prefix + "-sheets-list");
@@ -1722,8 +1732,8 @@
   }
 
   initMultiSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
-  initMultiSheetCard("fixedincome", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
-  initMultiSheetCard("fd", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("fixedincome", { fields: FIXED_INCOME_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("fd", { fields: FIXED_INCOME_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initSheetCard("mfmapping");
   initSheetCard("stocksetfmapping");
