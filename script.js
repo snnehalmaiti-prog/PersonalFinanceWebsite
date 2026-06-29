@@ -377,6 +377,7 @@
     renderEquityHoldingsTable();
     renderFixedIncomeHoldingsTable();
     renderFdHoldingsTable();
+    renderFixedDepositHoldingsTable();
     renderMarketSegmentChart();
     renderMutualFundPortfolioSplitChart();
   }
@@ -1180,19 +1181,9 @@
     tableWrap.hidden = false;
   }
 
-  function renderFdHoldingsTable() {
-    var statusEl = document.getElementById("fd-holdings-status");
-    var tableWrap = document.getElementById("fd-holdings-table-wrap");
-    var tbody = document.getElementById("fd-holdings-tbody");
-    if (!statusEl || !tableWrap || !tbody) return;
-
-    var rows = getSheetRows("fd");
-    if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
-      tableWrap.hidden = true;
-      return;
-    }
-
+  // Shared by the "Savings/Investment Holding" and "Fixed Deposit Holding" tables —
+  // both read the same FD sheet but render mutually-exclusive Instrument Sub Category subsets.
+  function buildFdHoldingsList(rows, includeSubCategory) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var bankIdx = header.indexOf("bank");
@@ -1204,9 +1195,7 @@
     var maturityIdx = header.indexOf("maturity date");
     var rateIdx = header.indexOf("rate of return");
     if (portfolioIdx === -1 || bankIdx === -1 || instrumentIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1 || maturityIdx === -1 || rateIdx === -1) {
-      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
-      tableWrap.hidden = true;
-      return;
+      return null;
     }
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
@@ -1222,6 +1211,7 @@
       var subCategory = (row[subCategoryIdx] || "").trim();
       var normSubCategory = normalizeText(subCategory);
       if (!subCategory) return;
+      if (!includeSubCategory(normSubCategory)) return;
 
       var bank = (row[bankIdx] || "").trim();
       var instrument = (row[instrumentIdx] || "").trim();
@@ -1286,8 +1276,12 @@
       });
     });
 
-    if (!holdings.length) {
-      statusEl.textContent = "No Fixed Deposit/Savings Account holdings found.";
+    return holdings;
+  }
+
+  function renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, emptyMessage) {
+    if (!holdings || !holdings.length) {
+      statusEl.textContent = emptyMessage;
       tableWrap.hidden = true;
       return;
     }
@@ -1328,6 +1322,59 @@
 
     statusEl.textContent = holdings.length + " holding(s).";
     tableWrap.hidden = false;
+  }
+
+  // "Savings/Investment Holding": Fixed Deposit and Savings Account sub-categories.
+  // Investment Corpus has its own dedicated "Fixed Deposit Holding" table below.
+  function renderFdHoldingsTable() {
+    var statusEl = document.getElementById("fd-holdings-status");
+    var tableWrap = document.getElementById("fd-holdings-table-wrap");
+    var tbody = document.getElementById("fd-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var holdings = buildFdHoldingsList(rows, function (normSubCategory) {
+      return normSubCategory === "fixed deposit" || normSubCategory === "savings account";
+    });
+    if (holdings === null) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit/Savings Account holdings found.");
+  }
+
+  // "Fixed Deposit Holding": Investment Corpus sub-category only.
+  function renderFixedDepositHoldingsTable() {
+    var statusEl = document.getElementById("fixeddeposit-holdings-status");
+    var tableWrap = document.getElementById("fixeddeposit-holdings-table-wrap");
+    var tbody = document.getElementById("fixeddeposit-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var holdings = buildFdHoldingsList(rows, function (normSubCategory) {
+      return normSubCategory === "investment corpus";
+    });
+    if (holdings === null) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Investment Corpus holdings found.");
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
@@ -1711,6 +1758,7 @@
   renderEquityHoldingsTable();
   renderFixedIncomeHoldingsTable();
   renderFdHoldingsTable();
+  renderFixedDepositHoldingsTable();
   renderInvestmentSplitChart();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
@@ -1737,7 +1785,7 @@
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         if (prefix === "fixedincome") { renderValueChart(); renderFixedIncomeHoldingsTable(); }
-        if (prefix === "fd") { renderValueChart(); renderFdHoldingsTable(); }
+        if (prefix === "fd") { renderValueChart(); renderFdHoldingsTable(); renderFixedDepositHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });

@@ -341,7 +341,7 @@
 
       <div class="holdings-card">
         <div class="holdings-card-header">
-          <h3>Fixed/Savings Holding</h3>
+          <h3>Savings/Investment Holding</h3>
         </div>
         <p class="muted small" id="fd-holdings-status">Loading holdings…</p>
         <div id="fd-holdings-table-wrap" class="holdings-table-wrap" hidden>
@@ -360,9 +360,31 @@
           </table>
         </div>
       </div>
+
+      <div class="holdings-card">
+        <div class="holdings-card-header">
+          <h3>Fixed Deposit Holding</h3>
+        </div>
+        <p class="muted small" id="fixeddeposit-holdings-status">Loading holdings…</p>
+        <div id="fixeddeposit-holdings-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="fixeddeposit-holdings-table" class="holdings-table">
+            <thead>
+              <tr>
+                <th>Portfolio Name</th>
+                <th>Bank</th>
+                <th class="fund-name-col">Instrument Name</th>
+                <th>Instrument Sub Category</th>
+                <th class="num">Invested Amount</th>
+                <th class="num">Current Value</th>
+              </tr>
+            </thead>
+            <tbody id="fixeddeposit-holdings-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
 
-  <script src="script.js?v=14fb4df"></script>
+  <script src="script.js?v=aba9fce"></script>
 </body>
 </html>
