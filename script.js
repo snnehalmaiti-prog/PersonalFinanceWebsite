@@ -788,8 +788,8 @@
 
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var unitEvents = buildInstrumentUnitEvents(selected);
-    var investment = computeTotalInvestment(selected, ["equity"]);
     var equityRows = getSheetRows("equity");
+    var transactionsByInstrumentForInvestment = groupUnitTransactionsByInstrument(equityRows, selected) || {};
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
     if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
@@ -803,6 +803,16 @@
     if (overviewDayChangeEl) overviewDayChangeEl.textContent = "…";
     if (equityDayChangeEl) equityDayChangeEl.textContent = "…";
 
+    function investedCostFor(instrumentNames) {
+      var total = 0;
+      instrumentNames.forEach(function (name) {
+        var txns = transactionsByInstrumentForInvestment[name];
+        if (!txns) return;
+        fifoRemainingLots(txns).forEach(function (lot) { total += lot.units * lot.price; });
+      });
+      return total;
+    }
+
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       if (!instruments.length) {
@@ -813,8 +823,8 @@
           : "None of your equity instruments matched a resolved Scheme Code.";
         if (overviewEl) { overviewEl.textContent = formatCurrency(0); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
-        setUnrealizedReturn(overviewReturnEl, overviewPctEl, 0, investment);
-        setUnrealizedReturn(equityReturnEl, equityPctEl, 0, investment);
+        setUnrealizedReturn(overviewReturnEl, overviewPctEl, 0, 0);
+        setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
         setXirr(overviewXirrEl, xirrNoValue);
@@ -828,15 +838,17 @@
         .then(function (navHistories) {
           var total = 0;
           var yesterdayTotal = 0;
+          var heldInstruments = [];
           instruments.forEach(function (name, i) {
             var navHistory = navHistories[i];
             var events = unitEvents[name];
             var units = events.length ? events[events.length - 1].cumulativeUnits : 0;
             var nav = latest_nav_for(navHistory);
             var prevNav = previous_nav_for(navHistory);
-            if (units > UNITS_EPSILON && nav) total += units * nav;
+            if (units > UNITS_EPSILON && nav) { total += units * nav; heldInstruments.push(name); }
             if (units > UNITS_EPSILON && prevNav) yesterdayTotal += units * prevNav;
           });
+          var investment = investedCostFor(heldInstruments);
           if (overviewEl) overviewEl.textContent = formatCurrency(total);
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(overviewReturnEl, overviewPctEl, total, investment);
