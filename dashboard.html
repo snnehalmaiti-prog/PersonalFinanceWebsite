@@ -315,9 +315,30 @@
       </div>
 
       <p class="muted small" style="margin-top:24px;">Connect your fixed income transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
+
+      <div class="holdings-card">
+        <div class="holdings-card-header">
+          <h3>Holdings</h3>
+        </div>
+        <p class="muted small" id="fixedincome-holdings-status">Loading holdings…</p>
+        <div id="fixedincome-holdings-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="fixedincome-holdings-table" class="holdings-table">
+            <thead>
+              <tr>
+                <th class="fund-name-col">Instrument Name</th>
+                <th class="num">Invested Amount</th>
+                <th class="num">Current Value</th>
+                <th class="num">Unrealized Profit</th>
+                <th class="num">Return %</th>
+              </tr>
+            </thead>
+            <tbody id="fixedincome-holdings-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
 
-  <script src="script.js?v=07b59b8"></script>
+  <script src="script.js?v=5823178"></script>
 </body>
 </html>

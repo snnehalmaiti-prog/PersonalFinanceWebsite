@@ -375,6 +375,7 @@
     updateDashboardStats();
     renderValueChart();
     renderEquityHoldingsTable();
+    renderFixedIncomeHoldingsTable();
     renderMarketSegmentChart();
     renderMutualFundPortfolioSplitChart();
   }
@@ -810,6 +811,100 @@
     }
   }
 
+  function renderFixedIncomeHoldingsTable() {
+    var statusEl = document.getElementById("fixedincome-holdings-status");
+    var tableWrap = document.getElementById("fixedincome-holdings-table-wrap");
+    var tbody = document.getElementById("fixedincome-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("fixedincome");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your EPF Transactions sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var typeIdx = header.indexOf("transaction type");
+    var amountIdx = header.indexOf("amount");
+    var categoryIdx = header.indexOf("instrument category");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || amountIdx === -1) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var byInstrument = {};
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var instrument = (row[instrumentIdx] || "").trim();
+      if (!instrument) return;
+      var type = normalizeText(row[typeIdx]);
+      var isDeposit = type.indexOf("deposit") !== -1;
+      var isInterest = type.indexOf("interest") !== -1;
+      if (!isDeposit && !isInterest) return;
+
+      var amount = parseNumber(row[amountIdx]);
+      if (!byInstrument[instrument]) byInstrument[instrument] = { invested: 0, current: 0 };
+      if (isDeposit) { byInstrument[instrument].invested += amount; byInstrument[instrument].current += amount; }
+      else byInstrument[instrument].current += amount;
+    });
+
+    var holdings = Object.keys(byInstrument).map(function (instrument) {
+      var entry = byInstrument[instrument];
+      var unrealized = entry.current - entry.invested;
+      var pct = entry.invested > 0 ? (unrealized / entry.invested) * 100 : 0;
+      return { instrument: instrument, invested: entry.invested, current: entry.current, unrealized: unrealized, pct: pct };
+    });
+
+    if (!holdings.length) {
+      statusEl.textContent = "No EPF holdings found.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    tbody.innerHTML = "";
+    holdings.forEach(function (h) {
+      var tr = document.createElement("tr");
+      var cls = h.unrealized > 0 ? "positive" : (h.unrealized < 0 ? "negative" : "");
+
+      var nameTd = document.createElement("td");
+      nameTd.className = "fund-name";
+      nameTd.textContent = h.instrument;
+      tr.appendChild(nameTd);
+
+      var investedTd = document.createElement("td");
+      investedTd.className = "num";
+      investedTd.textContent = formatCurrency(h.invested);
+      tr.appendChild(investedTd);
+
+      var currentTd = document.createElement("td");
+      currentTd.className = "num";
+      currentTd.textContent = formatCurrency(h.current);
+      tr.appendChild(currentTd);
+
+      var unrealizedTd = document.createElement("td");
+      unrealizedTd.className = "num " + cls;
+      unrealizedTd.textContent = (h.unrealized > 0 ? "+" : "") + formatCurrency(h.unrealized);
+      tr.appendChild(unrealizedTd);
+
+      var pctTd = document.createElement("td");
+      pctTd.className = "num " + cls;
+      pctTd.textContent = (h.pct > 0 ? "+" : "") + h.pct.toFixed(2) + "%";
+      tr.appendChild(pctTd);
+
+      tbody.appendChild(tr);
+    });
+
+    statusEl.textContent = holdings.length + " holding(s).";
+    tableWrap.hidden = false;
+  }
+
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
   // excluded — they're accrued growth already reflected in the terminal balance, not
   // an external contribution. A terminal positive cash flow (current EPF balance) is
@@ -1180,6 +1275,7 @@
   updateDashboardStats();
   renderValueChart();
   renderEquityHoldingsTable();
+  renderFixedIncomeHoldingsTable();
   renderInvestmentSplitChart();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
@@ -1205,6 +1301,7 @@
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
+        if (prefix === "fixedincome") { renderValueChart(); renderFixedIncomeHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });
