@@ -901,6 +901,13 @@
       return flows;
     }
 
+    function epfUnrealizedProfit() {
+      if (isFixedIncomeExcluded()) return 0;
+      var epfRows = getSheetRows("fixedincome");
+      if (!epfRows) return 0;
+      return sumEpfAmount(epfRows, selected, true) - sumEpfAmount(epfRows, selected, false);
+    }
+
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
     if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
     if (equityEl) { equityEl.textContent = "…"; equityEl.title = loadingMsg; }
@@ -932,9 +939,10 @@
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
         var overviewInvestmentNoValue = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-        if (overviewEl) { overviewEl.textContent = formatCurrency(overviewInvestmentNoValue); overviewEl.title = reason; }
+        var overviewCurrentValueNoValue = overviewInvestmentNoValue + epfUnrealizedProfit();
+        if (overviewEl) { overviewEl.textContent = formatCurrency(overviewCurrentValueNoValue); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
-        setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewInvestmentNoValue, overviewInvestmentNoValue);
+        setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValueNoValue, overviewInvestmentNoValue);
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
@@ -962,7 +970,7 @@
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
           var overviewInvestment = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-          var overviewCurrentValue = overviewInvestment + unrealizedProfit;
+          var overviewCurrentValue = overviewInvestment + unrealizedProfit + epfUnrealizedProfit();
           if (overviewEl) overviewEl.textContent = formatCurrency(overviewCurrentValue);
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValue, overviewInvestment);
