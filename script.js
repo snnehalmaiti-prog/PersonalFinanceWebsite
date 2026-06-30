@@ -429,10 +429,7 @@
     updateDashboardStats();
     renderValueChart();
     renderEquityHoldingsTable();
-    renderFixedIncomeHoldingsTable();
     renderAllFixedIncomeHoldingsTable();
-    renderFdHoldingsTable();
-    renderFixedDepositHoldingsTable();
     renderCommodityHoldingsTable();
     renderMarketSegmentChart();
     renderMutualFundPortfolioSplitChart();
@@ -1425,8 +1422,9 @@
     return holdings;
   }
 
-  function buildAllFixedIncomeHoldingsList(rows, portfolioFilter) {
-    var header = rows[0].map(normalizeText);
+  // Builds holdings from the FD sheet (all Fixed Income sub-categories).
+  function buildFdFixedIncomeHoldingsList(fdRows, portfolioFilter) {
+    var header = fdRows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var bankIdx = header.indexOf("bank");
     var instrumentIdx = header.indexOf("instrument name");
@@ -1442,12 +1440,11 @@
     var today = new Date();
     var holdings = [];
     var latestCorpusByKey = {};
-    rows.slice(1).forEach(function (row) {
+    fdRows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       var normCategory = categoryIdx !== -1 ? normalizeText(row[categoryIdx]) : "";
       if (normCategory !== "fixed income") return;
-      var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var normSubCategory = normalizeText(subCategory);
       if (!subCategory) return;
@@ -1457,10 +1454,10 @@
 
       if (normSubCategory === "investment corpus" || normSubCategory === "savings account") {
         var corpusDate = parseFlexibleDate(row[dateIdx]);
-        var key = normalizeText(portfolio) + "||" + normalizeText(bank) + "||" + normalizeText(instrument);
-        var existing = latestCorpusByKey[key];
+        var corpusKey = normalizeText(portfolio) + "||" + normalizeText(bank) + "||" + normalizeText(instrument);
+        var existing = latestCorpusByKey[corpusKey];
         if (!existing || (corpusDate && (!existing.date || corpusDate > existing.date))) {
-          latestCorpusByKey[key] = { row: row, date: corpusDate, portfolio: portfolio, bank: bank, category: category, instrument: instrument, subCategory: subCategory };
+          latestCorpusByKey[corpusKey] = { row: row, date: corpusDate, portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory };
         }
         return;
       }
@@ -1474,12 +1471,10 @@
         if (startDate) {
           var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
           var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
-          if (elapsedQuarters > 0 && rate) {
-            current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
-          }
+          if (elapsedQuarters > 0 && rate) current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
         }
       }
-      holdings.push({ portfolio: portfolio, bank: bank, category: category, instrument: instrument, subCategory: subCategory, invested: invested, current: current });
+      holdings.push({ portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory, invested: invested, current: current });
     });
 
     Object.keys(latestCorpusByKey).forEach(function (key) {
@@ -1497,10 +1492,46 @@
           if (elapsedMonths > 0) current = invested * Math.pow(1 + rate / 12, elapsedMonths);
         }
       }
-      holdings.push({ portfolio: entry.portfolio, bank: entry.bank, category: entry.category, instrument: entry.instrument, subCategory: entry.subCategory, invested: invested, current: current });
+      holdings.push({ portfolio: entry.portfolio, bank: entry.bank, instrument: entry.instrument, subCategory: entry.subCategory, invested: invested, current: current });
     });
 
     return holdings;
+  }
+
+  // Builds holdings from the EPF/fixedincome sheet using deposit+interest accumulation logic.
+  function buildEpfFixedIncomeHoldingsList(epfRows, portfolioFilter) {
+    var header = epfRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var instrumentIdx = header.indexOf("instrument name");
+    var typeIdx = header.indexOf("transaction type");
+    var amountIdx = header.indexOf("amount");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var categoryIdx = header.indexOf("instrument category");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || typeIdx === -1 || amountIdx === -1) return null;
+
+    var byKey = {};
+    epfRows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var instrument = (row[instrumentIdx] || "").trim();
+      if (!instrument) return;
+      var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
+      var type = normalizeText(row[typeIdx]);
+      var isDeposit = type.indexOf("deposit") !== -1;
+      var isInterest = type.indexOf("interest") !== -1;
+      if (!isDeposit && !isInterest) return;
+      var key = normalizeText(portfolio) + "||" + normalizeText(instrument) + "||" + normalizeText(subCategory);
+      var amount = parseNumber(row[amountIdx]);
+      if (!byKey[key]) byKey[key] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, invested: 0, current: 0 };
+      if (isDeposit) { byKey[key].invested += amount; byKey[key].current += amount; }
+      else byKey[key].current += amount;
+    });
+
+    return Object.keys(byKey).map(function (key) {
+      var e = byKey[key];
+      return { portfolio: e.portfolio, bank: "", instrument: e.instrument, subCategory: e.subCategory, invested: e.invested, current: e.current };
+    });
   }
 
   function renderAllFixedIncomeHoldingsTable() {
@@ -1509,16 +1540,32 @@
     var tbody = document.getElementById("fixedincome-holding-tbody");
     if (!statusEl || !tableWrap || !tbody) return;
 
-    var rows = getSheetRows("fd");
-    if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var epfRows = getSheetRows("fixedincome");
+    var fdRows = getSheetRows("fd");
+
+    if ((!epfRows || !epfRows.length) && (!fdRows || !fdRows.length)) {
+      statusEl.textContent = "Connect your fixed income transaction sheets in Settings to populate this view.";
       tableWrap.hidden = true;
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var holdings = buildAllFixedIncomeHoldingsList(rows, selectedPortfolio);
-    if (holdings === null) {
+    var holdings = [];
+    var headerError = false;
+
+    if (epfRows && epfRows.length) {
+      var epfHoldings = buildEpfFixedIncomeHoldingsList(epfRows, selectedPortfolio);
+      if (epfHoldings === null) { headerError = true; }
+      else holdings = holdings.concat(epfHoldings);
+    }
+
+    if (fdRows && fdRows.length) {
+      var fdHoldings = buildFdFixedIncomeHoldingsList(fdRows, selectedPortfolio);
+      if (fdHoldings === null) { headerError = true; }
+      else holdings = holdings.concat(fdHoldings);
+    }
+
+    if (headerError && !holdings.length) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
       tableWrap.hidden = true;
       return;
@@ -1532,6 +1579,9 @@
     tbody.innerHTML = "";
     holdings.forEach(function (h) {
       var tr = document.createElement("tr");
+      var unrealized = h.current - h.invested;
+      var returnPct = h.invested > 0 ? (unrealized / h.invested) * 100 : 0;
+      var cls = unrealized > 0 ? "positive" : unrealized < 0 ? "negative" : "";
 
       var portfolioTd = document.createElement("td");
       portfolioTd.className = "col-desktop-only";
@@ -1542,11 +1592,6 @@
       bankTd.className = "col-desktop-only";
       bankTd.textContent = h.bank;
       tr.appendChild(bankTd);
-
-      var categoryTd = document.createElement("td");
-      categoryTd.className = "col-desktop-only";
-      categoryTd.textContent = h.category;
-      tr.appendChild(categoryTd);
 
       var subCategoryTd = document.createElement("td");
       subCategoryTd.className = "col-desktop-only";
@@ -1568,15 +1613,13 @@
       currentTd.textContent = formatCurrency(h.current);
       tr.appendChild(currentTd);
 
-      var unrealized = h.current - h.invested;
       var unrealizedTd = document.createElement("td");
-      unrealizedTd.className = "num " + (unrealized > 0 ? "positive" : unrealized < 0 ? "negative" : "");
+      unrealizedTd.className = "num " + cls;
       unrealizedTd.textContent = (unrealized > 0 ? "+" : "") + formatCurrency(unrealized);
       tr.appendChild(unrealizedTd);
 
-      var returnPct = h.invested > 0 ? (unrealized / h.invested) * 100 : 0;
       var returnTd = document.createElement("td");
-      returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
+      returnTd.className = "num " + cls;
       returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
       tr.appendChild(returnTd);
 
@@ -2469,9 +2512,7 @@
   updateDashboardStats();
   renderValueChart();
   renderEquityHoldingsTable();
-  renderFixedIncomeHoldingsTable();
-  renderFdHoldingsTable();
-  renderFixedDepositHoldingsTable();
+  renderAllFixedIncomeHoldingsTable();
   renderInvestmentSplitChart();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
@@ -2497,8 +2538,8 @@
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
-        if (prefix === "fixedincome") { renderValueChart(); renderFixedIncomeHoldingsTable(); }
-        if (prefix === "fd") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); renderFdHoldingsTable(); renderFixedDepositHoldingsTable(); renderCommodityHoldingsTable(); }
+        if (prefix === "fixedincome") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); }
+        if (prefix === "fd") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });
