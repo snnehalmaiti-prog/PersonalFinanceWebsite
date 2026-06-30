@@ -1143,6 +1143,7 @@
       var cls = h.unrealized > 0 ? "positive" : (h.unrealized < 0 ? "negative" : "");
 
       var portfolioTd = document.createElement("td");
+      portfolioTd.className = "col-desktop-only";
       portfolioTd.textContent = h.portfolio;
       tr.appendChild(portfolioTd);
 
@@ -1152,6 +1153,7 @@
       tr.appendChild(nameTd);
 
       var subCategoryTd = document.createElement("td");
+      subCategoryTd.className = "col-desktop-only";
       subCategoryTd.textContent = h.subCategory;
       tr.appendChild(subCategoryTd);
 
@@ -1161,12 +1163,12 @@
       tr.appendChild(investedTd);
 
       var currentTd = document.createElement("td");
-      currentTd.className = "num";
+      currentTd.className = "num col-desktop-only";
       currentTd.textContent = formatCurrency(h.current);
       tr.appendChild(currentTd);
 
       var unrealizedTd = document.createElement("td");
-      unrealizedTd.className = "num " + cls;
+      unrealizedTd.className = "num col-desktop-only " + cls;
       unrealizedTd.textContent = (h.unrealized > 0 ? "+" : "") + formatCurrency(h.unrealized);
       tr.appendChild(unrealizedTd);
 
@@ -1291,10 +1293,12 @@
       var tr = document.createElement("tr");
 
       var portfolioTd = document.createElement("td");
+      portfolioTd.className = "col-desktop-only";
       portfolioTd.textContent = h.portfolio;
       tr.appendChild(portfolioTd);
 
       var bankTd = document.createElement("td");
+      bankTd.className = "col-desktop-only";
       bankTd.textContent = h.bank;
       tr.appendChild(bankTd);
 
@@ -1304,6 +1308,7 @@
       tr.appendChild(nameTd);
 
       var subCategoryTd = document.createElement("td");
+      subCategoryTd.className = "col-desktop-only";
       subCategoryTd.textContent = h.subCategory;
       tr.appendChild(subCategoryTd);
 
@@ -1313,7 +1318,7 @@
       tr.appendChild(investedTd);
 
       var currentTd = document.createElement("td");
-      currentTd.className = "num";
+      currentTd.className = "num col-desktop-only";
       currentTd.textContent = formatCurrency(h.current);
       tr.appendChild(currentTd);
 
@@ -3335,22 +3340,22 @@
       tr.appendChild(nameTd);
 
       var qtyTd = document.createElement("td");
-      qtyTd.className = "num";
+      qtyTd.className = "num col-desktop-only";
       qtyTd.textContent = h.units.toFixed(3);
       tr.appendChild(qtyTd);
 
       var avgNavTd = document.createElement("td");
-      avgNavTd.className = "num";
+      avgNavTd.className = "num col-desktop-only";
       avgNavTd.textContent = "₹" + h.avgNav.toFixed(2);
       tr.appendChild(avgNavTd);
 
       var currNavTd = document.createElement("td");
-      currNavTd.className = "num";
+      currNavTd.className = "num col-desktop-only";
       currNavTd.textContent = "₹" + h.currNav.toFixed(3);
       tr.appendChild(currNavTd);
 
       var investedTd = document.createElement("td");
-      investedTd.className = "num";
+      investedTd.className = "num col-desktop-only";
       investedTd.textContent = formatCurrency(h.invested);
       tr.appendChild(investedTd);
 
@@ -3365,12 +3370,12 @@
       tr.appendChild(pnlTd);
 
       var netChgTd = document.createElement("td");
-      netChgTd.className = "num";
+      netChgTd.className = "num col-desktop-only";
       netChgTd.appendChild(pnlChip((h.pnlPct > 0 ? "+" : "") + h.pnlPct.toFixed(2) + "%", h.pnlPct));
       tr.appendChild(netChgTd);
 
       var dayChgTd = document.createElement("td");
-      dayChgTd.className = "num";
+      dayChgTd.className = "num col-desktop-only";
       dayChgTd.appendChild(pnlChip((h.dayChgPct > 0 ? "+" : "") + h.dayChgPct.toFixed(2) + "%", h.dayChgPct));
       tr.appendChild(dayChgTd);
 
@@ -3388,6 +3393,7 @@
   }
 
   function attachInstrumentColumnResizer() {
+    if (window.matchMedia("(max-width: 760px)").matches) return;
     var resizer = document.getElementById("equity-holdings-instrument-resizer");
     var col = document.getElementById("equity-holdings-instrument-col");
     if (!resizer || !col || resizer.dataset.bound) return;

@@ -1610,3 +1610,30 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   width: calc(100% - 20px) !important;
   height: calc(100% - 20px) !important;
 }
+
+/* ===== Mobile Optimisation ===== */
+@media (max-width: 760px) {
+  /* Phase 1: Hide secondary table columns */
+  .col-desktop-only { display: none; }
+
+  /* Phase 2: Hide column resizer handle */
+  .col-resizer { display: none; }
+
+  /* Phase 3: Stack pie charts vertically */
+  .charts-row { flex-direction: column; }
+  .charts-row .value-chart-card { flex: 1 1 auto; width: 100%; }
+  .pie-chart-resize { resize: none; width: 100%; max-width: 320px; min-height: 240px; }
+
+  /* Phase 4: Touch-friendly tap targets */
+  .btn { min-height: 44px; padding: 12px 22px; }
+  .btn-sm { min-height: 44px; padding: 10px 16px; }
+  .range-pill { min-height: 44px; padding: 10px 16px; }
+  .portfolio-option { min-height: 44px; display: flex; align-items: center; }
+}
+
+@media (max-width: 480px) {
+  /* Phase 5: Tighter stat card typography on very small screens */
+  .overview-stat-label { font-size: 0.7rem; }
+  .overview-stat-value { font-size: 0.9rem; }
+  .overview-stat-card { padding: 8px 10px; }
+}
