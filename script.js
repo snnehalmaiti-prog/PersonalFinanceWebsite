@@ -1659,16 +1659,6 @@
       portfolioTd.textContent = h.portfolio;
       tr.appendChild(portfolioTd);
 
-      var categoryTd = document.createElement("td");
-      categoryTd.className = "col-desktop-only";
-      categoryTd.textContent = h.bank; // bank field holds Instrument Category for commodity
-      tr.appendChild(categoryTd);
-
-      var nameTd = document.createElement("td");
-      nameTd.className = "fund-name";
-      nameTd.textContent = h.instrument;
-      tr.appendChild(nameTd);
-
       var subCategoryTd = document.createElement("td");
       subCategoryTd.className = "col-desktop-only";
       subCategoryTd.textContent = h.subCategory;
@@ -1680,7 +1670,7 @@
       tr.appendChild(investedTd);
 
       var currentTd = document.createElement("td");
-      currentTd.className = "num col-desktop-only";
+      currentTd.className = "num";
       currentTd.textContent = formatCurrency(h.current);
       tr.appendChild(currentTd);
 
