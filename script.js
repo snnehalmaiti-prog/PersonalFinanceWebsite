@@ -920,7 +920,6 @@
 
         var issues = [];
         if (!portfolio) issues.push("Portfolio Name is blank");
-        if (!bank) issues.push("Bank is blank");
         if (!instrument) issues.push("Instrument Name is blank");
         if (!category) issues.push("Instrument Category is blank");
         if (!subCategory) issues.push("Instrument Sub Category is blank");
@@ -934,8 +933,8 @@
         if (isFixedDeposit && !rateRaw) issues.push("Rate of Return is mandatory for Fixed Deposit rows but is blank");
         else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
 
+        if (!isCommodity && !bank) issues.push("Bank is blank");
         if (isCommodity) {
-          if (!bank) issues.push("Bank is mandatory for Commodity rows but is blank");
           if (gramsIdx !== -1) {
             var gramsRaw = (row[gramsIdx] || "").trim();
             if (gramsRaw && isNaN(parseFloat(gramsRaw))) issues.push("Grams must be a number");
