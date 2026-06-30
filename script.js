@@ -1617,8 +1617,10 @@
     ]).then(function (results) {
       var goldData = results[0];
       var fxData = results[1];
-      var goldUsdPerOz = Array.isArray(goldData) ? goldData[0].price : (goldData.price || goldData.gold);
+      var goldEntry = Array.isArray(goldData) ? goldData[0] : goldData;
+      var goldUsdPerOz = goldEntry.price || goldEntry.gold || goldEntry.XAU;
       var usdInr = fxData && fxData.rates && fxData.rates.INR;
+      console.log("[Gold] raw response:", goldData, "parsed USD/oz:", goldUsdPerOz, "USD/INR:", usdInr);
       if (!goldUsdPerOz || !usdInr) throw new Error("Invalid gold/fx response");
       var priceInrPerGram = (goldUsdPerOz * usdInr) / TROY_OZ_TO_GRAM;
       try {
