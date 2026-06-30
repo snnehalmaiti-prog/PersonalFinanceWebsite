@@ -770,7 +770,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
   .settings-main { padding: 20px 12px 60px; }
   .settings-panel { padding: 16px 14px; }
-  .settings-tabs { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  .settings-tabs { display: none; }
   .settings-tab { flex: 0 0 auto; padding: 9px 14px; white-space: nowrap; font-size: 0.875rem; }
 
   .overview-stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
@@ -928,7 +928,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 @media (max-width: 760px) {
   .left-drawer-toggle { display: flex; }
-  .settings-tabs { display: none; }
 }
 
 /* ===== Login modal ===== */
