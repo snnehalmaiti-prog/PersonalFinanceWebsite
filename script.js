@@ -1117,7 +1117,8 @@
   // Per-tab numeric values — refreshed by each tab's async computation; overview is their sum.
   var _ov = { mfInvested: 0, mfCurrent: 0, mfUnrealized: 0, mfRealized: 0,
                seInvested: 0, seRealized: 0,
-               fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0 };
+               fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0,
+               commInvested: 0, commCurrent: 0, commUnrealized: 0, commRealized: 0 };
 
   function refreshOverviewStats() {
     var overviewInvestedEl = document.getElementById("overview-total-investment");
@@ -1127,12 +1128,11 @@
     var overviewRealizedEl = document.getElementById("overview-realized-return");
     var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
     var fiCurrent = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
-    var fiUnrealized = isFixedIncomeExcluded() ? 0 : _ov.fiUnrealized;
     var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
-    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested;
-    // SE has no live pricing so current value = invested (SE unrealized = 0)
-    var totalCurrent = _ov.mfCurrent + _ov.seInvested + fiCurrent;
-    var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized;
+    // Commodity is always included — not affected by Fixed Income exclusion
+    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + _ov.commInvested;
+    var totalCurrent = _ov.mfCurrent + _ov.seInvested + fiCurrent + _ov.commCurrent;
+    var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + _ov.commRealized;
     if (overviewInvestedEl) overviewInvestedEl.textContent = formatCurrency(totalInvested);
     if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
@@ -1144,6 +1144,7 @@
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
     _ov.seInvested = 0; _ov.seRealized = 0;
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
+    _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
 
     var equityEl = document.getElementById("equity-total-investment");
     var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
@@ -1190,7 +1191,7 @@
       var commodityInvested = 0;
       fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
       if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested + commodityInvested);
-      _ov.fiInvested = fiBaseInvested + commodityInvested;
+      _ov.commInvested = commodityInvested;
       refreshOverviewStats();
     });
 
@@ -1232,15 +1233,21 @@
         commodityRealizedProfit += h.realizedProfit;
       });
 
-      var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0) + commodityInvested;
-      var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + commodityCurrent;
+      var fiInvestment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0);
+      var investment = fiInvestment + commodityInvested;
+      var fiCurrentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
+      var currentValue = fiCurrentValue + commodityCurrent;
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
-      if (realizedProfitEl) setSignedCurrency(realizedProfitEl, (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + commodityRealizedProfit);
+      var fiRealized = fdRows ? sumFdRealizedProfit(fdRows, selected) : 0;
+      if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fiRealized + commodityRealizedProfit);
 
-      _ov.fiCurrent = currentValue;
-      _ov.fiUnrealized = currentValue - investment;
-      _ov.fiRealized = (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + commodityRealizedProfit;
+      _ov.fiCurrent = fiCurrentValue;
+      _ov.fiUnrealized = fiCurrentValue - fiInvestment;
+      _ov.fiRealized = fiRealized;
+      _ov.commCurrent = commodityCurrent;
+      _ov.commUnrealized = commodityCurrent - commodityInvested;
+      _ov.commRealized = commodityRealizedProfit;
       refreshOverviewStats();
 
       if (xirrEl) {
@@ -2131,8 +2138,9 @@
         flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected))
           .concat(buildFdMaturedXirrCashFlows(fdRows, selected));
         if (fixedIncomeCurrentValue > 0) flows.push({ date: new Date(), amount: fixedIncomeCurrentValue });
-        if (commodityFlows && commodityFlows.length) flows = flows.concat(commodityFlows);
       }
+      // Commodity is always included in XIRR regardless of Fixed Income exclusion
+      if (commodityFlows && commodityFlows.length) flows = flows.concat(commodityFlows);
       return flows;
     }
 
@@ -2158,7 +2166,7 @@
     // Fetch gold price upfront so commodity profit/XIRR flow into overview stats
     var fdRowsForOverview = getSheetRows("fd");
     var commodityProfitPromise = (function () {
-      if (isFixedIncomeExcluded() || !fdRowsForOverview || !fdRowsForOverview.length) return Promise.resolve({ profit: 0, flows: [] });
+      if (!fdRowsForOverview || !fdRowsForOverview.length) return Promise.resolve({ profit: 0, flows: [] });
       var uniqueDatesOv = collectCommodityUniqueDates(fdRowsForOverview, selected);
       return Promise.all([
         fetchGoldPriceINRPerGram().catch(function () { return null; }),
@@ -2202,13 +2210,9 @@
         setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows, null, commodityFlows)));
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
-        if (!isFixedIncomeExcluded()) {
-          fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-            setDayChange(overviewDayChangeEl, commodityDayChange);
-          });
-        } else {
-          setDayChange(overviewDayChangeEl, 0);
-        }
+        fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
+          setDayChange(overviewDayChangeEl, commodityDayChange);
+        });
         return;
       }
 
@@ -2234,13 +2238,9 @@
           refreshOverviewStats();
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
-          if (!isFixedIncomeExcluded()) {
-            fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-              setDayChange(overviewDayChangeEl, equityDayChange + commodityDayChange);
-            });
-          } else {
-            setDayChange(overviewDayChangeEl, equityDayChange);
-          }
+          fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
+            setDayChange(overviewDayChangeEl, equityDayChange + commodityDayChange);
+          });
 
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
@@ -3650,6 +3650,56 @@
     return events;
   }
 
+  // Builds stepped commodity (gold) value events at each buy/sell date using historical prices.
+  // Between events the last known value is carried forward via lastAtOrBefore, matching EPF/FD behaviour.
+  function buildCommodityValueEvents(fdRows, portfolioFilter, histPrices) {
+    if (!fdRows || !fdRows.length) return [];
+    var header = fdRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var categoryIdx = header.indexOf("instrument category");
+    var gramsIdx = header.indexOf("grams");
+    var dateIdx = header.indexOf("transaction date");
+    var maturityIdx = header.indexOf("maturity date/sell date");
+    if (gramsIdx === -1 || dateIdx === -1) return [];
+
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+
+    // Collect raw buy/sell events
+    var raw = [];
+    fdRows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      var grams = parseNumber(row[gramsIdx]);
+      if (!grams) return;
+      var buyDate = parseFlexibleDate(row[dateIdx]);
+      if (!buyDate) return;
+      var buyDateStr = formatDateISO(buyDate);
+      var buyPrice = histPrices[buyDateStr] || 0;
+      raw.push({ date: buyDate, valueDelta: grams * buyPrice });
+
+      var sellDateParsed = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+      if (sellDateParsed) {
+        var sellDay = new Date(sellDateParsed.getFullYear(), sellDateParsed.getMonth(), sellDateParsed.getDate());
+        if (today > sellDay) {
+          var sellDateStr = formatDateISO(sellDateParsed);
+          var sellPrice = histPrices[sellDateStr] || 0;
+          // On sell date: remove the buy-price contribution (commodity exits the portfolio)
+          raw.push({ date: sellDateParsed, valueDelta: -(grams * buyPrice) });
+          // Any realized gain/loss is not included in "current portfolio value"
+          void sellPrice;
+        }
+      }
+    });
+
+    raw.sort(function (a, b) { return a.date - b.date; });
+    var running = 0;
+    return raw.map(function (e) {
+      running += e.valueDelta;
+      return { date: e.date, cumulativeValue: running };
+    });
+  }
+
   function lastAtOrBefore(sortedEvents, targetDate, valueKey) {
     var lo = 0, hi = sortedEvents.length - 1, result = null;
     while (lo <= hi) {
@@ -3682,7 +3732,15 @@
       var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
       var fdValueEvents = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
 
-      if (!instruments.length && !epfEvents.length && !fdValueEvents.length) {
+      // Fetch historical gold prices for commodity transaction dates so they can be included in the chart
+      var fdRowsForChart = getSheetRows("fd");
+      var commodityDatesForChart = fdRowsForChart
+        ? collectCommodityUniqueDates(fdRowsForChart, selectedPortfolio) : [];
+      var commodityHistPromise = Promise.all(commodityDatesForChart.map(function (d) {
+        return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+      }));
+
+      if (!instruments.length && !epfEvents.length && !fdValueEvents.length && !commodityDatesForChart.length) {
         if (window.__wfValueChart) {
           window.__wfValueChart.destroy();
           window.__wfValueChart = null;
@@ -3696,8 +3754,16 @@
 
       statusEl.textContent = instruments.length ? "Fetching NAV history for " + instruments.length + " instrument(s)…" : "Loading…";
 
-      return Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
-        .then(function (navHistories) {
+      return Promise.all([
+        Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); })),
+        commodityHistPromise
+      ]).then(function (outerResults) {
+        var navHistories = outerResults[0];
+        var commodityHistResults = outerResults[1];
+        var commodityHistPrices = {};
+        commodityHistResults.forEach(function (r) { if (r.price) commodityHistPrices[r.dateStr] = r.price; });
+        var commodityValueEvents = fdRowsForChart
+          ? buildCommodityValueEvents(fdRowsForChart, selectedPortfolio, commodityHistPrices) : [];
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
@@ -3707,6 +3773,7 @@
         });
         epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         fdValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        commodityValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
         var firstTxnDate = null, lastTxnDate = null;
@@ -3731,6 +3798,10 @@
           if (!firstTxnDate || fdEarliest < firstTxnDate) firstTxnDate = fdEarliest;
           if (!lastTxnDate || fdLatest > lastTxnDate) lastTxnDate = fdLatest;
         }
+        if (commodityValueEvents.length) {
+          var commEarliest = commodityValueEvents[0].date;
+          if (!firstTxnDate || commEarliest < firstTxnDate) firstTxnDate = commEarliest;
+        }
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
@@ -3740,7 +3811,9 @@
         }
 
         var points = timeline.map(function (date) {
-          var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0) + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0);
+          var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0)
+            + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0)
+            + (lastAtOrBefore(commodityValueEvents, date, "cumulativeValue") || 0);
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
