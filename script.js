@@ -1204,7 +1204,6 @@
     var pctEl = document.getElementById("fixedincome-return-pct");
     var realizedProfitEl = document.getElementById("fixedincome-realized-profit");
     var xirrEl = document.getElementById("fixedincome-xirr");
-    if (!currentValueEl && !profitEl && !pctEl && !realizedProfitEl && !xirrEl) return;
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var rows = getSheetRows("fixedincome");
     var fdRows = getSheetRows("fd");
