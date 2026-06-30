@@ -1352,19 +1352,6 @@
         returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
         tr.appendChild(returnTd);
 
-        var xirrTd = document.createElement("td");
-        xirrTd.className = "num";
-        if (h.startDate && h.current > 0 && h.invested > 0) {
-          var fdFlows = [
-            { date: h.startDate, amount: -h.invested },
-            { date: new Date(), amount: h.current }
-          ];
-          var fdXirr = calculateXIRR(fdFlows);
-          setXirr(xirrTd, fdXirr);
-        } else {
-          xirrTd.textContent = "—";
-        }
-        tr.appendChild(xirrTd);
       }
 
       tbody.appendChild(tr);
