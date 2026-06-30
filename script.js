@@ -2111,17 +2111,19 @@
     var grams = getTotalCommodityGrams(fdRows, portfolioFilter);
     if (!grams) return Promise.resolve(0);
     var today = new Date();
-    var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-    var yesterdayStr = formatDateISO(yesterday);
-    return Promise.all([
-      fetchGoldPriceINRPerGram().catch(function () { return null; }),
-      fetchXauInrForDate(yesterdayStr).catch(function () { return null; })
-    ]).then(function (prices) {
-      var todayPrice = prices[0];
-      var yesterdayPrice = prices[1];
-      if (!todayPrice || !yesterdayPrice) return 0;
-      return (todayPrice - yesterdayPrice) * grams;
-    });
+    // Use the last two available trading days: today's price vs. the prior trading day
+    var todayStr = formatDateISO(today);
+    return fetchXauInrForDate(todayStr)
+      .then(function (todayPrice) {
+        // Step back one more day from the resolved date to get the prior trading day
+        var priorDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        var priorStr = formatDateISO(priorDate);
+        return fetchXauInrForDate(priorStr).then(function (priorPrice) {
+          if (!todayPrice || !priorPrice) return 0;
+          return (todayPrice - priorPrice) * grams;
+        });
+      })
+      .catch(function () { return 0; });
   }
 
   function updateTotalCurrentValue() {
