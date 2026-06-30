@@ -668,9 +668,13 @@
     var categoryIdx = header.indexOf("instrument category");
     var dateIdx = header.indexOf("transaction date");
     var gramsIdx = header.indexOf("grams");
+    var maturityIdx = header.indexOf("maturity date/sell date");
     if (portfolioIdx === -1 || dateIdx === -1 || gramsIdx === -1) return Promise.resolve([]);
 
-    var purchases = [];
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    var entries = [];
     fdRows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
@@ -679,13 +683,16 @@
       var date = parseFlexibleDate(row[dateIdx]);
       var dateStr = formatDateISO(date);
       if (!grams || !date || !dateStr) return;
-      purchases.push({ date: date, dateStr: dateStr, grams: grams });
+      var sellDateParsed = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+      var sellDateStr = sellDateParsed ? formatDateISO(sellDateParsed) : null;
+      var sellDay = sellDateParsed ? new Date(sellDateParsed.getFullYear(), sellDateParsed.getMonth(), sellDateParsed.getDate()) : null;
+      var isSold = !!(sellDay && today > sellDay);
+      entries.push({ date: date, dateStr: dateStr, grams: grams, isSold: isSold, sellDate: sellDateParsed, sellDateStr: sellDateStr });
     });
 
-    if (!purchases.length) return Promise.resolve([]);
+    if (!entries.length) return Promise.resolve([]);
 
-    var uniqueDates = [];
-    purchases.forEach(function (p) { if (uniqueDates.indexOf(p.dateStr) === -1) uniqueDates.push(p.dateStr); });
+    var uniqueDates = collectCommodityUniqueDates(fdRows, portfolioFilter);
 
     return Promise.all(uniqueDates.map(function (dateStr) {
       return fetchXauInrForDate(dateStr)
@@ -696,14 +703,19 @@
       results.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
 
       var flows = [];
-      var totalGrams = 0;
-      purchases.forEach(function (p) {
-        var histPrice = histPrices[p.dateStr];
-        if (!histPrice) return;
-        flows.push({ date: p.date, amount: -(p.grams * histPrice) });
-        totalGrams += p.grams;
+      var activeGrams = 0;
+      entries.forEach(function (e) {
+        var buyPrice = histPrices[e.dateStr];
+        if (!buyPrice) return;
+        flows.push({ date: e.date, amount: -(e.grams * buyPrice) });
+        if (e.isSold) {
+          var sellPrice = e.sellDateStr && histPrices[e.sellDateStr];
+          if (sellPrice) flows.push({ date: e.sellDate, amount: e.grams * sellPrice });
+        } else {
+          activeGrams += e.grams;
+        }
       });
-      if (totalGrams > 0) flows.push({ date: new Date(), amount: totalGrams * currentGoldPrice });
+      if (activeGrams > 0) flows.push({ date: new Date(), amount: activeGrams * currentGoldPrice });
       return flows;
     });
   }
@@ -1124,22 +1136,22 @@
       if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested);
       if (!isFixedIncomeExcluded()) {
         var fdRowsInv = getSheetRows("fd");
-        fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
-          if (!goldPrice || !fdRowsInv || !fdRowsInv.length) return;
-          var holdings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, null) || [];
-          var uniqueDates = [];
-          holdings.forEach(function (h) { if (h.dateStr && uniqueDates.indexOf(h.dateStr) === -1) uniqueDates.push(h.dateStr); });
-          Promise.all(uniqueDates.map(function (d) {
+        var uniqueDatesInv = fdRowsInv ? collectCommodityUniqueDates(fdRowsInv, selected) : [];
+        Promise.all([
+          fetchGoldPriceINRPerGram().catch(function () { return null; }),
+          Promise.all(uniqueDatesInv.map(function (d) {
             return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
-          })).then(function (histResults) {
-            var histPrices = {};
-            histResults.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
-            var fullHoldings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, histPrices) || [];
-            var commodityInvested = 0;
-            fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
-            if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(baseFixedIncomeInvested + commodityInvested);
-            if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested + commodityInvested);
-          });
+          }))
+        ]).then(function (results) {
+          var goldPrice = results[0];
+          if (!goldPrice || !fdRowsInv || !fdRowsInv.length) return;
+          var histPrices = {};
+          results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+          var fullHoldings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, histPrices) || [];
+          var commodityInvested = 0;
+          fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
+          if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(baseFixedIncomeInvested + commodityInvested);
+          if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested + commodityInvested);
         });
       }
     }
@@ -1166,45 +1178,43 @@
     var connectHintEl = document.getElementById("fixedincome-connect-hint");
     if (connectHintEl) connectHintEl.hidden = !!(rows && rows.length) || !!(fdRows && fdRows.length);
 
-    // Fetch current gold price to include commodity in stats; fall back to 0 if unavailable
-    fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
-      var commodityHoldings = (fdRows && goldPrice)
-        ? buildCommodityHoldingsList(fdRows, selected, goldPrice, null)
-        : [];
-      // For commodity invested amounts we need historical prices; fetch them if needed
-      var uniqueCommodityDates = [];
-      if (commodityHoldings && commodityHoldings.length) {
-        commodityHoldings.forEach(function (h) { if (h.dateStr && uniqueCommodityDates.indexOf(h.dateStr) === -1) uniqueCommodityDates.push(h.dateStr); });
-      }
+    // Fetch current gold price + all historical prices (buy and sell dates) for commodity rows
+    var uniqueCommodityDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
+    Promise.all([
+      fetchGoldPriceINRPerGram().catch(function () { return null; }),
       Promise.all(uniqueCommodityDates.map(function (dateStr) {
         return fetchXauInrForDate(dateStr).then(function (p) { return { dateStr: dateStr, price: p }; }).catch(function () { return { dateStr: dateStr, price: null }; });
-      })).then(function (histResults) {
-        var histPrices = {};
-        histResults.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+      }))
+    ]).then(function (results) {
+      var goldPrice = results[0];
+      var histPrices = {};
+      results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
 
-        var commodityHoldingsFull = (fdRows && goldPrice)
-          ? buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices)
-          : [];
-        var commodityInvested = 0, commodityCurrent = 0;
-        if (commodityHoldingsFull) commodityHoldingsFull.forEach(function (h) { commodityInvested += h.invested; commodityCurrent += h.current; });
-
-        var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0) + commodityInvested;
-        var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + commodityCurrent;
-        if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
-        setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
-        if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fdRows ? sumFdRealizedProfit(fdRows, selected) : 0);
-
-        if (xirrEl) {
-          var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
-          var baseCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
-          buildCommodityXirrCashFlows(fdRows, selected, goldPrice).then(function (commodityFlows) {
-            var allFlows = baseCashFlows.concat(commodityFlows);
-            // The commodity terminal flow is already included in commodityFlows; add FD/EPF terminal
-            if (currentValueForXirr > 0) allFlows.push({ date: new Date(), amount: currentValueForXirr });
-            setXirr(xirrEl, calculateXIRR(allFlows));
-          });
-        }
+      var commodityHoldingsFull = (fdRows && goldPrice)
+        ? buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices)
+        : [];
+      var commodityInvested = 0, commodityCurrent = 0, commodityRealizedProfit = 0;
+      if (commodityHoldingsFull) commodityHoldingsFull.forEach(function (h) {
+        commodityInvested += h.invested;
+        commodityCurrent += h.current;
+        commodityRealizedProfit += h.realizedProfit;
       });
+
+      var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0) + commodityInvested;
+      var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + commodityCurrent;
+      if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
+      setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
+      if (realizedProfitEl) setSignedCurrency(realizedProfitEl, (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + commodityRealizedProfit);
+
+      if (xirrEl) {
+        var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
+        var baseCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
+        buildCommodityXirrCashFlows(fdRows, selected, goldPrice).then(function (commodityFlows) {
+          var allFlows = baseCashFlows.concat(commodityFlows);
+          if (currentValueForXirr > 0) allFlows.push({ date: new Date(), amount: currentValueForXirr });
+          setXirr(xirrEl, calculateXIRR(allFlows));
+        });
+      }
     });
   }
 
@@ -1757,7 +1767,11 @@
     var subCategoryIdx = header.indexOf("instrument sub category");
     var dateIdx = header.indexOf("transaction date");
     var gramsIdx = header.indexOf("grams");
+    var maturityIdx = header.indexOf("maturity date/sell date");
     if (portfolioIdx === -1 || instrumentIdx === -1 || gramsIdx === -1) return null;
+
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     var holdings = [];
     rows.slice(1).forEach(function (row) {
@@ -1770,10 +1784,29 @@
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var grams = parseNumber(row[gramsIdx]);
       var dateStr = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
-      var historicalPrice = dateStr && historicalPrices && historicalPrices[dateStr];
-      var invested = (historicalPrice && grams > 0) ? grams * historicalPrice : 0;
-      var current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
-      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: current, grams: grams, dateStr: dateStr });
+
+      var sellDateParsed = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+      var sellDateStr = sellDateParsed ? formatDateISO(sellDateParsed) : null;
+      var sellDay = sellDateParsed ? new Date(sellDateParsed.getFullYear(), sellDateParsed.getMonth(), sellDateParsed.getDate()) : null;
+      var isSold = !!(sellDay && today > sellDay);
+
+      var buyPrice = dateStr && historicalPrices && historicalPrices[dateStr];
+      var sellPrice = sellDateStr && historicalPrices && historicalPrices[sellDateStr];
+
+      var invested, current, realizedProfit;
+      if (isSold) {
+        invested = 0;
+        current = 0;
+        realizedProfit = (buyPrice && sellPrice && grams > 0) ? (sellPrice - buyPrice) * grams : 0;
+      } else {
+        invested = (buyPrice && grams > 0) ? grams * buyPrice : 0;
+        current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
+        realizedProfit = 0;
+      }
+
+      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory,
+        invested: invested, current: current, grams: isSold ? 0 : grams,
+        dateStr: dateStr, sellDateStr: sellDateStr, isSold: isSold, realizedProfit: realizedProfit });
     });
     return holdings;
   }
@@ -1794,16 +1827,8 @@
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     statusEl.textContent = "Fetching gold prices…";
 
-    // Collect unique transaction dates from commodity rows to fetch historical prices
-    var header = rows[0].map(normalizeText);
-    var dateIdx = header.indexOf("transaction date");
-    var categoryIdx = header.indexOf("instrument category");
-    var uniqueDates = [];
-    rows.slice(1).forEach(function (row) {
-      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
-      var dateStr = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
-      if (dateStr && uniqueDates.indexOf(dateStr) === -1) uniqueDates.push(dateStr);
-    });
+    // Collect unique buy + sell dates from commodity rows to fetch historical prices
+    var uniqueDates = collectCommodityUniqueDates(rows, selectedPortfolio);
 
     Promise.all([
       fetchGoldPriceINRPerGram().catch(function () { return null; }),
@@ -1814,14 +1839,15 @@
       var goldPrice = results[0];
       var historicalPrices = {};
       results[1].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
-      console.log("[Gold] current price/g:", goldPrice, "historical:", historicalPrices);
 
-      var holdings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice, historicalPrices);
-      if (holdings === null) {
+      var allHoldings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice, historicalPrices);
+      if (allHoldings === null) {
         statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
         tableWrap.hidden = true;
         return;
       }
+      // Only show active (unsold) holdings in the table
+      var holdings = allHoldings.filter(function (h) { return !h.isSold; });
       if (!holdings.length) {
         statusEl.textContent = "No Physical Commodity holdings found.";
         tableWrap.hidden = true;
@@ -1935,18 +1961,44 @@
     return navHistory[navHistory.length - 2].nav;
   }
 
+  // Returns all unique dates (buy + sell) for commodity rows — used to batch-fetch historical prices.
+  function collectCommodityUniqueDates(fdRows, portfolioFilter) {
+    if (!fdRows || !fdRows.length) return [];
+    var header = fdRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var categoryIdx = header.indexOf("instrument category");
+    var dateIdx = header.indexOf("transaction date");
+    var maturityIdx = header.indexOf("maturity date/sell date");
+    var dates = [];
+    fdRows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      var buyDate = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
+      if (buyDate && dates.indexOf(buyDate) === -1) dates.push(buyDate);
+      var sellDate = maturityIdx !== -1 ? formatDateISO(parseFlexibleDate(row[maturityIdx])) : null;
+      if (sellDate && dates.indexOf(sellDate) === -1) dates.push(sellDate);
+    });
+    return dates;
+  }
+
   function getTotalCommodityGrams(fdRows, portfolioFilter) {
     if (!fdRows || !fdRows.length) return 0;
     var header = fdRows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var categoryIdx = header.indexOf("instrument category");
     var gramsIdx = header.indexOf("grams");
+    var maturityIdx = header.indexOf("maturity date/sell date");
     if (gramsIdx === -1) return 0;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
     var total = 0;
     fdRows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      var sellDate = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+      if (sellDate) { var sd = new Date(sellDate.getFullYear(), sellDate.getMonth(), sellDate.getDate()); if (today > sd) return; }
       total += parseNumber(row[gramsIdx]);
     });
     return total;
@@ -2041,22 +2093,22 @@
     var fdRowsForOverview = getSheetRows("fd");
     var commodityProfitPromise = (function () {
       if (isFixedIncomeExcluded() || !fdRowsForOverview || !fdRowsForOverview.length) return Promise.resolve({ profit: 0, flows: [] });
-      return fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
-        if (!goldPrice) return { profit: 0, flows: [] };
-        var holdings = buildCommodityHoldingsList(fdRowsForOverview, selected, goldPrice, null) || [];
-        var uniqueDates = [];
-        holdings.forEach(function (h) { if (h.dateStr && uniqueDates.indexOf(h.dateStr) === -1) uniqueDates.push(h.dateStr); });
-        return Promise.all(uniqueDates.map(function (d) {
+      var uniqueDatesOv = collectCommodityUniqueDates(fdRowsForOverview, selected);
+      return Promise.all([
+        fetchGoldPriceINRPerGram().catch(function () { return null; }),
+        Promise.all(uniqueDatesOv.map(function (d) {
           return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
-        })).then(function (histResults) {
-          var histPrices = {};
-          histResults.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
-          var fullHoldings = buildCommodityHoldingsList(fdRowsForOverview, selected, goldPrice, histPrices) || [];
-          var profit = 0;
-          fullHoldings.forEach(function (h) { profit += h.current - h.invested; });
-          return buildCommodityXirrCashFlows(fdRowsForOverview, selected, goldPrice).then(function (flows) {
-            return { profit: profit, flows: flows };
-          });
+        }))
+      ]).then(function (res) {
+        var goldPrice = res[0];
+        if (!goldPrice) return { profit: 0, flows: [] };
+        var histPrices = {};
+        res[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+        var fullHoldings = buildCommodityHoldingsList(fdRowsForOverview, selected, goldPrice, histPrices) || [];
+        var profit = 0;
+        fullHoldings.forEach(function (h) { profit += h.current - h.invested; });
+        return buildCommodityXirrCashFlows(fdRowsForOverview, selected, goldPrice).then(function (flows) {
+          return { profit: profit, flows: flows };
         });
       });
     })();
