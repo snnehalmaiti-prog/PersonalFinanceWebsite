@@ -895,7 +895,6 @@
         "rate of return": headerFd.indexOf("rate of return")
       };
       var gramsIdx = headerFd.indexOf("grams");
-      var rateGramIdx = headerFd.indexOf("rate/gram");
       var missingFd = Object.keys(fdIdx).filter(function (key) { return fdIdx[key] === -1; });
       if (missingFd.length) {
         return {
@@ -938,10 +937,6 @@
           if (gramsIdx !== -1) {
             var gramsRaw = (row[gramsIdx] || "").trim();
             if (gramsRaw && isNaN(parseFloat(gramsRaw))) issues.push("Grams must be a number");
-          }
-          if (rateGramIdx !== -1) {
-            var rateGramRaw = (row[rateGramIdx] || "").trim();
-            if (rateGramRaw && isNaN(parseFloat(rateGramRaw))) issues.push("Rate/Gram must be a number");
           }
         }
 
@@ -1602,6 +1597,33 @@
   var GOLD_PRICE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
   var TROY_OZ_TO_GRAM = 31.1035;
 
+  function formatDateISO(date) {
+    if (!date) return null;
+    var y = date.getFullYear();
+    var m = String(date.getMonth() + 1);
+    var d = String(date.getDate());
+    return y + "-" + (m.length < 2 ? "0" + m : m) + "-" + (d.length < 2 ? "0" + d : d);
+  }
+
+  function fetchXauInrForDate(dateStr) {
+    // Historical prices never change — cache indefinitely
+    var cacheKey = "wf-gold-hist-" + dateStr;
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey));
+      if (cached && cached.price) return Promise.resolve(cached.price);
+    } catch (e) {}
+    var url = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dateStr + "/v1/currencies/xau.min.json";
+    return fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var xauInr = data && data.xau && data.xau.inr;
+        if (!xauInr) throw new Error("No XAU/INR for " + dateStr);
+        var pricePerGram = xauInr / TROY_OZ_TO_GRAM;
+        try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
+        return pricePerGram;
+      });
+  }
+
   function fetchGoldPriceINRPerGram() {
     try {
       var cached = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
@@ -1625,15 +1647,15 @@
       });
   }
 
-  function buildCommodityHoldingsList(rows, portfolioFilter, goldPricePerGram) {
+  function buildCommodityHoldingsList(rows, portfolioFilter, goldPricePerGram, historicalPrices) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var instrumentIdx = header.indexOf("instrument name");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
-    var amountIdx = header.indexOf("invested amount");
+    var dateIdx = header.indexOf("transaction date");
     var gramsIdx = header.indexOf("grams");
-    if (portfolioIdx === -1 || instrumentIdx === -1 || amountIdx === -1) return null;
+    if (portfolioIdx === -1 || instrumentIdx === -1 || gramsIdx === -1) return null;
 
     var holdings = [];
     rows.slice(1).forEach(function (row) {
@@ -1644,10 +1666,12 @@
       if (!instrument) return;
       var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
-      var invested = parseNumber(row[amountIdx]);
-      var grams = gramsIdx !== -1 ? parseNumber(row[gramsIdx]) : 0;
+      var grams = parseNumber(row[gramsIdx]);
+      var dateStr = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
+      var historicalPrice = dateStr && historicalPrices && historicalPrices[dateStr];
+      var invested = (historicalPrice && grams > 0) ? grams * historicalPrice : 0;
       var current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
-      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: current, grams: grams });
+      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: current, grams: grams, dateStr: dateStr });
     });
     return holdings;
   }
@@ -1666,9 +1690,31 @@
     }
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    statusEl.textContent = "Fetching gold price…";
-    fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
-      var holdings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice);
+    statusEl.textContent = "Fetching gold prices…";
+
+    // Collect unique transaction dates from commodity rows to fetch historical prices
+    var header = rows[0].map(normalizeText);
+    var dateIdx = header.indexOf("transaction date");
+    var categoryIdx = header.indexOf("instrument category");
+    var uniqueDates = [];
+    rows.slice(1).forEach(function (row) {
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      var dateStr = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
+      if (dateStr && uniqueDates.indexOf(dateStr) === -1) uniqueDates.push(dateStr);
+    });
+
+    Promise.all([
+      fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      Promise.all(uniqueDates.map(function (dateStr) {
+        return fetchXauInrForDate(dateStr).then(function (price) { return { dateStr: dateStr, price: price }; }).catch(function () { return { dateStr: dateStr, price: null }; });
+      }))
+    ]).then(function (results) {
+      var goldPrice = results[0];
+      var historicalPrices = {};
+      results[1].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
+      console.log("[Gold] current price/g:", goldPrice, "historical:", historicalPrices);
+
+      var holdings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice, historicalPrices);
       if (holdings === null) {
         statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
         tableWrap.hidden = true;
@@ -2671,7 +2717,6 @@
     "Instrument Category",
     "Instrument Sub Category",
     "Grams",
-    "Rate/Gram",
     "Invested Amount",
     "Maturity Date/Sell Date",
     "Rate of Return"
