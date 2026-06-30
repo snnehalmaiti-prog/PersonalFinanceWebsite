@@ -43,7 +43,7 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 
 body {
   margin: 0;
@@ -53,6 +53,7 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   transition: background 0.3s var(--ease), color 0.3s var(--ease);
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4 {
@@ -746,26 +747,36 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* hide-mobile / show-mobile helpers */
+.hide-mobile { display: revert; }
+.show-mobile { display: none !important; }
+
 @media (max-width: 760px) {
   .main-nav, .nav-only { display: none; }
   .menu-toggle { display: flex; }
   .feature-grid, .steps, .testimonial-grid, .stats { grid-template-columns: 1fr; }
   .floating-badge { display: none; }
-  .header-inner { height: 68px; }
+  .header-inner { height: 64px; }
   .hero { padding: 48px 0 40px; }
   .footer-inner { flex-direction: column; gap: 32px; }
 
-  .settings-main { padding: 32px 16px 60px; }
-  .settings-panel { padding: 20px; }
-  .settings-tabs { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
-  .settings-tab { flex: 0 0 auto; padding: 9px 16px; white-space: nowrap; }
+  /* hide text nav links in dashboard header; hamburger takes over */
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: flex !important; }
 
-  .header-actions { gap: 8px; }
-  .portfolio-toggle { max-width: 140px; padding: 8px 12px; }
+  .header-actions { gap: 6px; }
+  .portfolio-toggle { max-width: 130px; padding: 7px 10px; font-size: 0.875rem; }
+
+  .settings-main { padding: 20px 12px 60px; }
+  .settings-panel { padding: 16px 14px; }
+  .settings-tabs { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  .settings-tab { flex: 0 0 auto; padding: 9px 14px; white-space: nowrap; font-size: 0.875rem; }
 
   .overview-stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
   .overview-stat-card { padding: 10px 12px; }
   .overview-stat-value { font-size: 1rem; }
+
+  .panel-title-row { gap: 8px; }
 
   .equity-card { padding: 16px 14px; }
   .equity-card-header { flex-wrap: wrap; align-items: flex-start; }
@@ -774,15 +785,21 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .equity-link-row input.header-row-input { width: 100%; }
 
   .value-chart-card { padding: 14px 12px; }
-  .value-chart-header { flex-direction: column; align-items: flex-start; }
+  .value-chart-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .value-chart-wrap { height: 220px; }
 
-  .modal { padding: 24px 20px; }
+  .exclusions-dropdown .portfolio-menu { min-width: 220px; }
+
+  .holdings-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .modal { padding: 24px 16px; }
 }
 
 @media (max-width: 480px) {
   .overview-stats { grid-template-columns: repeat(2, 1fr); }
-  .value-chart-wrap { height: 200px; }
+  .value-chart-wrap { height: 190px; }
+  .settings-panel { padding: 14px 12px; }
+  .portfolio-toggle { max-width: 110px; font-size: 0.8rem; }
 }
 
 .menu-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }

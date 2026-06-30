@@ -35,14 +35,21 @@
             <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
           </ul>
         </div>
-        <a href="settings.html" class="btn btn-ghost">Settings</a>
+        <a href="settings.html" class="btn btn-ghost hide-mobile">Settings</a>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
-        <a href="index.html" class="btn btn-ghost">Log out</a>
+        <a href="index.html" class="btn btn-ghost hide-mobile">Log out</a>
+        <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </div>
+    <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation">
+      <a href="settings.html">Settings</a>
+      <a href="index.html">Log out</a>
+    </nav>
   </header>
 
   <main class="container settings-main">
