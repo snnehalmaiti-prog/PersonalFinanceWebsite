@@ -1453,10 +1453,10 @@
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
       var instrument = (row[instrumentIdx] || "").trim();
       if (!instrument) return;
-      var bank = bankIdx !== -1 ? (row[bankIdx] || "").trim() : "";
+      var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var invested = parseNumber(row[amountIdx]);
-      holdings.push({ portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory, invested: invested, current: invested });
+      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: invested });
     });
     return holdings;
   }
