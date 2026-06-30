@@ -13,17 +13,51 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 </head>
 <body>
+  <!-- Left nav drawer (mobile only) -->
+  <div id="left-drawer-overlay" class="left-drawer-overlay" hidden></div>
+  <nav id="left-drawer" class="left-drawer" aria-label="Section navigation" hidden>
+    <div class="left-drawer-header">
+      <span class="left-drawer-title">Navigation</span>
+      <button id="left-drawer-close" class="left-drawer-close" aria-label="Close navigation">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <ul class="left-drawer-nav">
+      <li><button class="left-drawer-item active" data-tab="overview">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </button></li>
+      <li><button class="left-drawer-item" data-tab="equity">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-8 4 4 4-6 4 4"/></svg>
+        Mutual Fund
+      </button></li>
+      <li><button class="left-drawer-item" data-tab="stocksetf">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Stocks / ETF
+      </button></li>
+      <li><button class="left-drawer-item" data-tab="fixedincome">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        Fixed Income
+      </button></li>
+    </ul>
+  </nav>
+
   <header class="site-header">
     <div class="container header-inner">
-      <a href="index.html" class="logo" aria-label="Wealthfolio home">
-        <span class="logo-mark" aria-hidden="true">
-          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="26" height="26" rx="7" fill="currentColor" class="logo-bg"/>
-            <path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-        <span class="logo-text">Wealthfolio</span>
-      </a>
+      <div class="header-left">
+        <button id="left-drawer-toggle" class="left-drawer-toggle show-mobile" aria-label="Open navigation" aria-expanded="false" aria-controls="left-drawer">
+          <span></span><span></span><span></span>
+        </button>
+        <a href="index.html" class="logo" aria-label="Wealthfolio home">
+          <span class="logo-mark" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="26" height="26" rx="7" fill="currentColor" class="logo-bg"/>
+              <path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="logo-text">Wealthfolio</span>
+        </a>
+      </div>
       <div class="header-actions">
         <div class="portfolio-dropdown">
           <button type="button" id="portfolio-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
@@ -408,6 +442,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=d615c4d"></script>
+  <script src="script.js?v=a665940"></script>
 </body>
 </html>

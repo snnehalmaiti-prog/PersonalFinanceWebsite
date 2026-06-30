@@ -337,6 +337,10 @@
         entry.tab.setAttribute("aria-selected", String(isActive));
         entry.panel.hidden = !isActive;
       });
+      document.querySelectorAll(".left-drawer-item").forEach(function (btn) {
+        btn.classList.toggle("active", btn.dataset.tab === tab);
+      });
+
     }
 
     dashTabs.forEach(function (entry) {
@@ -344,6 +348,44 @@
       entry.tab.addEventListener("click", function () { showDashboardTab(entry.key); });
     });
   }
+
+  // ===== Left nav drawer (mobile) =====
+  var leftDrawer = document.getElementById("left-drawer");
+  var leftDrawerOverlay = document.getElementById("left-drawer-overlay");
+  var leftDrawerToggle = document.getElementById("left-drawer-toggle");
+  var leftDrawerClose = document.getElementById("left-drawer-close");
+
+  function openLeftDrawer() {
+    if (!leftDrawer) return;
+    leftDrawer.hidden = false;
+    leftDrawerOverlay.hidden = false;
+    setTimeout(function () { leftDrawer.classList.add("open"); }, 10);
+    if (leftDrawerToggle) leftDrawerToggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeLeftDrawer() {
+    if (!leftDrawer) return;
+    leftDrawer.classList.remove("open");
+    leftDrawerOverlay.hidden = true;
+    if (leftDrawerToggle) leftDrawerToggle.setAttribute("aria-expanded", "false");
+  }
+
+  if (leftDrawerToggle) leftDrawerToggle.addEventListener("click", openLeftDrawer);
+  if (leftDrawerClose) leftDrawerClose.addEventListener("click", closeLeftDrawer);
+  if (leftDrawerOverlay) leftDrawerOverlay.addEventListener("click", closeLeftDrawer);
+
+  document.querySelectorAll(".left-drawer-item").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tab = btn.dataset.tab;
+      var tabEl = tab && document.getElementById("tab-" + tab);
+      if (tabEl) tabEl.click();
+      closeLeftDrawer();
+    });
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && leftDrawer && leftDrawer.classList.contains("open")) closeLeftDrawer();
+  });
 
   // Treat residual fractional units below this as a fully closed-out position,
   // to absorb floating-point rounding error from repeated cumulative +=/-=.
