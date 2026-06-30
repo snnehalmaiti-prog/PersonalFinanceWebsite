@@ -1610,30 +1610,13 @@
       }
     } catch (e) {}
 
-    // Fetch gold spot price (USD/troy oz) and USD→INR rate in parallel
-    // goldprice.org returns XAU price directly in the requested currency (INR per troy oz)
-    return fetch("https://data-asg.goldprice.org/dbXRates/INR")
+    // jsDelivr CDN-hosted currency API — CORS-friendly, no API key, includes XAU (gold) in INR
+    return fetch("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.min.json")
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        var xauInr = data && data.items && data.items[0] && data.items[0].xauPrice;
-        console.log("[Gold] goldprice.org response:", data, "XAU/INR:", xauInr);
-        if (!xauInr) throw new Error("Invalid goldprice.org response");
-        return xauInr;
-      })
-      .catch(function () {
-        // Fallback: fetch gold in USD + USD/INR rate
-        return Promise.all([
-          fetch("https://api.gold-api.com/price/XAU").then(function (r) { return r.json(); }),
-          fetch("https://api.frankfurter.app/latest?from=USD&to=INR").then(function (r) { return r.json(); })
-        ]).then(function (results) {
-          var goldUsdPerOz = results[0] && results[0].price;
-          var usdInr = results[1] && results[1].rates && results[1].rates.INR;
-          console.log("[Gold] fallback: USD/oz =", goldUsdPerOz, "USD/INR =", usdInr);
-          if (!goldUsdPerOz || !usdInr) throw new Error("Fallback gold/fx failed");
-          return goldUsdPerOz * usdInr;
-        });
-      })
-      .then(function (xauInr) {
+        var xauInr = data && data.xau && data.xau.inr;
+        console.log("[Gold] XAU/INR from currency-api:", xauInr);
+        if (!xauInr) throw new Error("Invalid currency-api response");
         var priceInrPerGram = xauInr / TROY_OZ_TO_GRAM;
         try {
           localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), price: priceInrPerGram }));
