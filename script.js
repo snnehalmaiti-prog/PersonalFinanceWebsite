@@ -1598,14 +1598,44 @@
     renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.", true);
   }
 
-  function buildCommodityHoldingsList(rows, portfolioFilter) {
+  var GOLD_PRICE_CACHE_KEY = "wf-gold-price-inr-per-gram";
+  var GOLD_PRICE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
+  var TROY_OZ_TO_GRAM = 31.1035;
+
+  function fetchGoldPriceINRPerGram() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
+      if (cached && Date.now() - cached.fetchedAt < GOLD_PRICE_CACHE_MAX_AGE_MS) {
+        return Promise.resolve(cached.price);
+      }
+    } catch (e) {}
+
+    // Fetch gold spot price (USD/troy oz) and USD→INR rate in parallel
+    return Promise.all([
+      fetch("https://api.metals.live/v1/spot/gold").then(function (r) { return r.json(); }),
+      fetch("https://open.er-api.com/v6/latest/USD").then(function (r) { return r.json(); })
+    ]).then(function (results) {
+      var goldData = results[0];
+      var fxData = results[1];
+      var goldUsdPerOz = Array.isArray(goldData) ? goldData[0].price : (goldData.price || goldData.gold);
+      var usdInr = fxData && fxData.rates && fxData.rates.INR;
+      if (!goldUsdPerOz || !usdInr) throw new Error("Invalid gold/fx response");
+      var priceInrPerGram = (goldUsdPerOz * usdInr) / TROY_OZ_TO_GRAM;
+      try {
+        localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), price: priceInrPerGram }));
+      } catch (e) {}
+      return priceInrPerGram;
+    });
+  }
+
+  function buildCommodityHoldingsList(rows, portfolioFilter, goldPricePerGram) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
-    var bankIdx = header.indexOf("bank");
     var instrumentIdx = header.indexOf("instrument name");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
     var amountIdx = header.indexOf("invested amount");
+    var gramsIdx = header.indexOf("grams");
     if (portfolioIdx === -1 || instrumentIdx === -1 || amountIdx === -1) return null;
 
     var holdings = [];
@@ -1618,7 +1648,9 @@
       var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var invested = parseNumber(row[amountIdx]);
-      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: invested });
+      var grams = gramsIdx !== -1 ? parseNumber(row[gramsIdx]) : 0;
+      var current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
+      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: current, grams: grams });
     });
     return holdings;
   }
@@ -1637,60 +1669,63 @@
     }
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var holdings = buildCommodityHoldingsList(rows, selectedPortfolio);
-    if (holdings === null) {
-      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
-      tableWrap.hidden = true;
-      return;
-    }
+    statusEl.textContent = "Fetching gold price…";
+    fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
+      var holdings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice);
+      if (holdings === null) {
+        statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+        tableWrap.hidden = true;
+        return;
+      }
+      if (!holdings.length) {
+        statusEl.textContent = "No Physical Commodity holdings found.";
+        tableWrap.hidden = true;
+        return;
+      }
 
-    if (!holdings.length) {
-      statusEl.textContent = "No Physical Commodity holdings found.";
-      tableWrap.hidden = true;
-      return;
-    }
-
-    tbody.innerHTML = "";
-    holdings.forEach(function (h) {
+      tbody.innerHTML = "";
+      holdings.forEach(function (h) {
       var tr = document.createElement("tr");
 
-      var portfolioTd = document.createElement("td");
-      portfolioTd.className = "col-desktop-only";
-      portfolioTd.textContent = h.portfolio;
-      tr.appendChild(portfolioTd);
+        var portfolioTd = document.createElement("td");
+        portfolioTd.className = "col-desktop-only";
+        portfolioTd.textContent = h.portfolio;
+        tr.appendChild(portfolioTd);
 
-      var subCategoryTd = document.createElement("td");
-      subCategoryTd.className = "col-desktop-only";
-      subCategoryTd.textContent = h.subCategory;
-      tr.appendChild(subCategoryTd);
+        var subCategoryTd = document.createElement("td");
+        subCategoryTd.className = "col-desktop-only";
+        subCategoryTd.textContent = h.subCategory;
+        tr.appendChild(subCategoryTd);
 
-      var investedTd = document.createElement("td");
-      investedTd.className = "num";
-      investedTd.textContent = formatCurrency(h.invested);
-      tr.appendChild(investedTd);
+        var investedTd = document.createElement("td");
+        investedTd.className = "num";
+        investedTd.textContent = formatCurrency(h.invested);
+        tr.appendChild(investedTd);
 
-      var currentTd = document.createElement("td");
-      currentTd.className = "num";
-      currentTd.textContent = formatCurrency(h.current);
-      tr.appendChild(currentTd);
+        var currentTd = document.createElement("td");
+        currentTd.className = "num";
+        currentTd.textContent = formatCurrency(h.current);
+        tr.appendChild(currentTd);
 
-      var unrealized = h.current - h.invested;
-      var unrealizedTd = document.createElement("td");
-      unrealizedTd.className = "num " + (unrealized > 0 ? "positive" : unrealized < 0 ? "negative" : "");
-      unrealizedTd.textContent = (unrealized > 0 ? "+" : "") + formatCurrency(unrealized);
-      tr.appendChild(unrealizedTd);
+        var unrealized = h.current - h.invested;
+        var unrealizedTd = document.createElement("td");
+        unrealizedTd.className = "num " + (unrealized > 0 ? "positive" : unrealized < 0 ? "negative" : "");
+        unrealizedTd.textContent = (unrealized > 0 ? "+" : "") + formatCurrency(unrealized);
+        tr.appendChild(unrealizedTd);
 
-      var returnPct = h.invested > 0 ? (unrealized / h.invested) * 100 : 0;
-      var returnTd = document.createElement("td");
-      returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
-      returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
-      tr.appendChild(returnTd);
+        var returnPct = h.invested > 0 ? (unrealized / h.invested) * 100 : 0;
+        var returnTd = document.createElement("td");
+        returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
+        returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
+        tr.appendChild(returnTd);
 
-      tbody.appendChild(tr);
+        tbody.appendChild(tr);
+      });
+
+      var suffix = goldPrice ? " (gold ₹" + Math.round(goldPrice) + "/g)" : " (gold price unavailable)";
+      statusEl.textContent = holdings.length + " holding(s)." + suffix;
+      tableWrap.hidden = false;
     });
-
-    statusEl.textContent = holdings.length + " holding(s).";
-    tableWrap.hidden = false;
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
