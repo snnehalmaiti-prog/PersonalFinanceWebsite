@@ -1114,50 +1114,86 @@
     else if (amount < 0) el.classList.add("negative");
   }
 
+  // Per-tab numeric values — refreshed by each tab's async computation; overview is their sum.
+  var _ov = { mfInvested: 0, mfCurrent: 0, mfUnrealized: 0, mfRealized: 0,
+               seInvested: 0, seRealized: 0,
+               fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0 };
+
+  function refreshOverviewStats() {
+    var overviewInvestedEl = document.getElementById("overview-total-investment");
+    var overviewCurrentEl = document.getElementById("overview-total-current-value");
+    var overviewReturnEl = document.getElementById("overview-unrealized-return");
+    var overviewPctEl = document.getElementById("overview-return-pct");
+    var overviewRealizedEl = document.getElementById("overview-realized-return");
+    var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
+    var fiCurrent = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
+    var fiUnrealized = isFixedIncomeExcluded() ? 0 : _ov.fiUnrealized;
+    var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
+    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested;
+    // SE has no live pricing so current value = invested (SE unrealized = 0)
+    var totalCurrent = _ov.mfCurrent + _ov.seInvested + fiCurrent;
+    var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized;
+    if (overviewInvestedEl) overviewInvestedEl.textContent = formatCurrency(totalInvested);
+    if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
+    setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
+    if (overviewRealizedEl) setSignedCurrency(overviewRealizedEl, totalRealized);
+  }
+
   function updateDashboardStats() {
-    var overviewEl = document.getElementById("overview-total-investment");
+    // Reset accumulator so stale tab values don't persist across portfolio changes
+    _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
+    _ov.seInvested = 0; _ov.seRealized = 0;
+    _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
+
     var equityEl = document.getElementById("equity-total-investment");
     var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
     var stocksEtfEl = document.getElementById("stocksetf-total-investment");
-    var overviewRealizedEl = document.getElementById("overview-realized-return");
     var equityRealizedEl = document.getElementById("equity-realized-return");
     var stocksEtfRealizedEl = document.getElementById("stocksetf-realized-return");
-    if (overviewEl || equityEl || fixedIncomeEl || stocksEtfEl) {
-      var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
-      if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(computeTotalInvestment(selected, ["stocksetf"]));
-      // Commodity invested amount requires async gold price fetch; resolve then update Fixed Income + Overview
-      var baseFixedIncomeInvested = computeTotalInvestment(selected, ["fixedincome", "fd"]);
-      var baseOverviewInvested = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(baseFixedIncomeInvested);
-      if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested);
-      if (!isFixedIncomeExcluded()) {
-        var fdRowsInv = getSheetRows("fd");
-        var uniqueDatesInv = fdRowsInv ? collectCommodityUniqueDates(fdRowsInv, selected) : [];
-        Promise.all([
-          fetchGoldPriceINRPerGram().catch(function () { return null; }),
-          Promise.all(uniqueDatesInv.map(function (d) {
-            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
-          }))
-        ]).then(function (results) {
-          var goldPrice = results[0];
-          if (!goldPrice || !fdRowsInv || !fdRowsInv.length) return;
-          var histPrices = {};
-          results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
-          var fullHoldings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, histPrices) || [];
-          var commodityInvested = 0;
-          fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
-          if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(baseFixedIncomeInvested + commodityInvested);
-          if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested + commodityInvested);
-        });
-      }
-    }
-    if (overviewRealizedEl || equityRealizedEl || stocksEtfRealizedEl) {
-      var selectedForRealized = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      setSignedCurrency(overviewRealizedEl, computeRealizedReturn(selectedForRealized, ["equity", "stocksetf"]));
-      setSignedCurrency(equityRealizedEl, computeRealizedReturn(selectedForRealized, ["equity"]));
-      setSignedCurrency(stocksEtfRealizedEl, computeRealizedReturn(selectedForRealized, ["stocksetf"]));
-    }
+
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+
+    // Invested amounts (synchronous)
+    var mfInvested = computeTotalInvestment(selected, ["equity"]);
+    var seInvested = computeTotalInvestment(selected, ["stocksetf"]);
+    var fiBaseInvested = computeTotalInvestment(selected, ["fixedincome", "fd"]);
+    if (equityEl) equityEl.textContent = formatCurrency(mfInvested);
+    if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(seInvested);
+    if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested);
+    _ov.mfInvested = mfInvested;
+    _ov.seInvested = seInvested;
+    _ov.fiInvested = fiBaseInvested;
+
+    // Realized profits (synchronous for MF and SE)
+    var mfRealized = computeRealizedReturn(selected, ["equity"]);
+    var seRealized = computeRealizedReturn(selected, ["stocksetf"]);
+    if (equityRealizedEl) setSignedCurrency(equityRealizedEl, mfRealized);
+    if (stocksEtfRealizedEl) setSignedCurrency(stocksEtfRealizedEl, seRealized);
+    _ov.mfRealized = mfRealized;
+    _ov.seRealized = seRealized;
+    refreshOverviewStats();
+
+    // Commodity invested amount added to Fixed Income asynchronously
+    var fdRowsInv = getSheetRows("fd");
+    var uniqueDatesInv = fdRowsInv ? collectCommodityUniqueDates(fdRowsInv, selected) : [];
+    Promise.all([
+      fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      Promise.all(uniqueDatesInv.map(function (d) {
+        return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+      }))
+    ]).then(function (results) {
+      var goldPrice = results[0];
+      if (!goldPrice || !fdRowsInv || !fdRowsInv.length) return;
+      var histPrices = {};
+      results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+      var fullHoldings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, histPrices) || [];
+      var commodityInvested = 0;
+      fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
+      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested + commodityInvested);
+      _ov.fiInvested = fiBaseInvested + commodityInvested;
+      refreshOverviewStats();
+    });
+
     updateEpfStats();
     updateTotalCurrentValue();
   }
@@ -1202,6 +1238,11 @@
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
       if (realizedProfitEl) setSignedCurrency(realizedProfitEl, (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + commodityRealizedProfit);
+
+      _ov.fiCurrent = currentValue;
+      _ov.fiUnrealized = currentValue - investment;
+      _ov.fiRealized = (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + commodityRealizedProfit;
+      refreshOverviewStats();
 
       if (xirrEl) {
         var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
@@ -2065,17 +2106,14 @@
   }
 
   function updateTotalCurrentValue() {
-    var overviewEl = document.getElementById("overview-total-current-value");
     var equityEl = document.getElementById("equity-total-current-value");
-    var overviewReturnEl = document.getElementById("overview-unrealized-return");
-    var overviewPctEl = document.getElementById("overview-return-pct");
     var equityReturnEl = document.getElementById("equity-unrealized-return");
     var equityPctEl = document.getElementById("equity-return-pct");
     var overviewXirrEl = document.getElementById("overview-xirr");
     var equityXirrEl = document.getElementById("equity-xirr");
     var overviewDayChangeEl = document.getElementById("overview-day-change");
     var equityDayChangeEl = document.getElementById("equity-day-change");
-    if (!overviewEl && !equityEl && !overviewReturnEl && !equityReturnEl && !overviewXirrEl && !equityXirrEl && !overviewDayChangeEl && !equityDayChangeEl) return;
+    if (!equityEl && !equityReturnEl && !overviewXirrEl && !equityXirrEl && !overviewDayChangeEl && !equityDayChangeEl) return;
 
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var unitEvents = buildInstrumentUnitEvents(selected);
@@ -2097,17 +2135,6 @@
         if (commodityFlows && commodityFlows.length) flows = flows.concat(commodityFlows);
       }
       return flows;
-    }
-
-    function epfUnrealizedProfit(commodityProfit) {
-      if (isFixedIncomeExcluded()) return 0;
-      var epfRows = getSheetRows("fixedincome");
-      var fdRows = getSheetRows("fd");
-      var epfProfit = epfRows ? sumEpfAmount(epfRows, selected, true) - sumEpfAmount(epfRows, selected, false) : 0;
-      var fdProfit = fdRows
-        ? (sumFdCurrentValueAtPar(fdRows, selected) + sumFdMaturedCurrentValue(fdRows, selected)) - sumFdInvestment(fdRows, selected)
-        : 0;
-      return epfProfit + fdProfit + (commodityProfit || 0);
     }
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
@@ -2170,11 +2197,9 @@
           : !Object.keys(schemeMap).length
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
-        var overviewInvestmentNoValue = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-        var overviewCurrentValueNoValue = overviewInvestmentNoValue + epfUnrealizedProfit(commodityProfit);
-        if (overviewEl) { overviewEl.textContent = formatCurrency(overviewCurrentValueNoValue); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
-        setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValueNoValue, overviewInvestmentNoValue);
+        _ov.mfCurrent = 0; _ov.mfUnrealized = 0;
+        refreshOverviewStats();
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
@@ -2207,12 +2232,10 @@
           });
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
-          var overviewInvestment = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-          var overviewCurrentValue = overviewInvestment + unrealizedProfit + epfUnrealizedProfit(commodityProfit);
-          if (overviewEl) overviewEl.textContent = formatCurrency(overviewCurrentValue);
           if (equityEl) equityEl.textContent = formatCurrency(total);
-          setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValue, overviewInvestment);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
+          _ov.mfCurrent = total; _ov.mfUnrealized = unrealizedProfit;
+          refreshOverviewStats();
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
           if (!isFixedIncomeExcluded()) {
