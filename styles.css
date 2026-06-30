@@ -763,6 +763,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   /* hide text nav links in dashboard header; hamburger takes over */
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
+  .logo-text { display: none; }
 
   .header-actions { gap: 6px; }
   .portfolio-toggle { max-width: 130px; padding: 7px 10px; font-size: 0.875rem; }
