@@ -1912,6 +1912,40 @@
     return navHistory[navHistory.length - 2].nav;
   }
 
+  function getTotalCommodityGrams(fdRows, portfolioFilter) {
+    if (!fdRows || !fdRows.length) return 0;
+    var header = fdRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var categoryIdx = header.indexOf("instrument category");
+    var gramsIdx = header.indexOf("grams");
+    if (gramsIdx === -1) return 0;
+    var total = 0;
+    fdRows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      total += parseNumber(row[gramsIdx]);
+    });
+    return total;
+  }
+
+  function fetchCommodityDayChange(fdRows, portfolioFilter) {
+    var grams = getTotalCommodityGrams(fdRows, portfolioFilter);
+    if (!grams) return Promise.resolve(0);
+    var today = new Date();
+    var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    var yesterdayStr = formatDateISO(yesterday);
+    return Promise.all([
+      fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      fetchXauInrForDate(yesterdayStr).catch(function () { return null; })
+    ]).then(function (prices) {
+      var todayPrice = prices[0];
+      var yesterdayPrice = prices[1];
+      if (!todayPrice || !yesterdayPrice) return 0;
+      return (todayPrice - yesterdayPrice) * grams;
+    });
+  }
+
   function updateTotalCurrentValue() {
     var overviewEl = document.getElementById("overview-total-current-value");
     var equityEl = document.getElementById("equity-total-current-value");
@@ -1998,8 +2032,15 @@
         var xirrNoValue = calculateXIRR(xirrCashFlows);
         setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows)));
         setXirr(equityXirrEl, xirrNoValue);
-        setDayChange(overviewDayChangeEl, 0);
         setDayChange(equityDayChangeEl, 0);
+        var fdRowsNoNav = getSheetRows("fd");
+        if (!isFixedIncomeExcluded()) {
+          fetchCommodityDayChange(fdRowsNoNav, selected).then(function (commodityDayChange) {
+            setDayChange(overviewDayChangeEl, commodityDayChange);
+          });
+        } else {
+          setDayChange(overviewDayChangeEl, 0);
+        }
         return;
       }
 
@@ -2025,8 +2066,16 @@
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValue, overviewInvestment);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
-          setDayChange(overviewDayChangeEl, total - yesterdayTotal);
-          setDayChange(equityDayChangeEl, total - yesterdayTotal);
+          var equityDayChange = total - yesterdayTotal;
+          setDayChange(equityDayChangeEl, equityDayChange);
+          var fdRowsForDay = getSheetRows("fd");
+          if (!isFixedIncomeExcluded()) {
+            fetchCommodityDayChange(fdRowsForDay, selected).then(function (commodityDayChange) {
+              setDayChange(overviewDayChangeEl, equityDayChange + commodityDayChange);
+            });
+          } else {
+            setDayChange(overviewDayChangeEl, equityDayChange);
+          }
 
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
