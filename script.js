@@ -1933,17 +1933,20 @@
     // Collect unique buy + sell dates from commodity rows to fetch historical prices
     var uniqueDates = collectCommodityUniqueDates(rows, selectedPortfolio);
 
+    console.log("[Commodity] uniqueDates to fetch:", uniqueDates);
     Promise.all([
       fetchGoldPriceINRPerGram().catch(function () { return null; }),
       Promise.all(uniqueDates.map(function (dateStr) {
-        return fetchXauInrForDate(dateStr).then(function (price) { return { dateStr: dateStr, price: price }; }).catch(function () { return { dateStr: dateStr, price: null }; });
+        return fetchXauInrForDate(dateStr).then(function (price) { console.log("[Commodity] fetched price for", dateStr, "->", price); return { dateStr: dateStr, price: price }; }).catch(function (e) { console.warn("[Commodity] failed to fetch price for", dateStr, e); return { dateStr: dateStr, price: null }; });
       }))
     ]).then(function (results) {
       var goldPrice = results[0];
       var historicalPrices = {};
       results[1].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
+      console.log("[Commodity] historicalPrices:", historicalPrices, "goldPrice:", goldPrice);
 
       var allHoldings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice, historicalPrices);
+      console.log("[Commodity] holdings:", allHoldings);
       if (allHoldings === null) {
         statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
         tableWrap.hidden = true;
