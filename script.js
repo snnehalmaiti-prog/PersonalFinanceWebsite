@@ -1281,7 +1281,7 @@
     return holdings;
   }
 
-  function renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, emptyMessage) {
+  function renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, emptyMessage, showReturn) {
     if (!holdings || !holdings.length) {
       statusEl.textContent = emptyMessage;
       tableWrap.hidden = true;
@@ -1328,6 +1328,14 @@
       unrealizedTd.textContent = (unrealizedProfit > 0 ? "+" : "") + formatCurrency(unrealizedProfit);
       tr.appendChild(unrealizedTd);
 
+      if (showReturn) {
+        var returnPct = h.invested > 0 ? (unrealizedProfit / h.invested) * 100 : 0;
+        var returnTd = document.createElement("td");
+        returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
+        returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
+        tr.appendChild(returnTd);
+      }
+
       tbody.appendChild(tr);
     });
 
@@ -1360,7 +1368,7 @@
       return;
     }
 
-    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Investment Corpus/Savings Account holdings found.");
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Investment Corpus/Savings Account holdings found.", false);
   }
 
   // "Fixed Deposit Holding": Fixed Deposit sub-category only.
@@ -1387,7 +1395,7 @@
       return;
     }
 
-    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.");
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.", true);
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
