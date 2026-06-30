@@ -923,8 +923,10 @@
         if (!category) issues.push("Instrument Category is blank");
         if (!subCategory) issues.push("Instrument Sub Category is blank");
         if (!parseFlexibleDate(row[fdIdx["transaction date"]])) issues.push("Transaction Date is blank or not a valid date");
-        var amountCheck = validateNumericCell(row[fdIdx["invested amount"]]);
-        if (!amountCheck.ok) issues.push("Invested Amount " + amountCheck.reason);
+        if (!isCommodity) {
+          var amountCheck = validateNumericCell(row[fdIdx["invested amount"]]);
+          if (!amountCheck.ok) issues.push("Invested Amount " + amountCheck.reason);
+        }
 
         if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date/Sell Date is mandatory for Fixed Deposit rows but is blank");
         else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date/Sell Date is not a valid date");
