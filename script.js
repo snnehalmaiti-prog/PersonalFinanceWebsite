@@ -3650,9 +3650,9 @@
     return events;
   }
 
-  // Builds stepped commodity (gold) value events at each buy/sell date using historical prices.
-  // Between events the last known value is carried forward via lastAtOrBefore, matching EPF/FD behaviour.
-  function buildCommodityValueEvents(fdRows, portfolioFilter, histPrices) {
+  // Builds stepped commodity (gold) gram events at each buy/sell date.
+  // Value = cumulativeGrams × currentGoldPrice, so the chart shows market value at today's price.
+  function buildCommodityGramEvents(fdRows, portfolioFilter) {
     if (!fdRows || !fdRows.length) return [];
     var header = fdRows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -3663,8 +3663,6 @@
     if (gramsIdx === -1 || dateIdx === -1) return [];
 
     var today = new Date(); today.setHours(0, 0, 0, 0);
-
-    // Collect raw buy/sell events
     var raw = [];
     fdRows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
@@ -3674,20 +3672,13 @@
       if (!grams) return;
       var buyDate = parseFlexibleDate(row[dateIdx]);
       if (!buyDate) return;
-      var buyDateStr = formatDateISO(buyDate);
-      var buyPrice = histPrices[buyDateStr] || 0;
-      raw.push({ date: buyDate, valueDelta: grams * buyPrice });
+      raw.push({ date: buyDate, gramsDelta: grams });
 
       var sellDateParsed = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
       if (sellDateParsed) {
         var sellDay = new Date(sellDateParsed.getFullYear(), sellDateParsed.getMonth(), sellDateParsed.getDate());
         if (today > sellDay) {
-          var sellDateStr = formatDateISO(sellDateParsed);
-          var sellPrice = histPrices[sellDateStr] || 0;
-          // On sell date: remove the buy-price contribution (commodity exits the portfolio)
-          raw.push({ date: sellDateParsed, valueDelta: -(grams * buyPrice) });
-          // Any realized gain/loss is not included in "current portfolio value"
-          void sellPrice;
+          raw.push({ date: sellDateParsed, gramsDelta: -grams });
         }
       }
     });
@@ -3695,8 +3686,8 @@
     raw.sort(function (a, b) { return a.date - b.date; });
     var running = 0;
     return raw.map(function (e) {
-      running += e.valueDelta;
-      return { date: e.date, cumulativeValue: running };
+      running += e.gramsDelta;
+      return { date: e.date, cumulativeGrams: running };
     });
   }
 
@@ -3732,15 +3723,16 @@
       var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
       var fdValueEvents = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
 
-      // Fetch historical gold prices for commodity transaction dates so they can be included in the chart
+      // Build commodity gram events and fetch current gold price for chart
       var fdRowsForChart = getSheetRows("fd");
-      var commodityDatesForChart = fdRowsForChart
-        ? collectCommodityUniqueDates(fdRowsForChart, selectedPortfolio) : [];
-      var commodityHistPromise = Promise.all(commodityDatesForChart.map(function (d) {
-        return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
-      }));
+      var commodityGramEvents = fdRowsForChart
+        ? buildCommodityGramEvents(fdRowsForChart, selectedPortfolio) : [];
+      var hasAnyCommodity = commodityGramEvents.length > 0;
+      var currentGoldPricePromise = hasAnyCommodity
+        ? fetchGoldPriceINRPerGram().catch(function () { return null; })
+        : Promise.resolve(null);
 
-      if (!instruments.length && !epfEvents.length && !fdValueEvents.length && !commodityDatesForChart.length) {
+      if (!instruments.length && !epfEvents.length && !fdValueEvents.length && !hasAnyCommodity) {
         if (window.__wfValueChart) {
           window.__wfValueChart.destroy();
           window.__wfValueChart = null;
@@ -3756,14 +3748,10 @@
 
       return Promise.all([
         Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); })),
-        commodityHistPromise
+        currentGoldPricePromise
       ]).then(function (outerResults) {
         var navHistories = outerResults[0];
-        var commodityHistResults = outerResults[1];
-        var commodityHistPrices = {};
-        commodityHistResults.forEach(function (r) { if (r.price) commodityHistPrices[r.dateStr] = r.price; });
-        var commodityValueEvents = fdRowsForChart
-          ? buildCommodityValueEvents(fdRowsForChart, selectedPortfolio, commodityHistPrices) : [];
+        var currentGoldPrice = outerResults[1];
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
@@ -3773,7 +3761,7 @@
         });
         epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         fdValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
-        commodityValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        commodityGramEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
         var firstTxnDate = null, lastTxnDate = null;
@@ -3798,8 +3786,8 @@
           if (!firstTxnDate || fdEarliest < firstTxnDate) firstTxnDate = fdEarliest;
           if (!lastTxnDate || fdLatest > lastTxnDate) lastTxnDate = fdLatest;
         }
-        if (commodityValueEvents.length) {
-          var commEarliest = commodityValueEvents[0].date;
+        if (commodityGramEvents.length) {
+          var commEarliest = commodityGramEvents[0].date;
           if (!firstTxnDate || commEarliest < firstTxnDate) firstTxnDate = commEarliest;
         }
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
@@ -3811,9 +3799,10 @@
         }
 
         var points = timeline.map(function (date) {
+          var activeGrams = lastAtOrBefore(commodityGramEvents, date, "cumulativeGrams") || 0;
           var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0)
             + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0)
-            + (lastAtOrBefore(commodityValueEvents, date, "cumulativeValue") || 0);
+            + (currentGoldPrice ? activeGrams * currentGoldPrice : 0);
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
