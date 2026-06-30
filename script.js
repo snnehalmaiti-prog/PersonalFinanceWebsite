@@ -432,6 +432,7 @@
     renderFixedIncomeHoldingsTable();
     renderFdHoldingsTable();
     renderFixedDepositHoldingsTable();
+    renderCommodityHoldingsTable();
     renderMarketSegmentChart();
     renderMutualFundPortfolioSplitChart();
   }
@@ -879,6 +880,8 @@
     if (prefix === "fd") {
       var rawHeaderFd = rows[0];
       var headerFd = rawHeaderFd.map(normalizeText);
+      var maturityDateIdx = headerFd.indexOf("maturity date/sell date");
+      if (maturityDateIdx === -1) maturityDateIdx = headerFd.indexOf("maturity date");
       var fdIdx = {
         "transaction date": headerFd.indexOf("transaction date"),
         "portfolio name": headerFd.indexOf("portfolio name"),
@@ -887,9 +890,11 @@
         "instrument category": headerFd.indexOf("instrument category"),
         "instrument sub category": headerFd.indexOf("instrument sub category"),
         "invested amount": headerFd.indexOf("invested amount"),
-        "maturity date": headerFd.indexOf("maturity date"),
+        "maturity date/sell date": maturityDateIdx,
         "rate of return": headerFd.indexOf("rate of return")
       };
+      var gramsIdx = headerFd.indexOf("grams");
+      var rateGramIdx = headerFd.indexOf("rate/gram");
       var missingFd = Object.keys(fdIdx).filter(function (key) { return fdIdx[key] === -1; });
       if (missingFd.length) {
         return {
@@ -906,9 +911,11 @@
         var instrument = (row[fdIdx["instrument name"]] || "").trim();
         var category = (row[fdIdx["instrument category"]] || "").trim();
         var subCategory = (row[fdIdx["instrument sub category"]] || "").trim();
-        var maturityRaw = (row[fdIdx["maturity date"]] || "").trim();
+        var maturityRaw = (row[fdIdx["maturity date/sell date"]] || "").trim();
         var rateRaw = (row[fdIdx["rate of return"]] || "").trim();
-        var isFixedDeposit = normalizeText(category) === "fixed income" && normalizeText(subCategory) === "fixed deposit";
+        var normCategory = normalizeText(category);
+        var isFixedDeposit = normCategory === "fixed income" && normalizeText(subCategory) === "fixed deposit";
+        var isCommodity = normCategory === "commodity";
 
         var issues = [];
         if (!portfolio) issues.push("Portfolio Name is blank");
@@ -920,11 +927,22 @@
         var amountCheck = validateNumericCell(row[fdIdx["invested amount"]]);
         if (!amountCheck.ok) issues.push("Invested Amount " + amountCheck.reason);
 
-        if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date is mandatory for Fixed Deposit rows but is blank");
-        else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date is not a valid date");
+        if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date/Sell Date is mandatory for Fixed Deposit rows but is blank");
+        else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date/Sell Date is not a valid date");
 
         if (isFixedDeposit && !rateRaw) issues.push("Rate of Return is mandatory for Fixed Deposit rows but is blank");
         else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
+
+        if (isCommodity) {
+          if (gramsIdx !== -1) {
+            var gramsRaw = (row[gramsIdx] || "").trim();
+            if (gramsRaw && isNaN(parseFloat(gramsRaw))) issues.push("Grams must be a number");
+          }
+          if (rateGramIdx !== -1) {
+            var rateGramRaw = (row[rateGramIdx] || "").trim();
+            if (rateGramRaw && isNaN(parseFloat(rateGramRaw))) issues.push("Rate/Gram must be a number");
+          }
+        }
 
         if (issues.length) fdBadRows.push("Row " + (i + 2) + " (" + (portfolio || "unknown portfolio") + "): " + issues.join(", "));
       });
@@ -1210,7 +1228,8 @@
     var subCategoryIdx = header.indexOf("instrument sub category");
     var amountIdx = header.indexOf("invested amount");
     var dateIdx = header.indexOf("transaction date");
-    var maturityIdx = header.indexOf("maturity date");
+    var maturityIdx = header.indexOf("maturity date/sell date");
+    if (maturityIdx === -1) maturityIdx = header.indexOf("maturity date");
     var rateIdx = header.indexOf("rate of return");
     if (portfolioIdx === -1 || bankIdx === -1 || instrumentIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1 || maturityIdx === -1 || rateIdx === -1) {
       return null;
@@ -1414,6 +1433,55 @@
     }
 
     renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.", true);
+  }
+
+  function buildCommodityHoldingsList(rows, portfolioFilter) {
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var bankIdx = header.indexOf("bank");
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var amountIdx = header.indexOf("invested amount");
+    if (portfolioIdx === -1 || instrumentIdx === -1 || amountIdx === -1) return null;
+
+    var holdings = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      var instrument = (row[instrumentIdx] || "").trim();
+      if (!instrument) return;
+      var bank = bankIdx !== -1 ? (row[bankIdx] || "").trim() : "";
+      var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
+      var invested = parseNumber(row[amountIdx]);
+      holdings.push({ portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory, invested: invested, current: invested });
+    });
+    return holdings;
+  }
+
+  function renderCommodityHoldingsTable() {
+    var statusEl = document.getElementById("commodity-holdings-status");
+    var tableWrap = document.getElementById("commodity-holdings-table-wrap");
+    var tbody = document.getElementById("commodity-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var holdings = buildCommodityHoldingsList(rows, selectedPortfolio);
+    if (holdings === null) {
+      statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Physical Commodity holdings found.", true);
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
@@ -1912,7 +1980,7 @@
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         if (prefix === "fixedincome") { renderValueChart(); renderFixedIncomeHoldingsTable(); }
-        if (prefix === "fd") { renderValueChart(); renderFdHoldingsTable(); renderFixedDepositHoldingsTable(); }
+        if (prefix === "fd") { renderValueChart(); renderFdHoldingsTable(); renderFixedDepositHoldingsTable(); renderCommodityHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });
@@ -2361,8 +2429,10 @@
     "Instrument Name",
     "Instrument Category",
     "Instrument Sub Category",
+    "Grams",
+    "Rate/Gram",
     "Invested Amount",
-    "Maturity Date",
+    "Maturity Date/Sell Date",
     "Rate of Return"
   ];
 
