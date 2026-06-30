@@ -618,6 +618,19 @@
     return total;
   }
 
+  // Realized Profit for Fixed Deposits = current accrued value − invested amount,
+  // identical to Unrealized Profit (applies to all FDs regardless of maturity status).
+  function sumFdRealizedProfit(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
+      return normSubCategory === "fixed deposit";
+    });
+    if (!holdings) return 0;
+    var total = 0;
+    holdings.forEach(function (h) { total += h.current - h.invested; });
+    return total;
+  }
+
   function buildFdMaturedXirrCashFlows(rows, portfolioFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -1055,8 +1068,9 @@
     var currentValueEl = document.getElementById("fixedincome-current-value");
     var profitEl = document.getElementById("fixedincome-unrealized-profit");
     var pctEl = document.getElementById("fixedincome-return-pct");
+    var realizedProfitEl = document.getElementById("fixedincome-realized-profit");
     var xirrEl = document.getElementById("fixedincome-xirr");
-    if (!currentValueEl && !profitEl && !pctEl && !xirrEl) return;
+    if (!currentValueEl && !profitEl && !pctEl && !realizedProfitEl && !xirrEl) return;
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var rows = getSheetRows("fixedincome");
     var fdRows = getSheetRows("fd");
@@ -1066,6 +1080,7 @@
     var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
     if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
     setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
+    if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fdRows ? sumFdRealizedProfit(fdRows, selected) : 0);
     if (xirrEl) {
       // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded from
       // XIRR, regardless of the "Exclude Savings/Investment Holding" toggle — its running-balance
