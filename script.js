@@ -1964,7 +1964,7 @@
     var equityRows = getSheetRows("equity");
     var transactionsByInstrumentForInvestment = groupUnitTransactionsByInstrument(equityRows, selected) || {};
 
-    function overviewXirrCashFlows(equityFlows) {
+    function overviewXirrCashFlows(equityFlows, goldPrice, commodityFlows) {
       var flows = equityFlows.slice();
       if (!isFixedIncomeExcluded()) {
         var epfRows = getSheetRows("fixedincome");
@@ -1976,11 +1976,12 @@
         flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected))
           .concat(buildFdMaturedXirrCashFlows(fdRows, selected));
         if (fixedIncomeCurrentValue > 0) flows.push({ date: new Date(), amount: fixedIncomeCurrentValue });
+        if (commodityFlows && commodityFlows.length) flows = flows.concat(commodityFlows);
       }
       return flows;
     }
 
-    function epfUnrealizedProfit() {
+    function epfUnrealizedProfit(commodityProfit) {
       if (isFixedIncomeExcluded()) return 0;
       var epfRows = getSheetRows("fixedincome");
       var fdRows = getSheetRows("fd");
@@ -1988,7 +1989,7 @@
       var fdProfit = fdRows
         ? (sumFdCurrentValueAtPar(fdRows, selected) + sumFdMaturedCurrentValue(fdRows, selected)) - sumFdInvestment(fdRows, selected)
         : 0;
-      return epfProfit + fdProfit;
+      return epfProfit + fdProfit + (commodityProfit || 0);
     }
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
@@ -2013,7 +2014,36 @@
       return total;
     }
 
-    buildInstrumentSchemeMap().then(function (schemeMap) {
+    // Fetch gold price upfront so commodity profit/XIRR flow into overview stats
+    var fdRowsForOverview = getSheetRows("fd");
+    var commodityProfitPromise = (function () {
+      if (isFixedIncomeExcluded() || !fdRowsForOverview || !fdRowsForOverview.length) return Promise.resolve({ profit: 0, flows: [] });
+      return fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
+        if (!goldPrice) return { profit: 0, flows: [] };
+        var holdings = buildCommodityHoldingsList(fdRowsForOverview, selected, goldPrice, null) || [];
+        var uniqueDates = [];
+        holdings.forEach(function (h) { if (h.dateStr && uniqueDates.indexOf(h.dateStr) === -1) uniqueDates.push(h.dateStr); });
+        return Promise.all(uniqueDates.map(function (d) {
+          return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+        })).then(function (histResults) {
+          var histPrices = {};
+          histResults.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+          var fullHoldings = buildCommodityHoldingsList(fdRowsForOverview, selected, goldPrice, histPrices) || [];
+          var profit = 0;
+          fullHoldings.forEach(function (h) { profit += h.current - h.invested; });
+          return buildCommodityXirrCashFlows(fdRowsForOverview, selected, goldPrice).then(function (flows) {
+            return { profit: profit, flows: flows };
+          });
+        });
+      });
+    })();
+
+    Promise.all([buildInstrumentSchemeMap(), commodityProfitPromise]).then(function (results) {
+      var schemeMap = results[0];
+      var commodityData = results[1];
+      var commodityProfit = commodityData.profit;
+      var commodityFlows = commodityData.flows;
+
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       console.log("[NAV] instruments held:", Object.keys(unitEvents), "resolved scheme codes:", instruments.map(function (name) { return name + " -> " + lookupSchemeCode(schemeMap, name); }));
       if (!instruments.length) {
@@ -2023,19 +2053,18 @@
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
         var overviewInvestmentNoValue = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-        var overviewCurrentValueNoValue = overviewInvestmentNoValue + epfUnrealizedProfit();
+        var overviewCurrentValueNoValue = overviewInvestmentNoValue + epfUnrealizedProfit(commodityProfit);
         if (overviewEl) { overviewEl.textContent = formatCurrency(overviewCurrentValueNoValue); overviewEl.title = reason; }
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
         setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValueNoValue, overviewInvestmentNoValue);
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
-        setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows)));
+        setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows, null, commodityFlows)));
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
-        var fdRowsNoNav = getSheetRows("fd");
         if (!isFixedIncomeExcluded()) {
-          fetchCommodityDayChange(fdRowsNoNav, selected).then(function (commodityDayChange) {
+          fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
             setDayChange(overviewDayChangeEl, commodityDayChange);
           });
         } else {
@@ -2061,16 +2090,15 @@
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
           var overviewInvestment = computeTotalInvestment(selected, overviewInvestmentPrefixes());
-          var overviewCurrentValue = overviewInvestment + unrealizedProfit + epfUnrealizedProfit();
+          var overviewCurrentValue = overviewInvestment + unrealizedProfit + epfUnrealizedProfit(commodityProfit);
           if (overviewEl) overviewEl.textContent = formatCurrency(overviewCurrentValue);
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(overviewReturnEl, overviewPctEl, overviewCurrentValue, overviewInvestment);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
-          var fdRowsForDay = getSheetRows("fd");
           if (!isFixedIncomeExcluded()) {
-            fetchCommodityDayChange(fdRowsForDay, selected).then(function (commodityDayChange) {
+            fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
               setDayChange(overviewDayChangeEl, equityDayChange + commodityDayChange);
             });
           } else {
@@ -2080,7 +2108,7 @@
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
           var xirr = calculateXIRR(xirrCashFlows);
-          setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows)));
+          setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows, null, commodityFlows)));
           setXirr(equityXirrEl, xirr);
         });
     });
