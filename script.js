@@ -1645,7 +1645,63 @@
       return;
     }
 
-    renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Physical Commodity holdings found.", true);
+    if (!holdings.length) {
+      statusEl.textContent = "No Physical Commodity holdings found.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    tbody.innerHTML = "";
+    holdings.forEach(function (h) {
+      var tr = document.createElement("tr");
+
+      var portfolioTd = document.createElement("td");
+      portfolioTd.className = "col-desktop-only";
+      portfolioTd.textContent = h.portfolio;
+      tr.appendChild(portfolioTd);
+
+      var categoryTd = document.createElement("td");
+      categoryTd.className = "col-desktop-only";
+      categoryTd.textContent = h.bank; // bank field holds Instrument Category for commodity
+      tr.appendChild(categoryTd);
+
+      var nameTd = document.createElement("td");
+      nameTd.className = "fund-name";
+      nameTd.textContent = h.instrument;
+      tr.appendChild(nameTd);
+
+      var subCategoryTd = document.createElement("td");
+      subCategoryTd.className = "col-desktop-only";
+      subCategoryTd.textContent = h.subCategory;
+      tr.appendChild(subCategoryTd);
+
+      var investedTd = document.createElement("td");
+      investedTd.className = "num";
+      investedTd.textContent = formatCurrency(h.invested);
+      tr.appendChild(investedTd);
+
+      var currentTd = document.createElement("td");
+      currentTd.className = "num col-desktop-only";
+      currentTd.textContent = formatCurrency(h.current);
+      tr.appendChild(currentTd);
+
+      var unrealized = h.current - h.invested;
+      var unrealizedTd = document.createElement("td");
+      unrealizedTd.className = "num " + (unrealized > 0 ? "positive" : unrealized < 0 ? "negative" : "");
+      unrealizedTd.textContent = (unrealized > 0 ? "+" : "") + formatCurrency(unrealized);
+      tr.appendChild(unrealizedTd);
+
+      var returnPct = h.invested > 0 ? (unrealized / h.invested) * 100 : 0;
+      var returnTd = document.createElement("td");
+      returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
+      returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
+      tr.appendChild(returnTd);
+
+      tbody.appendChild(tr);
+    });
+
+    statusEl.textContent = holdings.length + " holding(s).";
+    tableWrap.hidden = false;
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
