@@ -2430,11 +2430,15 @@
         }
       });
 
+      var numberRow = document.createElement("div");
+      numberRow.className = "sheet-row-number-row";
+      numberRow.appendChild(headerInput);
+      numberRow.appendChild(removeBtn);
+
       var fields = document.createElement("div");
       fields.className = "equity-link-row sheet-row-fields";
       fields.appendChild(linkInput);
-      fields.appendChild(headerInput);
-      fields.appendChild(removeBtn);
+      fields.appendChild(numberRow);
 
       var rowMeta = document.createElement("div");
       rowMeta.className = "equity-meta muted small sheet-row-meta";
