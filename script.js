@@ -1322,13 +1322,13 @@
       currentTd.textContent = formatCurrency(h.current);
       tr.appendChild(currentTd);
 
-      var unrealizedProfit = h.current - h.invested;
-      var unrealizedTd = document.createElement("td");
-      unrealizedTd.className = "num " + (unrealizedProfit > 0 ? "positive" : unrealizedProfit < 0 ? "negative" : "");
-      unrealizedTd.textContent = (unrealizedProfit > 0 ? "+" : "") + formatCurrency(unrealizedProfit);
-      tr.appendChild(unrealizedTd);
-
       if (showReturn) {
+        var unrealizedProfit = h.current - h.invested;
+        var unrealizedTd = document.createElement("td");
+        unrealizedTd.className = "num " + (unrealizedProfit > 0 ? "positive" : unrealizedProfit < 0 ? "negative" : "");
+        unrealizedTd.textContent = (unrealizedProfit > 0 ? "+" : "") + formatCurrency(unrealizedProfit);
+        tr.appendChild(unrealizedTd);
+
         var returnPct = h.invested > 0 ? (unrealizedProfit / h.invested) * 100 : 0;
         var returnTd = document.createElement("td");
         returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
