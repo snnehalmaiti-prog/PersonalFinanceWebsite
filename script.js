@@ -1115,10 +1115,33 @@
     var stocksEtfRealizedEl = document.getElementById("stocksetf-realized-return");
     if (overviewEl || equityEl || fixedIncomeEl || stocksEtfEl) {
       var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-      if (overviewEl) overviewEl.textContent = formatCurrency(computeTotalInvestment(selected, overviewInvestmentPrefixes()));
       if (equityEl) equityEl.textContent = formatCurrency(computeTotalInvestment(selected, ["equity"]));
-      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(computeTotalInvestment(selected, ["fixedincome", "fd"]));
       if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(computeTotalInvestment(selected, ["stocksetf"]));
+      // Commodity invested amount requires async gold price fetch; resolve then update Fixed Income + Overview
+      var baseFixedIncomeInvested = computeTotalInvestment(selected, ["fixedincome", "fd"]);
+      var baseOverviewInvested = computeTotalInvestment(selected, overviewInvestmentPrefixes());
+      if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(baseFixedIncomeInvested);
+      if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested);
+      if (!isFixedIncomeExcluded()) {
+        var fdRowsInv = getSheetRows("fd");
+        fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
+          if (!goldPrice || !fdRowsInv || !fdRowsInv.length) return;
+          var holdings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, null) || [];
+          var uniqueDates = [];
+          holdings.forEach(function (h) { if (h.dateStr && uniqueDates.indexOf(h.dateStr) === -1) uniqueDates.push(h.dateStr); });
+          Promise.all(uniqueDates.map(function (d) {
+            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+          })).then(function (histResults) {
+            var histPrices = {};
+            histResults.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+            var fullHoldings = buildCommodityHoldingsList(fdRowsInv, selected, goldPrice, histPrices) || [];
+            var commodityInvested = 0;
+            fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
+            if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(baseFixedIncomeInvested + commodityInvested);
+            if (overviewEl) overviewEl.textContent = formatCurrency(baseOverviewInvested + commodityInvested);
+          });
+        });
+      }
     }
     if (overviewRealizedEl || equityRealizedEl || stocksEtfRealizedEl) {
       var selectedForRealized = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
