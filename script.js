@@ -2137,10 +2137,7 @@
     }
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
-    if (overviewEl) { overviewEl.textContent = "…"; overviewEl.title = loadingMsg; }
     if (equityEl) { equityEl.textContent = "…"; equityEl.title = loadingMsg; }
-    if (overviewReturnEl) overviewReturnEl.textContent = "…";
-    if (overviewPctEl) overviewPctEl.textContent = "…";
     if (equityReturnEl) equityReturnEl.textContent = "…";
     if (equityPctEl) equityPctEl.textContent = "…";
     if (overviewXirrEl) overviewXirrEl.textContent = "…";
