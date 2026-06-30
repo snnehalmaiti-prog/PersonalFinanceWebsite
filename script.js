@@ -658,6 +658,56 @@
     return flows;
   }
 
+  // Commodity XIRR: each purchase is a negative cash flow on the transaction date
+  // (amount = grams × historical gold price/g). Terminal positive flow = total grams × current price.
+  // Returns a Promise because historical gold prices require async API calls.
+  function buildCommodityXirrCashFlows(fdRows, portfolioFilter, currentGoldPrice) {
+    if (!fdRows || !fdRows.length || !currentGoldPrice) return Promise.resolve([]);
+    var header = fdRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var categoryIdx = header.indexOf("instrument category");
+    var dateIdx = header.indexOf("transaction date");
+    var gramsIdx = header.indexOf("grams");
+    if (portfolioIdx === -1 || dateIdx === -1 || gramsIdx === -1) return Promise.resolve([]);
+
+    var purchases = [];
+    fdRows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
+      var grams = parseNumber(row[gramsIdx]);
+      var date = parseFlexibleDate(row[dateIdx]);
+      var dateStr = formatDateISO(date);
+      if (!grams || !date || !dateStr) return;
+      purchases.push({ date: date, dateStr: dateStr, grams: grams });
+    });
+
+    if (!purchases.length) return Promise.resolve([]);
+
+    var uniqueDates = [];
+    purchases.forEach(function (p) { if (uniqueDates.indexOf(p.dateStr) === -1) uniqueDates.push(p.dateStr); });
+
+    return Promise.all(uniqueDates.map(function (dateStr) {
+      return fetchXauInrForDate(dateStr)
+        .then(function (price) { return { dateStr: dateStr, price: price }; })
+        .catch(function () { return { dateStr: dateStr, price: null }; });
+    })).then(function (results) {
+      var histPrices = {};
+      results.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+
+      var flows = [];
+      var totalGrams = 0;
+      purchases.forEach(function (p) {
+        var histPrice = histPrices[p.dateStr];
+        if (!histPrice) return;
+        flows.push({ date: p.date, amount: -(p.grams * histPrice) });
+        totalGrams += p.grams;
+      });
+      if (totalGrams > 0) flows.push({ date: new Date(), amount: totalGrams * currentGoldPrice });
+      return flows;
+    });
+  }
+
   function groupUnitTransactionsByInstrument(rows, portfolioFilter) {
     if (!rows || !rows.length) return null;
     var header = rows[0].map(normalizeText);
@@ -1092,20 +1142,47 @@
     var fdRows = getSheetRows("fd");
     var connectHintEl = document.getElementById("fixedincome-connect-hint");
     if (connectHintEl) connectHintEl.hidden = !!(rows && rows.length) || !!(fdRows && fdRows.length);
-    var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0);
-    var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
-    if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
-    setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
-    if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fdRows ? sumFdRealizedProfit(fdRows, selected) : 0);
-    if (xirrEl) {
-      // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded from
-      // XIRR, regardless of the "Exclude Savings/Investment Holding" toggle — its running-balance
-      // updates aren't real cash-flow events.
-      var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
-      var epfCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
-      if (currentValueForXirr > 0) epfCashFlows.push({ date: new Date(), amount: currentValueForXirr });
-      setXirr(xirrEl, calculateXIRR(epfCashFlows));
-    }
+
+    // Fetch current gold price to include commodity in stats; fall back to 0 if unavailable
+    fetchGoldPriceINRPerGram().catch(function () { return null; }).then(function (goldPrice) {
+      var commodityHoldings = (fdRows && goldPrice)
+        ? buildCommodityHoldingsList(fdRows, selected, goldPrice, null)
+        : [];
+      // For commodity invested amounts we need historical prices; fetch them if needed
+      var uniqueCommodityDates = [];
+      if (commodityHoldings && commodityHoldings.length) {
+        commodityHoldings.forEach(function (h) { if (h.dateStr && uniqueCommodityDates.indexOf(h.dateStr) === -1) uniqueCommodityDates.push(h.dateStr); });
+      }
+      Promise.all(uniqueCommodityDates.map(function (dateStr) {
+        return fetchXauInrForDate(dateStr).then(function (p) { return { dateStr: dateStr, price: p }; }).catch(function () { return { dateStr: dateStr, price: null }; });
+      })).then(function (histResults) {
+        var histPrices = {};
+        histResults.forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+
+        var commodityHoldingsFull = (fdRows && goldPrice)
+          ? buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices)
+          : [];
+        var commodityInvested = 0, commodityCurrent = 0;
+        if (commodityHoldingsFull) commodityHoldingsFull.forEach(function (h) { commodityInvested += h.invested; commodityCurrent += h.current; });
+
+        var investment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0) + commodityInvested;
+        var currentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + commodityCurrent;
+        if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
+        setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
+        if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fdRows ? sumFdRealizedProfit(fdRows, selected) : 0);
+
+        if (xirrEl) {
+          var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
+          var baseCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
+          buildCommodityXirrCashFlows(fdRows, selected, goldPrice).then(function (commodityFlows) {
+            var allFlows = baseCashFlows.concat(commodityFlows);
+            // The commodity terminal flow is already included in commodityFlows; add FD/EPF terminal
+            if (currentValueForXirr > 0) allFlows.push({ date: new Date(), amount: currentValueForXirr });
+            setXirr(xirrEl, calculateXIRR(allFlows));
+          });
+        }
+      });
+    });
   }
 
   function renderFixedIncomeHoldingsTable() {
