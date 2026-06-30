@@ -1814,16 +1814,29 @@
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && cached.price) return Promise.resolve(cached.price);
     } catch (e) {}
-    var url = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dateStr + "/v1/currencies/xau.min.json";
-    return fetch(url)
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var xauInr = data && data.xau && data.xau.inr;
-        if (!xauInr) throw new Error("No XAU/INR for " + dateStr);
-        var pricePerGram = xauInr / TROY_OZ_TO_GRAM;
-        try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
-        return pricePerGram;
-      });
+    // Try up to 3 previous days to handle weekends and market holidays
+    function tryDate(dStr, attemptsLeft) {
+      var url = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
+      return fetch(url)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var xauInr = data && data.xau && data.xau.inr;
+          if (!xauInr) throw new Error("No XAU/INR for " + dStr);
+          var pricePerGram = xauInr / TROY_OZ_TO_GRAM;
+          // Cache under the original requested date so callers always find it
+          try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
+          return pricePerGram;
+        })
+        .catch(function () {
+          if (attemptsLeft <= 0) throw new Error("No XAU/INR found near " + dateStr);
+          // Step back one calendar day and retry
+          var parts = dStr.split("-");
+          var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) - 1);
+          var prev = formatDateISO(d);
+          return tryDate(prev, attemptsLeft - 1);
+        });
+    }
+    return tryDate(dateStr, 3);
   }
 
   function fetchGoldPriceINRPerGram() {
@@ -1857,7 +1870,6 @@
     var subCategoryIdx = header.indexOf("instrument sub category");
     var dateIdx = header.indexOf("transaction date");
     var gramsIdx = header.indexOf("grams");
-    var amountIdx = header.indexOf("invested amount");
     var maturityIdx = header.indexOf("maturity date/sell date");
     if (portfolioIdx === -1 || instrumentIdx === -1 || gramsIdx === -1) return null;
 
@@ -1874,7 +1886,6 @@
       var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var grams = parseNumber(row[gramsIdx]);
-      var sheetInvested = amountIdx !== -1 ? parseNumber(row[amountIdx]) : 0;
       var dateStr = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
 
       var sellDateParsed = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
@@ -1889,13 +1900,9 @@
       if (isSold) {
         invested = 0;
         current = 0;
-        // Realized profit = sell proceeds − invested cost (from sheet if available, else grams × buy price)
-        var costBasis = sheetInvested || (buyPrice && grams > 0 ? grams * buyPrice : 0);
-        var sellProceeds = (sellPrice && grams > 0) ? grams * sellPrice : 0;
-        realizedProfit = sellProceeds - costBasis;
+        realizedProfit = (buyPrice && sellPrice && grams > 0) ? (sellPrice - buyPrice) * grams : 0;
       } else {
-        // Use sheet Invested Amount directly; fall back to grams × buy price if not populated
-        invested = sheetInvested || (buyPrice && grams > 0 ? grams * buyPrice : 0);
+        invested = (buyPrice && grams > 0) ? grams * buyPrice : 0;
         current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
         realizedProfit = 0;
       }
