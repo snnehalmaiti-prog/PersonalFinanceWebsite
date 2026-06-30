@@ -401,6 +401,31 @@
 
       <div class="holdings-card">
         <div class="holdings-card-header">
+          <h3>Fixed Income Holding</h3>
+        </div>
+        <p class="muted small" id="fixedincome-holding-status">Loading holdings…</p>
+        <div id="fixedincome-holding-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="fixedincome-holding-table" class="holdings-table">
+            <thead>
+              <tr>
+                <th class="col-desktop-only">Portfolio Name</th>
+                <th class="col-desktop-only">Bank</th>
+                <th class="col-desktop-only">Instrument Category</th>
+                <th class="col-desktop-only">Instrument Sub Category</th>
+                <th class="fund-name-col">Instrument Name</th>
+                <th class="num">Invested Amount</th>
+                <th class="num col-desktop-only">Current Value</th>
+                <th class="num">Unrealized Profit</th>
+                <th class="num">Return %</th>
+              </tr>
+            </thead>
+            <tbody id="fixedincome-holding-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="holdings-card">
+        <div class="holdings-card-header">
           <h3>Savings/Investment Holding</h3>
         </div>
         <p class="muted small">Note: these investments are assumed to be non-interest bearing, even though you might be earning interest.</p>
