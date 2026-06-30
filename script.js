@@ -1857,6 +1857,7 @@
     var subCategoryIdx = header.indexOf("instrument sub category");
     var dateIdx = header.indexOf("transaction date");
     var gramsIdx = header.indexOf("grams");
+    var amountIdx = header.indexOf("invested amount");
     var maturityIdx = header.indexOf("maturity date/sell date");
     if (portfolioIdx === -1 || instrumentIdx === -1 || gramsIdx === -1) return null;
 
@@ -1873,6 +1874,7 @@
       var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var grams = parseNumber(row[gramsIdx]);
+      var sheetInvested = amountIdx !== -1 ? parseNumber(row[amountIdx]) : 0;
       var dateStr = dateIdx !== -1 ? formatDateISO(parseFlexibleDate(row[dateIdx])) : null;
 
       var sellDateParsed = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
@@ -1887,9 +1889,13 @@
       if (isSold) {
         invested = 0;
         current = 0;
-        realizedProfit = (buyPrice && sellPrice && grams > 0) ? (sellPrice - buyPrice) * grams : 0;
+        // Realized profit = sell proceeds − invested cost (from sheet if available, else grams × buy price)
+        var costBasis = sheetInvested || (buyPrice && grams > 0 ? grams * buyPrice : 0);
+        var sellProceeds = (sellPrice && grams > 0) ? grams * sellPrice : 0;
+        realizedProfit = sellProceeds - costBasis;
       } else {
-        invested = (buyPrice && grams > 0) ? grams * buyPrice : 0;
+        // Use sheet Invested Amount directly; fall back to grams × buy price if not populated
+        invested = sheetInvested || (buyPrice && grams > 0 ? grams * buyPrice : 0);
         current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
         realizedProfit = 0;
       }
