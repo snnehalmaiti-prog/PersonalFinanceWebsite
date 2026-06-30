@@ -934,6 +934,7 @@
         else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
 
         if (isCommodity) {
+          if (!bank) issues.push("Bank is mandatory for Commodity rows but is blank");
           if (gramsIdx !== -1) {
             var gramsRaw = (row[gramsIdx] || "").trim();
             if (gramsRaw && isNaN(parseFloat(gramsRaw))) issues.push("Grams must be a number");
@@ -1452,10 +1453,10 @@
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "commodity") return;
       var instrument = (row[instrumentIdx] || "").trim();
       if (!instrument) return;
-      var category = categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "";
+      var bank = bankIdx !== -1 ? (row[bankIdx] || "").trim() : "";
       var subCategory = subCategoryIdx !== -1 ? (row[subCategoryIdx] || "").trim() : "";
       var invested = parseNumber(row[amountIdx]);
-      holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory, invested: invested, current: invested });
+      holdings.push({ portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory, invested: invested, current: invested });
     });
     return holdings;
   }
