@@ -779,10 +779,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .panel-title-row { gap: 8px; }
 
   .equity-card { padding: 16px 14px; }
-  .equity-card-header { flex-wrap: wrap; align-items: flex-start; }
+  .equity-card-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .equity-card-header h3 { flex-wrap: wrap; font-size: 1rem; }
+  .equity-card-header .btn { width: 100%; justify-content: center; }
   .equity-link-row, .sheet-link-row { flex-direction: column; }
-  .equity-link-row input, .sheet-link-row input { min-width: 0; width: 100%; }
-  .equity-link-row input.header-row-input { width: 100%; }
+  .equity-link-row input, .sheet-link-row input { min-width: 0; width: 100%; box-sizing: border-box; }
+  .equity-link-row input.header-row-input { width: 100%; text-align: left; }
+  .sheet-row-remove { width: 100%; }
+  .btn-outline.btn-sm { width: 100%; justify-content: center; }
 
   .value-chart-card { padding: 14px 12px; }
   .value-chart-header { flex-direction: column; align-items: flex-start; gap: 8px; }
