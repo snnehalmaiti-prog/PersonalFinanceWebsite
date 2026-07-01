@@ -3227,6 +3227,45 @@
     var storageKey = "wf-" + prefix + "-sheet-link";
     var headerRowKey = "wf-" + prefix + "-header-row";
 
+    // Inject toggle control once, lazily
+    var tableToggleEl = (function () {
+      var existing = sheetTableWrap.parentNode.querySelector(".sheet-table-toggle");
+      if (existing) return existing;
+      var el = document.createElement("button");
+      el.type = "button";
+      el.className = "btn btn-ghost btn-sm sheet-table-toggle";
+      el.style.marginTop = "10px";
+      el.hidden = true;
+      sheetTableWrap.parentNode.insertBefore(el, sheetTableWrap);
+      el.addEventListener("click", function () {
+        var expanded = sheetTableWrap.getAttribute("data-expanded") === "true";
+        setTableExpanded(!expanded);
+      });
+      return el;
+    }());
+
+    function setTableExpanded(expanded) {
+      sheetTableWrap.setAttribute("data-expanded", expanded ? "true" : "false");
+      var tbody = sheetTable.querySelector("tbody");
+      if (!tbody) return;
+      var dataRows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+      var total = dataRows.length;
+      dataRows.forEach(function (tr, i) {
+        tr.hidden = !expanded && i >= 5;
+      });
+      sheetTableWrap.hidden = false;
+      if (expanded) {
+        sheetTableWrap.style.maxHeight = "320px";
+        sheetTableWrap.style.overflowY = total > 5 ? "auto" : "";
+        tableToggleEl.textContent = "Hide entries";
+      } else {
+        sheetTableWrap.style.maxHeight = "";
+        sheetTableWrap.style.overflowY = "";
+        tableToggleEl.textContent = "View entries (" + total + ")";
+      }
+      tableToggleEl.hidden = false;
+    }
+
     function renderTable(rows) {
       sheetTable.innerHTML = "";
       if (!rows.length) return;
@@ -3251,6 +3290,8 @@
         tbody.appendChild(tr);
       });
       sheetTable.appendChild(tbody);
+      // Start collapsed
+      setTableExpanded(false);
     }
 
     function setStatus(message, isError) {
@@ -3306,7 +3347,6 @@
             sheetTableWrap.hidden = true;
           } else {
             renderTable(displayRows);
-            sheetTableWrap.hidden = false;
           }
           setStatus(diagnostics.message, diagnostics.missingColumns);
           setConnected(diagnostics.missingColumns ? "warning" : true);
