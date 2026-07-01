@@ -1826,23 +1826,26 @@
         });
     }
 
-    // Fallback: Yahoo Finance XAUINR=X — no API key, CORS-friendly, decades of history
-    function fetchFromYahoo(dStr) {
+    // Fallback: Yahoo Finance XAUINR=X via CORS proxy (Yahoo blocks direct browser requests)
+    function fetchFromYahooViaProxy(proxyPrefix, dStr) {
       var parts = dStr.split("-");
       var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
       var period1 = Math.floor(d.getTime() / 1000);
-      var period2 = period1 + 7 * 86400; // 7-day window to ensure a trading day is included
-      var url = "https://query1.finance.yahoo.com/v8/finance/chart/XAUINR=X?interval=1d&period1=" + period1 + "&period2=" + period2 + "&corsDomain=finance.yahoo.com";
-      return fetch(url)
+      var period2 = period1 + 7 * 86400;
+      var target = "https://query1.finance.yahoo.com/v8/finance/chart/XAUINR=X?interval=1d&period1=" + period1 + "&period2=" + period2;
+      return fetch(proxyPrefix + encodeURIComponent(target))
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var result = data && data.chart && data.chart.result && data.chart.result[0];
           var closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
-          // Find the first valid close price in the window
           var price = closes && closes.filter(function (v) { return v && v > 0; })[0];
           if (!price) throw new Error("No Yahoo price for " + dStr);
           return price / TROY_OZ_TO_GRAM;
         });
+    }
+    function fetchFromYahoo(dStr) {
+      return fetchFromYahooViaProxy("https://corsproxy.io/?", dStr)
+        .catch(function () { return fetchFromYahooViaProxy("https://api.allorigins.win/raw?url=", dStr); });
     }
 
     // Try jsDelivr → Cloudflare Pages → Yahoo Finance for a given date
