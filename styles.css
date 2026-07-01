@@ -1088,9 +1088,33 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .settings-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 
 #tab-overview.active,
-#tab-equity.active,
-#tab-stocksetf.active,
-#tab-fixedincome.active { background: var(--emerald); color: #fff; }
+#tab-investment.active { background: var(--emerald); color: #fff; }
+
+/* Investment sub-tabs */
+.invest-sub-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-alt);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 28px;
+  overflow-x: auto;
+}
+.invest-sub-tab {
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  border-radius: 7px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s;
+}
+.invest-sub-tab:hover { color: var(--text); }
+.invest-sub-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 600; }
+.invest-sub-panel { padding: 0; }
 
 .settings-panel {
   background: var(--surface);

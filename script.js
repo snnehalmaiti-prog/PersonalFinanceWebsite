@@ -314,20 +314,38 @@
 
   // ===== Dashboard tabs =====
   var dashTabOverview = document.getElementById("tab-overview");
-  var dashTabEquity = document.getElementById("tab-equity");
-  var dashTabFixedIncome = document.getElementById("tab-fixedincome");
-  var dashTabStocksEtf = document.getElementById("tab-stocksetf");
-  if (dashTabOverview && dashTabEquity) {
+  var dashTabInvestment = document.getElementById("tab-investment");
+  if (dashTabOverview && dashTabInvestment) {
     var panelOverview = document.getElementById("panel-overview");
-    var panelEquity = document.getElementById("panel-equity");
-    var panelFixedIncome = document.getElementById("panel-fixedincome");
-    var panelStocksEtf = document.getElementById("panel-stocksetf");
+    var panelInvestment = document.getElementById("panel-investment");
     var dashTabs = [
       { tab: dashTabOverview, panel: panelOverview, key: "overview" },
-      { tab: dashTabEquity, panel: panelEquity, key: "equity" },
-      { tab: dashTabStocksEtf, panel: panelStocksEtf, key: "stocksetf" },
-      { tab: dashTabFixedIncome, panel: panelFixedIncome, key: "fixedincome" }
+      { tab: dashTabInvestment, panel: panelInvestment, key: "investment" }
     ];
+
+    // ===== Investment sub-tabs =====
+    var investSubTabs = [
+      { tab: document.getElementById("subtab-equity"),      panel: document.getElementById("subpanel-equity"),      key: "equity" },
+      { tab: document.getElementById("subtab-stocksetf"),   panel: document.getElementById("subpanel-stocksetf"),   key: "stocksetf" },
+      { tab: document.getElementById("subtab-fixedincome"), panel: document.getElementById("subpanel-fixedincome"), key: "fixedincome" }
+    ];
+
+    function showInvestmentSubTab(key) {
+      investSubTabs.forEach(function (entry) {
+        if (!entry.tab || !entry.panel) return;
+        var isActive = entry.key === key;
+        entry.tab.classList.toggle("active", isActive);
+        entry.tab.setAttribute("aria-selected", String(isActive));
+        entry.panel.hidden = !isActive;
+      });
+      if (key === "stocksetf") renderStockEtfHoldingsTable();
+      if (key === "equity") renderEquityHoldingsTable();
+    }
+
+    investSubTabs.forEach(function (entry) {
+      if (!entry.tab) return;
+      entry.tab.addEventListener("click", function () { showInvestmentSubTab(entry.key); });
+    });
 
     function showDashboardTab(tab) {
       dashTabs.forEach(function (entry) {
@@ -340,8 +358,12 @@
       document.querySelectorAll(".left-drawer-item").forEach(function (btn) {
         btn.classList.toggle("active", btn.dataset.tab === tab);
       });
-      if (tab === "stocksetf") renderStockEtfHoldingsTable();
-      if (tab === "equity") renderEquityHoldingsTable();
+      if (tab === "investment") {
+        // activate Mutual Fund sub-tab by default when switching to Investment
+        var activeSubTab = investSubTabs.find(function (e) { return e.tab && e.tab.classList.contains("active"); });
+        var activeKey = activeSubTab ? activeSubTab.key : "equity";
+        showInvestmentSubTab(activeKey);
+      }
     }
 
     dashTabs.forEach(function (entry) {

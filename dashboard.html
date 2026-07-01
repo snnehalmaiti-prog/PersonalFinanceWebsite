@@ -27,17 +27,9 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Dashboard
       </button></li>
-      <li><button class="left-drawer-item" data-tab="equity">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-8 4 4 4-6 4 4"/></svg>
-        Mutual Fund
-      </button></li>
-      <li><button class="left-drawer-item" data-tab="stocksetf">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Stocks / ETF
-      </button></li>
-      <li><button class="left-drawer-item" data-tab="fixedincome">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-        Fixed Income/Commodity
+      <li><button class="left-drawer-item" data-tab="investment">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Investment
       </button></li>
     </ul>
   </nav>
@@ -89,9 +81,7 @@
   <main class="container settings-main">
     <div class="settings-tabs" role="tablist" aria-label="Dashboard sections">
       <button type="button" class="settings-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Dashboard</button>
-      <button type="button" class="settings-tab" id="tab-equity" role="tab" aria-selected="false" aria-controls="panel-equity">Mutual Fund</button>
-      <button type="button" class="settings-tab" id="tab-stocksetf" role="tab" aria-selected="false" aria-controls="panel-stocksetf">Stocks/ETF</button>
-      <button type="button" class="settings-tab" id="tab-fixedincome" role="tab" aria-selected="false" aria-controls="panel-fixedincome">Fixed Income/Commodity</button>
+      <button type="button" class="settings-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investment</button>
     </div>
 
     <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
@@ -187,7 +177,15 @@
       </div>
     </section>
 
-    <section id="panel-equity" class="settings-panel" role="tabpanel" aria-labelledby="tab-equity" hidden>
+    <section id="panel-investment" class="settings-panel" role="tabpanel" aria-labelledby="tab-investment" hidden>
+      <div class="invest-sub-tabs" role="tablist" aria-label="Investment sections">
+        <button type="button" class="invest-sub-tab active" id="subtab-equity" role="tab" aria-selected="true" aria-controls="subpanel-equity">Mutual Fund</button>
+        <button type="button" class="invest-sub-tab" id="subtab-stocksetf" role="tab" aria-selected="false" aria-controls="subpanel-stocksetf">Stocks/ETF</button>
+        <button type="button" class="invest-sub-tab" id="subtab-fixedincome" role="tab" aria-selected="false" aria-controls="subpanel-fixedincome">Fixed Income/Commodity</button>
+      </div>
+
+      <div id="subpanel-equity">
+      <section id="panel-equity" class="invest-sub-panel" role="tabpanel" aria-labelledby="subtab-equity">
       <div class="panel-title-row">
         <h2>Mutual Fund</h2>
         <div class="panel-title-actions">
@@ -295,7 +293,11 @@
       </div>
     </section>
 
-    <section id="panel-stocksetf" class="settings-panel" role="tabpanel" aria-labelledby="tab-stocksetf" hidden>
+      </section>
+      </div>
+
+      <div id="subpanel-stocksetf" hidden>
+      <section id="panel-stocksetf" class="invest-sub-panel" role="tabpanel" aria-labelledby="subtab-stocksetf">
       <div class="panel-title-row">
         <h2>Stocks/ETF</h2>
         <button type="button" id="stocksetf-refresh" class="theme-toggle refresh-btn" aria-label="Refresh Stocks/ETF data" title="Refresh Stocks/ETF data">
@@ -410,7 +412,11 @@
       </div>
     </section>
 
-    <section id="panel-fixedincome" class="settings-panel" role="tabpanel" aria-labelledby="tab-fixedincome" hidden>
+      </section>
+      </div>
+
+      <div id="subpanel-fixedincome" hidden>
+      <section id="panel-fixedincome" class="settings-panel" role="tabpanel" aria-labelledby="subtab-fixedincome">
       <div class="panel-title-row">
         <h2>Fixed Income/Commodity</h2>
         <button type="button" id="fixedincome-refresh" class="theme-toggle refresh-btn" aria-label="Refresh Fixed Income/Commodity data" title="Refresh Fixed Income/Commodity data">
@@ -497,6 +503,9 @@
         </div>
       </div>
     </section>
+      </div>
+
+    </section><!-- /panel-investment -->
   </main>
 
   <script src="script.js?v=084ba53"></script>
