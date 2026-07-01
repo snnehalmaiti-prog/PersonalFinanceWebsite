@@ -50,8 +50,8 @@ def load_tickers_from_mapping():
             yf_ticker = price_key
             currency  = "USD"
         else:
-            price_key = name
-            yf_ticker = name + ".NS"
+            price_key = identifier or name   # use NSE symbol from Identifier column
+            yf_ticker = price_key + ".NS"
             currency  = "INR"
         if price_key and price_key not in seen:
             seen.add(price_key)

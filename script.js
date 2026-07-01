@@ -1815,7 +1815,7 @@
       var region     = (row[regionIdx]     || "").trim();
       var identifier = (row[identifierIdx] || "").trim();
       map[normalizeText(name)] = {
-        ticker:   region === "US" ? identifier : name,
+        ticker:   identifier || name,
         region:   region,
         exchange: region === "India" ? "NSE" : null,
         segment:  segmentIdx  !== -1 ? (row[segmentIdx]  || "").trim() : "",
@@ -5094,14 +5094,15 @@
     var warnEl = document.getElementById("stocksetf-corporate-actions-warning");
     if (!warnEl) return;
 
-    // Build map: instrumentName.toLowerCase() → { firstTxnDate (ISO), txns }
+    // Build map: ticker/identifier.toLowerCase() → { firstTxnDate (ISO), txns }
+    // Keyed by ticker (NSE symbol / identifier) to match corporate_actions keys in stock_prices.json
     var heldInstruments = {};
     (holdings || []).forEach(function (h) {
       var earliest = null;
       (h.txns || []).forEach(function (txn) {
         if (txn.date && (!earliest || txn.date < earliest)) earliest = txn.date;
       });
-      heldInstruments[h.instrument.toLowerCase()] = {
+      heldInstruments[h.ticker.toLowerCase()] = {
         firstTxnDate: earliest ? formatDateISO(earliest) : null,
         txns: h.txns || []
       };
