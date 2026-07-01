@@ -1143,7 +1143,7 @@
   function updateDashboardStats() {
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
-    _ov.seInvested = 0; _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seRealized = 0; _ov.seXirrFlows = []; _ov._overviewBaseFlows = null;
+    _ov.seInvested = 0; _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seRealized = 0; _ov.seXirrFlows = []; _ov._overviewBaseFlows = null; _ov._mfCommDayChange = null;
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
     _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
 
@@ -1853,7 +1853,7 @@
 
   // Build holdings array for Stocks/ETF with FIFO lots and USD/INR conversion.
   // Returns a Promise resolving to array of { instrument, ticker, region, exchange, units, avgCostINR, investedINR, lots }
-  function buildStockHoldings(rows, mappingTable, portfolioFilter) {
+  function buildStockHoldings(rows, mappingTable, portfolioFilter, showClosed) {
     var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, portfolioFilter);
     if (!transactionsByInstrument) return Promise.resolve([]);
 
@@ -1863,7 +1863,11 @@
       var remainingLots = fifoRemainingLots(txns);
       var remainingUnits = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; });
-      if (remainingUnits < UNITS_EPSILON) return;
+      if (showClosed) {
+        if (remainingUnits >= UNITS_EPSILON) return; // skip open positions
+      } else {
+        if (remainingUnits < UNITS_EPSILON) return; // skip closed positions
+      }
 
       var mapping = mappingTable[normalizeText(instrument)];
       if (!mapping) return; // skip instruments not found in mapping sheet
@@ -2426,7 +2430,8 @@
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
         fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-          setDayChange(overviewDayChangeEl, commodityDayChange);
+          _ov._mfCommDayChange = commodityDayChange;
+          setDayChange(overviewDayChangeEl, commodityDayChange + _ov.seDayChange);
         });
         return;
       }
@@ -2454,7 +2459,8 @@
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
           fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-            setDayChange(overviewDayChangeEl, equityDayChange + commodityDayChange);
+            _ov._mfCommDayChange = equityDayChange + commodityDayChange;
+            setDayChange(overviewDayChangeEl, _ov._mfCommDayChange + _ov.seDayChange);
           });
 
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
@@ -2753,6 +2759,9 @@
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
+
+  var stocksetfShowClosed = document.getElementById("stocksetf-show-closed");
+  if (stocksetfShowClosed) stocksetfShowClosed.addEventListener("change", renderStockEtfHoldingsTable);
 
   ["equity", "fixedincome", "fd", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
@@ -5046,7 +5055,9 @@
     indiaStatusEl.textContent = "Loading holdings…";
     usStatusEl.textContent = "Loading holdings…";
 
-    buildStockHoldings(rows, mappingTable, selectedPortfolio).then(function (holdings) {
+    var showClosedCheckbox = document.getElementById("stocksetf-show-closed");
+    var showClosed = !!(showClosedCheckbox && showClosedCheckbox.checked);
+    buildStockHoldings(rows, mappingTable, selectedPortfolio, showClosed).then(function (holdings) {
       var indiaHoldings = holdings.filter(function(h) { return h.region !== "US"; });
       var usHoldings = holdings.filter(function(h) { return h.region === "US"; });
 
@@ -5177,6 +5188,10 @@
           var seInvestedEl = document.getElementById("stocksetf-total-investment");
           if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
           refreshOverviewStats();
+          if (_ov._mfCommDayChange !== null) {
+            var overviewDayChgEl = document.getElementById("overview-day-change");
+            if (overviewDayChgEl) setDayChange(overviewDayChgEl, _ov._mfCommDayChange + totalDayChangeINR);
+          }
 
           // Update stat cards
           var seCurrentEl = document.getElementById("stocksetf-current-value");
