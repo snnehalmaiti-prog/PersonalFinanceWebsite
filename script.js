@@ -5087,6 +5087,8 @@
     var warnEl = document.getElementById("stocksetf-corporate-actions-warning");
     if (!warnEl) return;
 
+    console.log("[CA] corporateActions instruments:", Object.keys(corporateActions));
+
     // Build a set of (instrument, date-window) pairs from existing split/bonus rows in the user's sheet
     var recordedKeys = {};
     if (seRows && seRows.length > 1) {
@@ -5094,6 +5096,7 @@
       var typeIdx = header.indexOf("transaction type");
       var instrumentIdx = header.indexOf("instrument name");
       var dateIdx = header.indexOf("transaction date");
+      console.log("[CA] seRows header indices — typeIdx:", typeIdx, "instrumentIdx:", instrumentIdx, "dateIdx:", dateIdx);
       if (typeIdx !== -1 && instrumentIdx !== -1 && dateIdx !== -1) {
         seRows.slice(1).forEach(function (row) {
           var type = normalizeText(row[typeIdx] || "");
@@ -5101,6 +5104,7 @@
           var instrument = (row[instrumentIdx] || "").trim().toLowerCase();
           var date = parseFlexibleDate(row[dateIdx]);
           if (!date) return;
+          console.log("[CA] recorded event:", instrument, formatDateISO(date));
           // Allow ±14 day window around the recorded date
           for (var d = -14; d <= 14; d++) {
             var shifted = new Date(date.getTime() + d * 86400000);
@@ -5115,7 +5119,9 @@
       var actions = corporateActions[instrument];
       actions.forEach(function (action) {
         var key = instrument.toLowerCase() + "|" + action.date;
-        if (!recordedKeys[key]) {
+        var matched = !!recordedKeys[key];
+        console.log("[CA] check:", key, matched ? "MATCHED" : "UNMATCHED");
+        if (!matched) {
           var label = action.type === "split"
             ? instrument + ": " + action.ratio + ":1 split on " + action.date
             : instrument + ": bonus on " + action.date;
