@@ -1826,35 +1826,38 @@
         });
     }
 
-    // Fallback: Yahoo Finance XAUINR=X via CORS proxy (Yahoo blocks direct browser requests)
-    function fetchFromYahooViaProxy(proxyPrefix, dStr) {
+    // Fallback: stooq.com (XAU/USD CSV) + frankfurter.app (USD→INR) — both CORS-friendly, no API key
+    function fetchFromStooqAndFrankfurter(dStr) {
+      var d8 = dStr.replace(/-/g, "");
+      // stooq returns CSV with OHLCV; request a 5-day window in case the exact date has no trading
       var parts = dStr.split("-");
-      var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-      var period1 = Math.floor(d.getTime() / 1000);
-      var period2 = period1 + 7 * 86400;
-      var target = "https://query1.finance.yahoo.com/v8/finance/chart/XAUINR=X?interval=1d&period1=" + period1 + "&period2=" + period2;
-      return fetch(proxyPrefix + encodeURIComponent(target))
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          var result = data && data.chart && data.chart.result && data.chart.result[0];
-          var closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
-          var price = closes && closes.filter(function (v) { return v && v > 0; })[0];
-          if (!price) throw new Error("No Yahoo price for " + dStr);
-          return price / TROY_OZ_TO_GRAM;
-        });
-    }
-    function fetchFromYahoo(dStr) {
-      return fetchFromYahooViaProxy("https://corsproxy.io/?", dStr)
-        .catch(function () { return fetchFromYahooViaProxy("https://api.allorigins.win/raw?url=", dStr); });
+      var end = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) + 5);
+      var endStr = formatDateISO(end).replace(/-/g, "");
+      var stooqUrl = "https://stooq.com/q/d/l/?s=xauusd&d1=" + d8 + "&d2=" + endStr + "&i=d";
+      var frankfurterUrl = "https://api.frankfurter.app/" + dStr + "?from=USD&to=INR";
+      return Promise.all([
+        fetch(stooqUrl).then(function (r) { return r.text(); }),
+        fetch(frankfurterUrl).then(function (r) { return r.json(); })
+      ]).then(function (results) {
+        var csvLines = results[0].trim().split("\n");
+        // First line is header; second line is the earliest data row in the window
+        var dataLine = csvLines[1];
+        if (!dataLine) throw new Error("No stooq data for " + dStr);
+        var xauUsd = parseFloat(dataLine.split(",")[4]); // Close price column
+        if (!xauUsd || isNaN(xauUsd)) throw new Error("Invalid stooq XAU/USD for " + dStr);
+        var usdInr = results[1] && results[1].rates && results[1].rates.INR;
+        if (!usdInr) throw new Error("No frankfurter USD/INR for " + dStr);
+        return (xauUsd * usdInr) / TROY_OZ_TO_GRAM;
+      });
     }
 
-    // Try jsDelivr → Cloudflare Pages → Yahoo Finance for a given date
+    // Try jsDelivr → Cloudflare Pages → stooq+frankfurter for a given date
     function tryDateAllSources(dStr) {
       var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
       var urlB = "https://" + dStr + ".currency-api.pages.dev/v1/currencies/xau.min.json";
       return fetchFromCurrencyApi(urlA)
         .catch(function () { return fetchFromCurrencyApi(urlB); })
-        .catch(function () { return fetchFromYahoo(dStr); });
+        .catch(function () { return fetchFromStooqAndFrankfurter(dStr); });
     }
 
     // Step back up to 3 days (handles weekends/holidays for currency-api dates)
