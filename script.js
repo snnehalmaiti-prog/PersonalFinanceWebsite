@@ -1160,6 +1160,40 @@
         message: baseMessage + " Found " + badRows.length + " row(s) with missing/invalid data: " + preview + more + ". Fix these cells in the sheet and sync again."
       };
     }
+
+    // Check for instruments in transactions that are missing from the mapping sheet
+    if (prefix === "equity" || prefix === "stocksetf") {
+      var mappingPrefix = prefix === "equity" ? "mfmapping" : "stocksetfmapping";
+      var mappingLabel = prefix === "equity" ? "Mutual Fund Mapping" : "Stocks/ETF Mapping";
+      var mappingRows = getSheetRows(mappingPrefix);
+      if (mappingRows && mappingRows.length > 1) {
+        var mappingHeader = mappingRows[0].map(normalizeText);
+        var mappingInstrIdx = mappingHeader.indexOf("instrument name");
+        var mappingInstruments = {};
+        if (mappingInstrIdx !== -1) {
+          mappingRows.slice(1).forEach(function (r) {
+            var name = normalizeText((r[mappingInstrIdx] || "").trim());
+            if (name) mappingInstruments[name] = true;
+          });
+        }
+        var txInstruments = {};
+        rows.slice(1).forEach(function (row) {
+          var name = (row[instrumentIdx] || "").trim();
+          if (name) txInstruments[normalizeText(name)] = name;
+        });
+        var missing = Object.keys(txInstruments).filter(function (k) { return !mappingInstruments[k]; });
+        if (missing.length) {
+          var missingNames = missing.map(function (k) { return txInstruments[k]; });
+          var missingPreview = missingNames.slice(0, 5).join(", ");
+          var missingMore = missingNames.length > 5 ? " (+" + (missingNames.length - 5) + " more)" : "";
+          return {
+            missingColumns: true,
+            message: baseMessage + " Warning: " + missing.length + " instrument(s) found in transactions but missing from " + mappingLabel + ": " + missingPreview + missingMore + ". Add them to the mapping sheet and sync again."
+          };
+        }
+      }
+    }
+
     return { missingColumns: false, message: baseMessage };
   }
 
