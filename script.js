@@ -3804,7 +3804,7 @@
       var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
       var fdValueEvents = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
 
-      // Build commodity gram events and fetch current gold price for chart
+      // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
       var commodityGramEvents = fdRowsForChart
         ? buildCommodityGramEvents(fdRowsForChart, selectedPortfolio) : [];
@@ -3812,6 +3812,27 @@
       var currentGoldPricePromise = hasAnyCommodity
         ? fetchGoldPriceINRPerGram().catch(function () { return null; })
         : Promise.resolve(null);
+      // Build monthly sample dates from first buy to today for historical price chart
+      var goldPriceHistoryPromise = hasAnyCommodity
+        ? (function () {
+            var firstDate = commodityGramEvents[0].date;
+            var samples = [];
+            var d = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+            var todaySample = new Date(); todaySample.setHours(0, 0, 0, 0);
+            while (d <= todaySample) {
+              samples.push(formatDateISO(new Date(d)));
+              d.setMonth(d.getMonth() + 1);
+            }
+            samples.push(formatDateISO(todaySample));
+            return Promise.all(samples.map(function (dStr) {
+              return fetchXauInrForDate(dStr)
+                .then(function (p) { return { date: new Date(dStr), price: p }; })
+                .catch(function () { return null; });
+            })).then(function (results) {
+              return results.filter(Boolean).sort(function (a, b) { return a.date - b.date; });
+            });
+          })()
+        : Promise.resolve([]);
 
       if (!instruments.length && !epfEvents.length && !fdValueEvents.length && !hasAnyCommodity) {
         if (window.__wfValueChart) {
@@ -3829,10 +3850,12 @@
 
       return Promise.all([
         Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); })),
-        currentGoldPricePromise
+        currentGoldPricePromise,
+        goldPriceHistoryPromise
       ]).then(function (outerResults) {
         var navHistories = outerResults[0];
         var currentGoldPrice = outerResults[1];
+        var goldPriceHistory = outerResults[2];
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
@@ -3890,9 +3913,10 @@
 
         var points = timeline.map(function (date) {
           var activeGrams = lastAtOrBefore(commodityGramEvents, date, "cumulativeGrams") || 0;
+          var goldPriceAtDate = lastAtOrBefore(goldPriceHistory, date, "price") || currentGoldPrice || 0;
           var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0)
             + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0)
-            + (currentGoldPrice ? activeGrams * currentGoldPrice : 0);
+            + (activeGrams > 0 ? activeGrams * goldPriceAtDate : 0);
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
