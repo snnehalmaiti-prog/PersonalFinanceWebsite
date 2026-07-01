@@ -4510,7 +4510,7 @@
 
       var xirrTd = document.createElement("td");
       xirrTd.className = "num";
-      if (h.xirrPct === null) {
+      if (h.xirrPct === null || h.units <= 0) {
         xirrTd.textContent = "—";
       } else {
         xirrTd.appendChild(pnlChip((h.xirrPct > 0 ? "+" : "") + h.xirrPct.toFixed(2) + "%", h.xirrPct));
