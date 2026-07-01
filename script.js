@@ -2951,12 +2951,31 @@
     equityRefreshNavBtn.addEventListener("click", function () {
       var originalLabel = equityRefreshNavBtn.textContent;
       equityRefreshNavBtn.disabled = true;
-      equityRefreshNavBtn.textContent = "Refreshing…";
+      equityRefreshNavBtn.textContent = "Triggering…";
+
+      // Clear locally cached NAV/ISIN data
       Object.keys(localStorage).forEach(function (key) {
         if (key.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(key);
       });
       localStorage.removeItem(AMFI_ISIN_MAP_CACHE_KEY);
       localStorage.removeItem(AMFI_NAV_MAP_CACHE_KEY);
+
+      // Trigger AMFI NAV and ISIN Map workflows via GitHub API if credentials are saved
+      var gh = loadGhSettings();
+      if (gh.owner && gh.repo && gh.token) {
+        var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/actions/workflows/";
+        var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
+        var branch = gh.branch || "main";
+        var body = JSON.stringify({ ref: branch });
+        ["update-amfi-nav.yml", "update-amfi-isin-map.yml"].forEach(function (wf) {
+          fetch(apiBase + wf + "/dispatches", { method: "POST", headers: headers, body: body })
+            .catch(function () {}); // silent — workflows run in background
+        });
+        equityRefreshNavBtn.textContent = "Triggered ✓";
+      } else {
+        equityRefreshNavBtn.textContent = "Refreshing…";
+      }
+
       updateDashboardStats();
       renderValueChart();
       renderEquityHoldingsTable();
@@ -2966,7 +2985,7 @@
       setTimeout(function () {
         equityRefreshNavBtn.disabled = false;
         equityRefreshNavBtn.textContent = originalLabel;
-      }, 1500);
+      }, 2000);
     });
   }
 
