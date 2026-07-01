@@ -5156,9 +5156,13 @@
           }
 
           // Feed live totals back into overview accumulator and refresh dashboard
+          // Use FIFO-adjusted invested (remaining lots only), not all-time buy total
+          _ov.seInvested   = totalInvestedINR;
           _ov.seCurrent    = totalCurrentINR;
           _ov.seUnrealized = totalPnlINR;
           _ov.seDayChange  = totalDayChangeINR;
+          var seInvestedEl = document.getElementById("stocksetf-total-investment");
+          if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
           refreshOverviewStats();
 
           // Update stat cards
