@@ -25,7 +25,7 @@
   { "name": "ICICIBANK",   "ticker": "ICICIBANK.NS",   "currency": "INR" },
   { "name": "BANKBARODA",  "ticker": "BANKBARODA.NS",  "currency": "INR" },
   { "name": "SUNPHARMA",   "ticker": "SUNPHARMA.NS",   "currency": "INR" },
-  { "name": "CANARABANK",  "ticker": "CANBK.NS",       "currency": "INR" },
+  { "name": "CANBK",       "ticker": "CANBK.NS",       "currency": "INR" },
   { "name": "GOLDBEES",    "ticker": "GOLDBEES.NS",    "currency": "INR" },
   { "name": "PVTBANIETF",  "ticker": "PVTBANIETF.NS",  "currency": "INR" },
   { "name": "NIFTYBEES",   "ticker": "NIFTYBEES.NS",   "currency": "INR" },
