@@ -619,6 +619,17 @@
     return total;
   }
 
+  function sumProvidentFundCurrentValue(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
+      return normSubCategory === "provident fund" || normSubCategory === "provident pension";
+    });
+    if (!holdings) return 0;
+    var total = 0;
+    holdings.forEach(function (h) { total += h.invested; });
+    return total;
+  }
+
   // Realized Profit for Fixed Deposits = current accrued value − invested amount,
   // identical to Unrealized Profit (applies to all FDs regardless of maturity status).
   function sumFdRealizedProfit(rows, portfolioFilter) {
@@ -1254,7 +1265,7 @@
 
       var fiInvestment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0);
       var investment = fiInvestment + commodityInvested;
-      var fiCurrentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
+      var fiCurrentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0);
       var currentValue = fiCurrentValue + commodityCurrent;
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
