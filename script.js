@@ -631,6 +631,18 @@
     return total;
   }
 
+  function sumProvidentFundRealizedProfit(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var holdings = buildFdFixedIncomeHoldingsList(rows, portfolioFilter);
+    if (!holdings) return 0;
+    var total = 0;
+    holdings.forEach(function (h) {
+      var normSub = normalizeText(h.subCategory || "");
+      if (normSub === "provident fund" || normSub === "provident pension") total += (h.realizedProfit || 0);
+    });
+    return total;
+  }
+
   // Realized Profit for Fixed Deposits = current accrued value − invested amount,
   // identical to Unrealized Profit (applies to all FDs regardless of maturity status).
   function sumFdRealizedProfit(rows, portfolioFilter) {
@@ -688,11 +700,12 @@
       var normSub = normalizeText(row[subCategoryIdx] || "");
       if (normSub !== "provident fund" && normSub !== "provident pension") return;
       var normTxType = txTypeIdx !== -1 ? normalizeText(row[txTypeIdx] || "") : "";
-      if (normTxType === "interest") return; // interest is part of terminal value, not an outflow
+      if (normTxType === "interest") return; // interest is part of terminal value, not a cash flow
       var amount = parseNumber(row[amountIdx]);
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date || !amount) return;
-      flows.push({ date: date, amount: -amount });
+      // Deposits are outflows (negative), withdrawals are inflows (positive)
+      flows.push({ date: date, amount: normTxType === "withdrawal" ? amount : -amount });
     });
     return flows;
   }
@@ -1297,7 +1310,7 @@
       var currentValue = fiCurrentValue + commodityCurrent;
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
-      var fiRealized = fdRows ? sumFdRealizedProfit(fdRows, selected) : 0;
+      var fiRealized = (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + (fdRows ? sumProvidentFundRealizedProfit(fdRows, selected) : 0);
       if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fiRealized + commodityRealizedProfit);
 
       _ov.fiCurrent = fiCurrentValue;
@@ -1574,14 +1587,11 @@
       if (normSubCategory === "provident fund" || normSubCategory === "provident pension") {
         var pfKey = normalizeText(portfolio) + "||" + normalizeText(instrument) + "||" + normalizeText(subCategory);
         if (!providentFundByKey[pfKey]) {
-          providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, invested: 0, interest: 0 };
+          providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, txns: [] };
         }
         var normTxType = txTypeIdx !== -1 ? normalizeText(row[txTypeIdx] || "") : "";
-        if (normTxType === "interest") {
-          providentFundByKey[pfKey].interest += parseNumber(row[amountIdx]);
-        } else {
-          providentFundByKey[pfKey].invested += parseNumber(row[amountIdx]);
-        }
+        var txDate = parseFlexibleDate(row[dateIdx]);
+        providentFundByKey[pfKey].txns.push({ date: txDate, amount: parseNumber(row[amountIdx]), type: normTxType });
         return;
       }
 
@@ -1620,7 +1630,43 @@
 
     Object.keys(providentFundByKey).forEach(function (key) {
       var pf = providentFundByKey[key];
-      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: pf.invested, current: pf.invested + pf.interest });
+      pf.txns.sort(function (a, b) { return (a.date || 0) - (b.date || 0); });
+
+      var lots = []; // FIFO queue of deposit lots {amount}
+      var totalInterest = 0;
+      var realizedInterest = 0;
+
+      pf.txns.forEach(function (tx) {
+        if (tx.type === "interest") {
+          totalInterest += tx.amount;
+        } else if (tx.type === "withdrawal") {
+          // FIFO consume deposit lots
+          var totalPrincipalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+          var remaining = tx.amount;
+          while (remaining > 0 && lots.length > 0) {
+            if (lots[0].amount <= remaining) {
+              remaining -= lots[0].amount;
+              lots.shift();
+            } else {
+              lots[0].amount -= remaining;
+              remaining = 0;
+            }
+          }
+          var withdrawnPrincipal = tx.amount - remaining;
+          // Proportional interest on the withdrawn principal becomes realized profit
+          if (totalPrincipalBefore > 0 && totalInterest > 0) {
+            var interestRealized = totalInterest * (withdrawnPrincipal / totalPrincipalBefore);
+            realizedInterest += interestRealized;
+            totalInterest -= interestRealized;
+          }
+        } else {
+          lots.push({ amount: tx.amount });
+        }
+      });
+
+      var invested = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+      var current = invested + totalInterest;
+      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: invested, current: current, realizedProfit: realizedInterest });
     });
 
     return holdings;
