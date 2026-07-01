@@ -1891,9 +1891,10 @@
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; });
       if (remainingUnits < UNITS_EPSILON) return;
 
-      var mapping = mappingTable[normalizeText(instrument)] || {};
-      var ticker = mapping.ticker || instrument;
-      var region = mapping.region || "India";
+      var mapping = mappingTable[normalizeText(instrument)];
+      if (!mapping) return; // skip instruments not found in mapping sheet
+      var ticker = mapping.ticker;
+      var region = mapping.region;
       var exchange = mapping.exchange || null;
 
       // Attach date to each remaining lot by replaying transactions
@@ -5008,6 +5009,14 @@
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var mappingTable = buildStockMappingTable();
 
+    if (!Object.keys(mappingTable).length) {
+      indiaStatusEl.textContent = "Connect your Stocks/ETF Mapping sheet in Settings to populate this view.";
+      usStatusEl.textContent = "Connect your Stocks/ETF Mapping sheet in Settings to populate this view.";
+      if (indiaTableWrap) indiaTableWrap.hidden = true;
+      if (usTableWrap) usTableWrap.hidden = true;
+      return;
+    }
+
     indiaStatusEl.textContent = "Loading holdings…";
     usStatusEl.textContent = "Loading holdings…";
 
@@ -5016,7 +5025,7 @@
       var usHoldings = holdings.filter(function(h) { return h.region === "US"; });
 
       if (!holdings.length) {
-        indiaStatusEl.textContent = "No Stocks/ETF holdings with unsold units found.";
+        indiaStatusEl.textContent = "No Stocks/ETF holdings with unsold units found. Ensure instrument names match the mapping sheet exactly.";
         usStatusEl.textContent = "No US holdings found.";
         if (indiaTableWrap) indiaTableWrap.hidden = true;
         if (usTableWrap) usTableWrap.hidden = true;
