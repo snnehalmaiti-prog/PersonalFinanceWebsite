@@ -1826,38 +1826,30 @@
         });
     }
 
-    // Fallback: stooq.com (XAU/USD CSV) + frankfurter.app (USD→INR) — both CORS-friendly, no API key
-    function fetchFromStooqAndFrankfurter(dStr) {
-      var d8 = dStr.replace(/-/g, "");
-      // stooq returns CSV with OHLCV; request a 5-day window in case the exact date has no trading
-      var parts = dStr.split("-");
-      var end = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) + 5);
-      var endStr = formatDateISO(end).replace(/-/g, "");
-      var stooqUrl = "https://stooq.com/q/d/l/?s=xauusd&d1=" + d8 + "&d2=" + endStr + "&i=d";
-      var frankfurterUrl = "https://api.frankfurter.app/" + dStr + "?from=USD&to=INR";
-      return Promise.all([
-        fetch(stooqUrl).then(function (r) { return r.text(); }),
-        fetch(frankfurterUrl).then(function (r) { return r.json(); })
-      ]).then(function (results) {
-        var csvLines = results[0].trim().split("\n");
-        // First line is header; second line is the earliest data row in the window
-        var dataLine = csvLines[1];
-        if (!dataLine) throw new Error("No stooq data for " + dStr);
-        var xauUsd = parseFloat(dataLine.split(",")[4]); // Close price column
-        if (!xauUsd || isNaN(xauUsd)) throw new Error("Invalid stooq XAU/USD for " + dStr);
-        var usdInr = results[1] && results[1].rates && results[1].rates.INR;
-        if (!usdInr) throw new Error("No frankfurter USD/INR for " + dStr);
-        return (xauUsd * usdInr) / TROY_OZ_TO_GRAM;
-      });
+    // Fallback: GitHub API (CORS-friendly) to find commit SHA, then jsDelivr GitHub CDN for the data file
+    // This reaches the same currency-api dataset but bypasses the missing npm version tags for 2021 dates.
+    function fetchFromGitHubCurrencyApi(dStr) {
+      var apiUrl = "https://api.github.com/repos/fawazahmed0/currency-api/commits?until=" + dStr + "T23:59:59Z&per_page=1";
+      return fetch(apiUrl, { headers: { "Accept": "application/vnd.github.v3+json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (commits) {
+          if (!commits || !commits.length || !commits[0].sha) throw new Error("No commit for " + dStr);
+          var sha = commits[0].sha;
+          var cdnUrl = "https://cdn.jsdelivr.net/gh/fawazahmed0/currency-api@" + sha + "/v1/currencies/xau.min.json";
+          return fetch(cdnUrl).then(function (r2) { return r2.json(); });
+        })
+        .then(function (data) {
+          var xauInr = data && data.xau && data.xau.inr;
+          if (!xauInr) throw new Error("No XAU/INR in GitHub commit for " + dStr);
+          return xauInr / TROY_OZ_TO_GRAM;
+        });
     }
 
-    // Try jsDelivr → Cloudflare Pages → stooq+frankfurter for a given date
+    // Try jsDelivr npm CDN → GitHub API + jsDelivr GitHub CDN for a given date
     function tryDateAllSources(dStr) {
       var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
-      var urlB = "https://" + dStr + ".currency-api.pages.dev/v1/currencies/xau.min.json";
       return fetchFromCurrencyApi(urlA)
-        .catch(function () { return fetchFromCurrencyApi(urlB); })
-        .catch(function () { return fetchFromStooqAndFrankfurter(dStr); });
+        .catch(function () { return fetchFromGitHubCurrencyApi(dStr); });
     }
 
     // Step back up to 3 days (handles weekends/holidays for currency-api dates)
