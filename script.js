@@ -1743,7 +1743,7 @@
 
     var rows = getSheetRows("fd");
     if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      statusEl.textContent = "Connect your Fixed Income/Commodity sheet in Settings to populate this view.";
       tableWrap.hidden = true;
       return;
     }
@@ -1770,7 +1770,7 @@
 
     var rows = getSheetRows("fd");
     if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      statusEl.textContent = "Connect your Fixed Income/Commodity sheet in Settings to populate this view.";
       tableWrap.hidden = true;
       return;
     }
@@ -2104,7 +2104,7 @@
 
     var rows = getSheetRows("fd");
     if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your Fixed Deposit/Savings Account sheet in Settings to populate this view.";
+      statusEl.textContent = "Connect your Fixed Income/Commodity sheet in Settings to populate this view.";
       tableWrap.hidden = true;
       return;
     }
@@ -3234,6 +3234,7 @@
     "Instrument Name",
     "Instrument Category",
     "Instrument Sub Category",
+    "Transaction Type",
     "Grams",
     "Invested Amount",
     "Maturity Date/Sell Date",
