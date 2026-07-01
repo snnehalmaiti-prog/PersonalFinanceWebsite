@@ -5087,14 +5087,17 @@
     var warnEl = document.getElementById("stocksetf-corporate-actions-warning");
     if (!warnEl) return;
 
-    // Build map of currently-held instruments → earliest buy transaction date (ISO string)
+    // Build map: instrumentName.toLowerCase() → { firstTxnDate (ISO), txns }
     var heldInstruments = {};
     (holdings || []).forEach(function (h) {
       var earliest = null;
       (h.txns || []).forEach(function (txn) {
         if (txn.date && (!earliest || txn.date < earliest)) earliest = txn.date;
       });
-      heldInstruments[h.instrument.toLowerCase()] = earliest ? formatDateISO(earliest) : null;
+      heldInstruments[h.instrument.toLowerCase()] = {
+        firstTxnDate: earliest ? formatDateISO(earliest) : null,
+        txns: h.txns || []
+      };
     });
 
     // Build a set of (instrument, date-window) pairs from existing split/bonus rows in the user's sheet
@@ -5125,16 +5128,26 @@
       var instrumentKey = instrument.toLowerCase();
       // Only warn for instruments the user currently holds
       if (!heldInstruments.hasOwnProperty(instrumentKey)) return;
-      var firstTxnDate = heldInstruments[instrumentKey];
+      var held = heldInstruments[instrumentKey];
+      var firstTxnDate = held.firstTxnDate;
+      var txns = held.txns;
       var actions = corporateActions[instrument];
       actions.forEach(function (action) {
         // Skip corporate actions that happened before the user's first transaction
         if (firstTxnDate && action.date < firstTxnDate) return;
         var key = instrumentKey + "|" + action.date;
         if (!recordedKeys[key]) {
-          var label = action.type === "split"
-            ? instrument + ": " + action.ratio + ":1 split on " + action.date
-            : instrument + ": bonus on " + action.date;
+          // Calculate units held just before the corporate action date
+          var unitsAtAction = 0;
+          txns.forEach(function (txn) {
+            if (!txn.date || formatDateISO(txn.date) >= action.date) return;
+            unitsAtAction += txn.type === "buy" ? txn.units : -txn.units;
+          });
+          unitsAtAction = Math.max(0, Math.round(unitsAtAction * 1000) / 1000);
+          var extraUnits = Math.round(unitsAtAction * (action.ratio - 1) * 1000) / 1000;
+          var label = instrument + " (" + action.date + "): " + action.ratio + ":1 "
+            + (action.type === "split" ? "split" : "bonus")
+            + " — add " + extraUnits + " units at ₹0";
           unmatched.push(label);
         }
       });
@@ -5160,7 +5173,7 @@
     warnEl.appendChild(ul);
     var hint = document.createElement("p");
     hint.className = "ca-hint";
-    hint.textContent = "Add a row with Transaction Type \"Split\" or \"Bonus\" and the actual number of extra units received (at price 0) to keep your P&L and XIRR accurate.";
+    hint.textContent = "Add a row for each item above with Transaction Type \"Split\" or \"Bonus\", the indicated number of units, price 0, and the corporate action date.";
     warnEl.appendChild(hint);
   }
 
