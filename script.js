@@ -1830,10 +1830,21 @@
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && Date.now() - cached.fetchedAt < SE_EOD_CACHE_MAX_AGE_MS) return Promise.resolve(cached.price);
     } catch (e) {}
-    var url = "https://api.twelvedata.com/eod?symbol=" + encodeURIComponent(ticker) + (exchange ? "&exchange=" + exchange : "") + "&apikey=" + TWELVEDATA_API_KEY;
-    return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
-      if (!data || !data.close) throw new Error("No EOD price for " + ticker);
-      var price = parseFloat(data.close);
+    var sym = encodeURIComponent(ticker) + (exchange ? "&exchange=" + exchange : "");
+    // Try /eod first (prior close); fall back to /price (real-time/delayed) for exchanges
+    // where /eod is not available on the free plan (e.g. NSE)
+    var eodUrl   = "https://api.twelvedata.com/eod?symbol="   + sym + "&apikey=" + TWELVEDATA_API_KEY;
+    var priceUrl = "https://api.twelvedata.com/price?symbol=" + sym + "&apikey=" + TWELVEDATA_API_KEY;
+    function tryPrice() {
+      return fetch(priceUrl).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data || !data.price) throw new Error("No price for " + ticker);
+        return parseFloat(data.price);
+      });
+    }
+    return fetch(eodUrl).then(function(r) { return r.json(); }).then(function(data) {
+      if (!data || !data.close) return tryPrice();
+      return parseFloat(data.close);
+    }).catch(function() { return tryPrice(); }).then(function(price) {
       try { localStorage.setItem(cacheKey, JSON.stringify({ price: price, fetchedAt: Date.now() })); } catch (e) {}
       return price;
     });
