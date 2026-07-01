@@ -5199,12 +5199,12 @@
               buildXirrCashFlows(rows, selectedPortfolio, hh.instrument).forEach(function (f) { seXirrFlows.push(f); });
             }
           });
-          // Store raw flows (without terminal) in _ov so overviewXirrCashFlows can use them;
-          // overviewXirrCashFlows adds its own terminal value for the overall portfolio.
-          _ov.seXirrFlows = seXirrFlows;
+          // Store flows WITH terminal in _ov so the overview XIRR has a positive terminal to converge on.
+          var seXirrFlowsWithTerminal = seXirrFlows.slice();
+          if (totalCurrentINR > UNITS_EPSILON) seXirrFlowsWithTerminal.push({ date: new Date(), amount: totalCurrentINR });
+          _ov.seXirrFlows = seXirrFlowsWithTerminal;
           if (seXirrEl) {
-            var allFlows = seXirrFlows.slice();
-            if (totalCurrentINR > UNITS_EPSILON) allFlows.push({ date: new Date(), amount: totalCurrentINR });
+            var allFlows = seXirrFlowsWithTerminal;
             var portXirr = calculateXIRR(allFlows);
             if (portXirr !== null && isFinite(portXirr)) {
               var xirrPctPort = portXirr * 100;
