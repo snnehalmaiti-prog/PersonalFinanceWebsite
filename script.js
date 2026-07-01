@@ -1116,7 +1116,7 @@
 
   // Per-tab numeric values — refreshed by each tab's async computation; overview is their sum.
   var _ov = { mfInvested: 0, mfCurrent: 0, mfUnrealized: 0, mfRealized: 0,
-               seInvested: 0, seCurrent: 0, seUnrealized: 0, seDayChange: 0, seRealized: 0,
+               seInvested: 0, seCurrent: 0, seUnrealized: 0, seDayChange: 0, seRealized: 0, seXirrFlows: [],
                fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0,
                commInvested: 0, commCurrent: 0, commUnrealized: 0, commRealized: 0 };
 
@@ -1143,7 +1143,7 @@
   function updateDashboardStats() {
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
-    _ov.seInvested = 0; _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seRealized = 0;
+    _ov.seInvested = 0; _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seRealized = 0; _ov.seXirrFlows = []; _ov._overviewBaseFlows = null;
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
     _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
 
@@ -2420,7 +2420,9 @@
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
-        setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows, null, commodityFlows)));
+        var ovBaseFlows = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
+        _ov._overviewBaseFlows = ovBaseFlows;
+        setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows.concat(_ov.seXirrFlows)));
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
         fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
@@ -2458,7 +2460,9 @@
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
           var xirr = calculateXIRR(xirrCashFlows);
-          setXirr(overviewXirrEl, calculateXIRR(overviewXirrCashFlows(xirrCashFlows, null, commodityFlows)));
+          var ovBaseFlows2 = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
+          _ov._overviewBaseFlows = ovBaseFlows2;
+          setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows2.concat(_ov.seXirrFlows)));
           setXirr(equityXirrEl, xirr);
         });
     });
@@ -5182,21 +5186,24 @@
           }
 
           // Portfolio-level XIRR
+          var seXirrFlows = [];
+          holdings.forEach(function (hh) {
+            if (hh.region === "US") {
+              (hh.txns || []).forEach(function (txn) {
+                if (!txn.date || !txn.units || !txn.price) return;
+                var dateStr = formatDateISO(txn.date);
+                var rateForDate = usdInrHistMap[dateStr] || usdInrToday;
+                seXirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -(txn.units * txn.price * rateForDate) : (txn.units * txn.price * rateForDate) });
+              });
+            } else {
+              buildXirrCashFlows(rows, selectedPortfolio, hh.instrument).forEach(function (f) { seXirrFlows.push(f); });
+            }
+          });
+          // Store raw flows (without terminal) in _ov so overviewXirrCashFlows can use them;
+          // overviewXirrCashFlows adds its own terminal value for the overall portfolio.
+          _ov.seXirrFlows = seXirrFlows;
           if (seXirrEl) {
-            var allFlows = [];
-            // Build portfolio-level XIRR across all instruments
-            holdings.forEach(function (hh) {
-              if (hh.region === "US") {
-                (hh.txns || []).forEach(function (txn) {
-                  if (!txn.date || !txn.units || !txn.price) return;
-                  var dateStr = formatDateISO(txn.date);
-                  var rateForDate = usdInrHistMap[dateStr] || usdInrToday;
-                  allFlows.push({ date: txn.date, amount: txn.type === "buy" ? -(txn.units * txn.price * rateForDate) : (txn.units * txn.price * rateForDate) });
-                });
-              } else {
-                buildXirrCashFlows(rows, selectedPortfolio, hh.instrument).forEach(function (f) { allFlows.push(f); });
-              }
-            });
+            var allFlows = seXirrFlows.slice();
             if (totalCurrentINR > UNITS_EPSILON) allFlows.push({ date: new Date(), amount: totalCurrentINR });
             var portXirr = calculateXIRR(allFlows);
             if (portXirr !== null && isFinite(portXirr)) {
@@ -5205,6 +5212,15 @@
               seXirrEl.className = "overview-stat-value " + (xirrPctPort > 0 ? "positive" : xirrPctPort < 0 ? "negative" : "");
             } else {
               seXirrEl.textContent = "—";
+            }
+          }
+          // Refresh overview XIRR now that SE flows are available.
+          // _ov._overviewBaseFlows is set by updateTotalCurrentValue (equity+FI+commodity flows).
+          // If it's already been computed, we can recompute overview XIRR without re-fetching.
+          if (_ov._overviewBaseFlows) {
+            var overviewXirrEl = document.getElementById("overview-xirr");
+            if (overviewXirrEl) {
+              setXirr(overviewXirrEl, calculateXIRR(_ov._overviewBaseFlows.concat(_ov.seXirrFlows)));
             }
           }
       });
