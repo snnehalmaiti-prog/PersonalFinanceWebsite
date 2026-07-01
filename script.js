@@ -5145,7 +5145,10 @@
           });
           unitsAtAction = Math.max(0, Math.round(unitsAtAction * 1000) / 1000);
           var extraUnits = Math.round(unitsAtAction * (action.ratio - 1) * 1000) / 1000;
-          var label = instrument + " (" + action.date + "): " + action.ratio + ":1 "
+          var dateParts = action.date.split("-");
+          var displayDate = dateParts[2] + "/" + dateParts[1] + "/" + dateParts[0];
+          var ratioDisplay = (action.ratio % 1 === 0) ? action.ratio.toFixed(0) : action.ratio;
+          var label = instrument + " (" + displayDate + "): " + ratioDisplay + ":1 "
             + (action.type === "split" ? "split" : "bonus")
             + " — add " + extraUnits + " units at ₹0";
           unmatched.push(label);
