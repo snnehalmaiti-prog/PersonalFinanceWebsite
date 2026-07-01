@@ -4613,8 +4613,11 @@
           updateNavAsOf(navHistories);
         });
     }).catch(function (err) {
-      statusEl.textContent = "Couldn't load holdings: " + (err && err.message ? err.message : err);
-      tableWrap.hidden = true;
+      var msg = "Couldn't load holdings: " + (err && err.message ? err.message : err);
+      if (indiaStatusEl) indiaStatusEl.textContent = msg;
+      if (usStatusEl) usStatusEl.textContent = msg;
+      if (indiaTableWrap) indiaTableWrap.hidden = true;
+      if (usTableWrap) usTableWrap.hidden = true;
     });
   }
 
@@ -4985,27 +4988,38 @@
   }
 
   function renderStockEtfHoldingsTable() {
-    var statusEl = document.getElementById("stocksetf-holdings-status");
-    var tableWrap = document.getElementById("stocksetf-holdings-table-wrap");
-    var tbody = document.getElementById("stocksetf-holdings-tbody");
-    if (!statusEl || !tableWrap || !tbody) return;
+    var indiaStatusEl = document.getElementById("stocksetf-india-holdings-status");
+    var indiaTableWrap = document.getElementById("stocksetf-india-holdings-table-wrap");
+    var indiaTbody = document.getElementById("stocksetf-india-holdings-tbody");
+    var usStatusEl = document.getElementById("stocksetf-us-holdings-status");
+    var usTableWrap = document.getElementById("stocksetf-us-holdings-table-wrap");
+    var usTbody = document.getElementById("stocksetf-us-holdings-tbody");
+    if (!indiaStatusEl || !usStatusEl) return;
 
     var rows = getSheetRows("stocksetf");
     if (!rows || !rows.length) {
-      statusEl.textContent = "Connect your Stocks/ETF Transactions sheet in Settings to populate this view.";
-      tableWrap.hidden = true;
+      indiaStatusEl.textContent = "Connect your Stocks/ETF Transactions sheet in Settings to populate this view.";
+      usStatusEl.textContent = "Connect your Stocks/ETF Transactions sheet in Settings to populate this view.";
+      if (indiaTableWrap) indiaTableWrap.hidden = true;
+      if (usTableWrap) usTableWrap.hidden = true;
       return;
     }
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var mappingTable = buildStockMappingTable();
 
-    statusEl.textContent = "Loading holdings…";
+    indiaStatusEl.textContent = "Loading holdings…";
+    usStatusEl.textContent = "Loading holdings…";
 
     buildStockHoldings(rows, mappingTable, selectedPortfolio).then(function (holdings) {
+      var indiaHoldings = holdings.filter(function(h) { return h.region !== "US"; });
+      var usHoldings = holdings.filter(function(h) { return h.region === "US"; });
+
       if (!holdings.length) {
-        statusEl.textContent = "No Stocks/ETF holdings with unsold units found.";
-        tableWrap.hidden = true;
+        indiaStatusEl.textContent = "No Stocks/ETF holdings with unsold units found.";
+        usStatusEl.textContent = "No US holdings found.";
+        if (indiaTableWrap) indiaTableWrap.hidden = true;
+        if (usTableWrap) usTableWrap.hidden = true;
         return;
       }
 
@@ -5093,6 +5107,7 @@
 
             rowsData.push({
               instrument: h.instrument,
+              region: h.region,
               units: h.units,
               avgCostINR: h.avgCostINR,
               ltpINR: ltpINR,
@@ -5105,8 +5120,28 @@
             });
           });
 
-          renderSeHoldingsRows(tbody, rowsData);
-          attachSeHoldingsSortHandlers(tbody, rowsData);
+          var indiaRowsData = rowsData.filter(function(r) { return r.region !== "US"; });
+          var usRowsData = rowsData.filter(function(r) { return r.region === "US"; });
+
+          if (indiaHoldings.length) {
+            renderSeHoldingsRows(indiaTbody, indiaRowsData);
+            attachSeHoldingsSortHandlers(indiaTbody, indiaRowsData);
+            indiaStatusEl.textContent = indiaRowsData.length + " holding(s).";
+            if (indiaTableWrap) indiaTableWrap.hidden = false;
+          } else {
+            indiaStatusEl.textContent = "No India holdings found.";
+            if (indiaTableWrap) indiaTableWrap.hidden = true;
+          }
+
+          if (usHoldings.length) {
+            renderSeHoldingsRows(usTbody, usRowsData);
+            attachSeHoldingsSortHandlers(usTbody, usRowsData);
+            usStatusEl.textContent = usRowsData.length + " holding(s). Values converted to INR at today\'s USD/INR rate.";
+            if (usTableWrap) usTableWrap.hidden = false;
+          } else {
+            usStatusEl.textContent = "No US holdings found.";
+            if (usTableWrap) usTableWrap.hidden = true;
+          }
 
           // Update stat cards
           var seCurrentEl = document.getElementById("stocksetf-current-value");
@@ -5155,13 +5190,15 @@
             }
           }
 
-          statusEl.textContent = rowsData.length + " holding(s) with unsold units.";
-          tableWrap.hidden = false;
+
         });
       });
     }).catch(function (err) {
-      statusEl.textContent = "Couldn't load holdings: " + (err && err.message ? err.message : err);
-      tableWrap.hidden = true;
+      var msg = "Couldn't load holdings: " + (err && err.message ? err.message : err);
+      if (indiaStatusEl) indiaStatusEl.textContent = msg;
+      if (usStatusEl) usStatusEl.textContent = msg;
+      if (indiaTableWrap) indiaTableWrap.hidden = true;
+      if (usTableWrap) usTableWrap.hidden = true;
     });
   }
 

@@ -335,15 +335,13 @@
         </div>
       </div>
 
-      <p class="muted small" style="margin-top:24px;">Connect your Stocks/ETF transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
-
       <div class="holdings-card">
         <div class="holdings-card-header">
-          <h3>Holdings</h3>
+          <h3>India Holdings</h3>
         </div>
-        <p class="muted small" id="stocksetf-holdings-status">Loading holdings…</p>
-        <div id="stocksetf-holdings-table-wrap" class="holdings-table-wrap" hidden>
-          <table id="stocksetf-holdings-table" class="holdings-table">
+        <p class="muted small" id="stocksetf-india-holdings-status">Loading holdings…</p>
+        <div id="stocksetf-india-holdings-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="stocksetf-india-holdings-table" class="holdings-table">
             <colgroup>
               <col style="width: 200px;" />
               <col span="9" />
@@ -362,7 +360,37 @@
                 <th class="num col-desktop-only" data-sort="xirrPct">XIRR</th>
               </tr>
             </thead>
-            <tbody id="stocksetf-holdings-tbody"></tbody>
+            <tbody id="stocksetf-india-holdings-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="holdings-card" style="margin-top:28px;">
+        <div class="holdings-card-header">
+          <h3>US Holdings</h3>
+        </div>
+        <p class="muted small" id="stocksetf-us-holdings-status">Loading holdings…</p>
+        <div id="stocksetf-us-holdings-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="stocksetf-us-holdings-table" class="holdings-table">
+            <colgroup>
+              <col style="width: 220px;" />
+              <col span="9" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th data-sort="instrument" class="fund-name-col">Instrument</th>
+                <th class="num col-desktop-only" data-sort="units">Qty.</th>
+                <th class="num col-desktop-only" data-sort="avgCostINR">Avg. cost (₹)</th>
+                <th class="num col-desktop-only" data-sort="ltpINR">LTP (₹)</th>
+                <th class="num col-desktop-only" data-sort="investedINR">Invested</th>
+                <th class="num" data-sort="currentINR">Cur. val</th>
+                <th class="num col-desktop-only" data-sort="dayChangeINR">Day chg.</th>
+                <th class="num" data-sort="pnl">P&amp;L</th>
+                <th class="num col-desktop-only" data-sort="pnlPct">Net chg.</th>
+                <th class="num col-desktop-only" data-sort="xirrPct">XIRR</th>
+              </tr>
+            </thead>
+            <tbody id="stocksetf-us-holdings-tbody"></tbody>
           </table>
         </div>
       </div>
