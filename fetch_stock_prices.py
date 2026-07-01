@@ -94,6 +94,20 @@ def fetch_prices(tickers_config):
                 hist = t.history(period="5d", interval="1d", auto_adjust=True)
                 series = hist["Close"].dropna()
 
+            # If .NS returned no data, retry with .BO (BSE)
+            if len(series) < 1 and ticker.endswith(".NS"):
+                bo_ticker = ticker[:-3] + ".BO"
+                try:
+                    t2 = yf.Ticker(bo_ticker)
+                    hist2 = t2.history(period="5d", interval="1d", auto_adjust=True)
+                    series2 = hist2["Close"].dropna()
+                    if len(series2) >= 1:
+                        series = series2
+                        print(f"  {ticker}: no data on NSE, falling back to {bo_ticker}")
+                        ticker = bo_ticker
+                except Exception:
+                    pass
+
             if len(series) < 1:
                 print(f"WARNING: No data for {ticker}")
                 continue

@@ -20,7 +20,7 @@
   { "name": "BSE",         "ticker": "BSE.NS",         "currency": "INR" },
   { "name": "LGEINDIA",    "ticker": "LGEINDIA.NS",    "currency": "INR" },
   { "name": "MAXHEALTH",   "ticker": "MAXHEALTH.NS",   "currency": "INR" },
-  { "name": "NSDL",        "ticker": "NSDL.BO",        "currency": "INR" },
+  { "name": "NSDL",        "ticker": "NSDL.NS",        "currency": "INR" },
   { "name": "TATACAP",     "ticker": "TATACAP.NS",     "currency": "INR" },
   { "name": "ICICIBANK",   "ticker": "ICICIBANK.NS",   "currency": "INR" },
   { "name": "BANKBARODA",  "ticker": "BANKBARODA.NS",  "currency": "INR" },
