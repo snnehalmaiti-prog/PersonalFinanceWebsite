@@ -2040,8 +2040,17 @@
         tbody.appendChild(tr);
       });
 
-      var suffix = goldPrice ? " (gold ₹" + Math.round(goldPrice) + "/g)" : " (gold price unavailable)";
-      statusEl.textContent = holdings.length + " holding(s)." + suffix;
+      var rateDate = goldPrice ? (function () {
+        try {
+          var cached = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
+          if (cached && cached.fetchedAt) {
+            var d = new Date(cached.fetchedAt);
+            return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          }
+        } catch (e) {}
+        return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+      })() : null;
+      statusEl.textContent = holdings.length + " holding(s)." + (rateDate ? " Gold rate as of " + rateDate + "." : "");
       tableWrap.hidden = false;
     });
   }
