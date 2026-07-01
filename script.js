@@ -4672,11 +4672,13 @@
           resolvable.forEach(function (h, i) {
             var isClosed = h.units < 1;
             var currNav, current, pnl, pnlPct, dayChgPct;
+            var investedForDisplay = h.invested;
 
             if (isClosed) {
               var detail = computeInstrumentRealizedDetail(transactionsByInstrument[h.instrument]);
               currNav = detail.lastSellPrice;
               current = detail.saleProceeds;
+              investedForDisplay = detail.costOfSoldUnits;
               pnl = detail.realizedPnl;
               pnlPct = detail.costOfSoldUnits > 0 ? (pnl / detail.costOfSoldUnits) * 100 : 0;
               dayChgPct = 0;
@@ -4702,7 +4704,7 @@
               units: h.units,
               avgNav: h.avgNav,
               currNav: currNav,
-              invested: h.invested,
+              invested: investedForDisplay,
               current: current,
               pnl: pnl,
               pnlPct: pnlPct,
