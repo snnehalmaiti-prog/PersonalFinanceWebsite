@@ -1116,7 +1116,7 @@
 
   // Per-tab numeric values — refreshed by each tab's async computation; overview is their sum.
   var _ov = { mfInvested: 0, mfCurrent: 0, mfUnrealized: 0, mfRealized: 0,
-               seInvested: 0, seRealized: 0,
+               seInvested: 0, seCurrent: 0, seUnrealized: 0, seDayChange: 0, seRealized: 0,
                fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0,
                commInvested: 0, commCurrent: 0, commUnrealized: 0, commRealized: 0 };
 
@@ -1129,9 +1129,10 @@
     var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
     var fiCurrent = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
     var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
-    // Commodity is always included — not affected by Fixed Income exclusion
+    // Use seCurrent if prices have loaded; fall back to seInvested so overview is never blank
+    var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
     var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + _ov.commInvested;
-    var totalCurrent = _ov.mfCurrent + _ov.seInvested + fiCurrent + _ov.commCurrent;
+    var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + _ov.commCurrent;
     var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + _ov.commRealized;
     if (overviewInvestedEl) overviewInvestedEl.textContent = formatCurrency(totalInvested);
     if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
@@ -1142,7 +1143,7 @@
   function updateDashboardStats() {
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
-    _ov.seInvested = 0; _ov.seRealized = 0;
+    _ov.seInvested = 0; _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seRealized = 0;
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
     _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
 
@@ -5153,6 +5154,12 @@
             usStatusEl.textContent = "No US holdings found.";
             if (usTableWrap) usTableWrap.hidden = true;
           }
+
+          // Feed live totals back into overview accumulator and refresh dashboard
+          _ov.seCurrent    = totalCurrentINR;
+          _ov.seUnrealized = totalPnlINR;
+          _ov.seDayChange  = totalDayChangeINR;
+          refreshOverviewStats();
 
           // Update stat cards
           var seCurrentEl = document.getElementById("stocksetf-current-value");
