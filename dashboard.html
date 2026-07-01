@@ -311,19 +311,19 @@
         </div>
         <div class="overview-stat-card">
           <span class="overview-stat-label">Current</span>
-          <span class="overview-stat-value">—</span>
+          <span class="overview-stat-value" id="stocksetf-current-value">—</span>
         </div>
         <div class="overview-stat-card">
           <span class="overview-stat-label">Day Change</span>
-          <span class="overview-stat-value">—</span>
+          <span class="overview-stat-value" id="stocksetf-day-change">—</span>
         </div>
         <div class="overview-stat-card">
           <span class="overview-stat-label">Unrealized Profit</span>
-          <span class="overview-stat-value">—</span>
+          <span class="overview-stat-value" id="stocksetf-unrealized">—</span>
         </div>
         <div class="overview-stat-card">
           <span class="overview-stat-label">Return %</span>
-          <span class="overview-stat-value">—</span>
+          <span class="overview-stat-value" id="stocksetf-return-pct">—</span>
         </div>
         <div class="overview-stat-card">
           <span class="overview-stat-label">Realized Profit</span>
@@ -331,11 +331,41 @@
         </div>
         <div class="overview-stat-card">
           <span class="overview-stat-label">XIRR</span>
-          <span class="overview-stat-value">—</span>
+          <span class="overview-stat-value" id="stocksetf-xirr">—</span>
         </div>
       </div>
 
-      <p class="muted small" style="margin-top:24px;">Connect your Stocks/ETF transaction sheet in <a href="settings.html">Settings</a> to populate this view. Live current-value pricing for stocks/ETFs isn't wired up yet.</p>
+      <p class="muted small" style="margin-top:24px;">Connect your Stocks/ETF transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
+
+      <div class="holdings-card">
+        <div class="holdings-card-header">
+          <h3>Holdings</h3>
+        </div>
+        <p class="muted small" id="stocksetf-holdings-status">Loading holdings…</p>
+        <div id="stocksetf-holdings-table-wrap" class="holdings-table-wrap" hidden>
+          <table id="stocksetf-holdings-table" class="holdings-table">
+            <colgroup>
+              <col style="width: 200px;" />
+              <col span="9" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th data-sort="instrument" class="fund-name-col">Instrument</th>
+                <th class="num col-desktop-only" data-sort="units">Qty.</th>
+                <th class="num col-desktop-only" data-sort="avgCostINR">Avg. cost</th>
+                <th class="num col-desktop-only" data-sort="ltpINR">LTP</th>
+                <th class="num col-desktop-only" data-sort="investedINR">Invested</th>
+                <th class="num" data-sort="currentINR">Cur. val</th>
+                <th class="num col-desktop-only" data-sort="dayChangeINR">Day chg.</th>
+                <th class="num" data-sort="pnl">P&amp;L</th>
+                <th class="num col-desktop-only" data-sort="pnlPct">Net chg.</th>
+                <th class="num col-desktop-only" data-sort="xirrPct">XIRR</th>
+              </tr>
+            </thead>
+            <tbody id="stocksetf-holdings-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section id="panel-fixedincome" class="settings-panel" role="tabpanel" aria-labelledby="tab-fixedincome" hidden>

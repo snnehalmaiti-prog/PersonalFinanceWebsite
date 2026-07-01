@@ -1790,6 +1790,181 @@
     renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.", true);
   }
 
+  // ─── Stocks/ETF: Twelve Data helpers ──────────────────────────────────────
+  var TWELVEDATA_API_KEY = "04915b953c22462191c1c6ee5bb02566";
+  var SE_EOD_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+  var USD_INR_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+
+  function buildStockMappingTable() {
+    var rows = getSheetRows("stocksetfmapping");
+    if (!rows || rows.length < 2) return {};
+    var map = {};
+    rows.slice(1).forEach(function (row) {
+      var name = (row[0] || "").trim();
+      if (!name) return;
+      var region = (row[4] || "").trim();
+      var identifier = (row[5] || "").trim();
+      map[normalizeText(name)] = {
+        ticker: region === "US" ? identifier : name,
+        region: region,
+        exchange: region === "India" ? "NSE" : null,
+        segment: (row[3] || "").trim(),
+        subCat: (row[2] || "").trim(),
+        category: (row[1] || "").trim()
+      };
+    });
+    return map;
+  }
+
+  function fetchStockEod(ticker, exchange) {
+    var cacheKey = "wf-se-eod-" + ticker;
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey));
+      if (cached && Date.now() - cached.fetchedAt < SE_EOD_CACHE_MAX_AGE_MS) return Promise.resolve(cached.price);
+    } catch (e) {}
+    var url = "https://api.twelvedata.com/eod?symbol=" + encodeURIComponent(ticker) + (exchange ? "&exchange=" + exchange : "") + "&apikey=" + TWELVEDATA_API_KEY;
+    return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data || !data.close) throw new Error("No EOD price for " + ticker);
+      var price = parseFloat(data.close);
+      try { localStorage.setItem(cacheKey, JSON.stringify({ price: price, fetchedAt: Date.now() })); } catch (e) {}
+      return price;
+    });
+  }
+
+  function fetchStockHistoricalPrice(ticker, exchange, dateStr) {
+    var cacheKey = "wf-se-hist-" + ticker + "-" + dateStr;
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey));
+      if (cached && cached.price) return Promise.resolve(cached.price);
+    } catch (e) {}
+    var url = "https://api.twelvedata.com/time_series?symbol=" + encodeURIComponent(ticker) + (exchange ? "&exchange=" + exchange : "") + "&interval=1day&start_date=" + dateStr + "&end_date=" + dateStr + "&outputsize=1&apikey=" + TWELVEDATA_API_KEY;
+    return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data || !data.values || !data.values.length) throw new Error("No historical price for " + ticker + " on " + dateStr);
+      var price = parseFloat(data.values[0].close);
+      try { localStorage.setItem(cacheKey, JSON.stringify({ price: price })); } catch (e) {}
+      return price;
+    });
+  }
+
+  function fetchUsdInrRate() {
+    var cacheKey = "wf-usd-inr-rate";
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey));
+      if (cached && Date.now() - cached.fetchedAt < USD_INR_CACHE_MAX_AGE_MS) return Promise.resolve(cached.rate);
+    } catch (e) {}
+    return fetch("https://api.twelvedata.com/exchange_rate?symbol=USD/INR&apikey=" + TWELVEDATA_API_KEY)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.rate) throw new Error("No USD/INR rate");
+        var rate = parseFloat(data.rate);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ rate: rate, fetchedAt: Date.now() })); } catch (e) {}
+        return rate;
+      });
+  }
+
+  function fetchUsdInrHistorical(dateStr) {
+    var cacheKey = "wf-usd-inr-hist-" + dateStr;
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey));
+      if (cached && cached.rate) return Promise.resolve(cached.rate);
+    } catch (e) {}
+    var url = "https://api.twelvedata.com/time_series?symbol=USD/INR&interval=1day&start_date=" + dateStr + "&end_date=" + dateStr + "&outputsize=1&apikey=" + TWELVEDATA_API_KEY;
+    return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data || !data.values || !data.values.length) throw new Error("No USD/INR for " + dateStr);
+      var rate = parseFloat(data.values[0].close);
+      try { localStorage.setItem(cacheKey, JSON.stringify({ rate: rate })); } catch (e) {}
+      return rate;
+    });
+  }
+
+  // Build holdings array for Stocks/ETF with FIFO lots and USD/INR conversion.
+  // Returns a Promise resolving to array of { instrument, ticker, region, exchange, units, avgCostINR, investedINR, lots }
+  function buildStockHoldings(rows, mappingTable, portfolioFilter) {
+    var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!transactionsByInstrument) return Promise.resolve([]);
+
+    var holdings = [];
+    Object.keys(transactionsByInstrument).forEach(function (instrument) {
+      var txns = transactionsByInstrument[instrument];
+      var remainingLots = fifoRemainingLots(txns);
+      var remainingUnits = 0;
+      remainingLots.forEach(function (lot) { remainingUnits += lot.units; });
+      if (remainingUnits < UNITS_EPSILON) return;
+
+      var mapping = mappingTable[normalizeText(instrument)] || {};
+      var ticker = mapping.ticker || instrument;
+      var region = mapping.region || "India";
+      var exchange = mapping.exchange || null;
+
+      // Attach date to each remaining lot by replaying transactions
+      var lotsWithDate = [];
+      var buyQueue = [];
+      txns.forEach(function (txn) {
+        if (txn.type === "buy") {
+          buyQueue.push({ units: txn.units, price: txn.price, date: txn.date });
+        } else {
+          var toMatch = txn.units;
+          while (toMatch > 0 && buyQueue.length) {
+            var head = buyQueue[0];
+            var matched = Math.min(toMatch, head.units);
+            head.units -= matched;
+            toMatch -= matched;
+            if (head.units <= 0) buyQueue.shift();
+          }
+        }
+      });
+      lotsWithDate = buyQueue.slice();
+
+      holdings.push({ instrument: instrument, ticker: ticker, region: region, exchange: exchange, remainingUnits: remainingUnits, lots: lotsWithDate, txns: txns });
+    });
+
+    if (!holdings.length) return Promise.resolve([]);
+
+    // For US stocks, fetch historical USD/INR for each unique buy date in remaining lots
+    var usdDateSet = {};
+    holdings.forEach(function (h) {
+      if (h.region === "US") {
+        h.lots.forEach(function (lot) {
+          if (lot.date) usdDateSet[formatDateISO(lot.date)] = true;
+        });
+      }
+    });
+    var usdDates = Object.keys(usdDateSet);
+
+    return Promise.all(usdDates.map(function (d) {
+      return fetchUsdInrHistorical(d).then(function (rate) { return { date: d, rate: rate }; }).catch(function () { return { date: d, rate: null }; });
+    })).then(function (usdRates) {
+      var usdRateMap = {};
+      usdRates.forEach(function (r) { if (r.rate) usdRateMap[r.date] = r.rate; });
+
+      return holdings.map(function (h) {
+        var investedINR = 0;
+        h.lots.forEach(function (lot) {
+          if (h.region === "US") {
+            var dateStr = formatDateISO(lot.date);
+            var rate = usdRateMap[dateStr] || 84; // fallback rate
+            investedINR += lot.units * lot.price * rate;
+          } else {
+            investedINR += lot.units * lot.price;
+          }
+        });
+        var avgCostINR = h.remainingUnits > UNITS_EPSILON ? investedINR / h.remainingUnits : 0;
+        return {
+          instrument: h.instrument,
+          ticker: h.ticker,
+          region: h.region,
+          exchange: h.exchange,
+          units: h.remainingUnits,
+          avgCostINR: avgCostINR,
+          investedINR: investedINR,
+          txns: h.txns
+        };
+      });
+    });
+  }
+
+  // ─── End Stocks/ETF helpers ───────────────────────────────────────────────
+
   var GOLD_PRICE_CACHE_KEY = "wf-gold-price-inr-per-gram";
   var GOLD_PRICE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
   var GOLD_API_KEY = "goldapi-bb93d5efdf450d839eba8c4fe351ead2-io";
@@ -2635,6 +2810,7 @@
         if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         if (prefix === "fixedincome") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); }
         if (prefix === "fd") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
+        if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });
@@ -4686,6 +4862,310 @@
   }
 
   linkPieChartBoxSizes("market-segment-resize", "mf-portfolio-split-resize");
+
+  // ===== Stocks/ETF Holdings Table =====
+  var seHoldingsSortState = { key: null, dir: 1 };
+
+  function renderSeHoldingsRows(tbody, rowsData) {
+    var key = seHoldingsSortState.key;
+    var dir = seHoldingsSortState.dir;
+    var sorted = rowsData.slice();
+    if (key) {
+      sorted.sort(function (a, b) {
+        var av = a[key], bv = b[key];
+        if (av === null || av === undefined) av = (typeof bv === "number") ? -Infinity : "";
+        if (bv === null || bv === undefined) bv = (typeof av === "number") ? -Infinity : "";
+        if (typeof av === "string" || typeof bv === "string") return String(av).localeCompare(String(bv)) * dir;
+        return (av - bv) * dir;
+      });
+    }
+
+    tbody.innerHTML = "";
+    sorted.forEach(function (h, idx) {
+      var tr = document.createElement("tr");
+      tr.style.animationDelay = (Math.min(idx, 12) * 25) + "ms";
+      tr.className = "row-enter";
+
+      var nameTd = document.createElement("td");
+      nameTd.className = "fund-name";
+      nameTd.textContent = h.instrument;
+      nameTd.title = h.instrument;
+      tr.appendChild(nameTd);
+
+      var qtyTd = document.createElement("td");
+      qtyTd.className = "num col-desktop-only";
+      qtyTd.textContent = h.units.toFixed(3);
+      tr.appendChild(qtyTd);
+
+      var avgTd = document.createElement("td");
+      avgTd.className = "num col-desktop-only";
+      avgTd.textContent = "₹" + h.avgCostINR.toFixed(2);
+      tr.appendChild(avgTd);
+
+      var ltpTd = document.createElement("td");
+      ltpTd.className = "num col-desktop-only";
+      ltpTd.textContent = h.ltpINR !== null ? "₹" + h.ltpINR.toFixed(2) : "—";
+      tr.appendChild(ltpTd);
+
+      var investedTd = document.createElement("td");
+      investedTd.className = "num col-desktop-only";
+      investedTd.textContent = formatCurrency(h.investedINR);
+      tr.appendChild(investedTd);
+
+      var currentTd = document.createElement("td");
+      currentTd.className = "num";
+      currentTd.textContent = h.currentINR !== null ? formatCurrency(h.currentINR) : "—";
+      tr.appendChild(currentTd);
+
+      var dayChgTd = document.createElement("td");
+      dayChgTd.className = "num col-desktop-only";
+      if (h.dayChangeINR !== null) {
+        dayChgTd.appendChild(pnlChip((h.dayChangeINR > 0 ? "+" : "") + formatCurrency(h.dayChangeINR), h.dayChangeINR));
+      } else {
+        dayChgTd.textContent = "—";
+      }
+      tr.appendChild(dayChgTd);
+
+      var pnlTd = document.createElement("td");
+      pnlTd.className = "num";
+      if (h.pnl !== null) {
+        pnlTd.appendChild(pnlChip((h.pnl > 0 ? "+" : "") + formatCurrency(h.pnl), h.pnl));
+      } else {
+        pnlTd.textContent = "—";
+      }
+      tr.appendChild(pnlTd);
+
+      var netChgTd = document.createElement("td");
+      netChgTd.className = "num col-desktop-only";
+      if (h.pnlPct !== null) {
+        netChgTd.appendChild(pnlChip((h.pnlPct > 0 ? "+" : "") + h.pnlPct.toFixed(2) + "%", h.pnlPct));
+      } else {
+        netChgTd.textContent = "—";
+      }
+      tr.appendChild(netChgTd);
+
+      var xirrTd = document.createElement("td");
+      xirrTd.className = "num col-desktop-only";
+      if (h.xirrPct === null || h.xirrPct === undefined) {
+        xirrTd.textContent = "—";
+      } else {
+        xirrTd.appendChild(pnlChip((h.xirrPct > 0 ? "+" : "") + h.xirrPct.toFixed(2) + "%", h.xirrPct));
+      }
+      tr.appendChild(xirrTd);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function attachSeHoldingsSortHandlers(tbody, rowsData) {
+    var table = tbody.closest("table");
+    if (!table) return;
+    table.__wfSeRowsData = rowsData;
+    if (table.dataset.seSortableBound) return;
+    table.dataset.seSortableBound = "1";
+    var headers = table.querySelectorAll("th[data-sort]");
+    headers.forEach(function (th) {
+      th.classList.add("sortable");
+      var icon = document.createElement("span");
+      icon.className = "sort-icon";
+      th.appendChild(icon);
+      th.addEventListener("click", function () {
+        var k = th.getAttribute("data-sort");
+        if (seHoldingsSortState.key === k) {
+          seHoldingsSortState.dir *= -1;
+        } else {
+          seHoldingsSortState.key = k;
+          seHoldingsSortState.dir = 1;
+        }
+        headers.forEach(function (other) { other.classList.remove("sort-asc", "sort-desc"); });
+        th.classList.add(seHoldingsSortState.dir === 1 ? "sort-asc" : "sort-desc");
+        renderSeHoldingsRows(tbody, table.__wfSeRowsData);
+      });
+    });
+  }
+
+  function renderStockEtfHoldingsTable() {
+    var statusEl = document.getElementById("stocksetf-holdings-status");
+    var tableWrap = document.getElementById("stocksetf-holdings-table-wrap");
+    var tbody = document.getElementById("stocksetf-holdings-tbody");
+    if (!statusEl || !tableWrap || !tbody) return;
+
+    var rows = getSheetRows("stocksetf");
+    if (!rows || !rows.length) {
+      statusEl.textContent = "Connect your Stocks/ETF Transactions sheet in Settings to populate this view.";
+      tableWrap.hidden = true;
+      return;
+    }
+
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var mappingTable = buildStockMappingTable();
+
+    statusEl.textContent = "Loading holdings…";
+
+    buildStockHoldings(rows, mappingTable, selectedPortfolio).then(function (holdings) {
+      if (!holdings.length) {
+        statusEl.textContent = "No Stocks/ETF holdings with unsold units found.";
+        tableWrap.hidden = true;
+        return;
+      }
+
+      statusEl.textContent = "Fetching live prices…";
+
+      // Fetch today's USD/INR rate once for all US stocks
+      var hasUs = holdings.some(function (h) { return h.region === "US"; });
+      var usdInrPromise = hasUs ? fetchUsdInrRate().catch(function () { return 84; }) : Promise.resolve(null);
+
+      return usdInrPromise.then(function (usdInrToday) {
+        // For each holding: fetch today's EOD price + yesterday's price for day change
+        return Promise.all(holdings.map(function (h) {
+          var eodPromise = fetchStockEod(h.ticker, h.exchange).catch(function () { return null; });
+          return eodPromise.then(function (eodPriceRaw) {
+            if (eodPriceRaw === null) return { eodPriceRaw: null, prevPriceRaw: null };
+            // Fetch yesterday's price for day change calc
+            var today = new Date();
+            var prev = new Date(today);
+            prev.setDate(today.getDate() - 1);
+            var prevDateStr = formatDateISO(prev);
+            return fetchStockHistoricalPrice(h.ticker, h.exchange, prevDateStr)
+              .catch(function () { return null; })
+              .then(function (prevPriceRaw) {
+                return { eodPriceRaw: eodPriceRaw, prevPriceRaw: prevPriceRaw };
+              });
+          });
+        })).then(function (priceResults) {
+          var rowsData = [];
+          var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
+
+          holdings.forEach(function (h, i) {
+            var pr = priceResults[i];
+            var eodRaw = pr.eodPriceRaw;
+            var prevRaw = pr.prevPriceRaw;
+            var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
+
+            if (eodRaw !== null) {
+              if (h.region === "US") {
+                ltpINR = eodRaw * (usdInrToday || 84);
+              } else {
+                ltpINR = eodRaw;
+              }
+              currentINR = h.units * ltpINR;
+              pnl = currentINR - h.investedINR;
+              pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
+
+              if (prevRaw !== null) {
+                var prevINR = h.region === "US" ? prevRaw * (usdInrToday || 84) : prevRaw;
+                dayChangeINR = (ltpINR - prevINR) * h.units;
+              }
+            }
+
+            // XIRR: build cash flows in INR
+            // Use buildXirrCashFlows which calls parseNumber (strips currency symbols) for prices
+            // We need custom cash flows for US stocks to apply USD/INR conversion
+            var xirrFlows = [];
+            if (h.region === "US") {
+              // Build custom flows in INR for US stocks using historical rates already fetched
+              var txnsForXirr = h.txns || [];
+              txnsForXirr.forEach(function (txn) {
+                if (!txn.date || !txn.units || !txn.price) return;
+                var dateStr = formatDateISO(txn.date);
+                // We need to look up the historical rate - use a synchronous cache read
+                var rateForDate = 84;
+                try {
+                  var cached = JSON.parse(localStorage.getItem("wf-usd-inr-hist-" + dateStr));
+                  if (cached && cached.rate) rateForDate = cached.rate;
+                } catch (e) {}
+                var amountINR = txn.units * txn.price * rateForDate;
+                xirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -amountINR : amountINR });
+              });
+            } else {
+              xirrFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
+            }
+            if (currentINR !== null && currentINR > UNITS_EPSILON) {
+              xirrFlows.push({ date: new Date(), amount: currentINR });
+            }
+            var xirrVal = calculateXIRR(xirrFlows);
+            var xirrPct = (xirrVal === null || xirrVal === undefined || !isFinite(xirrVal)) ? null : xirrVal * 100;
+
+            if (currentINR !== null) totalCurrentINR += currentINR;
+            totalInvestedINR += h.investedINR;
+            if (dayChangeINR !== null) totalDayChangeINR += dayChangeINR;
+            if (pnl !== null) totalPnlINR += pnl;
+
+            rowsData.push({
+              instrument: h.instrument,
+              units: h.units,
+              avgCostINR: h.avgCostINR,
+              ltpINR: ltpINR,
+              investedINR: h.investedINR,
+              currentINR: currentINR,
+              dayChangeINR: dayChangeINR,
+              pnl: pnl,
+              pnlPct: pnlPct,
+              xirrPct: xirrPct
+            });
+          });
+
+          renderSeHoldingsRows(tbody, rowsData);
+          attachSeHoldingsSortHandlers(tbody, rowsData);
+
+          // Update stat cards
+          var seCurrentEl = document.getElementById("stocksetf-current-value");
+          var seDayChgEl = document.getElementById("stocksetf-day-change");
+          var seUnrealizedEl = document.getElementById("stocksetf-unrealized");
+          var seReturnPctEl = document.getElementById("stocksetf-return-pct");
+          var seXirrEl = document.getElementById("stocksetf-xirr");
+
+          if (seCurrentEl) seCurrentEl.textContent = formatCurrency(totalCurrentINR);
+          if (seDayChgEl) setSignedCurrency(seDayChgEl, totalDayChangeINR);
+          if (seUnrealizedEl) setSignedCurrency(seUnrealizedEl, totalPnlINR);
+          if (seReturnPctEl) {
+            var retPct = totalInvestedINR > 0 ? (totalPnlINR / totalInvestedINR) * 100 : 0;
+            seReturnPctEl.textContent = (retPct > 0 ? "+" : "") + retPct.toFixed(2) + "%";
+            seReturnPctEl.className = "overview-stat-value " + (retPct > 0 ? "positive" : retPct < 0 ? "negative" : "");
+          }
+
+          // Portfolio-level XIRR
+          if (seXirrEl) {
+            var allFlows = [];
+            // Build portfolio-level XIRR across all instruments
+            holdings.forEach(function (hh) {
+              if (hh.region === "US") {
+                (hh.txns || []).forEach(function (txn) {
+                  if (!txn.date || !txn.units || !txn.price) return;
+                  var dateStr = formatDateISO(txn.date);
+                  var rateForDate = 84;
+                  try {
+                    var cached = JSON.parse(localStorage.getItem("wf-usd-inr-hist-" + dateStr));
+                    if (cached && cached.rate) rateForDate = cached.rate;
+                  } catch (e) {}
+                  allFlows.push({ date: txn.date, amount: txn.type === "buy" ? -(txn.units * txn.price * rateForDate) : (txn.units * txn.price * rateForDate) });
+                });
+              } else {
+                buildXirrCashFlows(rows, selectedPortfolio, hh.instrument).forEach(function (f) { allFlows.push(f); });
+              }
+            });
+            if (totalCurrentINR > UNITS_EPSILON) allFlows.push({ date: new Date(), amount: totalCurrentINR });
+            var portXirr = calculateXIRR(allFlows);
+            if (portXirr !== null && isFinite(portXirr)) {
+              var xirrPctPort = portXirr * 100;
+              seXirrEl.textContent = (xirrPctPort > 0 ? "+" : "") + xirrPctPort.toFixed(2) + "%";
+              seXirrEl.className = "overview-stat-value " + (xirrPctPort > 0 ? "positive" : xirrPctPort < 0 ? "negative" : "");
+            } else {
+              seXirrEl.textContent = "—";
+            }
+          }
+
+          statusEl.textContent = rowsData.length + " holding(s) with unsold units.";
+          tableWrap.hidden = false;
+        });
+      });
+    }).catch(function (err) {
+      statusEl.textContent = "Couldn't load holdings: " + (err && err.message ? err.message : err);
+      tableWrap.hidden = true;
+    });
+  }
+
+  renderStockEtfHoldingsTable();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
