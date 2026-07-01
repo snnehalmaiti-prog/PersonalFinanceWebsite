@@ -953,6 +953,7 @@
         "instrument name": headerFd.indexOf("instrument name"),
         "instrument category": headerFd.indexOf("instrument category"),
         "instrument sub category": headerFd.indexOf("instrument sub category"),
+        "transaction type": headerFd.indexOf("transaction type"),
         "invested amount": headerFd.indexOf("invested amount"),
         "maturity date/sell date": maturityDateIdx,
         "rate of return": headerFd.indexOf("rate of return")
@@ -976,9 +977,12 @@
         var subCategory = (row[fdIdx["instrument sub category"]] || "").trim();
         var maturityRaw = (row[fdIdx["maturity date/sell date"]] || "").trim();
         var rateRaw = (row[fdIdx["rate of return"]] || "").trim();
+        var txType = (fdIdx["transaction type"] !== -1 ? row[fdIdx["transaction type"]] || "" : "").trim();
         var normCategory = normalizeText(category);
-        var isFixedDeposit = normCategory === "fixed income" && normalizeText(subCategory) === "fixed deposit";
+        var normSubCategory = normalizeText(subCategory);
+        var isFixedDeposit = normCategory === "fixed income" && normSubCategory === "fixed deposit";
         var isCommodity = normCategory === "commodity";
+        var isProvidentFund = normCategory === "fixed income" && (normSubCategory === "provident fund" || normSubCategory === "provident pension");
 
         var issues = [];
         if (!portfolio) issues.push("Portfolio is blank");
@@ -997,7 +1001,13 @@
         if (isFixedDeposit && !rateRaw) issues.push("Rate of Return is mandatory for Fixed Deposit rows but is blank");
         else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
 
-        if (!isCommodity && !bank) issues.push("Bank is blank");
+        if (isProvidentFund) {
+          if (bank) issues.push("Bank must be blank for Provident Fund/Provident Pension rows");
+          if (!txType) issues.push("Transaction Type is blank");
+          if (!row[fdIdx["invested amount"]] || !(row[fdIdx["invested amount"]] || "").trim()) issues.push("Invested Amount is blank");
+        } else if (!isCommodity && !bank) {
+          issues.push("Bank is blank");
+        }
         if (isCommodity) {
           if (gramsIdx !== -1) {
             var gramsRaw = (row[gramsIdx] || "").trim();
