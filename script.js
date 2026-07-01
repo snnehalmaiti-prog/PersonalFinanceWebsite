@@ -2028,6 +2028,11 @@
         goldRateTd.textContent = goldPrice ? "₹" + Math.round(goldPrice).toLocaleString("en-IN") : "—";
         tr.appendChild(goldRateTd);
 
+        var gmsTd = document.createElement("td");
+        gmsTd.className = "num col-desktop-only";
+        gmsTd.textContent = h.grams > 0 ? h.grams.toLocaleString("en-IN") : "—";
+        tr.appendChild(gmsTd);
+
         var investedTd = document.createElement("td");
         investedTd.className = "num";
         investedTd.textContent = formatCurrency(h.invested);
