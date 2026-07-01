@@ -5056,7 +5056,7 @@
 
       var xirrTd = document.createElement("td");
       xirrTd.className = "num col-desktop-only";
-      if (h.xirrPct === null || h.xirrPct === undefined) {
+      if (h.xirrPct === null || h.xirrPct === undefined || h.units <= 0) {
         xirrTd.textContent = "—";
       } else {
         xirrTd.appendChild(pnlChip((h.xirrPct > 0 ? "+" : "") + h.xirrPct.toFixed(2) + "%", h.xirrPct));
