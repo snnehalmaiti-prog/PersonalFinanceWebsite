@@ -3843,6 +3843,15 @@
         epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         fdValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         commodityGramEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        // Fill daily dates for commodity so the chart has a dense timeline
+        if (commodityGramEvents.length) {
+          var commFill = new Date(commodityGramEvents[0].date);
+          var commToday = new Date(); commToday.setHours(0, 0, 0, 0);
+          while (commFill <= commToday) {
+            allDates[dateKey(commFill)] = new Date(commFill);
+            commFill.setDate(commFill.getDate() + 1);
+          }
+        }
         var timeline = Object.keys(allDates).map(function (k) { return allDates[k]; }).sort(function (a, b) { return a - b; });
         var today = new Date();
         var firstTxnDate = null, lastTxnDate = null;
