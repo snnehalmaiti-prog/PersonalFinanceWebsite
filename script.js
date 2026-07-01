@@ -5262,32 +5262,54 @@
         var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
 
         holdings.forEach(function (h) {
+          var isClosed = h.units < UNITS_EPSILON;
           var priceEntry = allPrices[h.ticker] || null;
           var eodRaw = priceEntry ? priceEntry.price : null;
           var prevRaw = priceEntry ? priceEntry.prev_close : null;
           var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
+          var investedForDisplay = h.investedINR;
+          var avgCostForDisplay = h.avgCostINR;
 
-          if (eodRaw !== null) {
+          if (isClosed) {
+            // Mirrors MF closed position behaviour: show realized figures
+            var detail = computeInstrumentRealizedDetail(h.txns || []);
             if (h.region === "US") {
-              ltpINR = eodRaw * usdInrToday;
+              var sellDateStr = detail.lastSellDate ? formatDateISO(detail.lastSellDate) : null;
+              var sellRate = (sellDateStr && usdInrHistMap[sellDateStr]) ? usdInrHistMap[sellDateStr] : usdInrToday;
+              ltpINR = detail.lastSellPrice * sellRate;
+              currentINR = detail.saleProceeds * sellRate;
+              investedForDisplay = detail.costOfSoldUnits * sellRate;
+              avgCostForDisplay = detail.avgBuyCost * sellRate;
             } else {
-              ltpINR = eodRaw;
+              ltpINR = detail.lastSellPrice;
+              currentINR = detail.saleProceeds;
+              investedForDisplay = detail.costOfSoldUnits;
+              avgCostForDisplay = detail.avgBuyCost;
             }
-            currentINR = h.units * ltpINR;
-            pnl = currentINR - h.investedINR;
-            pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
+            pnl = currentINR - investedForDisplay;
+            pnlPct = investedForDisplay > 0 ? (pnl / investedForDisplay) * 100 : null;
+          } else {
+            if (eodRaw !== null) {
+              if (h.region === "US") {
+                ltpINR = eodRaw * usdInrToday;
+              } else {
+                ltpINR = eodRaw;
+              }
+              currentINR = h.units * ltpINR;
+              pnl = currentINR - h.investedINR;
+              pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
 
-            if (prevRaw !== null) {
-              var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
-              dayChangeINR = (ltpINR - prevINR) * h.units;
+              if (prevRaw !== null) {
+                var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
+                dayChangeINR = (ltpINR - prevINR) * h.units;
+              }
             }
           }
 
-          // XIRR cash flows in INR
+          // XIRR cash flows in INR (no current value added for closed positions)
           var xirrFlows = [];
           if (h.region === "US") {
-            var txnsForXirr = h.txns || [];
-            txnsForXirr.forEach(function (txn) {
+            (h.txns || []).forEach(function (txn) {
               if (!txn.date || !txn.units || !txn.price) return;
               var dateStr = formatDateISO(txn.date);
               var rateForDate = usdInrHistMap[dateStr] || usdInrToday;
@@ -5295,35 +5317,35 @@
               xirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -amountINR : amountINR });
             });
           } else {
-              xirrFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
-            }
-            if (currentINR !== null && currentINR > UNITS_EPSILON) {
-              xirrFlows.push({ date: new Date(), amount: currentINR });
-            }
-            var xirrVal = calculateXIRR(xirrFlows);
-            var xirrPct = (xirrVal === null || xirrVal === undefined || !isFinite(xirrVal)) ? null : xirrVal * 100;
+            xirrFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
+          }
+          if (!isClosed && currentINR !== null && currentINR > UNITS_EPSILON) {
+            xirrFlows.push({ date: new Date(), amount: currentINR });
+          }
+          var xirrVal = calculateXIRR(xirrFlows);
+          var xirrPct = (xirrVal === null || xirrVal === undefined || !isFinite(xirrVal)) ? null : xirrVal * 100;
 
-            if (currentINR !== null) {
-              totalCurrentINR += currentINR;
-              totalInvestedINR += h.investedINR; // only count invested when we have a live price
-            }
-            if (dayChangeINR !== null) totalDayChangeINR += dayChangeINR;
-            if (pnl !== null) totalPnlINR += pnl;
+          if (!isClosed && currentINR !== null) {
+            totalCurrentINR += currentINR;
+            totalInvestedINR += h.investedINR;
+          }
+          if (dayChangeINR !== null) totalDayChangeINR += dayChangeINR;
+          if (pnl !== null) totalPnlINR += pnl;
 
-            rowsData.push({
-              instrument: h.instrument,
-              region: h.region,
-              units: h.units,
-              avgCostINR: h.avgCostINR,
-              ltpINR: ltpINR,
-              investedINR: h.investedINR,
-              currentINR: currentINR,
-              dayChangeINR: dayChangeINR,
-              pnl: pnl,
-              pnlPct: pnlPct,
-              xirrPct: xirrPct
-            });
+          rowsData.push({
+            instrument: h.instrument,
+            region: h.region,
+            units: h.units,
+            avgCostINR: avgCostForDisplay,
+            ltpINR: ltpINR,
+            investedINR: investedForDisplay,
+            currentINR: currentINR,
+            dayChangeINR: dayChangeINR,
+            pnl: pnl,
+            pnlPct: pnlPct,
+            xirrPct: xirrPct
           });
+        });
 
           var indiaRowsData = rowsData.filter(function(r) { return r.region !== "US"; });
           var usRowsData = rowsData.filter(function(r) { return r.region === "US"; });
