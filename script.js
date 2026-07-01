@@ -1826,30 +1826,26 @@
         });
     }
 
-    // Fallback: GitHub API (CORS-friendly) to find commit SHA, then jsDelivr GitHub CDN for the data file
-    // This reaches the same currency-api dataset but bypasses the missing npm version tags for 2021 dates.
-    function fetchFromGitHubCurrencyApi(dStr) {
-      var apiUrl = "https://api.github.com/repos/fawazahmed0/currency-api/commits?until=" + dStr + "T23:59:59Z&per_page=1";
-      return fetch(apiUrl, { headers: { "Accept": "application/vnd.github.v3+json" } })
+    // Fallback: goldapi.io — historical XAU/INR per gram, CORS-friendly
+    var GOLD_API_KEY = "goldapi-bb93d5efdf450d839eba8c4fe351ead2-io";
+    function fetchFromGoldApi(dStr) {
+      var datePart = dStr.replace(/-/g, "");
+      var url = "https://www.goldapi.io/api/XAU/INR/" + datePart;
+      return fetch(url, { headers: { "x-access-token": GOLD_API_KEY, "Content-Type": "application/json" } })
         .then(function (r) { return r.json(); })
-        .then(function (commits) {
-          if (!commits || !commits.length || !commits[0].sha) throw new Error("No commit for " + dStr);
-          var sha = commits[0].sha;
-          var cdnUrl = "https://cdn.jsdelivr.net/gh/fawazahmed0/currency-api@" + sha + "/v1/currencies/xau.min.json";
-          return fetch(cdnUrl).then(function (r2) { return r2.json(); });
-        })
         .then(function (data) {
-          var xauInr = data && data.xau && data.xau.inr;
-          if (!xauInr) throw new Error("No XAU/INR in GitHub commit for " + dStr);
-          return xauInr / TROY_OZ_TO_GRAM;
+          // goldapi.io returns price_gram_24k directly; fall back to price (per troy oz) / 31.1035
+          var pricePerGram = data && (data.price_gram_24k || (data.price && data.price / TROY_OZ_TO_GRAM));
+          if (!pricePerGram) throw new Error("No goldapi price for " + dStr);
+          return pricePerGram;
         });
     }
 
-    // Try jsDelivr npm CDN → GitHub API + jsDelivr GitHub CDN for a given date
+    // Try jsDelivr npm CDN → goldapi.io for a given date
     function tryDateAllSources(dStr) {
       var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
       return fetchFromCurrencyApi(urlA)
-        .catch(function () { return fetchFromGitHubCurrencyApi(dStr); });
+        .catch(function () { return fetchFromGoldApi(dStr); });
     }
 
     // Step back up to 3 days (handles weekends/holidays for currency-api dates)
