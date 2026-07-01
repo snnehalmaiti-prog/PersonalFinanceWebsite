@@ -5000,6 +5000,10 @@
         var allPrices = stockData.prices || {};
         var usdInrHistMap = stockData.usd_inr_history || {};
         var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
+        var pricesAvailable = Object.keys(allPrices).length > 0;
+        var pricesNote = pricesAvailable
+          ? (stockData.updated ? " (prices as of " + stockData.updated.replace("T", " ").replace("Z", " UTC") + ")" : "")
+          : " — Prices not yet fetched. Trigger the \"Fetch Stock Prices\" GitHub Actions workflow to populate live prices.";
 
         var rowsData = [];
         var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
@@ -5072,7 +5076,7 @@
           if (indiaHoldings.length) {
             renderSeHoldingsRows(indiaTbody, indiaRowsData);
             attachSeHoldingsSortHandlers(indiaTbody, indiaRowsData);
-            indiaStatusEl.textContent = indiaRowsData.length + " holding(s).";
+            indiaStatusEl.textContent = indiaRowsData.length + " holding(s)." + pricesNote;
             if (indiaTableWrap) indiaTableWrap.hidden = false;
           } else {
             indiaStatusEl.textContent = "No India holdings found.";
@@ -5082,7 +5086,7 @@
           if (usHoldings.length) {
             renderSeHoldingsRows(usTbody, usRowsData);
             attachSeHoldingsSortHandlers(usTbody, usRowsData);
-            usStatusEl.textContent = usRowsData.length + " holding(s). Values converted to INR at today\'s USD/INR rate.";
+            usStatusEl.textContent = usRowsData.length + " holding(s). Values in INR at today\'s USD/INR rate." + pricesNote;
             if (usTableWrap) usTableWrap.hidden = false;
           } else {
             usStatusEl.textContent = "No US holdings found.";
