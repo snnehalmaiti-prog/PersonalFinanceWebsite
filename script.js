@@ -626,7 +626,7 @@
     var total = 0;
     holdings.forEach(function (h) {
       var normSub = normalizeText(h.subCategory || "");
-      if (normSub === "provident fund" || normSub === "provident pension") total += h.current;
+      if (normSub === "provident fund" || normSub === "provident pension" || normSub === "public provident fund") total += h.current;
     });
     return total;
   }
@@ -638,7 +638,7 @@
     var total = 0;
     holdings.forEach(function (h) {
       var normSub = normalizeText(h.subCategory || "");
-      if (normSub === "provident fund" || normSub === "provident pension") total += (h.realizedProfit || 0);
+      if (normSub === "provident fund" || normSub === "provident pension" || normSub === "public provident fund") total += (h.realizedProfit || 0);
     });
     return total;
   }
@@ -698,7 +698,7 @@
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var normSub = normalizeText(row[subCategoryIdx] || "");
-      if (normSub !== "provident fund" && normSub !== "provident pension") return;
+      if (normSub !== "provident fund" && normSub !== "provident pension" && normSub !== "public provident fund") return;
       var normTxType = txTypeIdx !== -1 ? normalizeText(row[txTypeIdx] || "") : "";
       if (normTxType === "interest") return; // interest is part of terminal value, not a cash flow
       var amount = parseNumber(row[amountIdx]);
@@ -1035,7 +1035,7 @@
         var normSubCategory = normalizeText(subCategory);
         var isFixedDeposit = normCategory === "fixed income" && normSubCategory === "fixed deposit";
         var isCommodity = normCategory === "commodity";
-        var isProvidentFund = normCategory === "fixed income" && (normSubCategory === "provident fund" || normSubCategory === "provident pension");
+        var isProvidentFund = normCategory === "fixed income" && (normSubCategory === "provident fund" || normSubCategory === "provident pension" || normSubCategory === "public provident fund");
 
         var issues = [];
         if (!portfolio) issues.push("Portfolio is blank");
@@ -1584,7 +1584,7 @@
         return;
       }
 
-      if (normSubCategory === "provident fund" || normSubCategory === "provident pension") {
+      if (normSubCategory === "provident fund" || normSubCategory === "provident pension" || normSubCategory === "public provident fund") {
         var pfKey = normalizeText(portfolio) + "||" + normalizeText(instrument) + "||" + normalizeText(subCategory);
         if (!providentFundByKey[pfKey]) {
           providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, txns: [] };
