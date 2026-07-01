@@ -433,6 +433,7 @@
     renderCommodityHoldingsTable();
     renderMarketSegmentChart();
     renderMutualFundPortfolioSplitChart();
+    renderStockEtfHoldingsTable();
   }
 
   function parseNumber(value) {
