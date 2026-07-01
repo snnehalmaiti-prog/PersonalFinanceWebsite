@@ -1593,23 +1593,16 @@
     if (!statusEl || !tableWrap || !tbody) return;
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var epfRows = getSheetRows("fixedincome");
     var fdRows = getSheetRows("fd");
 
-    if ((!epfRows || !epfRows.length) && (!fdRows || !fdRows.length)) {
-      statusEl.textContent = "Connect your fixed income transaction sheets in Settings to populate this view.";
+    if (!fdRows || !fdRows.length) {
+      statusEl.textContent = "Connect your Fixed Income/Commodity sheet in Settings to populate this view.";
       tableWrap.hidden = true;
       return;
     }
 
     var holdings = [];
     var headerError = false;
-
-    if (epfRows && epfRows.length) {
-      var epfHoldings = buildEpfFixedIncomeHoldingsList(epfRows, selectedPortfolio);
-      if (epfHoldings === null) { headerError = true; }
-      else holdings = holdings.concat(epfHoldings);
-    }
 
     if (fdRows && fdRows.length) {
       var fdHoldings = buildFdFixedIncomeHoldingsList(fdRows, selectedPortfolio);
