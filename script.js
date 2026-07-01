@@ -2419,14 +2419,14 @@
     function overviewXirrCashFlows(equityFlows, goldPrice, commodityFlows) {
       var flows = equityFlows.slice();
       if (!isFixedIncomeExcluded()) {
-        var epfRows = getSheetRows("fixedincome");
         var fdRows = getSheetRows("fd");
         // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded
         // from XIRR — its running-balance updates aren't real cash-flow events.
-        var fixedIncomeCurrentValue = (epfRows ? sumEpfAmount(epfRows, selected, true) : 0)
-          + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
-        flows = flows.concat(buildEpfXirrCashFlows(epfRows, selected))
-          .concat(buildFdMaturedXirrCashFlows(fdRows, selected));
+        var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
+        var fixedIncomeCurrentValue = (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
+        flows = flows
+          .concat(fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [])
+          .concat(fdRows ? buildProvidentFundXirrCashFlows(fdRows, selected) : []);
         if (fixedIncomeCurrentValue > 0) flows.push({ date: new Date(), amount: fixedIncomeCurrentValue });
       }
       // Commodity is always included in XIRR regardless of Fixed Income exclusion
