@@ -5301,8 +5301,10 @@
             var xirrVal = calculateXIRR(xirrFlows);
             var xirrPct = (xirrVal === null || xirrVal === undefined || !isFinite(xirrVal)) ? null : xirrVal * 100;
 
-            if (currentINR !== null) totalCurrentINR += currentINR;
-            totalInvestedINR += h.investedINR;
+            if (currentINR !== null) {
+              totalCurrentINR += currentINR;
+              totalInvestedINR += h.investedINR; // only count invested when we have a live price
+            }
             if (dayChangeINR !== null) totalDayChangeINR += dayChangeINR;
             if (pnl !== null) totalPnlINR += pnl;
 
