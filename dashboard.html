@@ -37,7 +37,7 @@
       </button></li>
       <li><button class="left-drawer-item" data-tab="fixedincome">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-        Fixed Income
+        Fixed Income/Commodity
       </button></li>
     </ul>
   </nav>
@@ -91,7 +91,7 @@
       <button type="button" class="settings-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Dashboard</button>
       <button type="button" class="settings-tab" id="tab-equity" role="tab" aria-selected="false" aria-controls="panel-equity">Mutual Fund</button>
       <button type="button" class="settings-tab" id="tab-stocksetf" role="tab" aria-selected="false" aria-controls="panel-stocksetf">Stocks/ETF</button>
-      <button type="button" class="settings-tab" id="tab-fixedincome" role="tab" aria-selected="false" aria-controls="panel-fixedincome">Fixed Income</button>
+      <button type="button" class="settings-tab" id="tab-fixedincome" role="tab" aria-selected="false" aria-controls="panel-fixedincome">Fixed Income/Commodity</button>
     </div>
 
     <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
@@ -105,7 +105,7 @@
             </button>
             <ul id="exclusions-menu" class="portfolio-menu" role="listbox" aria-label="Select exclusion" hidden>
               <li role="option" id="exclusions-reset" aria-selected="true" data-value="none" class="portfolio-option selected">No Exclusion</li>
-              <li role="option" id="exclude-fixedincome-toggle" aria-selected="false" data-value="fixedincome" class="portfolio-option">Exclude Fixed Income</li>
+              <li role="option" id="exclude-fixedincome-toggle" aria-selected="false" data-value="fixedincome" class="portfolio-option">Exclude Fixed Income/Commodity</li>
               <li role="option" id="exclude-savings-investment-toggle" aria-selected="false" data-value="savings-investment" class="portfolio-option">Exclude Savings/Investment</li>
             </ul>
           </div>
@@ -412,8 +412,8 @@
 
     <section id="panel-fixedincome" class="settings-panel" role="tabpanel" aria-labelledby="tab-fixedincome" hidden>
       <div class="panel-title-row">
-        <h2>Fixed Income</h2>
-        <button type="button" id="fixedincome-refresh" class="theme-toggle refresh-btn" aria-label="Refresh Fixed Income data" title="Refresh Fixed Income data">
+        <h2>Fixed Income/Commodity</h2>
+        <button type="button" id="fixedincome-refresh" class="theme-toggle refresh-btn" aria-label="Refresh Fixed Income/Commodity data" title="Refresh Fixed Income/Commodity data">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
         </button>
       </div>
@@ -450,7 +450,7 @@
 
       <div class="holdings-card">
         <div class="holdings-card-header">
-          <h3>Fixed Income Holding</h3>
+          <h3>Fixed Income/Commodity Holding</h3>
         </div>
         <p class="muted small" id="fixedincome-holding-status">Loading holdings…</p>
         <p class="muted small" style="margin-top:0;margin-bottom:6px;">* Investment Corpus and Savings Account are considered non-interest bearing and show no Unrealized Profit.</p>
