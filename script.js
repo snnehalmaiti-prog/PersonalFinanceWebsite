@@ -44,7 +44,7 @@
     var labels = opts.labels;
     var data = opts.data;
     var total = opts.total;
-    var centerLabel = opts.centerLabel || "Current Value";
+    var centerLabel = opts.centerLabel || "Current";
     var formatLabel = opts.formatLabel;
 
     if (window[opts.instanceKey]) window[opts.instanceKey].destroy();
@@ -3912,7 +3912,7 @@
           type: "line",
           data: {
             datasets: [{
-              label: "Current Value",
+              label: "Current",
               data: points,
               borderColor: "#3B82F6",
               backgroundColor: fillGradient,
@@ -4484,7 +4484,7 @@
             labels: labels,
             data: data,
             total: total,
-            centerLabel: "Current Value",
+            centerLabel: "Current",
             formatLabel: formatCurrency
           });
         });
@@ -4618,7 +4618,7 @@
             labels: labels,
             data: data,
             total: total,
-            centerLabel: "Current Value",
+            centerLabel: "Current",
             formatLabel: formatCurrency
           });
         });
