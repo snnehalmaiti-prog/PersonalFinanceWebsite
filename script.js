@@ -1821,6 +1821,7 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var xauInr = data && data.xau && data.xau.inr;
+          console.log("[Gold CDN]", url, "-> xau.inr:", xauInr, "keys:", data ? Object.keys(data) : "null");
           if (!xauInr) throw new Error("No XAU/INR");
           return xauInr / TROY_OZ_TO_GRAM;
         });
