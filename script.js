@@ -3227,22 +3227,18 @@
     var storageKey = "wf-" + prefix + "-sheet-link";
     var headerRowKey = "wf-" + prefix + "-header-row";
 
-    // Inject toggle control once, lazily
-    var tableToggleEl = (function () {
-      var existing = sheetTableWrap.parentNode.querySelector(".sheet-table-toggle");
-      if (existing) return existing;
-      var el = document.createElement("button");
-      el.type = "button";
-      el.className = "btn btn-ghost btn-sm sheet-table-toggle";
-      el.style.marginTop = "10px";
-      el.hidden = true;
-      sheetTableWrap.parentNode.insertBefore(el, sheetTableWrap);
-      el.addEventListener("click", function () {
-        var expanded = sheetTableWrap.getAttribute("data-expanded") === "true";
-        setTableExpanded(!expanded);
-      });
-      return el;
-    }());
+    // Inject toggle button directly before the table wrap (scoped per-card)
+    var tableToggleEl = document.createElement("button");
+    tableToggleEl.type = "button";
+    tableToggleEl.className = "btn btn-ghost btn-sm sheet-table-toggle";
+    tableToggleEl.style.marginTop = "10px";
+    tableToggleEl.hidden = true;
+    tableToggleEl.textContent = "View Entries";
+    sheetTableWrap.parentNode.insertBefore(tableToggleEl, sheetTableWrap);
+    tableToggleEl.addEventListener("click", function () {
+      var expanded = sheetTableWrap.getAttribute("data-expanded") === "true";
+      setTableExpanded(!expanded);
+    });
 
     function setTableExpanded(expanded) {
       sheetTableWrap.setAttribute("data-expanded", expanded ? "true" : "false");
