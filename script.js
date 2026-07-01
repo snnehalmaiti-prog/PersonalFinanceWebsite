@@ -1797,20 +1797,28 @@
 
   function buildStockMappingTable() {
     var rows = getSheetRows("stocksetfmapping");
-    if (!rows || rows.length < 2) return {};
     var map = {};
+    if (!rows || rows.length < 2) return map;
+    var header = rows[0].map(normalizeText);
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx   = header.indexOf("instrument category");
+    var subCatIdx     = header.indexOf("instrument sub category");
+    var segmentIdx    = header.findIndex(function(h) { return h.indexOf("market segment") !== -1; });
+    var regionIdx     = header.findIndex(function(h) { return h === "region"; });
+    var identifierIdx = header.findIndex(function(h) { return h.indexOf("identifier") !== -1; });
+    if (instrumentIdx === -1 || regionIdx === -1 || identifierIdx === -1) return map;
     rows.slice(1).forEach(function (row) {
-      var name = (row[0] || "").trim();
+      var name = (row[instrumentIdx] || "").trim();
       if (!name) return;
-      var region = (row[4] || "").trim();
-      var identifier = (row[5] || "").trim();
+      var region     = (row[regionIdx]     || "").trim();
+      var identifier = (row[identifierIdx] || "").trim();
       map[normalizeText(name)] = {
-        ticker: region === "US" ? identifier : name,
-        region: region,
+        ticker:   region === "US" ? identifier : name,
+        region:   region,
         exchange: region === "India" ? "NSE" : null,
-        segment: (row[3] || "").trim(),
-        subCat: (row[2] || "").trim(),
-        category: (row[1] || "").trim()
+        segment:  segmentIdx  !== -1 ? (row[segmentIdx]  || "").trim() : "",
+        subCat:   subCatIdx   !== -1 ? (row[subCatIdx]   || "").trim() : "",
+        category: categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : ""
       };
     });
     return map;
@@ -5010,8 +5018,8 @@
     var mappingTable = buildStockMappingTable();
 
     if (!Object.keys(mappingTable).length) {
-      indiaStatusEl.textContent = "Connect your Stocks/ETF Mapping sheet in Settings to populate this view.";
-      usStatusEl.textContent = "Connect your Stocks/ETF Mapping sheet in Settings to populate this view.";
+      indiaStatusEl.textContent = "Sync your Stocks/ETF Mapping sheet in Settings → Mapping → Stocks/ETF Mapping, then return here.";
+      usStatusEl.textContent = "Sync your Stocks/ETF Mapping sheet in Settings → Mapping → Stocks/ETF Mapping, then return here.";
       if (indiaTableWrap) indiaTableWrap.hidden = true;
       if (usTableWrap) usTableWrap.hidden = true;
       return;
