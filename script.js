@@ -1814,26 +1814,37 @@
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && cached.price) return Promise.resolve(cached.price);
     } catch (e) {}
-    // Try up to 3 previous days to handle weekends and market holidays
-    function tryDate(dStr, attemptsLeft) {
-      var url = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
+
+    // Fetch from one CDN URL, returning the parsed price or rejecting
+    function fetchFromUrl(url) {
       return fetch(url)
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var xauInr = data && data.xau && data.xau.inr;
-          if (!xauInr) throw new Error("No XAU/INR for " + dStr);
-          var pricePerGram = xauInr / TROY_OZ_TO_GRAM;
-          // Cache under the original requested date so callers always find it
+          if (!xauInr) throw new Error("No XAU/INR");
+          return xauInr / TROY_OZ_TO_GRAM;
+        });
+    }
+
+    // Try two CDNs for a given date string, jsDelivr first then Cloudflare Pages fallback
+    function tryDateBothCdns(dStr) {
+      var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
+      var urlB = "https://" + dStr + ".currency-api.pages.dev/v1/currencies/xau.min.json";
+      return fetchFromUrl(urlA).catch(function () { return fetchFromUrl(urlB); });
+    }
+
+    // Step back up to 3 days to handle weekends and market holidays
+    function tryDate(dStr, attemptsLeft) {
+      return tryDateBothCdns(dStr)
+        .then(function (pricePerGram) {
           try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
           return pricePerGram;
         })
         .catch(function () {
           if (attemptsLeft <= 0) throw new Error("No XAU/INR found near " + dateStr);
-          // Step back one calendar day and retry
           var parts = dStr.split("-");
           var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) - 1);
-          var prev = formatDateISO(d);
-          return tryDate(prev, attemptsLeft - 1);
+          return tryDate(formatDateISO(d), attemptsLeft - 1);
         });
     }
     return tryDate(dateStr, 3);
