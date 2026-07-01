@@ -411,8 +411,8 @@
   }
 
   function overviewInvestmentPrefixes() {
-    var base = ["equity", "fixedincome", "fd", "stocksetf"];
-    return isFixedIncomeExcluded() ? base.filter(function (p) { return p !== "fixedincome" && p !== "fd"; }) : base;
+    var base = ["equity", "fd", "stocksetf"];
+    return isFixedIncomeExcluded() ? base.filter(function (p) { return p !== "fd"; }) : base;
   }
 
   function getStoredPortfolioNames() {
@@ -1236,10 +1236,9 @@
     var realizedProfitEl = document.getElementById("fixedincome-realized-profit");
     var xirrEl = document.getElementById("fixedincome-xirr");
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var rows = getSheetRows("fixedincome");
     var fdRows = getSheetRows("fd");
     var connectHintEl = document.getElementById("fixedincome-connect-hint");
-    if (connectHintEl) connectHintEl.hidden = !!(rows && rows.length) || !!(fdRows && fdRows.length);
+    if (connectHintEl) connectHintEl.hidden = !!(fdRows && fdRows.length);
 
     // Fetch current gold price + all historical prices (buy and sell dates) for commodity rows
     var uniqueCommodityDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
@@ -1263,9 +1262,9 @@
         commodityRealizedProfit += h.realizedProfit;
       });
 
-      var fiInvestment = (rows ? sumEpfAmount(rows, selected, false) : 0) + (fdRows ? sumFdInvestment(fdRows, selected) : 0);
+      var fiInvestment = fdRows ? sumFdInvestment(fdRows, selected) : 0;
       var investment = fiInvestment + commodityInvested;
-      var fiCurrentValue = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0);
+      var fiCurrentValue = (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0);
       var currentValue = fiCurrentValue + commodityCurrent;
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
@@ -1281,8 +1280,8 @@
       refreshOverviewStats();
 
       if (xirrEl) {
-        var currentValueForXirr = (rows ? sumEpfAmount(rows, selected, true) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0);
-        var baseCashFlows = buildEpfXirrCashFlows(rows, selected).concat(buildFdMaturedXirrCashFlows(fdRows, selected));
+        var currentValueForXirr = fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0;
+        var baseCashFlows = fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [];
         buildCommodityXirrCashFlows(fdRows, selected, goldPrice).then(function (commodityFlows) {
           var allFlows = baseCashFlows.concat(commodityFlows);
           if (currentValueForXirr > 0) allFlows.push({ date: new Date(), amount: currentValueForXirr });
