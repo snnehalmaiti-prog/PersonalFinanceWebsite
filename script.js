@@ -1797,6 +1797,9 @@
 
   var GOLD_PRICE_CACHE_KEY = "wf-gold-price-inr-per-gram";
   var GOLD_PRICE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
+  var GOLD_API_KEY = "goldapi-bb93d5efdf450d839eba8c4fe351ead2-io";
+  var GOLD_DAY_CHANGE_CACHE_KEY = "wf-gold-day-change-inr-per-gram";
+  var GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
   var TROY_OZ_TO_GRAM = 31.1035;
 
   function formatDateISO(date) {
@@ -1805,6 +1808,26 @@
     var m = String(date.getMonth() + 1);
     var d = String(date.getDate());
     return y + "-" + (m.length < 2 ? "0" + m : m) + "-" + (d.length < 2 ? "0" + d : d);
+  }
+
+  // Fetches today's gold day change per gram directly from goldapi.io's current-price endpoint.
+  // goldapi.io's `ch` field is the official daily change (today close vs previous close) per troy oz.
+  // This is more accurate than subtracting two dated-endpoint prices, which often return the same value.
+  function fetchGoldDayChangeINRPerGram() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(GOLD_DAY_CHANGE_CACHE_KEY));
+      if (cached && Date.now() - cached.fetchedAt < GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS) return Promise.resolve(cached.change);
+    } catch (e) {}
+    return fetch("https://www.goldapi.io/api/XAU/INR", {
+      headers: { "x-access-token": GOLD_API_KEY, "Content-Type": "application/json" }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || data.ch === undefined || data.ch === null) throw new Error("No ch in goldapi response");
+        var changePerGram = data.ch / TROY_OZ_TO_GRAM;
+        try { localStorage.setItem(GOLD_DAY_CHANGE_CACHE_KEY, JSON.stringify({ change: changePerGram, fetchedAt: Date.now() })); } catch (e) {}
+        return changePerGram;
+      });
   }
 
   function fetchXauInrForDate(dateStr) {
@@ -1827,7 +1850,6 @@
     }
 
     // Fallback: goldapi.io — historical XAU/INR per gram, CORS-friendly
-    var GOLD_API_KEY = "goldapi-bb93d5efdf450d839eba8c4fe351ead2-io";
     function fetchFromGoldApi(dStr) {
       var datePart = dStr.replace(/-/g, "");
       var url = "https://www.goldapi.io/api/XAU/INR/" + datePart;
@@ -1960,18 +1982,15 @@
     // Collect unique buy + sell dates from commodity rows to fetch historical prices
     var uniqueDates = collectCommodityUniqueDates(rows, selectedPortfolio);
 
-    var priorDate = new Date();
-    priorDate.setDate(priorDate.getDate() - 1);
-    var priorDateStr = formatDateISO(priorDate);
     Promise.all([
       fetchGoldPriceINRPerGram().catch(function () { return null; }),
-      fetchXauInrForDate(priorDateStr).catch(function () { return null; }),
+      fetchGoldDayChangeINRPerGram().catch(function () { return null; }),
       Promise.all(uniqueDates.map(function (dateStr) {
         return fetchXauInrForDate(dateStr).then(function (price) { return { dateStr: dateStr, price: price }; }).catch(function (e) { return { dateStr: dateStr, price: null }; });
       }))
     ]).then(function (results) {
       var goldPrice = results[0];
-      var priorGoldPrice = results[1];
+      var goldDayChangePerGram = results[1];
       var historicalPrices = {};
       results[2].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
 
@@ -2019,7 +2038,7 @@
         currentTd.textContent = formatCurrency(h.current);
         tr.appendChild(currentTd);
 
-        var dayChange = (goldPrice && priorGoldPrice && h.grams > 0) ? (goldPrice - priorGoldPrice) * h.grams : null;
+        var dayChange = (goldDayChangePerGram !== null && goldDayChangePerGram !== undefined && h.grams > 0) ? goldDayChangePerGram * h.grams : null;
         var dayChangeTd = document.createElement("td");
         dayChangeTd.className = "num " + (dayChange > 0 ? "positive" : dayChange < 0 ? "negative" : "");
         dayChangeTd.textContent = dayChange !== null ? (dayChange > 0 ? "+" : "") + formatCurrency(dayChange) : "—";
@@ -2163,20 +2182,9 @@
   function fetchCommodityDayChange(fdRows, portfolioFilter) {
     var grams = getTotalCommodityGrams(fdRows, portfolioFilter);
     if (!grams) return Promise.resolve(0);
-    var today = new Date();
-    // yesterday = last calendar day; fetchXauInrForDate will retry back up to 3 days
-    // to handle weekends/holidays automatically
-    var priorDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-    var priorStr = formatDateISO(priorDate);
-    return Promise.all([
-      fetchGoldPriceINRPerGram().catch(function () { return null; }),
-      fetchXauInrForDate(priorStr).catch(function () { return null; })
-    ]).then(function (prices) {
-      var todayPrice = prices[0];
-      var priorPrice = prices[1];
-      if (!todayPrice || !priorPrice) return 0;
-      return (todayPrice - priorPrice) * grams;
-    });
+    return fetchGoldDayChangeINRPerGram()
+      .then(function (changePerGram) { return changePerGram * grams; })
+      .catch(function () { return 0; });
   }
 
   function updateTotalCurrentValue() {
