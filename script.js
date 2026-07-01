@@ -340,7 +340,8 @@
       document.querySelectorAll(".left-drawer-item").forEach(function (btn) {
         btn.classList.toggle("active", btn.dataset.tab === tab);
       });
-
+      if (tab === "stocksetf") renderStockEtfHoldingsTable();
+      if (tab === "equity") renderEquityHoldingsTable();
     }
 
     dashTabs.forEach(function (entry) {
