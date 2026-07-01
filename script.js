@@ -736,15 +736,17 @@
       var type = normalizeText(row[typeIdx]);
       var isBuy = type.indexOf("buy") !== -1;
       var isSell = type.indexOf("sell") !== -1;
-      if (!isBuy && !isSell) return;
+      var isCorporateAction = type === "split" || type === "bonus";
+      if (!isBuy && !isSell && !isCorporateAction) return;
 
       var instrument = (row[instrumentIdx] || "").trim();
       if (!transactionsByInstrument[instrument]) transactionsByInstrument[instrument] = [];
       transactionsByInstrument[instrument].push({
-        type: isBuy ? "buy" : "sell",
+        type: (isBuy || isCorporateAction) ? "buy" : "sell",
         units: parseNumber(row[unitsIdx]),
-        price: parseNumber(row[priceIdx]),
+        price: isCorporateAction ? 0 : parseNumber(row[priceIdx]),
         date: parseFlexibleDate(row[dateIdx]),
+        isCorporateAction: isCorporateAction,
         order: transactionsByInstrument[instrument].length
       });
     });
@@ -5176,7 +5178,7 @@
     warnEl.appendChild(ul);
     var hint = document.createElement("p");
     hint.className = "ca-hint";
-    hint.textContent = "Add a row for each item above with Transaction Type \"Split\" or \"Bonus\", the indicated number of units, price 0, and the corporate action date.";
+    hint.textContent = "For each item above, add a row with Transaction Type \"Split\" or \"Bonus\", the indicated units, price 0, and exactly the date shown. The banner clears once a matching row is recorded.";
     warnEl.appendChild(hint);
   }
 
