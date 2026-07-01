@@ -669,6 +669,34 @@
     return flows;
   }
 
+  function buildProvidentFundXirrCashFlows(rows, portfolioFilter) {
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var amountIdx = header.indexOf("invested amount");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var txTypeIdx = header.indexOf("transaction type");
+    var dateIdx = header.indexOf("transaction date");
+    if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1) return [];
+
+    var flows = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      var normSub = normalizeText(row[subCategoryIdx] || "");
+      if (normSub !== "provident fund" && normSub !== "provident pension") return;
+      var normTxType = txTypeIdx !== -1 ? normalizeText(row[txTypeIdx] || "") : "";
+      if (normTxType === "interest") return; // interest is part of terminal value, not an outflow
+      var amount = parseNumber(row[amountIdx]);
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date || !amount) return;
+      flows.push({ date: date, amount: -amount });
+    });
+    return flows;
+  }
+
   // Commodity XIRR: each purchase is a negative cash flow on the transaction date
   // (amount = grams × historical gold price/g). Terminal positive flow = total grams × current price.
   // Returns a Promise because historical gold prices require async API calls.
@@ -1281,8 +1309,10 @@
       refreshOverviewStats();
 
       if (xirrEl) {
-        var currentValueForXirr = fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0;
-        var baseCashFlows = fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [];
+        var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
+        var currentValueForXirr = (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
+        var baseCashFlows = (fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [])
+          .concat(fdRows ? buildProvidentFundXirrCashFlows(fdRows, selected) : []);
         buildCommodityXirrCashFlows(fdRows, selected, goldPrice).then(function (commodityFlows) {
           var allFlows = baseCashFlows.concat(commodityFlows);
           if (currentValueForXirr > 0) allFlows.push({ date: new Date(), amount: currentValueForXirr });
