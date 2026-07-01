@@ -3248,20 +3248,17 @@
       sheetTableWrap.setAttribute("data-expanded", expanded ? "true" : "false");
       var tbody = sheetTable.querySelector("tbody");
       if (!tbody) return;
-      var dataRows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
-      var total = dataRows.length;
-      dataRows.forEach(function (tr, i) {
-        tr.hidden = !expanded && i >= 5;
-      });
-      sheetTableWrap.hidden = false;
+      var total = tbody.querySelectorAll("tr").length;
       if (expanded) {
-        sheetTableWrap.style.maxHeight = "320px";
+        sheetTableWrap.hidden = false;
+        sheetTableWrap.style.maxHeight = "252px"; // ~5 rows visible, scroll for rest
         sheetTableWrap.style.overflowY = total > 5 ? "auto" : "";
-        tableToggleEl.textContent = "Hide entries";
+        tableToggleEl.textContent = "Hide Entries";
       } else {
+        sheetTableWrap.hidden = true;
         sheetTableWrap.style.maxHeight = "";
         sheetTableWrap.style.overflowY = "";
-        tableToggleEl.textContent = "View entries (" + total + ")";
+        tableToggleEl.textContent = "View Entries (" + total + ")";
       }
       tableToggleEl.hidden = false;
     }
