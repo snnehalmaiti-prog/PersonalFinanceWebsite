@@ -5,6 +5,9 @@ on:
     # Every 15 minutes Mon–Fri, 3:00–21:00 UTC
     # (covers NSE 3:45–10:00 UTC and NYSE 13:30–20:00 UTC)
     - cron: "*/15 3-21 * * 1-5"
+  push:
+    paths:
+      - stocksetf_mapping.json
   workflow_dispatch: {}
 
 jobs:
