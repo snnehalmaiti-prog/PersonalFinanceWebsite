@@ -3472,6 +3472,7 @@
           : "";
         setStatus(diagnostics.message + failureNote, !!failures || diagnostics.missingColumns);
         setConnected(diagnostics.missingColumns ? "warning" : true);
+        if (typeof options.afterSync === "function") options.afterSync(merged);
       }, options.fields);
     }
 
@@ -3499,7 +3500,11 @@
   initMultiSheetCard("equity", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("fixedincome", { fields: FIXED_INCOME_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("fd", { fields: FD_SHEET_FIELDS, showTable: false });
-  initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
+  initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false, afterSync: function () {
+    // Auto-push mapping to GitHub so the price-fetch workflow picks up new instruments
+    var mappingRows = getSheetRows("stocksetfmapping");
+    if (mappingRows && mappingRows.length > 1) pushMappingToGitHub(mappingRows);
+  }});
   initSheetCard("mfmapping");
 
   // ─── GitHub integration: push stocksetf_mapping.json after every mapping sync ──
