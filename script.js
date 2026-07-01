@@ -2764,6 +2764,8 @@
 
   var stocksetfShowClosed = document.getElementById("stocksetf-show-closed");
   if (stocksetfShowClosed) stocksetfShowClosed.addEventListener("change", renderStockEtfHoldingsTable);
+  var stocksetfUsShowClosed = document.getElementById("stocksetf-us-show-closed");
+  if (stocksetfUsShowClosed) stocksetfUsShowClosed.addEventListener("change", renderStockEtfHoldingsTable);
 
   ["equity", "fixedincome", "fd", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
@@ -5223,9 +5225,15 @@
 
     var showClosedCheckbox = document.getElementById("stocksetf-show-closed");
     var showClosed = !!(showClosedCheckbox && showClosedCheckbox.checked);
-    buildStockHoldings(rows, mappingTable, selectedPortfolio, showClosed).then(function (holdings) {
-      var indiaHoldings = holdings.filter(function(h) { return h.region !== "US"; });
-      var usHoldings = holdings.filter(function(h) { return h.region === "US"; });
+    var showClosedUSCheckbox = document.getElementById("stocksetf-us-show-closed");
+    var showClosedUS = !!(showClosedUSCheckbox && showClosedUSCheckbox.checked);
+    Promise.all([
+      buildStockHoldings(rows, mappingTable, selectedPortfolio, showClosed),
+      buildStockHoldings(rows, mappingTable, selectedPortfolio, showClosedUS)
+    ]).then(function (results) {
+      var indiaHoldings = results[0].filter(function(h) { return h.region !== "US"; });
+      var usHoldings = results[1].filter(function(h) { return h.region === "US"; });
+      var holdings = indiaHoldings.concat(usHoldings);
 
       if (!holdings.length) {
         indiaStatusEl.textContent = "No Stocks/ETF holdings with unsold units found. Ensure instrument names match the mapping sheet exactly.";
