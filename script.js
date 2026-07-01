@@ -967,6 +967,9 @@
       var fdTotal = sumFdInvestment(rows, "all");
       var fdBadRows = [];
       rows.slice(1).forEach(function (row, i) {
+        // Skip completely blank rows (trailing empty rows from Google Sheets)
+        if (!row || row.every(function (cell) { return !String(cell || "").trim(); })) return;
+
         var portfolio = (row[fdIdx["portfolio name"]] || "").trim();
         var bank = (row[fdIdx.bank] || "").trim();
         var instrument = (row[fdIdx["instrument name"]] || "").trim();
@@ -1060,6 +1063,9 @@
 
     var badRows = [];
     rows.slice(1).forEach(function (row, i) {
+      // Skip completely blank rows (trailing empty rows from Google Sheets)
+      if (!row || row.every(function (cell) { return !String(cell || "").trim(); })) return;
+
       var portfolio = (row[portfolioIdx] || "").trim();
       var type = normalizeText(row[typeIdx]);
       var isBuyOrSell = type.indexOf("buy") !== -1 || type.indexOf("sell") !== -1 || type.indexOf("withdraw") !== -1 || type.indexOf("deposit") !== -1 || type.indexOf("contribut") !== -1 || type.indexOf("interest") !== -1;
