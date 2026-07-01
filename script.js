@@ -5067,9 +5067,18 @@
         var usdInrHistMap = stockData.usd_inr_history || {};
         var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
         var pricesAvailable = Object.keys(allPrices).length > 0;
-        var pricesNote = pricesAvailable
-          ? (stockData.updated ? " (prices as of " + stockData.updated.replace("T", " ").replace("Z", " UTC") + ")" : "")
-          : " — Prices not yet fetched. Trigger the \"Fetch Stock Prices\" GitHub Actions workflow to populate live prices.";
+        var pricesUpdatedEl = document.getElementById("stocksetf-prices-updated");
+        if (pricesUpdatedEl) {
+          if (pricesAvailable && stockData.updated) {
+            var utcDate = new Date(stockData.updated);
+            var istStr = utcDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+            pricesUpdatedEl.textContent = "Prices as of " + istStr + " IST";
+          } else if (!pricesAvailable) {
+            pricesUpdatedEl.textContent = "Prices not yet fetched — trigger the \"Fetch Stock Prices\" GitHub Actions workflow.";
+          } else {
+            pricesUpdatedEl.textContent = "";
+          }
+        }
 
         var rowsData = [];
         var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
@@ -5142,7 +5151,7 @@
           if (indiaHoldings.length) {
             renderSeHoldingsRows(indiaTbody, indiaRowsData);
             attachSeHoldingsSortHandlers(indiaTbody, indiaRowsData);
-            indiaStatusEl.textContent = indiaRowsData.length + " holding(s)." + pricesNote;
+            indiaStatusEl.textContent = indiaRowsData.length + " holding(s).";
             if (indiaTableWrap) indiaTableWrap.hidden = false;
           } else {
             indiaStatusEl.textContent = "No India holdings found.";
@@ -5152,7 +5161,7 @@
           if (usHoldings.length) {
             renderSeHoldingsRows(usTbody, usRowsData);
             attachSeHoldingsSortHandlers(usTbody, usRowsData);
-            usStatusEl.textContent = usRowsData.length + " holding(s). Values in INR at today\'s USD/INR rate." + pricesNote;
+            usStatusEl.textContent = usRowsData.length + " holding(s). Values in INR at today\'s USD/INR rate.";
             if (usTableWrap) usTableWrap.hidden = false;
           } else {
             usStatusEl.textContent = "No US holdings found.";
