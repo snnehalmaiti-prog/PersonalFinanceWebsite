@@ -1790,10 +1790,9 @@
     renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, "No Fixed Deposit holdings found.", true);
   }
 
-  // ─── Stocks/ETF: Twelve Data helpers ──────────────────────────────────────
-  var TWELVEDATA_API_KEY = "04915b953c22462191c1c6ee5bb02566";
-  var SE_EOD_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000;
-  var USD_INR_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+  // ─── Stocks/ETF: stock_prices.json helpers ────────────────────────────────
+  var STOCK_PRICES_CACHE_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
+  var _stockPricesPromise = null;
 
   function buildStockMappingTable() {
     var rows = getSheetRows("stocksetfmapping");
@@ -1824,76 +1823,31 @@
     return map;
   }
 
-  function fetchStockEod(ticker, exchange) {
-    var cacheKey = "wf-se-eod-" + ticker;
+  // Returns a Promise<{ updated, prices, usd_inr_history }> — cached 15 min in localStorage.
+  function fetchAllStockPrices() {
+    var cacheKey = "wf-stock-prices-json";
     try {
       var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && Date.now() - cached.fetchedAt < SE_EOD_CACHE_MAX_AGE_MS) return Promise.resolve(cached.price);
+      if (cached && cached.fetchedAt && Date.now() - cached.fetchedAt < STOCK_PRICES_CACHE_MAX_AGE_MS) {
+        return Promise.resolve(cached.data);
+      }
     } catch (e) {}
-    var sym = encodeURIComponent(ticker) + (exchange ? "&exchange=" + exchange : "");
-    // Try /eod first (prior close); fall back to /price (real-time/delayed) for exchanges
-    // where /eod is not available on the free plan (e.g. NSE)
-    var eodUrl   = "https://api.twelvedata.com/eod?symbol="   + sym + "&apikey=" + TWELVEDATA_API_KEY;
-    var priceUrl = "https://api.twelvedata.com/price?symbol=" + sym + "&apikey=" + TWELVEDATA_API_KEY;
-    function tryPrice() {
-      return fetch(priceUrl).then(function(r) { return r.json(); }).then(function(data) {
-        if (!data || !data.price) throw new Error("No price for " + ticker);
-        return parseFloat(data.price);
-      });
-    }
-    return fetch(eodUrl).then(function(r) { return r.json(); }).then(function(data) {
-      if (!data || !data.close) return tryPrice();
-      return parseFloat(data.close);
-    }).catch(function() { return tryPrice(); }).then(function(price) {
-      try { localStorage.setItem(cacheKey, JSON.stringify({ price: price, fetchedAt: Date.now() })); } catch (e) {}
-      return price;
-    });
-  }
-
-  function fetchStockHistoricalPrice(ticker, exchange, dateStr) {
-    var cacheKey = "wf-se-hist-" + ticker + "-" + dateStr;
-    try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && cached.price) return Promise.resolve(cached.price);
-    } catch (e) {}
-    var url = "https://api.twelvedata.com/time_series?symbol=" + encodeURIComponent(ticker) + (exchange ? "&exchange=" + exchange : "") + "&interval=1day&start_date=" + dateStr + "&end_date=" + dateStr + "&outputsize=1&apikey=" + TWELVEDATA_API_KEY;
-    return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
-      if (!data || !data.values || !data.values.length) throw new Error("No historical price for " + ticker + " on " + dateStr);
-      var price = parseFloat(data.values[0].close);
-      try { localStorage.setItem(cacheKey, JSON.stringify({ price: price })); } catch (e) {}
-      return price;
-    });
-  }
-
-  function fetchUsdInrRate() {
-    var cacheKey = "wf-usd-inr-rate";
-    try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && Date.now() - cached.fetchedAt < USD_INR_CACHE_MAX_AGE_MS) return Promise.resolve(cached.rate);
-    } catch (e) {}
-    return fetch("https://api.twelvedata.com/exchange_rate?symbol=USD/INR&apikey=" + TWELVEDATA_API_KEY)
-      .then(function (r) { return r.json(); })
+    if (_stockPricesPromise) return _stockPricesPromise;
+    _stockPricesPromise = fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_PRICES_CACHE_MAX_AGE_MS))
+      .then(function (r) {
+        if (!r.ok) throw new Error("stock_prices.json not found (HTTP " + r.status + ")");
+        return r.json();
+      })
       .then(function (data) {
-        if (!data || !data.rate) throw new Error("No USD/INR rate");
-        var rate = parseFloat(data.rate);
-        try { localStorage.setItem(cacheKey, JSON.stringify({ rate: rate, fetchedAt: Date.now() })); } catch (e) {}
-        return rate;
+        try { localStorage.setItem(cacheKey, JSON.stringify({ data: data, fetchedAt: Date.now() })); } catch (e) {}
+        _stockPricesPromise = null;
+        return data;
+      })
+      .catch(function (err) {
+        _stockPricesPromise = null;
+        throw err;
       });
-  }
-
-  function fetchUsdInrHistorical(dateStr) {
-    var cacheKey = "wf-usd-inr-hist-" + dateStr;
-    try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && cached.rate) return Promise.resolve(cached.rate);
-    } catch (e) {}
-    var url = "https://api.twelvedata.com/time_series?symbol=USD/INR&interval=1day&start_date=" + dateStr + "&end_date=" + dateStr + "&outputsize=1&apikey=" + TWELVEDATA_API_KEY;
-    return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
-      if (!data || !data.values || !data.values.length) throw new Error("No USD/INR for " + dateStr);
-      var rate = parseFloat(data.values[0].close);
-      try { localStorage.setItem(cacheKey, JSON.stringify({ rate: rate })); } catch (e) {}
-      return rate;
-    });
+    return _stockPricesPromise;
   }
 
   // Build holdings array for Stocks/ETF with FIFO lots and USD/INR conversion.
@@ -1940,22 +1894,9 @@
 
     if (!holdings.length) return Promise.resolve([]);
 
-    // For US stocks, fetch historical USD/INR for each unique buy date in remaining lots
-    var usdDateSet = {};
-    holdings.forEach(function (h) {
-      if (h.region === "US") {
-        h.lots.forEach(function (lot) {
-          if (lot.date) usdDateSet[formatDateISO(lot.date)] = true;
-        });
-      }
-    });
-    var usdDates = Object.keys(usdDateSet);
-
-    return Promise.all(usdDates.map(function (d) {
-      return fetchUsdInrHistorical(d).then(function (rate) { return { date: d, rate: rate }; }).catch(function () { return { date: d, rate: null }; });
-    })).then(function (usdRates) {
-      var usdRateMap = {};
-      usdRates.forEach(function (r) { if (r.rate) usdRateMap[r.date] = r.rate; });
+    // For US stocks, look up historical USD/INR from stock_prices.json usd_inr_history
+    return fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; }).then(function (stockPricesData) {
+      var usdRateMap = stockPricesData.usd_inr_history || {};
 
       return holdings.map(function (h) {
         var investedINR = 0;
@@ -5054,73 +4995,49 @@
       indiaStatusEl.textContent = "Fetching live prices…";
       usStatusEl.textContent = "Fetching live prices…";
 
-      // Fetch today's USD/INR rate once for all US stocks
-      var hasUs = holdings.some(function (h) { return h.region === "US"; });
-      var usdInrPromise = hasUs ? fetchUsdInrRate().catch(function () { return 84; }) : Promise.resolve(null);
+      // Load prices from stock_prices.json (generated by GitHub Actions via yfinance)
+      return fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; }).then(function (stockData) {
+        var allPrices = stockData.prices || {};
+        var usdInrHistMap = stockData.usd_inr_history || {};
+        var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
 
-      return usdInrPromise.then(function (usdInrToday) {
-        // For each holding: fetch today's EOD price + yesterday's price for day change
-        return Promise.all(holdings.map(function (h) {
-          var eodPromise = fetchStockEod(h.ticker, h.exchange).catch(function () { return null; });
-          return eodPromise.then(function (eodPriceRaw) {
-            if (eodPriceRaw === null) return { eodPriceRaw: null, prevPriceRaw: null };
-            // Fetch yesterday's price for day change calc
-            var today = new Date();
-            var prev = new Date(today);
-            prev.setDate(today.getDate() - 1);
-            var prevDateStr = formatDateISO(prev);
-            return fetchStockHistoricalPrice(h.ticker, h.exchange, prevDateStr)
-              .catch(function () { return null; })
-              .then(function (prevPriceRaw) {
-                return { eodPriceRaw: eodPriceRaw, prevPriceRaw: prevPriceRaw };
-              });
-          });
-        })).then(function (priceResults) {
-          var rowsData = [];
-          var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
+        var rowsData = [];
+        var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
 
-          holdings.forEach(function (h, i) {
-            var pr = priceResults[i];
-            var eodRaw = pr.eodPriceRaw;
-            var prevRaw = pr.prevPriceRaw;
-            var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
+        holdings.forEach(function (h) {
+          var priceEntry = allPrices[h.ticker] || null;
+          var eodRaw = priceEntry ? priceEntry.price : null;
+          var prevRaw = priceEntry ? priceEntry.prev_close : null;
+          var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
 
-            if (eodRaw !== null) {
-              if (h.region === "US") {
-                ltpINR = eodRaw * (usdInrToday || 84);
-              } else {
-                ltpINR = eodRaw;
-              }
-              currentINR = h.units * ltpINR;
-              pnl = currentINR - h.investedINR;
-              pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
-
-              if (prevRaw !== null) {
-                var prevINR = h.region === "US" ? prevRaw * (usdInrToday || 84) : prevRaw;
-                dayChangeINR = (ltpINR - prevINR) * h.units;
-              }
-            }
-
-            // XIRR: build cash flows in INR
-            // Use buildXirrCashFlows which calls parseNumber (strips currency symbols) for prices
-            // We need custom cash flows for US stocks to apply USD/INR conversion
-            var xirrFlows = [];
+          if (eodRaw !== null) {
             if (h.region === "US") {
-              // Build custom flows in INR for US stocks using historical rates already fetched
-              var txnsForXirr = h.txns || [];
-              txnsForXirr.forEach(function (txn) {
-                if (!txn.date || !txn.units || !txn.price) return;
-                var dateStr = formatDateISO(txn.date);
-                // We need to look up the historical rate - use a synchronous cache read
-                var rateForDate = 84;
-                try {
-                  var cached = JSON.parse(localStorage.getItem("wf-usd-inr-hist-" + dateStr));
-                  if (cached && cached.rate) rateForDate = cached.rate;
-                } catch (e) {}
-                var amountINR = txn.units * txn.price * rateForDate;
-                xirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -amountINR : amountINR });
-              });
+              ltpINR = eodRaw * usdInrToday;
             } else {
+              ltpINR = eodRaw;
+            }
+            currentINR = h.units * ltpINR;
+            pnl = currentINR - h.investedINR;
+            pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
+
+            if (prevRaw !== null) {
+              var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
+              dayChangeINR = (ltpINR - prevINR) * h.units;
+            }
+          }
+
+          // XIRR cash flows in INR
+          var xirrFlows = [];
+          if (h.region === "US") {
+            var txnsForXirr = h.txns || [];
+            txnsForXirr.forEach(function (txn) {
+              if (!txn.date || !txn.units || !txn.price) return;
+              var dateStr = formatDateISO(txn.date);
+              var rateForDate = usdInrHistMap[dateStr] || usdInrToday;
+              var amountINR = txn.units * txn.price * rateForDate;
+              xirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -amountINR : amountINR });
+            });
+          } else {
               xirrFlows = buildXirrCashFlows(rows, selectedPortfolio, h.instrument);
             }
             if (currentINR !== null && currentINR > UNITS_EPSILON) {
@@ -5197,11 +5114,7 @@
                 (hh.txns || []).forEach(function (txn) {
                   if (!txn.date || !txn.units || !txn.price) return;
                   var dateStr = formatDateISO(txn.date);
-                  var rateForDate = 84;
-                  try {
-                    var cached = JSON.parse(localStorage.getItem("wf-usd-inr-hist-" + dateStr));
-                    if (cached && cached.rate) rateForDate = cached.rate;
-                  } catch (e) {}
+                  var rateForDate = usdInrHistMap[dateStr] || usdInrToday;
                   allFlows.push({ date: txn.date, amount: txn.type === "buy" ? -(txn.units * txn.price * rateForDate) : (txn.units * txn.price * rateForDate) });
                 });
               } else {
@@ -5218,9 +5131,6 @@
               seXirrEl.textContent = "—";
             }
           }
-
-
-        });
       });
     }).catch(function (err) {
       var msg = "Couldn't load holdings: " + (err && err.message ? err.message : err);

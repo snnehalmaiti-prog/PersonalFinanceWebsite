@@ -1,0 +1,41 @@
+name: Fetch Stock Prices
+
+on:
+  schedule:
+    # Every 15 minutes Mon–Fri, 3:00–21:00 UTC
+    # (covers NSE 3:45–10:00 UTC and NYSE 13:30–20:00 UTC)
+    - cron: "*/15 3-21 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install yfinance
+
+      - name: Fetch stock prices
+        run: python fetch_stock_prices.py
+
+      - name: Commit updated prices
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add stock_prices.json
+          if git diff --cached --quiet; then
+            echo "No price changes — skipping commit."
+          else
+            git commit -m "chore: update stock_prices.json [skip ci]"
+            git push
+          fi
