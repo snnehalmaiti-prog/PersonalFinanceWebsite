@@ -4016,9 +4016,38 @@
       var commodityGramEvents = fdRowsForChart
         ? buildCommodityGramEvents(fdRowsForChart, selectedPortfolio) : [];
       var hasAnyCommodity = commodityGramEvents.length > 0;
+
+      // Build SE unit events keyed by ticker for chart contribution
+      var seRows = getSheetRows("stocksetf");
+      var seMappingTable = buildStockMappingTable();
+      var seUnitEventsByTicker = {}; // { ticker: [{date, cumulativeUnits, region}] }
+      if (seRows && seRows.length && Object.keys(seMappingTable).length) {
+        var seTxns = groupUnitTransactionsByInstrument(seRows, selectedPortfolio);
+        if (seTxns) {
+          Object.keys(seTxns).forEach(function (instrument) {
+            var mapping = seMappingTable[normalizeText(instrument)];
+            if (!mapping) return;
+            var ticker = mapping.ticker;
+            var region = mapping.region;
+            var sorted = seTxns[instrument].filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
+            if (!sorted.length) return;
+            var running = 0;
+            var events = sorted.map(function (txn) {
+              running += txn.type === "buy" ? txn.units : -txn.units;
+              return { date: txn.date, cumulativeUnits: Math.max(0, running) };
+            });
+            seUnitEventsByTicker[ticker] = events;
+          });
+        }
+      }
+      var hasAnySE = Object.keys(seUnitEventsByTicker).length > 0;
+
       var currentGoldPricePromise = hasAnyCommodity
         ? fetchGoldPriceINRPerGram().catch(function () { return null; })
         : Promise.resolve(null);
+      var stockPricesPromise = hasAnySE
+        ? fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; })
+        : Promise.resolve({ prices: {}, usd_inr_history: {} });
       // Build monthly sample dates from first buy to today for historical price chart
       var goldPriceHistoryPromise = hasAnyCommodity
         ? (function () {
@@ -4041,7 +4070,7 @@
           })()
         : Promise.resolve([]);
 
-      if (!instruments.length && !epfEvents.length && !fdValueEvents.length && !hasAnyCommodity) {
+      if (!instruments.length && !epfEvents.length && !fdValueEvents.length && !hasAnyCommodity && !hasAnySE) {
         if (window.__wfValueChart) {
           window.__wfValueChart.destroy();
           window.__wfValueChart = null;
@@ -4058,11 +4087,16 @@
       return Promise.all([
         Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); })),
         currentGoldPricePromise,
-        goldPriceHistoryPromise
+        goldPriceHistoryPromise,
+        stockPricesPromise
       ]).then(function (outerResults) {
         var navHistories = outerResults[0];
         var currentGoldPrice = outerResults[1];
         var goldPriceHistory = outerResults[2];
+        var stockPricesData = outerResults[3];
+        var allPrices = (stockPricesData && stockPricesData.prices) || {};
+        var usdInrHistMap = (stockPricesData && stockPricesData.usd_inr_history) || {};
+        var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
@@ -4073,6 +4107,9 @@
         epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         fdValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         commodityGramEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+          seUnitEventsByTicker[ticker].forEach(function (e) { allDates[dateKey(e.date)] = e.date; });
+        });
         // Fill daily dates for commodity so the chart has a dense timeline
         if (commodityGramEvents.length) {
           var commFill = new Date(commodityGramEvents[0].date);
@@ -4110,6 +4147,13 @@
           var commEarliest = commodityGramEvents[0].date;
           if (!firstTxnDate || commEarliest < firstTxnDate) firstTxnDate = commEarliest;
         }
+        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+          var events = seUnitEventsByTicker[ticker];
+          if (events.length) {
+            var seEarliest = events[0].date;
+            if (!firstTxnDate || seEarliest < firstTxnDate) firstTxnDate = seEarliest;
+          }
+        });
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
@@ -4128,6 +4172,22 @@
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
             if (units > UNITS_EPSILON && nav) total += units * nav;
+          });
+          // Stocks/ETF: use current price as proxy (no historical price feed available).
+          // For US stocks, apply the historical USD/INR rate for that date.
+          var dateStr = formatDateISO(date);
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            var events = seUnitEventsByTicker[ticker];
+            var units = lastAtOrBefore(events, date, "cumulativeUnits") || 0;
+            if (units <= UNITS_EPSILON) return;
+            var priceEntry = allPrices[ticker];
+            if (!priceEntry) return;
+            if (priceEntry.currency === "USD") {
+              var rate = usdInrHistMap[dateStr] || usdInrToday;
+              total += units * priceEntry.price * rate;
+            } else {
+              total += units * priceEntry.price;
+            }
           });
           return { x: date, y: total };
         });
