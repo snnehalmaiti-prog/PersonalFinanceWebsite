@@ -523,14 +523,14 @@
   // Portfolio/Bank/Instrument, Fixed Deposit rows summed standalone).
   function sumFdInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
-      if (isSavingsInvestmentExcluded() && (normSubCategory === "investment corpus" || normSubCategory === "savings account")) return false;
-      return true;
+    var fiHoldings = buildFdFixedIncomeHoldingsList(rows, portfolioFilter);
+    var fiTotal = 0;
+    if (fiHoldings) fiHoldings.forEach(function (h) {
+      var normSub = normalizeText(h.subCategory || "");
+      if (isSavingsInvestmentExcluded() && (normSub === "investment corpus" || normSub === "savings account")) return;
+      fiTotal += h.invested;
     });
-    if (!holdings) return 0;
-    var total = 0;
-    holdings.forEach(function (h) { total += h.invested; });
-    return total;
+    return fiTotal;
   }
 
   // Counts full 1-month periods completed between start and asOf — used for monthly
@@ -621,12 +621,13 @@
 
   function sumProvidentFundCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
-    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
-      return normSubCategory === "provident fund" || normSubCategory === "provident pension";
-    });
+    var holdings = buildFdFixedIncomeHoldingsList(rows, portfolioFilter);
     if (!holdings) return 0;
     var total = 0;
-    holdings.forEach(function (h) { total += h.invested; });
+    holdings.forEach(function (h) {
+      var normSub = normalizeText(h.subCategory || "");
+      if (normSub === "provident fund" || normSub === "provident pension") total += h.current;
+    });
     return total;
   }
 
@@ -1506,6 +1507,7 @@
     var instrumentIdx = header.indexOf("instrument name");
     var categoryIdx = header.indexOf("instrument category");
     var subCategoryIdx = header.indexOf("instrument sub category");
+    var txTypeIdx = header.indexOf("transaction type");
     var amountIdx = header.indexOf("invested amount");
     var dateIdx = header.indexOf("transaction date");
     var maturityIdx = header.indexOf("maturity date/sell date");
@@ -1542,9 +1544,14 @@
       if (normSubCategory === "provident fund" || normSubCategory === "provident pension") {
         var pfKey = normalizeText(portfolio) + "||" + normalizeText(instrument) + "||" + normalizeText(subCategory);
         if (!providentFundByKey[pfKey]) {
-          providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, invested: 0 };
+          providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, invested: 0, interest: 0 };
         }
-        providentFundByKey[pfKey].invested += parseNumber(row[amountIdx]);
+        var normTxType = txTypeIdx !== -1 ? normalizeText(row[txTypeIdx] || "") : "";
+        if (normTxType === "interest") {
+          providentFundByKey[pfKey].interest += parseNumber(row[amountIdx]);
+        } else {
+          providentFundByKey[pfKey].invested += parseNumber(row[amountIdx]);
+        }
         return;
       }
 
@@ -1583,7 +1590,7 @@
 
     Object.keys(providentFundByKey).forEach(function (key) {
       var pf = providentFundByKey[key];
-      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: pf.invested, current: pf.invested });
+      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: pf.invested, current: pf.invested + pf.interest });
     });
 
     return holdings;
