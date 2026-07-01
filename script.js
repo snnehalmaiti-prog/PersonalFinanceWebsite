@@ -3040,7 +3040,7 @@
     return values;
   }
 
-  function initSheetCard(prefix, options) {
+  function initSheetCard(prefix, options, afterSync) {
     options = options || {};
     var sheetLinkInput = document.getElementById(prefix + "-sheet-link");
     if (!sheetLinkInput) return;
@@ -3128,6 +3128,7 @@
           }
           addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+          if (typeof afterSync === "function") afterSync(rows);
           updateDashboardStats();
           populatePortfolioSelect();
           var diagnostics = buildSyncDiagnostics(prefix, rows);
@@ -3484,7 +3485,67 @@
   initMultiSheetCard("fd", { fields: FD_SHEET_FIELDS, showTable: false });
   initMultiSheetCard("stocksetf", { fields: TRANSACTION_SHEET_FIELDS, showTable: false });
   initSheetCard("mfmapping");
-  initSheetCard("stocksetfmapping");
+
+  // ─── GitHub integration: push stocksetf_mapping.json after every mapping sync ──
+  function loadGhSettings() {
+    return {
+      owner:  localStorage.getItem("wf-gh-owner")  || "",
+      repo:   localStorage.getItem("wf-gh-repo")   || "",
+      branch: localStorage.getItem("wf-gh-branch") || "",
+      token:  localStorage.getItem("wf-gh-token")  || ""
+    };
+  }
+
+  function pushMappingToGitHub(rows) {
+    var gh = loadGhSettings();
+    if (!gh.owner || !gh.repo || !gh.token) return; // not configured — silent skip
+    var content = btoa(unescape(encodeURIComponent(JSON.stringify(rows))));
+    var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/contents/stocksetf_mapping.json";
+    var headers = { "Authorization": "Bearer " + gh.token, "Content-Type": "application/json", "Accept": "application/vnd.github+json" };
+    // GET current SHA (needed for update)
+    fetch(apiBase + (gh.branch ? "?ref=" + encodeURIComponent(gh.branch) : ""), { headers: headers })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (existing) {
+        var body = { message: "chore: update stocksetf_mapping.json", content: content };
+        if (gh.branch) body.branch = gh.branch;
+        if (existing && existing.sha) body.sha = existing.sha;
+        return fetch(apiBase, { method: "PUT", headers: headers, body: JSON.stringify(body) });
+      })
+      .then(function (r) {
+        if (r && (r.status === 200 || r.status === 201)) {
+          console.log("stocksetf_mapping.json pushed to GitHub successfully.");
+        } else {
+          console.warn("GitHub push returned status", r && r.status);
+        }
+      })
+      .catch(function (err) { console.warn("GitHub push failed:", err); });
+  }
+
+  // Wire GitHub settings save button
+  var ghOwnerEl  = document.getElementById("gh-owner");
+  var ghRepoEl   = document.getElementById("gh-repo");
+  var ghBranchEl = document.getElementById("gh-branch");
+  var ghTokenEl  = document.getElementById("gh-token");
+  var ghSaveBtn  = document.getElementById("gh-save-btn");
+  var ghSaveStatus = document.getElementById("gh-save-status");
+  if (ghOwnerEl && ghRepoEl && ghBranchEl && ghTokenEl && ghSaveBtn) {
+    // Pre-fill from localStorage
+    ghOwnerEl.value  = localStorage.getItem("wf-gh-owner")  || "";
+    ghRepoEl.value   = localStorage.getItem("wf-gh-repo")   || "";
+    ghBranchEl.value = localStorage.getItem("wf-gh-branch") || "";
+    ghTokenEl.value  = localStorage.getItem("wf-gh-token")  || "";
+    ghSaveBtn.addEventListener("click", function () {
+      localStorage.setItem("wf-gh-owner",  ghOwnerEl.value.trim());
+      localStorage.setItem("wf-gh-repo",   ghRepoEl.value.trim());
+      localStorage.setItem("wf-gh-branch", ghBranchEl.value.trim());
+      localStorage.setItem("wf-gh-token",  ghTokenEl.value.trim());
+      if (ghSaveStatus) { ghSaveStatus.textContent = "Saved."; setTimeout(function () { ghSaveStatus.textContent = ""; }, 2000); }
+    });
+  }
+
+  initSheetCard("stocksetfmapping", {}, function afterSync(rows) {
+    pushMappingToGitHub(rows);
+  });
 
   // ===== Current Value Over Time chart =====
   var NAV_CACHE_PREFIX = "wf-nav-cache-";

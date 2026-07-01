@@ -195,6 +195,26 @@
         </div>
       </div>
     </section>
+
+    <section class="settings-section">
+      <h2 class="settings-section-title">GitHub Integration</h2>
+      <p class="muted small" style="margin-bottom:16px;">When set, syncing the Stocks/ETF Mapping will automatically push <code>stocksetf_mapping.json</code> to your repo so the price-fetch workflow always discovers new instruments.</p>
+      <div class="equity-card">
+        <div class="equity-card-header">
+          <h3>GitHub Repository</h3>
+        </div>
+        <div class="equity-link-row" style="flex-wrap:wrap;gap:10px;">
+          <input type="text" id="gh-owner" placeholder="GitHub username (e.g. snnehalmaiti-prog)" style="flex:1;min-width:180px;" />
+          <input type="text" id="gh-repo" placeholder="Repo name (e.g. PersonalFinanceWebsite)" style="flex:1;min-width:180px;" />
+          <input type="text" id="gh-branch" placeholder="Branch (e.g. main)" style="flex:1;min-width:150px;" />
+        </div>
+        <div class="equity-link-row" style="margin-top:10px;">
+          <input type="password" id="gh-token" placeholder="GitHub Personal Access Token (repo scope)" style="flex:1;" />
+          <button type="button" class="btn btn-primary" id="gh-save-btn">Save</button>
+        </div>
+        <p id="gh-save-status" class="muted small" style="margin-top:10px;"></p>
+      </div>
+    </section>
   </main>
 
   <script src="script.js?v=70061af"></script>

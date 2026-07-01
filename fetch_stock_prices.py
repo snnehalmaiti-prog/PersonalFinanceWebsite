@@ -16,10 +16,47 @@ except ImportError:
     print("yfinance not installed. Run: pip install yfinance")
     sys.exit(1)
 
-TICKERS_FILE = os.path.join(os.path.dirname(__file__), ".github", "stock_tickers.json")
+MAPPING_FILE = os.path.join(os.path.dirname(__file__), "stocksetf_mapping.json")
+TICKERS_FILE = os.path.join(os.path.dirname(__file__), ".github", "stock_tickers.json")  # fallback
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "stock_prices.json")
 USD_INR_TICKER = "USDINR=X"
 USD_INR_HISTORY_YEARS = 3
+
+
+def load_tickers_from_mapping():
+    """Derive ticker config from stocksetf_mapping.json (pushed by the dashboard on every sync)."""
+    with open(MAPPING_FILE) as f:
+        rows = json.load(f)
+    if not rows or len(rows) < 2:
+        return []
+    header = [str(h).strip().lower() for h in rows[0]]
+    instrument_idx  = next((i for i, h in enumerate(header) if h == "instrument name"), -1)
+    region_idx      = next((i for i, h in enumerate(header) if h == "region"), -1)
+    identifier_idx  = next((i for i, h in enumerate(header) if "identifier" in h), -1)
+    if instrument_idx == -1 or region_idx == -1 or identifier_idx == -1:
+        print("WARNING: stocksetf_mapping.json missing required columns (instrument name / region / identifier)")
+        return []
+    seen, tickers = set(), []
+    for row in rows[1:]:
+        def col(idx):
+            return str(row[idx]).strip() if idx != -1 and idx < len(row) else ""
+        name       = col(instrument_idx)
+        region     = col(region_idx)
+        identifier = col(identifier_idx)
+        if not name or not region:
+            continue
+        if region == "US":
+            price_key = identifier or name
+            yf_ticker = price_key
+            currency  = "USD"
+        else:
+            price_key = name
+            yf_ticker = name + ".NS"
+            currency  = "INR"
+        if price_key and price_key not in seen:
+            seen.add(price_key)
+            tickers.append({"name": price_key, "ticker": yf_ticker, "currency": currency})
+    return tickers
 
 
 def fetch_prices(tickers_config):
@@ -118,12 +155,22 @@ def fetch_usd_inr_history(years=USD_INR_HISTORY_YEARS):
 
 
 def main():
-    if not os.path.exists(TICKERS_FILE):
-        print(f"ERROR: Tickers config not found at {TICKERS_FILE}")
-        sys.exit(1)
+    if os.path.exists(MAPPING_FILE):
+        print(f"Reading tickers from {MAPPING_FILE}")
+        tickers_config = load_tickers_from_mapping()
+        if not tickers_config:
+            print("WARNING: No tickers derived from mapping file — falling back to stock_tickers.json")
+            tickers_config = None
+    else:
+        tickers_config = None
 
-    with open(TICKERS_FILE) as f:
-        tickers_config = json.load(f)
+    if tickers_config is None:
+        if not os.path.exists(TICKERS_FILE):
+            print(f"ERROR: Neither {MAPPING_FILE} nor {TICKERS_FILE} found.")
+            sys.exit(1)
+        print(f"Reading tickers from {TICKERS_FILE} (fallback)")
+        with open(TICKERS_FILE) as f:
+            tickers_config = json.load(f)
 
     print(f"Fetching prices for {len(tickers_config)} tickers…")
     prices = fetch_prices(tickers_config)
