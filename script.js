@@ -995,24 +995,28 @@
           if (!amountCheck.ok) issues.push("Invested Amount " + amountCheck.reason);
         }
 
-        if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date/Sell Date is mandatory for Fixed Deposit rows but is blank");
-        else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date/Sell Date is not a valid date");
+        if (!isProvidentFund) {
+          if (isFixedDeposit && !maturityRaw) issues.push("Maturity Date/Sell Date is mandatory for Fixed Deposit rows but is blank");
+          else if (maturityRaw && !parseFlexibleDate(maturityRaw)) issues.push("Maturity Date/Sell Date is not a valid date");
 
-        if (isFixedDeposit && !rateRaw) issues.push("Rate of Return is mandatory for Fixed Deposit rows but is blank");
-        else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
+          if (isFixedDeposit && !rateRaw) issues.push("Rate of Return is mandatory for Fixed Deposit rows but is blank");
+          else if (rateRaw && !/[0-9]/.test(rateRaw)) issues.push("Rate of Return is not a valid percentage");
+        }
+
+        var gramsRaw = gramsIdx !== -1 ? (row[gramsIdx] || "").trim() : "";
 
         if (isProvidentFund) {
           if (bank) issues.push("Bank must be blank for Provident Fund/Provident Pension rows");
           if (!txType) issues.push("Transaction Type is blank");
           if (!row[fdIdx["invested amount"]] || !(row[fdIdx["invested amount"]] || "").trim()) issues.push("Invested Amount is blank");
+          if (gramsRaw) issues.push("Grams must be blank for Provident Fund/Provident Pension rows");
+          if (maturityRaw) issues.push("Maturity Date/Sell Date must be blank for Provident Fund/Provident Pension rows");
+          if (rateRaw) issues.push("Rate of Return must be blank for Provident Fund/Provident Pension rows");
         } else if (!isCommodity && !bank) {
           issues.push("Bank is blank");
         }
         if (isCommodity) {
-          if (gramsIdx !== -1) {
-            var gramsRaw = (row[gramsIdx] || "").trim();
-            if (gramsRaw && isNaN(parseFloat(gramsRaw))) issues.push("Grams must be a number");
-          }
+          if (gramsRaw && isNaN(parseFloat(gramsRaw))) issues.push("Grams must be a number");
         }
 
         if (issues.length) fdBadRows.push("Row " + (i + 2) + " (" + (portfolio || "unknown portfolio") + "): " + issues.join(", "));
