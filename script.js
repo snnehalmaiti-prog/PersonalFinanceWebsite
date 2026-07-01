@@ -1815,28 +1815,49 @@
       if (cached && cached.price) return Promise.resolve(cached.price);
     } catch (e) {}
 
-    // Fetch from one CDN URL, returning the parsed price or rejecting
-    function fetchFromUrl(url) {
+    // Fetch from one currency-api CDN URL
+    function fetchFromCurrencyApi(url) {
       return fetch(url)
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var xauInr = data && data.xau && data.xau.inr;
-          console.log("[Gold CDN]", url, "-> xau.inr:", xauInr, "keys:", data ? Object.keys(data) : "null");
           if (!xauInr) throw new Error("No XAU/INR");
           return xauInr / TROY_OZ_TO_GRAM;
         });
     }
 
-    // Try two CDNs for a given date string, jsDelivr first then Cloudflare Pages fallback
-    function tryDateBothCdns(dStr) {
-      var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
-      var urlB = "https://" + dStr + ".currency-api.pages.dev/v1/currencies/xau.min.json";
-      return fetchFromUrl(urlA).catch(function () { return fetchFromUrl(urlB); });
+    // Fallback: Yahoo Finance XAUINR=X — no API key, CORS-friendly, decades of history
+    function fetchFromYahoo(dStr) {
+      var parts = dStr.split("-");
+      var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      var period1 = Math.floor(d.getTime() / 1000);
+      var period2 = period1 + 7 * 86400; // 7-day window to ensure a trading day is included
+      var url = "https://query1.finance.yahoo.com/v8/finance/chart/XAUINR=X?interval=1d&period1=" + period1 + "&period2=" + period2 + "&corsDomain=finance.yahoo.com";
+      return fetch(url)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var result = data && data.chart && data.chart.result && data.chart.result[0];
+          var closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
+          // Find the first valid close price in the window
+          var price = closes && closes.filter(function (v) { return v && v > 0; })[0];
+          if (!price) throw new Error("No Yahoo price for " + dStr);
+          return price / TROY_OZ_TO_GRAM;
+        });
     }
 
-    // Step back up to 3 days to handle weekends and market holidays
+    // Try jsDelivr → Cloudflare Pages → Yahoo Finance for a given date
+    function tryDateAllSources(dStr) {
+      var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
+      var urlB = "https://" + dStr + ".currency-api.pages.dev/v1/currencies/xau.min.json";
+      return fetchFromCurrencyApi(urlA)
+        .catch(function () { return fetchFromCurrencyApi(urlB); })
+        .catch(function () { return fetchFromYahoo(dStr); });
+    }
+
+    // Step back up to 3 days (handles weekends/holidays for currency-api dates)
+    // Yahoo Finance is tried for EACH date in the window before giving up
     function tryDate(dStr, attemptsLeft) {
-      return tryDateBothCdns(dStr)
+      return tryDateAllSources(dStr)
         .then(function (pricePerGram) {
           try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
           return pricePerGram;
