@@ -980,7 +980,7 @@
         if (!portfolio) issues.push("Portfolio is blank");
         if (!instrument) issues.push("Instrument Name is blank");
         if (!category) issues.push("Instrument Category is blank");
-        if (!subCategory) issues.push("Instrument Sub Category is blank");
+        if (!subCategory) issues.push("Inst. Sub-Cat is blank");
         if (!parseFlexibleDate(row[fdIdx["transaction date"]])) issues.push("Transaction Date is blank or not a valid date");
         if (!isCommodity) {
           var amountCheck = validateNumericCell(row[fdIdx["invested amount"]]);
