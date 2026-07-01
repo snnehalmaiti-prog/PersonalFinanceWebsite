@@ -135,6 +135,30 @@ def fetch_prices(tickers_config):
     return prices
 
 
+def fetch_corporate_actions(tickers_config):
+    """Fetch historical stock splits for each ticker via yfinance."""
+    print("Fetching corporate actions (splits)…")
+    actions = {}
+    for entry in tickers_config:
+        name = entry["name"]
+        ticker = entry["ticker"]
+        try:
+            t = yf.Ticker(ticker)
+            splits = t.splits
+            if splits is None or len(splits) == 0:
+                continue
+            ticker_actions = []
+            for ts, ratio in splits.items():
+                date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                ticker_actions.append({"date": date_str, "type": "split", "ratio": round(float(ratio), 6)})
+            if ticker_actions:
+                actions[name] = ticker_actions
+                print(f"  {ticker}: {len(ticker_actions)} split event(s)")
+        except Exception as e:
+            print(f"WARNING: Failed to fetch splits for {ticker}: {e}")
+    return actions
+
+
 def fetch_usd_inr_history(years=USD_INR_HISTORY_YEARS):
     """Fetch multi-year daily USD/INR history for historical invested-cost conversion."""
     print(f"Fetching {years}-year USD/INR history…")
@@ -177,16 +201,19 @@ def main():
 
     usd_inr_history = fetch_usd_inr_history()
 
+    corporate_actions = fetch_corporate_actions(tickers_config)
+
     output = {
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "prices": prices,
         "usd_inr_history": usd_inr_history,
+        "corporate_actions": corporate_actions,
     }
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices and {len(usd_inr_history)} USD/INR history entries.")
+    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, and {len(corporate_actions)} ticker(s) with corporate actions.")
 
 
 if __name__ == "__main__":

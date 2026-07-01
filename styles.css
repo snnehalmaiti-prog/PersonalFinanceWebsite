@@ -1294,6 +1294,37 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 .sheet-row-meta { margin-top: 6px; margin-left: 2px; }
 
+.ca-warning-card {
+  margin-top: 16px;
+  padding: 14px 18px;
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  border-radius: var(--radius-lg, 18px);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.ca-warning-card .ca-warning-title {
+  font-weight: 700;
+  color: var(--warning);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ca-warning-card ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ca-warning-card li { line-height: 1.5; }
+.ca-warning-card .ca-hint {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+}
+
 .holdings-card {
   margin-top: 22px;
   padding: 20px 22px;
