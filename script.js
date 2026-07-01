@@ -5032,7 +5032,8 @@
         return;
       }
 
-      statusEl.textContent = "Fetching live prices…";
+      indiaStatusEl.textContent = "Fetching live prices…";
+      usStatusEl.textContent = "Fetching live prices…";
 
       // Fetch today's USD/INR rate once for all US stocks
       var hasUs = holdings.some(function (h) { return h.region === "US"; });
