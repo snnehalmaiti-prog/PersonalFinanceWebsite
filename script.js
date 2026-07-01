@@ -1506,6 +1506,7 @@
     var today = new Date();
     var holdings = [];
     var latestCorpusByKey = {};
+    var providentFundByKey = {};
     fdRows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
@@ -1525,6 +1526,15 @@
         if (!existing || (corpusDate && (!existing.date || corpusDate > existing.date))) {
           latestCorpusByKey[corpusKey] = { row: row, date: corpusDate, portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory };
         }
+        return;
+      }
+
+      if (normSubCategory === "provident fund" || normSubCategory === "provident pension") {
+        var pfKey = normalizeText(portfolio) + "||" + normalizeText(instrument) + "||" + normalizeText(subCategory);
+        if (!providentFundByKey[pfKey]) {
+          providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, invested: 0 };
+        }
+        providentFundByKey[pfKey].invested += parseNumber(row[amountIdx]);
         return;
       }
 
@@ -1559,6 +1569,11 @@
         }
       }
       holdings.push({ portfolio: entry.portfolio, bank: entry.bank, instrument: entry.instrument, subCategory: entry.subCategory, invested: invested, current: current });
+    });
+
+    Object.keys(providentFundByKey).forEach(function (key) {
+      var pf = providentFundByKey[key];
+      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: pf.invested, current: pf.invested });
     });
 
     return holdings;
