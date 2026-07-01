@@ -1960,17 +1960,20 @@
     // Collect unique buy + sell dates from commodity rows to fetch historical prices
     var uniqueDates = collectCommodityUniqueDates(rows, selectedPortfolio);
 
-    console.log("[Commodity] uniqueDates to fetch:", uniqueDates);
+    var priorDate = new Date();
+    priorDate.setDate(priorDate.getDate() - 1);
+    var priorDateStr = formatDateISO(priorDate);
     Promise.all([
       fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      fetchXauInrForDate(priorDateStr).catch(function () { return null; }),
       Promise.all(uniqueDates.map(function (dateStr) {
-        return fetchXauInrForDate(dateStr).then(function (price) { console.log("[Commodity] fetched price for", dateStr, "->", price); return { dateStr: dateStr, price: price }; }).catch(function (e) { console.warn("[Commodity] failed to fetch price for", dateStr, e); return { dateStr: dateStr, price: null }; });
+        return fetchXauInrForDate(dateStr).then(function (price) { return { dateStr: dateStr, price: price }; }).catch(function (e) { return { dateStr: dateStr, price: null }; });
       }))
     ]).then(function (results) {
       var goldPrice = results[0];
+      var priorGoldPrice = results[1];
       var historicalPrices = {};
-      results[1].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
-      console.log("[Commodity] historicalPrices:", historicalPrices, "goldPrice:", goldPrice);
+      results[2].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
 
       var allHoldings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice, historicalPrices);
       console.log("[Commodity] holdings:", allHoldings);
@@ -2001,6 +2004,11 @@
         subCategoryTd.textContent = h.subCategory;
         tr.appendChild(subCategoryTd);
 
+        var goldRateTd = document.createElement("td");
+        goldRateTd.className = "num col-desktop-only";
+        goldRateTd.textContent = goldPrice ? "₹" + Math.round(goldPrice).toLocaleString("en-IN") : "—";
+        tr.appendChild(goldRateTd);
+
         var investedTd = document.createElement("td");
         investedTd.className = "num";
         investedTd.textContent = formatCurrency(h.invested);
@@ -2010,6 +2018,12 @@
         currentTd.className = "num";
         currentTd.textContent = formatCurrency(h.current);
         tr.appendChild(currentTd);
+
+        var dayChange = (goldPrice && priorGoldPrice && h.grams > 0) ? (goldPrice - priorGoldPrice) * h.grams : null;
+        var dayChangeTd = document.createElement("td");
+        dayChangeTd.className = "num " + (dayChange > 0 ? "positive" : dayChange < 0 ? "negative" : "");
+        dayChangeTd.textContent = dayChange !== null ? (dayChange > 0 ? "+" : "") + formatCurrency(dayChange) : "—";
+        tr.appendChild(dayChangeTd);
 
         var unrealized = h.current - h.invested;
         var unrealizedTd = document.createElement("td");
