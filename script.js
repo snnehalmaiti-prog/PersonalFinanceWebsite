@@ -5152,6 +5152,7 @@
             unitsAtAction += txn.type === "buy" ? txn.units : -txn.units;
           });
           unitsAtAction = Math.max(0, Math.round(unitsAtAction * 1000) / 1000);
+          if (unitsAtAction <= 0) return; // no units held at time of action — skip
           var extraUnits = Math.round(unitsAtAction * (action.ratio - 1) * 1000) / 1000;
           var dateParts = action.date.split("-");
           var displayDate = dateParts[2] + "/" + dateParts[1] + "/" + dateParts[0];
