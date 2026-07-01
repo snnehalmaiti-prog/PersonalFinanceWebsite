@@ -1637,3 +1637,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .overview-stat-value { font-size: 0.9rem; }
   .overview-stat-card { padding: 8px 10px; }
 }
+
+/* Commodity holdings table — column min-widths so headers render fully */
+#commodity-holdings-table th:nth-child(1) { min-width: 100px; } /* Portfolio */
+#commodity-holdings-table th:nth-child(2) { min-width: 160px; } /* Instrument Sub Category */
+#commodity-holdings-table th:nth-child(3) { min-width: 140px; } /* Gold Rate */
+#commodity-holdings-table th:nth-child(4) { min-width:  70px; } /* Gms */
+#commodity-holdings-table th:nth-child(5) { min-width: 100px; } /* Invested */
+#commodity-holdings-table th:nth-child(6) { min-width: 100px; } /* Current */
+#commodity-holdings-table th:nth-child(7) { min-width: 110px; } /* Day Change */
+#commodity-holdings-table th:nth-child(8) { min-width: 140px; } /* Unrealized Profit */
+#commodity-holdings-table th:nth-child(9) { min-width:  90px; } /* Return % */
