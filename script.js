@@ -1635,11 +1635,6 @@
       portfolioTd.textContent = h.portfolio;
       tr.appendChild(portfolioTd);
 
-      var bankTd = document.createElement("td");
-      bankTd.className = "col-desktop-only";
-      bankTd.textContent = h.bank;
-      tr.appendChild(bankTd);
-
       var subCategoryTd = document.createElement("td");
       subCategoryTd.className = "col-desktop-only";
       subCategoryTd.textContent = h.subCategory;
