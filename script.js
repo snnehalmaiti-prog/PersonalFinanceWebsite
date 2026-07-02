@@ -2305,6 +2305,16 @@
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
     }
 
+    // Index XIRR always uses ALL asset classes (ignoring exclusion) so it stays stable
+    // when the user toggles exclusions — only Portfolio XIRR should react to exclusion.
+    var allFlowsForIndex = buildXirrCashFlows(equityRows, selected);
+    if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected));
+    if (fdRows) {
+      allFlowsForIndex = allFlowsForIndex
+        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
+        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+    }
+
     // For portfolioXirr we need a terminal value (current portfolio worth) — use the
     // already-computed overview flows which include the terminal, or fall back to adding
     // the current value from _ov manually.
@@ -2312,7 +2322,6 @@
     if (_ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
       flowsWithTerminal = _ov._overviewBaseFlows.concat(_ov.seXirrFlows || []);
     } else {
-      // _ov not yet populated — build a best-effort terminal from known current values
       var currentVal = _ov.mfCurrent + _ov.seCurrent + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
       flowsWithTerminal = allFlows.slice();
       if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
@@ -2322,8 +2331,7 @@
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
       if (!indexData || !indexData.prices) return { portfolioXirr: portfolioXirr, indexXirr: null };
-      // allFlows (without terminal) is correct here — buildIndexXirrCashFlows adds its own terminal
-      var indexFlows = buildIndexXirrCashFlows(allFlows, indexData.prices);
+      var indexFlows = buildIndexXirrCashFlows(allFlowsForIndex, indexData.prices);
       var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
       return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
     });
