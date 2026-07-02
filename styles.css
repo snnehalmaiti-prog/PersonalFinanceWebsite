@@ -1771,6 +1771,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.benchmark-result[hidden] { display: none; }
 .benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
 .benchmark-col-label {
   font-size: 0.74rem;
