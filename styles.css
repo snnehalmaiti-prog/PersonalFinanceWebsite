@@ -1574,6 +1574,20 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   transition: transform 0.12s ease;
 }
 .holdings-table tbody tr:hover .pnl-chip { transform: scale(1.04); }
+.holdings-table tfoot .holdings-subtotal-row td {
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+  font-weight: 700;
+  background: var(--surface-alt);
+  padding: 12px 16px;
+  position: sticky;
+  bottom: 0;
+}
+.holdings-table tfoot .holdings-subtotal-row td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
 .pnl-chip.positive { color: var(--emerald); background: rgba(31, 157, 107, 0.12); }
 .pnl-chip.negative { color: var(--negative); background: rgba(225, 96, 75, 0.12); }
 .pnl-chip.neutral { color: var(--muted); background: var(--surface-alt); }
