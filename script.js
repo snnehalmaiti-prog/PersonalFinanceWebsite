@@ -3362,7 +3362,7 @@
       return "The file appears to be empty.";
     }
     if (reason === "onedrive_cors") {
-      return "OneDrive/SharePoint links can’t be loaded directly by the browser (security restriction). Workaround: open your Excel file in Excel Online → File → Save As → Download a Copy → then upload it to Google Sheets and paste that link instead. Or export it as a publicly accessible CSV.";
+      return "OneDrive/SharePoint links can’t be loaded directly due to browser security restrictions. Easiest fix: upload your Excel file to Google Drive (drive.google.com), share it as “Anyone with the link”, then paste the Google Drive link here — it will be fetched and converted automatically.";
     }
     return "Couldn't load the file. Check the link and make sure it is shared publicly (anyone with the link can view).";
   }
