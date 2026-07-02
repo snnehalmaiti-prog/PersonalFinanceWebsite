@@ -25,7 +25,7 @@ USD_INR_HISTORY_YEARS = 3
 INDEX_TICKERS = [
     {"key": "NIFTY50",         "ticker": "^NSEI",               "label": "Nifty 50"},
     {"key": "NIFTYMIDCAP150",  "ticker": "NIFTYMIDCAP150.NS",   "label": "Nifty Midcap 150"},
-    {"key": "NIFTYSMLCAP250",  "ticker": "NIFTYSMLCAP250.NS",   "label": "Nifty Smlcap 250"},
+    {"key": "NIFTYSMLCAP100",  "ticker": "^CNXSC",              "label": "Nifty Smallcap 100"},
     {"key": "NIFTYNEXT50",     "ticker": "^NSMIDCP",            "label": "Nifty Next 50"},
     {"key": "NIFTY500",        "ticker": "^CRSLDX",             "label": "Nifty 500"},
 ]

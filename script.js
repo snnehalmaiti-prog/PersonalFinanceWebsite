@@ -2557,7 +2557,7 @@
       var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
       if (indexColEl) indexColEl.textContent = indexKey === "NIFTY50" ? "Nifty 50"
         : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
-        : indexKey === "NIFTYSMLCAP250" ? "Nifty Smlcap 250"
+        : indexKey === "NIFTYSMLCAP100" ? "Nifty Smallcap 100"
         : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
         : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
 
