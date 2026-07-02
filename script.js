@@ -2329,9 +2329,19 @@
     // then XIRR over [cutoff → today] using actual flows within the period + current value.
     var portfolioXirrPromise;
     if (periodYears && cutoff) {
-      portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (startVal) {
-        if (!startVal || startVal <= 0) return allTimePortfolioXirr; // no history yet, fall back
-        var periodCurrentVal = _ov.mfCurrent + (_ov.seCurrent > 0 ? _ov.seCurrent : 0) + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
+      portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (result) {
+        var startVal = result.value;
+        if (!startVal || startVal <= 0) return allTimePortfolioXirr;
+        // Terminal value must use same scope as startVal to avoid asymmetric comparisons.
+        // MF is always included. Stocks only if historical prices were available for that ticker.
+        var includedSet = {};
+        result.includedStockTickers.forEach(function (t) { includedSet[t] = true; });
+        var seCurrentMatched = 0;
+        // _ov.seByTicker is not available; use seValue proportion as approximation when some tickers had history
+        // Simpler: recompute SE current for included tickers only
+        var periodCurrentVal = _ov.mfCurrent + result.seValue * (_ov.seCurrent > 0 && result.seValue > 0 ? _ov.seCurrent / result.seValue : 1);
+        // If no stocks had historical prices, only use MF in current value too
+        if (!result.includedStockTickers.length) periodCurrentVal = _ov.mfCurrent;
         var periodFlows = [{ date: cutoff, amount: -startVal }];
         allFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
         if (periodCurrentVal > 0) periodFlows.push({ date: new Date(), amount: periodCurrentVal });
@@ -2453,24 +2463,26 @@
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
         var dateStr = formatDateISO(targetDate);
-        var total = 0;
+        var mfTotal = 0, seTotal = 0;
+        var includedStockTickers = [];
         instruments.forEach(function (name) {
           var units = lastAtOrBefore(unitEvents[name], targetDate, "cumulativeUnits") || 0;
           var nav = lastAtOrBefore(navByInstrument[name], targetDate, "nav");
-          if (units > UNITS_EPSILON && nav) total += units * nav;
+          if (units > UNITS_EPSILON && nav) mfTotal += units * nav;
         });
         Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
           var entry = seUnitEventsByTicker[ticker];
           var units = lastAtOrBefore(entry.events, targetDate, "cumulativeUnits") || 0;
           if (units <= UNITS_EPSILON) return;
           var hist = stockHistory[ticker];
+          // Only use actual historical price — never fall back to current LTP (would distort XIRR)
           var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
-          if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
           if (!price) return;
           var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
-          total += units * price * (isUsd ? (usdInrHistMap[dateStr] || usdInrToday) : 1);
+          seTotal += units * price * (isUsd ? (usdInrHistMap[dateStr] || usdInrToday) : 1);
+          includedStockTickers.push(ticker);
         });
-        return total;
+        return { value: mfTotal + seTotal, mfValue: mfTotal, seValue: seTotal, includedStockTickers: includedStockTickers };
       });
     });
   }
