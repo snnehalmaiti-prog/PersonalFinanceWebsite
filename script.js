@@ -320,7 +320,8 @@
     var panelInvestment = document.getElementById("panel-investment");
     var dashTabs = [
       { tab: dashTabOverview, panel: panelOverview, key: "overview" },
-      { tab: dashTabInvestment, panel: panelInvestment, key: "investment" }
+      { tab: dashTabInvestment, panel: panelInvestment, key: "investment" },
+      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" }
     ];
 
     // ===== Investment sub-tabs =====
