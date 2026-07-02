@@ -49,6 +49,10 @@
           </span>
           <span class="logo-text">Wealthfolio</span>
         </a>
+        <nav class="header-dash-tabs hide-mobile" role="tablist" aria-label="Dashboard sections">
+          <button type="button" class="header-dash-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Dashboard</button>
+          <button type="button" class="header-dash-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investment</button>
+        </nav>
       </div>
       <div class="header-actions">
         <div class="portfolio-dropdown">
@@ -79,53 +83,55 @@
   </header>
 
   <main class="container settings-main">
-    <div class="settings-tabs" role="tablist" aria-label="Dashboard sections">
-      <button type="button" class="settings-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Dashboard</button>
-      <button type="button" class="settings-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investment</button>
-    </div>
 
     <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
-      <div class="panel-title-row">
-        <h2>Overview</h2>
-        <div class="panel-title-actions">
-          <div class="portfolio-dropdown exclusions-dropdown">
-            <button type="button" id="exclusions-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
-              <span id="exclusions-label">No Exclusion</span>
-              <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <ul id="exclusions-menu" class="portfolio-menu" role="listbox" aria-label="Select exclusion" hidden>
-              <li role="option" id="exclusions-reset" aria-selected="true" data-value="none" class="portfolio-option selected">No Exclusion</li>
-              <li role="option" id="exclude-fixedincome-toggle" aria-selected="false" data-value="fixedincome" class="portfolio-option">Exclude Fixed Income</li>
-              <li role="option" id="exclude-savings-investment-toggle" aria-selected="false" data-value="savings-investment" class="portfolio-option">Exclude Savings/Investment</li>
-            </ul>
+
+      <!-- Portfolio Performance card -->
+      <div class="perf-card value-chart-card">
+        <div class="perf-card-header">
+          <div class="perf-card-title-group">
+            <span class="perf-label">PORTFOLIO PERFORMANCE</span>
+            <div class="perf-value-row">
+              <span class="perf-value" id="overview-total-current-value">—</span>
+              <span class="perf-badge" id="overview-return-pct">—</span>
+              <span class="perf-badge-suffix" id="value-chart-range"></span>
+            </div>
+            <div class="value-chart-callout" id="value-chart-callout" hidden>
+              <span class="value-chart-callout-value" id="value-chart-callout-value">—</span>
+              <span class="value-chart-callout-date" id="value-chart-callout-date">—</span>
+            </div>
+          </div>
+          <div class="perf-card-actions">
+            <div class="value-chart-range-picker" id="value-chart-range-picker" role="group" aria-label="Select time range">
+              <button type="button" class="range-pill" data-range="1M">1M</button>
+              <button type="button" class="range-pill" data-range="6M">6M</button>
+              <button type="button" class="range-pill" data-range="1Y">1Y</button>
+              <button type="button" class="range-pill active" data-range="3Y">3Y</button>
+              <button type="button" class="range-pill" data-range="5Y">5Y</button>
+              <button type="button" class="range-pill" data-range="ALL">All</button>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="value-chart-reset" style="display:none">Reset zoom</button>
           </div>
         </div>
+        <p class="muted small" id="value-chart-status" hidden>Loading NAV history…</p>
+        <div class="value-chart-wrap">
+          <canvas id="value-chart" height="280"></canvas>
+        </div>
+        <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
       </div>
-      <p class="muted small">Note: Savings/Investment Holding is excluded from XIRR calculation.</p>
 
-      <div class="overview-stats">
+      <!-- 4 key stat cards -->
+      <div class="overview-stats perf-stats-row">
         <div class="overview-stat-card">
           <span class="overview-stat-label">Invested</span>
           <span class="overview-stat-value" id="overview-total-investment">—</span>
         </div>
         <div class="overview-stat-card">
-          <span class="overview-stat-label">Current</span>
-          <span class="overview-stat-value" id="overview-total-current-value">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Day Change</span>
-          <span class="overview-stat-value" id="overview-day-change">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Unrealized Profit</span>
+          <span class="overview-stat-label">Unrealized</span>
           <span class="overview-stat-value" id="overview-unrealized-return">—</span>
         </div>
         <div class="overview-stat-card">
-          <span class="overview-stat-label">Return %</span>
-          <span class="overview-stat-value" id="overview-return-pct">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Realized Profit</span>
+          <span class="overview-stat-label">Realized</span>
           <span class="overview-stat-value" id="overview-realized-return">—</span>
         </div>
         <div class="overview-stat-card">
@@ -134,37 +140,29 @@
         </div>
       </div>
 
-      <p class="muted small" style="margin-top:24px;">Connect your transaction sheets in <a href="settings.html">Settings</a> to populate this overview.</p>
-
-      <div class="value-chart-card">
-        <div class="value-chart-header">
-          <div class="value-chart-title-group">
-            <h3>Account Value</h3>
-            <div class="value-chart-callout" id="value-chart-callout" hidden>
-              <span class="value-chart-callout-value" id="value-chart-callout-value">—</span>
-              <span class="value-chart-callout-date" id="value-chart-callout-date">—</span>
-            </div>
-          </div>
-          <div class="value-chart-actions">
-            <span class="muted small" id="value-chart-range">—</span>
-            <button type="button" class="btn btn-outline btn-sm" id="value-chart-reset">Reset zoom</button>
-          </div>
-        </div>
-        <p class="muted small" id="value-chart-status" hidden>Loading NAV history…</p>
-        <div class="value-chart-wrap">
-          <canvas id="value-chart" height="320"></canvas>
-        </div>
-        <div class="value-chart-range-picker" id="value-chart-range-picker" role="group" aria-label="Select time range">
-          <button type="button" class="range-pill" data-range="1M">1M</button>
-          <button type="button" class="range-pill" data-range="6M">6M</button>
-          <button type="button" class="range-pill" data-range="1Y">1Y</button>
-          <button type="button" class="range-pill active" data-range="3Y">3Y</button>
-          <button type="button" class="range-pill" data-range="5Y">5Y</button>
-          <button type="button" class="range-pill" data-range="ALL">All</button>
-        </div>
-        <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
+      <!-- Hidden elements kept for JS compatibility -->
+      <div hidden aria-hidden="true">
+        <span id="overview-day-change"></span>
       </div>
 
+      <p class="muted small" style="margin-top:16px;">Note: Savings/Investment Holding is excluded from XIRR calculation. <a href="settings.html">Settings</a></p>
+
+      <!-- Exclusions control -->
+      <div class="perf-exclusions-row">
+        <div class="portfolio-dropdown exclusions-dropdown">
+          <button type="button" id="exclusions-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
+            <span id="exclusions-label">No Exclusion</span>
+            <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <ul id="exclusions-menu" class="portfolio-menu" role="listbox" aria-label="Select exclusion" hidden>
+            <li role="option" id="exclusions-reset" aria-selected="true" data-value="none" class="portfolio-option selected">No Exclusion</li>
+            <li role="option" id="exclude-fixedincome-toggle" aria-selected="false" data-value="fixedincome" class="portfolio-option">Exclude Fixed Income</li>
+            <li role="option" id="exclude-savings-investment-toggle" aria-selected="false" data-value="savings-investment" class="portfolio-option">Exclude Savings/Investment</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Investment Split chart -->
       <div class="value-chart-card">
         <div class="value-chart-header">
           <h3>Investment Split</h3>
