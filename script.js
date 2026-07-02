@@ -2437,10 +2437,16 @@
     // Restore saved selection
     if (savedKey) applyBenchmark(savedKey);
 
-    // Re-run benchmark after overview flows are recomputed (e.g. after exclusion change).
-    // wf-overview-flows-ready fires once _ov._overviewBaseFlows is populated, so
-    // computeBenchmarkXirr will find the correct terminal value.
+    // When exclusion changes, updateDashboardStats is async. Wait for the next
+    // wf-overview-flows-ready (fired once _ov._overviewBaseFlows is populated)
+    // before re-running the benchmark so it has a valid terminal value.
+    var _pendingBenchmarkRefresh = false;
+    document.addEventListener("wf-exclusion-changed", function () {
+      _pendingBenchmarkRefresh = true;
+    });
     document.addEventListener("wf-overview-flows-ready", function () {
+      if (!_pendingBenchmarkRefresh) return;
+      _pendingBenchmarkRefresh = false;
       var currentKey = localStorage.getItem(BENCH_KEY) || "";
       if (currentKey) applyBenchmark(currentKey);
     });
