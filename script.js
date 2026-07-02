@@ -2769,7 +2769,7 @@
       if (modeCagrBtn) modeCagrBtn.classList.toggle("active", mode === "cagr");
       var label = mode === "cagr" ? "CAGR" : "XIRR";
       if (subtitleEl) subtitleEl.textContent = mode === "cagr"
-        ? "Portfolio: money-weighted return (XIRR). Index: point-to-point CAGR over selected period."
+        ? "point-to-point CAGR over selected period"
         : "XIRR calculated using your actual investment cash flow dates";
       if (portfolioLabelEl) portfolioLabelEl.textContent = "Your Portfolio " + label;
     }
