@@ -2297,8 +2297,7 @@
     var allFlows = buildXirrCashFlows(equityRows, selected);
 
     if (seRows) {
-      var seFlows = buildXirrCashFlows(seRows, selected);
-      allFlows = allFlows.concat(seFlows);
+      allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
     }
     if (fdRows && !isFixedIncomeExcluded()) {
       allFlows = allFlows
@@ -2306,12 +2305,15 @@
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
     }
 
+    // Compute portfolio XIRR directly — never read it from the DOM
+    var portfolioXirr = calculateXIRR(allFlows);
+
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
-      if (!indexData || !indexData.prices) return null;
+      if (!indexData || !indexData.prices) return { portfolioXirr: portfolioXirr, indexXirr: null };
       var indexFlows = buildIndexXirrCashFlows(allFlows, indexData.prices);
-      if (!indexFlows) return null;
-      return calculateXIRR(indexFlows);
+      var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
+      return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
     });
   }
 
@@ -2354,25 +2356,20 @@
       statusEl.textContent = "Calculating index XIRR…";
       if (indexNameEl) indexNameEl.textContent = indexName + " XIRR";
 
-      // Get portfolio XIRR from the already-computed value
-      var portXirrText = (document.getElementById("overview-xirr") || {}).textContent || "—";
-
-      computeBenchmarkXirr(indexKey).then(function (indexXirr) {
+      computeBenchmarkXirr(indexKey).then(function (result) {
         statusEl.hidden = true;
         resultEl.hidden = false;
 
-        // Portfolio XIRR — parse from overview-xirr element
-        var portXirrEl2 = document.getElementById("overview-xirr");
-        var portXirrRaw = portXirrEl2 ? portXirrEl2.textContent.replace(/[^0-9.\-+]/g, "") : "";
-        var portXirrVal = parseFloat(portXirrRaw) / 100;
-        portfolioXirrEl.textContent = portXirrEl2 ? portXirrEl2.textContent : "—";
-        portfolioXirrEl.className = "benchmark-col-value " + (portXirrVal > 0 ? "positive" : portXirrVal < 0 ? "negative" : "");
+        var portXirrVal = (result && result.portfolioXirr != null && isFinite(result.portfolioXirr)) ? result.portfolioXirr : null;
+        portfolioXirrEl.textContent = fmtXirr(portXirrVal);
+        portfolioXirrEl.className = "benchmark-col-value " + (portXirrVal !== null ? (portXirrVal > 0 ? "positive" : portXirrVal < 0 ? "negative" : "") : "");
 
+        var indexXirr = result ? result.indexXirr : null;
         var idxPct = indexXirr !== null && isFinite(indexXirr) ? indexXirr * 100 : null;
-        indexXirrEl.textContent = fmtXirr(indexXirr);
+        indexXirrEl.textContent = idxPct !== null ? fmtXirr(indexXirr) : "No data — trigger Fetch Stock Prices";
         indexXirrEl.className = "benchmark-col-value " + (idxPct !== null ? (idxPct > 0 ? "positive" : idxPct < 0 ? "negative" : "") : "");
 
-        if (idxPct !== null && !isNaN(portXirrVal) && isFinite(portXirrVal)) {
+        if (idxPct !== null && portXirrVal !== null) {
           var alpha = portXirrVal * 100 - idxPct;
           alphaEl.textContent = (alpha > 0 ? "+" : "") + alpha.toFixed(2) + "%";
           alphaEl.className = "benchmark-col-value " + (alpha > 0 ? "positive" : alpha < 0 ? "negative" : "");
@@ -2382,7 +2379,7 @@
         }
       }).catch(function () {
         statusEl.hidden = false;
-        statusEl.textContent = "Could not compute index XIRR — index price history may not be available (run the Fetch Stock Prices workflow).";
+        statusEl.textContent = "Could not compute benchmark XIRR.";
         resultEl.hidden = true;
       });
     }
