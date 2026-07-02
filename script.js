@@ -2422,6 +2422,12 @@
 
     // Restore saved selection
     if (savedKey) applyBenchmark(savedKey);
+
+    // Re-run benchmark when Fixed Income exclusion changes
+    document.addEventListener("wf-exclusion-changed", function () {
+      var currentKey = localStorage.getItem(BENCH_KEY) || "";
+      if (currentKey) applyBenchmark(currentKey);
+    });
   }
 
   function buildCommodityHoldingsList(rows, portfolioFilter, goldPricePerGram, historicalPrices) {
@@ -3080,6 +3086,7 @@
     updateDashboardStats();
     renderValueChart();
     renderInvestmentSplitChart();
+    document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
   }
 
   if (excludeFixedIncomeToggle) {
@@ -3102,6 +3109,7 @@
       updateDashboardStats();
       renderValueChart();
       renderInvestmentSplitChart();
+      document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
     });
   }
 
