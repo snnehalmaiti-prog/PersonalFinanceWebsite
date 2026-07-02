@@ -2287,42 +2287,40 @@
     return flows;
   }
 
-  function computeBenchmarkXirr(indexKey) {
-    // Collect all portfolio cash flows (same as overview XIRR)
+  // periodYears: number of years to look back (null = all time)
+  function computeBenchmarkXirr(indexKey, periodYears) {
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var equityRows = getSheetRows("equity");
     var seRows = getSheetRows("stocksetf");
     var fdRows = getSheetRows("fd");
 
-    var allFlows = buildXirrCashFlows(equityRows, selected);
+    var cutoff = periodYears ? new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000) : null;
+    function afterCutoff(f) { return !cutoff || f.date >= cutoff; }
 
-    if (seRows) {
-      allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
-    }
+    var allFlows = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
+    if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
     if (fdRows && !isFixedIncomeExcluded()) {
       allFlows = allFlows
-        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
-        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+        .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
+        .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
     }
 
-    // Index XIRR always uses ALL asset classes (ignoring exclusion) so it stays stable
-    // when the user toggles exclusions — only Portfolio XIRR should react to exclusion.
-    var allFlowsForIndex = buildXirrCashFlows(equityRows, selected);
-    if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected));
+    // Index XIRR always uses ALL asset classes regardless of exclusion.
+    var allFlowsForIndex = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
+    if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
     if (fdRows) {
       allFlowsForIndex = allFlowsForIndex
-        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
-        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+        .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
+        .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
     }
 
-    // For portfolioXirr we need a terminal value (current portfolio worth) — use the
-    // already-computed overview flows which include the terminal, or fall back to adding
-    // the current value from _ov manually.
+    // For portfolioXirr: use overview base flows for "all time", otherwise build from
+    // period-filtered flows + current value terminal.
     var flowsWithTerminal;
-    if (_ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
+    if (!periodYears && _ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
       flowsWithTerminal = _ov._overviewBaseFlows.concat(_ov.seXirrFlows || []);
     } else {
-      var currentVal = _ov.mfCurrent + _ov.seCurrent + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
+      var currentVal = _ov.mfCurrent + (_ov.seCurrent > 0 ? _ov.seCurrent : 0) + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
       flowsWithTerminal = allFlows.slice();
       if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
     }
@@ -2337,43 +2335,40 @@
     });
   }
 
-  function computeBenchmarkCagr(indexKey) {
+  function computeBenchmarkCagr(indexKey, periodYears) {
+    // Index CAGR = point-to-point from startDate to today.
+    // startDate = periodYears ago if a period is selected, else first investment date.
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var equityRows = getSheetRows("equity");
     var seRows = getSheetRows("stocksetf");
     var fdRows = getSheetRows("fd");
 
-    // Collect all buy/sell flows to find the first investment date
-    var allFlows = buildXirrCashFlows(equityRows, selected);
-    if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
-    if (fdRows && !isFixedIncomeExcluded()) {
-      allFlows = allFlows
-        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
-        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+    var startDate;
+    if (periodYears) {
+      startDate = new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000);
+    } else {
+      var allFlows = buildXirrCashFlows(equityRows, selected);
+      if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
+      if (fdRows && !isFixedIncomeExcluded()) {
+        allFlows = allFlows
+          .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
+          .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+      }
+      if (!allFlows.length) return Promise.resolve({ indexCagr: null, years: null });
+      startDate = allFlows.reduce(function (min, f) {
+        return f.date.getTime() < min.getTime() ? f.date : min;
+      }, allFlows[0].date);
     }
 
-    if (!allFlows.length) return Promise.resolve({ portfolioCagr: null, indexCagr: null, years: null });
-
-    var firstDate = allFlows.reduce(function (min, f) {
-      return f.date.getTime() < min.getTime() ? f.date : min;
-    }, allFlows[0].date);
-
-    var yearsHeld = (new Date() - firstDate) / (1000 * 60 * 60 * 24 * 365.25);
-    if (yearsHeld < 0.05) return Promise.resolve({ portfolioCagr: null, indexCagr: null, years: yearsHeld });
-
-    // Portfolio "CAGR" = XIRR — for an SIP portfolio (currentValue/invested)^(1/years)
-    // is misleading because most capital was invested recently, not at year 0.
-    // XIRR is the correct money-weighted annualised return and equals the intuitive CAGR
-    // for a lump-sum investor. We reuse the already-computed XIRR result.
-    // portfolioCagr is set later from the XIRR result in renderResult.
+    var yearsHeld = (new Date() - startDate) / (1000 * 60 * 60 * 24 * 365.25);
+    if (yearsHeld < 0.05) return Promise.resolve({ indexCagr: null, years: yearsHeld });
 
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
       if (!indexData || !indexData.prices) return { indexCagr: null, years: yearsHeld };
 
-      // Index CAGR = simple point-to-point from first investment date to today
       var prices = indexData.prices;
-      var startDateStr = formatDateISO(firstDate);
+      var startDateStr = formatDateISO(startDate);
       var sortedDates = Object.keys(prices).sort();
       var startPrice = null;
       for (var i = 0; i < sortedDates.length; i++) {
@@ -2408,9 +2403,22 @@
     var BENCH_MODE_KEY = "wf-benchmark-mode";
     var savedKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
     var _mode = localStorage.getItem(BENCH_MODE_KEY) || "xirr"; // "xirr" | "cagr"
+    var BENCH_PERIOD_KEY = "wf-benchmark-period";
+    var _period = localStorage.getItem(BENCH_PERIOD_KEY) || "all"; // "all"|"1"|"2"|"3"|"5"|"10"
 
     var _lastXirrResult = null;
     var _lastCagrResult = null;
+
+    var periodRow = document.querySelector(".bench-period-row");
+    function setPeriod(p) {
+      _period = p;
+      localStorage.setItem(BENCH_PERIOD_KEY, p);
+      if (periodRow) {
+        periodRow.querySelectorAll(".range-pill").forEach(function (btn) {
+          btn.classList.toggle("active", btn.dataset.period === p);
+        });
+      }
+    }
 
     function fmtRate(val) {
       if (val === null || val === undefined || !isFinite(val)) return "—";
@@ -2424,7 +2432,7 @@
       if (modeCagrBtn) modeCagrBtn.classList.toggle("active", mode === "cagr");
       var label = mode === "cagr" ? "CAGR" : "XIRR";
       if (subtitleEl) subtitleEl.textContent = mode === "cagr"
-        ? "Portfolio: money-weighted return (XIRR). Index: point-to-point CAGR from your first investment date."
+        ? "Portfolio: money-weighted return (XIRR). Index: point-to-point CAGR over selected period."
         : "XIRR calculated using your actual investment cash flow dates";
       if (portfolioLabelEl) portfolioLabelEl.textContent = "Your Portfolio " + label;
     }
@@ -2489,9 +2497,10 @@
       statusEl.textContent = "Calculating…";
       setMode(_mode);
 
+      var periodYears = (_period && _period !== "all") ? parseFloat(_period) : null;
       Promise.all([
-        computeBenchmarkXirr(indexKey),
-        computeBenchmarkCagr(indexKey)
+        computeBenchmarkXirr(indexKey, periodYears),
+        computeBenchmarkCagr(indexKey, periodYears)
       ]).then(function (results) {
         if (gen !== _benchmarkGeneration) return;
         _lastXirrResult = results[0];
@@ -2544,8 +2553,22 @@
       });
     });
 
-    // Restore saved mode and selection
+    // Period pill buttons
+    if (periodRow) {
+      periodRow.querySelectorAll(".range-pill").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var newPeriod = btn.dataset.period;
+          if (newPeriod === _period) return;
+          setPeriod(newPeriod);
+          var currentKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
+          if (currentKey) applyBenchmark(currentKey);
+        });
+      });
+    }
+
+    // Restore saved mode, period and selection
     setMode(_mode);
+    setPeriod(_period);
     if (savedKey) applyBenchmark(savedKey);
 
     // When exclusion changes, updateDashboardStats is async. Wait for the next

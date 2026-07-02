@@ -1772,6 +1772,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-top: 1px solid var(--border);
 }
 .benchmark-result[hidden] { display: none; }
+.bench-period-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
 .bench-mode-toggle {
   display: flex;
   background: var(--bg);
