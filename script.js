@@ -2587,40 +2587,50 @@
 
         if (portfolioValues.length < 2) return null;
 
-        // Cash flows within each window (buys/sells for MF + stocks, same scope as the
-        // valuations above). Without these, contributions inside a window would be
-        // counted as "return" and wildly overstate the rolling figure.
+        // Unitize the portfolio into a synthetic NAV series (like a fund NAV) using
+        // monthly time-weighted returns: each month's growth is computed net of external
+        // cash flows (buys/sells), so contributions don't masquerade as return. Rolling
+        // returns are then plain CAGR windows over this NAV series — the standard method:
+        //   Rolling return = (End NAV / Start NAV)^(1/n) − 1
         var equityRows = getSheetRows("equity");
-        var windowFlows = buildXirrCashFlows(equityRows, selected);
-        if (seRows) windowFlows = windowFlows.concat(buildXirrCashFlows(seRows, selected));
-        windowFlows.sort(function (a, b) { return a.date - b.date; });
+        var extFlows = buildXirrCashFlows(equityRows, selected);
+        if (seRows) extFlows = extFlows.concat(buildXirrCashFlows(seRows, selected));
+        // buildXirrCashFlows: buys are negative (money out of pocket), sells positive.
+        // Net contribution INTO the portfolio during a period = -sum(amounts).
+        extFlows.sort(function (a, b) { return a.date - b.date; });
+
+        var navSeries = [{ date: portfolioValues[0].date, nav: 100 }];
+        for (var m = 1; m < portfolioValues.length; m++) {
+          var prevPt = portfolioValues[m - 1], curPt = portfolioValues[m];
+          var netFlow = 0;
+          for (var q = 0; q < extFlows.length; q++) {
+            var ef = extFlows[q];
+            if (ef.date <= prevPt.date) continue;
+            if (ef.date > curPt.date) break;
+            netFlow += -ef.amount; // contribution into portfolio is positive
+          }
+          // End-of-period flow assumption: period growth = (V_t - F_t) / V_{t-1}
+          var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
+          if (!isFinite(g) || g <= 0) g = 1; // guard against degenerate months
+          navSeries.push({ date: curPt.date, nav: navSeries[m - 1].nav * g });
+        }
 
         var windowMs = windowYears * 365.25 * 24 * 60 * 60 * 1000;
         var portRolling = [], idxRolling = [];
 
-        portfolioValues.forEach(function (startPt, i) {
+        navSeries.forEach(function (startPt, i) {
           var targetEnd = new Date(startPt.date.getTime() + windowMs);
           if (targetEnd > today) return;
           var endPt = null;
-          for (var j = i + 1; j < portfolioValues.length; j++) {
-            if (portfolioValues[j].date >= targetEnd) { endPt = portfolioValues[j]; break; }
+          for (var j = i + 1; j < navSeries.length; j++) {
+            if (navSeries[j].date >= targetEnd) { endPt = navSeries[j]; break; }
           }
-          if (!endPt || startPt.value <= 0) return;
+          if (!endPt || startPt.nav <= 0) return;
           var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
           if (actualYears < windowYears * 0.85) return;
 
-          // Money-weighted return for the window: start value is the opening investment,
-          // actual buys/sells inside the window are flows, end value is the terminal.
-          var flows = [{ date: startPt.date, amount: -startPt.value }];
-          for (var k = 0; k < windowFlows.length; k++) {
-            var f = windowFlows[k];
-            if (f.date <= startPt.date) continue;
-            if (f.date > endPt.date) break;
-            flows.push(f);
-          }
-          flows.push({ date: endPt.date, amount: endPt.value });
-          var wr = calculateXIRR(flows);
-          if (wr !== null && isFinite(wr) && wr > -1 && wr < 20) portRolling.push(wr);
+          var cagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
+          if (isFinite(cagr) && cagr > -1 && cagr < 20) portRolling.push(cagr);
 
           if (indexPrices) {
             var sp = lookupIndexPrice(indexPrices, formatDateISO(startPt.date));
