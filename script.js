@@ -2385,6 +2385,219 @@
     });
   }
 
+  // Compute rolling CAGR statistics over all rolling windows of `windowYears` in portfolio history.
+  // Portfolio value at each monthly date = MF (units × NAV) + Stock (units × historical price).
+  // Index CAGR = point-to-point from stock_prices.json index_history.
+  function computeRollingReturns(windowYears, indexKey) {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var unitEvents = buildInstrumentUnitEvents(selected);
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+
+      var seRows = getSheetRows("stocksetf");
+      var seMappingTable = buildStockMappingTable();
+      var seUnitEventsByTicker = {};
+      if (seRows && seRows.length && Object.keys(seMappingTable).length) {
+        var seTxns = groupUnitTransactionsByInstrument(seRows, selected);
+        if (seTxns) {
+          Object.keys(seTxns).forEach(function (instrument) {
+            var mapping = seMappingTable[normalizeText(instrument)];
+            if (!mapping) return;
+            var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
+            if (!sorted.length) return;
+            var running = 0;
+            seUnitEventsByTicker[mapping.ticker] = { region: mapping.region, events: sorted.map(function (txn) {
+              running += txn.type === "buy" ? txn.units : -txn.units;
+              return { date: txn.date, cumulativeUnits: Math.max(0, running) };
+            }) };
+          });
+        }
+      }
+
+      var navHistoriesPromise = instruments.length
+        ? Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
+        : Promise.resolve([]);
+      var stockPricesPromise = fetchAllStockPrices().catch(function () { return {}; });
+
+      return Promise.all([navHistoriesPromise, stockPricesPromise]).then(function (res) {
+        var navHistories = res[0];
+        var spData = res[1];
+        var stockHistory = spData.stock_history || {};
+        var usdInrHistMap = spData.usd_inr_history || {};
+        var allPrices = spData.prices || {};
+        var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
+        var indexPrices = ((spData.index_history || {})[indexKey] || {}).prices || null;
+
+        var navByInstrument = {};
+        instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
+
+        // Find earliest transaction date across all asset types
+        var firstDate = null;
+        instruments.forEach(function (name) {
+          var evs = unitEvents[name];
+          if (evs && evs.length && (!firstDate || evs[0].date < firstDate)) firstDate = evs[0].date;
+        });
+        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+          var evs = seUnitEventsByTicker[ticker].events;
+          if (evs.length && (!firstDate || evs[0].date < firstDate)) firstDate = evs[0].date;
+        });
+        if (!firstDate) return null;
+
+        // Monthly sample dates from firstDate to today
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var samples = [];
+        var d = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+        while (d <= today) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
+        if (!samples.length || samples[samples.length - 1] < today) samples.push(today);
+
+        // Portfolio value at each sample date
+        var portfolioValues = [];
+        samples.forEach(function (date) {
+          var dateStr = formatDateISO(date);
+          var total = 0;
+          instruments.forEach(function (name) {
+            var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
+            var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
+            if (units > UNITS_EPSILON && nav) total += units * nav;
+          });
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            var entry = seUnitEventsByTicker[ticker];
+            var units = lastAtOrBefore(entry.events, date, "cumulativeUnits") || 0;
+            if (units <= UNITS_EPSILON) return;
+            var hist = stockHistory[ticker];
+            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+            if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
+            if (!price) return;
+            if (entry.region === "US" || (hist && hist.currency === "USD")) {
+              total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
+            } else {
+              total += units * price;
+            }
+          });
+          if (total > 0) portfolioValues.push({ date: date, value: total });
+        });
+
+        if (portfolioValues.length < 2) return null;
+
+        var windowMs = windowYears * 365.25 * 24 * 60 * 60 * 1000;
+        var portRolling = [], idxRolling = [];
+
+        portfolioValues.forEach(function (startPt, i) {
+          var targetEnd = new Date(startPt.date.getTime() + windowMs);
+          if (targetEnd > today) return;
+          var endPt = null;
+          for (var j = i + 1; j < portfolioValues.length; j++) {
+            if (portfolioValues[j].date >= targetEnd) { endPt = portfolioValues[j]; break; }
+          }
+          if (!endPt || startPt.value <= 0) return;
+          var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
+          if (actualYears < windowYears * 0.85) return;
+
+          var cagr = Math.pow(endPt.value / startPt.value, 1 / actualYears) - 1;
+          if (isFinite(cagr) && cagr > -1 && cagr < 20) portRolling.push(cagr);
+
+          if (indexPrices) {
+            var sp = lookupIndexPrice(indexPrices, formatDateISO(startPt.date));
+            var ep = lookupIndexPrice(indexPrices, formatDateISO(endPt.date));
+            if (sp && ep) {
+              var ic = Math.pow(ep / sp, 1 / actualYears) - 1;
+              if (isFinite(ic) && ic > -1 && ic < 20) idxRolling.push(ic);
+            }
+          }
+        });
+
+        if (!portRolling.length) return null;
+
+        function stats(arr) {
+          arr.sort(function (a, b) { return a - b; });
+          return { min: arr[0], median: arr[Math.floor(arr.length / 2)], max: arr[arr.length - 1], count: arr.length };
+        }
+        return { portfolio: stats(portRolling), index: idxRolling.length ? stats(idxRolling) : null };
+      });
+    });
+  }
+
+  function initRollingReturnsCard() {
+    var card = document.getElementById("rolling-returns-card");
+    if (!card) return;
+
+    var statusEl = document.getElementById("rolling-status");
+    var resultEl = document.getElementById("rolling-result");
+    var windowRow = document.getElementById("rolling-window-row");
+    var windowCountEl = document.getElementById("rolling-window-count");
+    var indexColEl = document.getElementById("rolling-index-col");
+
+    var ROLLING_WINDOW_KEY = "wf-rolling-window";
+    var _window = localStorage.getItem(ROLLING_WINDOW_KEY) || "2";
+
+    function fmtPct(v) {
+      if (v === null || v === undefined || !isFinite(v)) return "—";
+      var pct = v * 100;
+      return (pct > 0 ? "+" : "") + pct.toFixed(1) + "%";
+    }
+    function colorEl(el, v) {
+      el.classList.remove("positive", "negative");
+      if (v > 0) el.classList.add("positive");
+      else if (v < 0) el.classList.add("negative");
+    }
+
+    function renderRolling(windowYears) {
+      statusEl.hidden = false;
+      statusEl.textContent = "Computing rolling returns…";
+      resultEl.hidden = true;
+
+      var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
+      if (indexColEl) indexColEl.textContent = indexKey === "NIFTY50" ? "Nifty 50"
+        : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
+        : indexKey === "NIFTYSMLCAP250" ? "Nifty Smlcap 250"
+        : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
+        : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
+
+      computeRollingReturns(windowYears, indexKey).then(function (result) {
+        statusEl.hidden = true;
+        if (!result) {
+          statusEl.hidden = false;
+          statusEl.textContent = "Not enough history for " + windowYears + "Y rolling returns.";
+          return;
+        }
+        var p = result.portfolio, idx = result.index;
+        function setCell(id, v) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.textContent = fmtPct(v);
+          colorEl(el, v);
+        }
+        setCell("rolling-port-max", p.max);
+        setCell("rolling-port-median", p.median);
+        setCell("rolling-port-min", p.min);
+        setCell("rolling-idx-max", idx ? idx.max : null);
+        setCell("rolling-idx-median", idx ? idx.median : null);
+        setCell("rolling-idx-min", idx ? idx.min : null);
+        if (windowCountEl) windowCountEl.textContent = p.count + " rolling " + windowYears + "Y windows";
+        resultEl.hidden = false;
+      }).catch(function () {
+        statusEl.hidden = false;
+        statusEl.textContent = "Could not compute rolling returns.";
+      });
+    }
+
+    if (windowRow) {
+      windowRow.querySelectorAll(".range-pill").forEach(function (btn) {
+        if (btn.dataset.window === _window) btn.classList.add("active");
+        else btn.classList.remove("active");
+        btn.addEventListener("click", function () {
+          windowRow.querySelectorAll(".range-pill").forEach(function (b) { b.classList.remove("active"); });
+          btn.classList.add("active");
+          _window = btn.dataset.window;
+          localStorage.setItem(ROLLING_WINDOW_KEY, _window);
+          renderRolling(parseFloat(_window));
+        });
+      });
+    }
+
+    renderRolling(parseFloat(_window));
+  }
+
   function initBenchmarkCard() {
     var toggle = document.getElementById("benchmark-toggle");
     var menu = document.getElementById("benchmark-menu");
@@ -5012,20 +5225,22 @@
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
             if (units > UNITS_EPSILON && nav) total += units * nav;
           });
-          // Stocks/ETF: use current price as proxy (no historical price feed available).
-          // For US stocks, apply the historical USD/INR rate for that date.
+          // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
+          var stockHistory = (stockPricesData && stockPricesData.stock_history) || {};
           Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
             var events = seUnitEventsByTicker[ticker];
             var units = lastAtOrBefore(events, date, "cumulativeUnits") || 0;
             if (units <= UNITS_EPSILON) return;
-            var priceEntry = allPrices[ticker];
-            if (!priceEntry) return;
-            if (priceEntry.currency === "USD") {
-              var rate = usdInrHistMap[dateStr] || usdInrToday;
-              total += units * priceEntry.price * rate;
+            var hist = stockHistory[ticker];
+            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+            if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
+            if (!price) return;
+            var isUsd = hist ? hist.currency === "USD" : (allPrices[ticker] && allPrices[ticker].currency === "USD");
+            if (isUsd) {
+              total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
             } else {
-              total += units * priceEntry.price;
+              total += units * price;
             }
           });
           return { x: date, y: total };
@@ -6303,6 +6518,7 @@
   renderStockEtfHoldingsTable();
 
   initBenchmarkCard();
+  initRollingReturnsCard();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");

@@ -220,6 +220,47 @@ def fetch_index_history(years=10):
     return result
 
 
+def fetch_stock_history(tickers_config, years=10):
+    """Fetch multi-year daily closing prices for each stock/ETF ticker."""
+    print(f"Fetching {years}-year price history for {len(tickers_config)} stock/ETF ticker(s)…")
+    result = {}
+    for entry in tickers_config:
+        name = entry["name"]
+        ticker = entry["ticker"]
+        currency = entry["currency"]
+        try:
+            t = yf.Ticker(ticker)
+            hist = t.history(period=f"{years}y", interval="1d", auto_adjust=True)
+            series = hist["Close"].dropna() if not hist.empty else None
+
+            # Fallback to .BO if .NS returned nothing
+            if (series is None or len(series) == 0) and ticker.endswith(".NS"):
+                bo_ticker = ticker[:-3] + ".BO"
+                try:
+                    t2 = yf.Ticker(bo_ticker)
+                    hist2 = t2.history(period=f"{years}y", interval="1d", auto_adjust=True)
+                    series = hist2["Close"].dropna() if not hist2.empty else None
+                    if series is not None and len(series) > 0:
+                        print(f"  {ticker}: no history on NSE, fell back to {bo_ticker}")
+                except Exception:
+                    pass
+
+            if series is None or len(series) == 0:
+                print(f"  WARNING: No history for {ticker}")
+                continue
+
+            prices = {}
+            for ts, val in series.items():
+                date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                prices[date_str] = round(float(val), 4)
+
+            result[name] = {"currency": currency, "prices": prices}
+            print(f"  {ticker}: {len(prices)} days")
+        except Exception as e:
+            print(f"  WARNING: Failed to fetch history for {ticker}: {e}")
+    return result
+
+
 def main():
     if os.path.exists(MAPPING_FILE):
         print(f"Reading tickers from {MAPPING_FILE}")
@@ -243,6 +284,7 @@ def main():
 
     usd_inr_history = fetch_usd_inr_history()
     index_history = fetch_index_history()
+    stock_history = fetch_stock_history(tickers_config)
 
     corporate_actions = fetch_corporate_actions(tickers_config)
 
@@ -251,13 +293,14 @@ def main():
         "prices": prices,
         "usd_inr_history": usd_inr_history,
         "index_history": index_history,
+        "stock_history": stock_history,
         "corporate_actions": corporate_actions,
     }
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, {len(index_history)} index(es), and {len(corporate_actions)} ticker(s) with corporate actions.")
+    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, {len(index_history)} index(es), {len(stock_history)} stock history series, and {len(corporate_actions)} ticker(s) with corporate actions.")
 
 
 if __name__ == "__main__":
