@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Wealthfolio — Track, Analyze & Manage Every Investment</title>
 <meta name="description" content="Track stocks, mutual funds, PPF, fixed deposits and more across regions in one unified, premium portfolio dashboard." />
-<meta http-equiv="refresh" content="0; url=dashboard.html" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
@@ -417,5 +416,137 @@
   </div>
 
   <script src="script.js?v=70e3dab"></script>
+
+  <!-- Auth modal -->
+  <div id="auth-overlay" class="auth-overlay" hidden>
+    <div class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <button class="auth-modal-close" id="auth-modal-close" aria-label="Close">&times;</button>
+      <div class="auth-logo">
+        <svg width="32" height="32" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="7" fill="#1F9D6B"/><path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Wealthfolio</span>
+      </div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="auth-tab-signin">Sign In</button>
+        <button class="auth-tab" id="auth-tab-signup">Sign Up</button>
+      </div>
+      <form id="auth-form" autocomplete="on">
+        <div class="auth-field">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" name="email" required autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <div class="auth-field">
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" name="password" required autocomplete="current-password" placeholder="••••••••" minlength="6" />
+        </div>
+        <p class="auth-error" id="auth-error" hidden></p>
+        <button type="submit" class="btn btn-primary auth-submit" id="auth-submit">Sign In</button>
+      </form>
+      <p class="auth-confirm" id="auth-confirm" hidden>Check your email to confirm your account, then sign in.</p>
+    </div>
+  </div>
+  <script src="supabase-client.js"></script>
+  <script>
+    // If already logged in, go straight to dashboard
+    if (window.WfAuth && window.WfAuth.isLoggedIn()) {
+      window.location.href = "dashboard.html";
+    }
+
+    // Open auth modal when Get Started / Sign In clicked
+    var overlay = document.getElementById("auth-overlay");
+    var modalClose = document.getElementById("auth-modal-close");
+    var authTabSignin = document.getElementById("auth-tab-signin");
+    var authTabSignup = document.getElementById("auth-tab-signup");
+    var authForm = document.getElementById("auth-form");
+    var authEmail = document.getElementById("auth-email");
+    var authPassword = document.getElementById("auth-password");
+    var authError = document.getElementById("auth-error");
+    var authSubmit = document.getElementById("auth-submit");
+    var authConfirm = document.getElementById("auth-confirm");
+    var isSignUp = false;
+
+    function openModal(mode) {
+      overlay.hidden = false;
+      document.body.style.overflow = "hidden";
+      setMode(mode || "signin");
+      authEmail.focus();
+    }
+    function closeModal() {
+      overlay.hidden = true;
+      document.body.style.overflow = "";
+    }
+    function setMode(mode) {
+      isSignUp = mode === "signup";
+      authTabSignin.classList.toggle("active", !isSignUp);
+      authTabSignup.classList.toggle("active", isSignUp);
+      authSubmit.textContent = isSignUp ? "Create Account" : "Sign In";
+      var pwInput = document.getElementById("auth-password");
+      if (pwInput) pwInput.setAttribute("autocomplete", isSignUp ? "new-password" : "current-password");
+      authError.hidden = true;
+      authConfirm.hidden = true;
+    }
+
+    // Wire up all Get Started / Sign In buttons on the page
+    document.querySelectorAll("a[href='dashboard.html'], #get-started-btn, .cta-signin").forEach(function (el) {
+      el.addEventListener("click", function (e) { e.preventDefault(); openModal("signin"); });
+    });
+    // Also wire any Sign In nav link
+    document.querySelectorAll("a[href='#signin'], .btn-signin").forEach(function (el) {
+      el.addEventListener("click", function (e) { e.preventDefault(); openModal("signin"); });
+    });
+
+    if (modalClose) modalClose.addEventListener("click", closeModal);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) closeModal(); });
+    authTabSignin.addEventListener("click", function () { setMode("signin"); });
+    authTabSignup.addEventListener("click", function () { setMode("signup"); });
+
+    authForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      authError.hidden = true;
+      authSubmit.disabled = true;
+      authSubmit.textContent = isSignUp ? "Creating…" : "Signing in…";
+      var email = authEmail.value.trim();
+      var password = authPassword.value;
+      var action = isSignUp ? WfAuth.signUp(email, password) : WfAuth.signIn(email, password);
+      action.then(function (data) {
+        if (isSignUp) {
+          // Supabase sends a confirmation email by default
+          authConfirm.hidden = false;
+          authForm.hidden = true;
+        } else {
+          // Load settings then redirect
+          WfAuth.loadSettingsFromCloud().then(function () {
+            window.location.href = "dashboard.html";
+          });
+        }
+      }).catch(function (err) {
+        authError.textContent = err.message || "Something went wrong.";
+        authError.hidden = false;
+        authSubmit.disabled = false;
+        authSubmit.textContent = isSignUp ? "Create Account" : "Sign In";
+      });
+    });
+
+    // Wire up the "Log in" and "Get Started" nav buttons to open auth modal
+    var openLoginBtn = document.getElementById("open-login");
+    var openLoginMobileBtn = document.getElementById("open-login-mobile");
+    if (openLoginBtn) openLoginBtn.addEventListener("click", function (e) { e.preventDefault(); openModal("signin"); });
+    if (openLoginMobileBtn) openLoginMobileBtn.addEventListener("click", function (e) { e.preventDefault(); openModal("signin"); });
+
+    // Wire CTA form to open modal instead of submitting
+    var ctaForm = document.getElementById("signup-form");
+    if (ctaForm) {
+      ctaForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var emailVal = document.getElementById("email");
+        openModal("signup");
+        if (emailVal && authEmail) authEmail.value = emailVal.value;
+      });
+    }
+
+    // Wire Get Started buttons in hero
+    document.querySelectorAll("a[href='#get-started']").forEach(function (el) {
+      el.addEventListener("click", function (e) { e.preventDefault(); openModal("signup"); });
+    });
+  </script>
 </body>
 </html>

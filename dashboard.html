@@ -66,7 +66,8 @@
           <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
-        <a href="index.html" class="btn btn-ghost hide-mobile">Log out</a>
+        <span class="user-badge hide-mobile" id="user-badge" hidden></span>
+        <button type="button" class="btn btn-ghost hide-mobile" id="sign-out-btn">Sign out</button>
         <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
           <span></span><span></span><span></span>
         </button>
@@ -549,5 +550,23 @@
   </main>
 
   <script src="script.js?v=70e3dab"></script>
+  <script src="supabase-client.js"></script>
+  <script>
+    (function () {
+      if (!window.WfAuth) return;
+      var badge = document.getElementById("user-badge");
+      var signOutBtn = document.getElementById("sign-out-btn");
+      if (WfAuth.isLoggedIn()) {
+        var email = WfAuth.getUserEmail();
+        if (badge && email) { badge.textContent = email; badge.hidden = false; }
+        WfAuth.loadSettingsFromCloud().catch(function () {});
+      }
+      if (signOutBtn) {
+        signOutBtn.addEventListener("click", function () {
+          WfAuth.signOut().then(function () { window.location.href = "index.html"; });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
