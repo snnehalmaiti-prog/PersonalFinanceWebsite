@@ -2445,10 +2445,13 @@
       _pendingBenchmarkRefresh = true;
     });
     document.addEventListener("wf-overview-flows-ready", function () {
-      if (!_pendingBenchmarkRefresh) return;
+      var currentKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
+      if (!currentKey) return;
+      // Refresh if exclusion changed, or if Portfolio XIRR is still blank (initial load).
+      var portfolioBlank = portfolioXirrEl && portfolioXirrEl.textContent === "—";
+      if (!_pendingBenchmarkRefresh && !portfolioBlank) return;
       _pendingBenchmarkRefresh = false;
-      var currentKey = localStorage.getItem(BENCH_KEY) || "";
-      if (currentKey) applyBenchmark(currentKey);
+      applyBenchmark(currentKey);
     });
   }
 
