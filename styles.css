@@ -1448,7 +1448,21 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   table-layout: fixed;
   font-variant-numeric: tabular-nums;
 }
-.holdings-table .fund-name-col { position: relative; overflow: visible; }
+.holdings-table .fund-name-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  overflow: visible;
+}
+.holdings-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+.holdings-table tbody tr:nth-child(even) td:first-child { background: var(--surface-alt); }
+.holdings-table tbody tr:hover td:first-child { background: color-mix(in srgb, var(--emerald) 6%, var(--surface)); }
 .holdings-table .col-resizer {
   position: absolute;
   top: 0;
