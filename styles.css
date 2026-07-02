@@ -1843,6 +1843,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   min-height: 56px;
   background: var(--border);
   margin: 0 4px;
+  margin-left: auto; /* push the rolling-return group to the right edge */
 }
 @media (max-width: 760px) {
   .benchmark-divider { width: 100%; min-height: 1px; margin: 4px 0; }
