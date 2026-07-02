@@ -2350,7 +2350,7 @@
     if (!toggle || !menu) return;
 
     var BENCH_KEY = "wf-benchmark-index";
-    var savedKey = localStorage.getItem(BENCH_KEY) || "";
+    var savedKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
 
     function fmtXirr(val) {
       if (val === null || val === undefined || !isFinite(val)) return "—";
