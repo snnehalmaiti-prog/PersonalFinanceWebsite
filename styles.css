@@ -254,6 +254,15 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-color: var(--emerald);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--emerald) 18%, transparent);
 }
+#benchmark-dropdown-wrap .portfolio-toggle {
+  border-color: #3B82F6;
+  color: #3B82F6;
+}
+#benchmark-dropdown-wrap .portfolio-toggle .portfolio-chevron { color: #3B82F6; }
+#benchmark-dropdown-wrap .portfolio-toggle[aria-expanded="true"] {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.18);
+}
 
 .portfolio-menu {
   position: absolute;
@@ -1798,9 +1807,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   transition: background 0.15s, color 0.15s;
 }
 .bench-mode-btn.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  background: #3B82F6;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(59,130,246,0.25);
 }
 .benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
 .benchmark-col-label {
