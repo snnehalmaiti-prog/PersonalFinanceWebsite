@@ -4747,55 +4747,6 @@
 
       tbody.appendChild(tr);
     });
-
-    // subtotal row in tfoot
-    var table = tbody.closest("table");
-    if (table) {
-      var tfoot = table.tFoot;
-      if (!tfoot) { tfoot = table.createTFoot(); }
-      tfoot.innerHTML = "";
-      var totalInvested = 0, totalCurrent = 0, totalPnl = 0;
-      rowsData.forEach(function (h) {
-        totalInvested += h.invested || 0;
-        totalCurrent += h.current || 0;
-        totalPnl += h.pnl || 0;
-      });
-      var tfr = document.createElement("tr");
-      tfr.className = "holdings-subtotal-row";
-      // Instrument
-      var labelTd = document.createElement("td");
-      labelTd.textContent = "Total";
-      labelTd.className = "fund-name";
-      tfr.appendChild(labelTd);
-      // Qty, Avg Cost, LTP (desktop-only spacers)
-      ["", "", ""].forEach(function () {
-        var td = document.createElement("td");
-        td.className = "col-desktop-only";
-        tfr.appendChild(td);
-      });
-      // Invested (desktop-only)
-      var invTd = document.createElement("td");
-      invTd.className = "num col-desktop-only";
-      invTd.textContent = formatCurrency(totalInvested);
-      tfr.appendChild(invTd);
-      // Current Value
-      var curTd = document.createElement("td");
-      curTd.className = "num";
-      curTd.textContent = formatCurrency(totalCurrent);
-      tfr.appendChild(curTd);
-      // P&L
-      var pnlTd = document.createElement("td");
-      pnlTd.className = "num";
-      pnlTd.appendChild(pnlChip((totalPnl > 0 ? "+" : "") + formatCurrency(totalPnl), totalPnl));
-      tfr.appendChild(pnlTd);
-      // Net Chg%, Day Chg%, XIRR spacers (desktop-only)
-      ["col-desktop-only", "col-desktop-only", ""].forEach(function (cls) {
-        var td = document.createElement("td");
-        td.className = "num" + (cls ? " " + cls : "");
-        tfr.appendChild(td);
-      });
-      tfoot.appendChild(tfr);
-    }
   }
 
   function attachInstrumentColumnResizer() {
