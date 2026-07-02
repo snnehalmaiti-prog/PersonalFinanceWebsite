@@ -2657,7 +2657,6 @@
       var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
       if (indexColEl) indexColEl.textContent = indexKey === "NIFTY50" ? "Nifty 50"
         : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
-        : indexKey === "NIFTYSMLCAP100" ? "Nifty Smallcap 100"
         : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
         : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
 
@@ -2724,7 +2723,10 @@
 
     var BENCH_KEY = "wf-benchmark-index";
     var BENCH_MODE_KEY = "wf-benchmark-mode";
+    var VALID_BENCH_KEYS = { NIFTY50: 1, NIFTYMIDCAP150: 1, NIFTYNEXT50: 1, NIFTY500: 1 };
     var savedKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
+    // Fall back if a previously-selected index (e.g. removed Nifty Smallcap) is no longer available.
+    if (!VALID_BENCH_KEYS[savedKey]) { savedKey = "NIFTY50"; localStorage.setItem(BENCH_KEY, savedKey); }
     var _mode = localStorage.getItem(BENCH_MODE_KEY) || "xirr"; // "xirr" | "cagr"
     var BENCH_PERIOD_KEY = "wf-benchmark-period";
     var _period = localStorage.getItem(BENCH_PERIOD_KEY) || "all"; // "all"|"1"|"2"|"3"|"5"|"10"
