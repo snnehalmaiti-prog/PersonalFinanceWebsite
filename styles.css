@@ -1772,7 +1772,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
-.benchmark-title-group { display: flex; flex-direction: column; gap: 2px; }
+/* Fixed width so the period pills don't shift when the XIRR/CAGR subtitle text length changes. */
+.benchmark-title-group { display: flex; flex-direction: column; gap: 2px; width: 320px; max-width: 100%; }
 .benchmark-label {
   font-size: 0.72rem;
   font-weight: 700;
