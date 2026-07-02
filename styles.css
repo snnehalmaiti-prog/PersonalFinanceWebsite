@@ -1092,7 +1092,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 /* Investment sub-tabs */
 .invest-sub-tabs {
-  display: flex;
+  display: inline-flex;
   gap: 4px;
   background: var(--surface-alt);
   border-radius: 10px;
