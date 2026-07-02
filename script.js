@@ -2514,7 +2514,7 @@
             var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
             if (!sorted.length) return;
             var running = 0;
-            seUnitEventsByTicker[mapping.ticker] = { region: mapping.region, events: sorted.map(function (txn) {
+            seUnitEventsByTicker[mapping.ticker] = { region: mapping.region, instrument: instrument, events: sorted.map(function (txn) {
               running += txn.type === "buy" ? txn.units : -txn.units;
               return { date: txn.date, cumulativeUnits: Math.max(0, running) };
             }) };
@@ -2592,9 +2592,21 @@
         // cash flows (buys/sells), so contributions don't masquerade as return. Rolling
         // returns are then plain CAGR windows over this NAV series — the standard method:
         //   Rolling return = (End NAV / Start NAV)^(1/n) − 1
+        // Flows must cover exactly the instruments included in the valuations above:
+        // MF schemes that resolved in the scheme map, and stocks that have price history.
+        // Including flows for unvalued instruments would subtract contributions with no
+        // matching value increase, understating the return.
         var equityRows = getSheetRows("equity");
-        var extFlows = buildXirrCashFlows(equityRows, selected);
-        if (seRows) extFlows = extFlows.concat(buildXirrCashFlows(seRows, selected));
+        var extFlows = [];
+        instruments.forEach(function (name) {
+          extFlows = extFlows.concat(buildXirrCashFlows(equityRows, selected, name));
+        });
+        if (seRows) {
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            if (!stockHistory[ticker]) return; // excluded from valuation → exclude flows too
+            extFlows = extFlows.concat(buildXirrCashFlows(seRows, selected, seUnitEventsByTicker[ticker].instrument));
+          });
+        }
         // buildXirrCashFlows: buys are negative (money out of pocket), sells positive.
         // Net contribution INTO the portfolio during a period = -sum(amounts).
         extFlows.sort(function (a, b) { return a.date - b.date; });
