@@ -1443,7 +1443,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .holdings-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .holdings-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.9rem;
   table-layout: fixed;
   font-variant-numeric: tabular-nums;
@@ -1451,8 +1452,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .holdings-table .fund-name-col {
   position: sticky;
   left: 0;
-  z-index: 2;
-  background: var(--surface);
+  background: var(--surface-alt);
   overflow: visible;
 }
 .holdings-table tbody td:first-child {
@@ -1461,8 +1461,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   z-index: 1;
   background: var(--surface);
 }
-.holdings-table tbody tr:nth-child(even) td:first-child { background: var(--surface-alt); }
-.holdings-table tbody tr:hover td:first-child { background: color-mix(in srgb, var(--emerald) 6%, var(--surface)); }
+.holdings-table tbody tr:nth-child(even) td:first-child { background: color-mix(in srgb, var(--surface-alt) 35%, var(--surface)); }
+.holdings-table tbody tr:hover td:first-child { background: var(--surface-alt); }
 .holdings-table .col-resizer {
   position: absolute;
   top: 0;
@@ -1509,12 +1509,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
+/* right border on cells — needed because border-collapse:separate splits borders */
+.holdings-table td + td, .holdings-table th + th { border-left: none; }
 .holdings-table th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: color-mix(in srgb, var(--surface-alt) 92%, transparent);
-  backdrop-filter: blur(6px);
+  background: var(--surface-alt);
   font-weight: 600;
   font-size: 0.74rem;
   letter-spacing: 0.04em;
@@ -1524,6 +1525,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 0 var(--border);
 }
+/* sticky top-left corner: must be above both sticky header row and sticky column */
+.holdings-table .fund-name-col { z-index: 3; }
 .holdings-table th.num, .holdings-table td.num { text-align: right; }
 .holdings-table tbody tr:last-child td { border-bottom: none; }
 .holdings-table tbody tr:nth-child(even) {
