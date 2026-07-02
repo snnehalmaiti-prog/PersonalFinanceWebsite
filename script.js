@@ -2357,6 +2357,8 @@
       return (val > 0 ? "+" : "") + (val * 100).toFixed(2) + "%";
     }
 
+    var _benchmarkGeneration = 0;
+
     function applyBenchmark(indexKey) {
       localStorage.setItem(BENCH_KEY, indexKey);
       var options = menu.querySelectorAll("[data-value]");
@@ -2364,6 +2366,9 @@
       var selected = menu.querySelector("[data-value='" + indexKey + "']");
       var indexName = selected ? selected.textContent.trim() : "Index";
       labelEl.textContent = indexName || "Select Index";
+
+      _benchmarkGeneration++;
+      var gen = _benchmarkGeneration;
 
       if (!indexKey) {
         resultEl.hidden = true;
@@ -2377,6 +2382,7 @@
       if (indexNameEl) indexNameEl.textContent = indexName + " XIRR";
 
       computeBenchmarkXirr(indexKey).then(function (result) {
+        if (gen !== _benchmarkGeneration) return; // superseded by a newer call
         statusEl.hidden = true;
         resultEl.hidden = false;
 
@@ -2431,8 +2437,10 @@
     // Restore saved selection
     if (savedKey) applyBenchmark(savedKey);
 
-    // Re-run benchmark when Fixed Income exclusion changes
-    document.addEventListener("wf-exclusion-changed", function () {
+    // Re-run benchmark after overview flows are recomputed (e.g. after exclusion change).
+    // wf-overview-flows-ready fires once _ov._overviewBaseFlows is populated, so
+    // computeBenchmarkXirr will find the correct terminal value.
+    document.addEventListener("wf-overview-flows-ready", function () {
       var currentKey = localStorage.getItem(BENCH_KEY) || "";
       if (currentKey) applyBenchmark(currentKey);
     });
@@ -2820,6 +2828,7 @@
         setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows.concat(_ov.seXirrFlows)));
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
+        document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
         fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
           _ov._mfCommDayChange = commodityDayChange;
           setDayChange(overviewDayChangeEl, commodityDayChange + _ov.seDayChange);
@@ -2861,6 +2870,7 @@
           _ov._overviewBaseFlows = ovBaseFlows2;
           setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows2.concat(_ov.seXirrFlows)));
           setXirr(equityXirrEl, xirr);
+          document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
         });
     });
   }
