@@ -2294,18 +2294,19 @@
     var seRows = getSheetRows("stocksetf");
     var fdRows = getSheetRows("fd");
 
-    var cutoff = periodYears ? new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000) : null;
-    function afterCutoff(f) { return !cutoff || f.date >= cutoff; }
-
-    var allFlows = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
-    if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
+    // Portfolio XIRR always uses all-time flows — sub-period portfolio XIRR is not
+    // computable without historical portfolio valuations (NAV per fund N years ago).
+    var allFlows = buildXirrCashFlows(equityRows, selected);
+    if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
     if (fdRows && !isFixedIncomeExcluded()) {
       allFlows = allFlows
-        .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
-        .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
+        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
+        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
     }
 
-    // Index XIRR always uses ALL asset classes regardless of exclusion.
+    // Index XIRR uses all asset classes (ignoring exclusion) filtered to the selected period.
+    var cutoff = periodYears ? new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000) : null;
+    function afterCutoff(f) { return !cutoff || f.date >= cutoff; }
     var allFlowsForIndex = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
     if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
     if (fdRows) {
@@ -2314,10 +2315,8 @@
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
     }
 
-    // For portfolioXirr: use overview base flows for "all time", otherwise build from
-    // period-filtered flows + current value terminal.
     var flowsWithTerminal;
-    if (!periodYears && _ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
+    if (_ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
       flowsWithTerminal = _ov._overviewBaseFlows.concat(_ov.seXirrFlows || []);
     } else {
       var currentVal = _ov.mfCurrent + (_ov.seCurrent > 0 ? _ov.seCurrent : 0) + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
