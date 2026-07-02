@@ -2587,6 +2587,14 @@
 
         if (portfolioValues.length < 2) return null;
 
+        // Cash flows within each window (buys/sells for MF + stocks, same scope as the
+        // valuations above). Without these, contributions inside a window would be
+        // counted as "return" and wildly overstate the rolling figure.
+        var equityRows = getSheetRows("equity");
+        var windowFlows = buildXirrCashFlows(equityRows, selected);
+        if (seRows) windowFlows = windowFlows.concat(buildXirrCashFlows(seRows, selected));
+        windowFlows.sort(function (a, b) { return a.date - b.date; });
+
         var windowMs = windowYears * 365.25 * 24 * 60 * 60 * 1000;
         var portRolling = [], idxRolling = [];
 
@@ -2601,8 +2609,18 @@
           var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
           if (actualYears < windowYears * 0.85) return;
 
-          var cagr = Math.pow(endPt.value / startPt.value, 1 / actualYears) - 1;
-          if (isFinite(cagr) && cagr > -1 && cagr < 20) portRolling.push(cagr);
+          // Money-weighted return for the window: start value is the opening investment,
+          // actual buys/sells inside the window are flows, end value is the terminal.
+          var flows = [{ date: startPt.date, amount: -startPt.value }];
+          for (var k = 0; k < windowFlows.length; k++) {
+            var f = windowFlows[k];
+            if (f.date <= startPt.date) continue;
+            if (f.date > endPt.date) break;
+            flows.push(f);
+          }
+          flows.push({ date: endPt.date, amount: endPt.value });
+          var wr = calculateXIRR(flows);
+          if (wr !== null && isFinite(wr) && wr > -1 && wr < 20) portRolling.push(wr);
 
           if (indexPrices) {
             var sp = lookupIndexPrice(indexPrices, formatDateISO(startPt.date));
