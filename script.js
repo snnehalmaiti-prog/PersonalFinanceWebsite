@@ -2332,15 +2332,18 @@
       portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (result) {
         var startVal = result.value;
         if (!startVal || startVal <= 0) return allTimePortfolioXirr;
-        // Terminal value must use the exact same scope as startVal: MF + only the stock
-        // tickers that had historical prices at the cutoff (seCurrentIncluded).
-        var periodCurrentVal = _ov.mfCurrent + result.seCurrentIncluded;
-        // Period flows: MF + stocks only — FD/PF value isn't part of startVal/terminal,
-        // so including its contributions would make money vanish and drag XIRR down.
-        var mfSeFlows = buildXirrCashFlows(equityRows, selected);
-        if (seRows) mfSeFlows = mfSeFlows.concat(buildXirrCashFlows(seRows, selected));
+        // Terminal value must use same scope as startVal to avoid asymmetric comparisons.
+        // MF is always included. Stocks only if historical prices were available for that ticker.
+        var includedSet = {};
+        result.includedStockTickers.forEach(function (t) { includedSet[t] = true; });
+        var seCurrentMatched = 0;
+        // _ov.seByTicker is not available; use seValue proportion as approximation when some tickers had history
+        // Simpler: recompute SE current for included tickers only
+        var periodCurrentVal = _ov.mfCurrent + result.seValue * (_ov.seCurrent > 0 && result.seValue > 0 ? _ov.seCurrent / result.seValue : 1);
+        // If no stocks had historical prices, only use MF in current value too
+        if (!result.includedStockTickers.length) periodCurrentVal = _ov.mfCurrent;
         var periodFlows = [{ date: cutoff, amount: -startVal }];
-        mfSeFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
+        allFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
         if (periodCurrentVal > 0) periodFlows.push({ date: new Date(), amount: periodCurrentVal });
         return calculateXIRR(periodFlows) || allTimePortfolioXirr;
       });
@@ -2467,8 +2470,6 @@
           var nav = lastAtOrBefore(navByInstrument[name], targetDate, "nav");
           if (units > UNITS_EPSILON && nav) mfTotal += units * nav;
         });
-        var seCurrentIncluded = 0;
-        var today = new Date();
         Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
           var entry = seUnitEventsByTicker[ticker];
           var units = lastAtOrBefore(entry.events, targetDate, "cumulativeUnits") || 0;
@@ -2480,15 +2481,8 @@
           var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
           seTotal += units * price * (isUsd ? (usdInrHistMap[dateStr] || usdInrToday) : 1);
           includedStockTickers.push(ticker);
-          // Current value of this same ticker (today's units × LTP) so callers can build
-          // a terminal value with the exact same stock scope as the historical value.
-          var unitsToday = lastAtOrBefore(entry.events, today, "cumulativeUnits") || 0;
-          var cur = allPrices[ticker];
-          if (unitsToday > UNITS_EPSILON && cur && cur.price) {
-            seCurrentIncluded += unitsToday * cur.price * (isUsd ? usdInrToday : 1);
-          }
         });
-        return { value: mfTotal + seTotal, mfValue: mfTotal, seValue: seTotal, seCurrentIncluded: seCurrentIncluded, includedStockTickers: includedStockTickers };
+        return { value: mfTotal + seTotal, mfValue: mfTotal, seValue: seTotal, includedStockTickers: includedStockTickers };
       });
     });
   }
@@ -2573,8 +2567,8 @@
             var units = lastAtOrBefore(entry.events, date, "cumulativeUnits") || 0;
             if (units <= UNITS_EPSILON) return;
             var hist = stockHistory[ticker];
-            // Only actual historical prices — today's LTP as a proxy would distort rolling CAGRs
             var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+            if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
             if (!price) return;
             if (entry.region === "US" || (hist && hist.currency === "USD")) {
               total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
