@@ -1114,7 +1114,18 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .invest-sub-tab:hover { color: var(--text); }
 .invest-sub-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 600; }
-.invest-sub-panel { padding: 0; }
+
+/* Investment panel wrapper — no card background, sub-panels provide their own cards */
+.invest-panel { width: 100%; display: flex; flex-direction: column; gap: 0; }
+
+/* Each sub-panel matches the settings-panel card style */
+.invest-sub-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 32px;
+  width: 100%;
+}
 
 .settings-panel {
   background: var(--surface);
