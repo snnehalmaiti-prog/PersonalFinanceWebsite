@@ -3306,6 +3306,13 @@
       return;
     }
 
+    // OneDrive/SharePoint blocks cross-origin requests from browsers (no CORS headers).
+    // Guide the user to a workaround instead of waiting for a timeout.
+    if (type === "onedrive" || type === "sharepoint") {
+      onError("onedrive_cors");
+      return;
+    }
+
     var csvUrl = type ? toCsvFetchUrl(url, type) : null;
     if (!csvUrl) { onError("query"); return; }
 
@@ -3316,13 +3323,11 @@
       })
       .then(function (text) {
         var allRows = parseCSVText(text);
-        // Respect headerRow — skip rows before the header
         var rows = headerRow > 1 ? allRows.slice(headerRow - 1) : allRows;
         if (!rows.length) { onError("empty"); return; }
         onRows(rows);
       })
       .catch(function (err) {
-        // CORS or network failure
         onError(err.message && err.message.indexOf("403") !== -1 ? "private" : "timeout");
       });
   }
@@ -3355,6 +3360,9 @@
     }
     if (reason === "empty") {
       return "The file appears to be empty.";
+    }
+    if (reason === "onedrive_cors") {
+      return "OneDrive/SharePoint links can’t be loaded directly by the browser (security restriction). Workaround: open your Excel file in Excel Online → File → Save As → Download a Copy → then upload it to Google Sheets and paste that link instead. Or export it as a publicly accessible CSV.";
     }
     return "Couldn't load the file. Check the link and make sure it is shared publicly (anyone with the link can view).";
   }
