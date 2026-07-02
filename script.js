@@ -2788,7 +2788,7 @@
       var label = mode === "cagr" ? "CAGR" : "XIRR";
       if (subtitleEl) subtitleEl.textContent = mode === "cagr"
         ? "point-to-point CAGR over selected period"
-        : "XIRR calculated using your actual investment cash flow dates";
+        : "Based on actual investment cash flow dates";
       if (portfolioLabelEl) portfolioLabelEl.textContent = "Your Portfolio " + label;
     }
 
