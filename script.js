@@ -2294,8 +2294,6 @@
     var seRows = getSheetRows("stocksetf");
     var fdRows = getSheetRows("fd");
 
-    // Portfolio XIRR always uses all-time flows — sub-period portfolio XIRR is not
-    // computable without historical portfolio valuations (NAV per fund N years ago).
     var allFlows = buildXirrCashFlows(equityRows, selected);
     if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
     if (fdRows && !isFixedIncomeExcluded()) {
@@ -2304,9 +2302,10 @@
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
     }
 
-    // Index XIRR uses all asset classes (ignoring exclusion) filtered to the selected period.
     var cutoff = periodYears ? new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000) : null;
     function afterCutoff(f) { return !cutoff || f.date >= cutoff; }
+
+    // Index XIRR: buy-only flows filtered to the selected period.
     var allFlowsForIndex = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
     if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
     if (fdRows) {
@@ -2315,6 +2314,7 @@
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
     }
 
+    // All-time portfolio XIRR (used for "All" period and as fallback)
     var flowsWithTerminal;
     if (_ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
       flowsWithTerminal = _ov._overviewBaseFlows.concat(_ov.seXirrFlows || []);
@@ -2323,20 +2323,36 @@
       flowsWithTerminal = allFlows.slice();
       if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
     }
-    var portfolioXirr = calculateXIRR(flowsWithTerminal);
+    var allTimePortfolioXirr = calculateXIRR(flowsWithTerminal);
 
-    return fetchIndexHistory().then(function (indexHistory) {
-      var indexData = indexHistory[indexKey];
-      var indexPriceDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
-      var indexHasHistory = indexPriceDates.length >= 30 &&
-        (new Date(indexPriceDates[indexPriceDates.length - 1]) - new Date(indexPriceDates[0])) > 180 * 24 * 60 * 60 * 1000;
-      if (!indexHasHistory) return { portfolioXirr: portfolioXirr, indexXirr: null };
-      // Only pass buy (negative) flows to the index simulation. Including sells creates
-      // multiple sign changes → multiple IRR solutions → Newton-Raphson finds a spurious root.
-      var buyFlowsForIndex = allFlowsForIndex.filter(function(f) { return f.amount < 0; });
-      var indexFlows = buildIndexXirrCashFlows(buyFlowsForIndex, indexData.prices);
-      var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
-      return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
+    // For a selected period: compute portfolio value at cutoff as "starting investment",
+    // then XIRR over [cutoff → today] using actual flows within the period + current value.
+    var portfolioXirrPromise;
+    if (periodYears && cutoff) {
+      portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (startVal) {
+        if (!startVal || startVal <= 0) return allTimePortfolioXirr; // no history yet, fall back
+        var periodCurrentVal = _ov.mfCurrent + (_ov.seCurrent > 0 ? _ov.seCurrent : 0) + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
+        var periodFlows = [{ date: cutoff, amount: -startVal }];
+        allFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
+        if (periodCurrentVal > 0) periodFlows.push({ date: new Date(), amount: periodCurrentVal });
+        return calculateXIRR(periodFlows) || allTimePortfolioXirr;
+      });
+    } else {
+      portfolioXirrPromise = Promise.resolve(allTimePortfolioXirr);
+    }
+
+    return portfolioXirrPromise.then(function (portfolioXirr) {
+      return fetchIndexHistory().then(function (indexHistory) {
+        var indexData = indexHistory[indexKey];
+        var indexPriceDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
+        var indexHasHistory = indexPriceDates.length >= 30 &&
+          (new Date(indexPriceDates[indexPriceDates.length - 1]) - new Date(indexPriceDates[0])) > 180 * 24 * 60 * 60 * 1000;
+        if (!indexHasHistory) return { portfolioXirr: portfolioXirr, indexXirr: null };
+        var buyFlowsForIndex = allFlowsForIndex.filter(function (f) { return f.amount < 0; });
+        var indexFlows = buildIndexXirrCashFlows(buyFlowsForIndex, indexData.prices);
+        var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
+        return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
+      });
     });
   }
 
@@ -2390,6 +2406,72 @@
         : null;
 
       return { indexCagr: indexCagr, years: yearsHeld };
+    });
+  }
+
+  // Returns a Promise<number> — total portfolio value (MF + stocks) at a historical date.
+  function computePortfolioValueAtDate(targetDate, portfolioFilter) {
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var unitEvents = buildInstrumentUnitEvents(portfolioFilter);
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+
+      var seRows = getSheetRows("stocksetf");
+      var seMappingTable = buildStockMappingTable();
+      var seUnitEventsByTicker = {};
+      if (seRows && seRows.length && Object.keys(seMappingTable).length) {
+        var seTxns = groupUnitTransactionsByInstrument(seRows, portfolioFilter);
+        if (seTxns) {
+          Object.keys(seTxns).forEach(function (instrument) {
+            var mapping = seMappingTable[normalizeText(instrument)];
+            if (!mapping) return;
+            var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
+            if (!sorted.length) return;
+            var running = 0;
+            seUnitEventsByTicker[mapping.ticker] = { region: mapping.region, events: sorted.map(function (txn) {
+              running += txn.type === "buy" ? txn.units : -txn.units;
+              return { date: txn.date, cumulativeUnits: Math.max(0, running) };
+            }) };
+          });
+        }
+      }
+
+      var navHistoriesPromise = instruments.length
+        ? Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
+        : Promise.resolve([]);
+      var spPromise = Object.keys(seUnitEventsByTicker).length
+        ? fetchAllStockPrices().catch(function () { return {}; })
+        : Promise.resolve({});
+
+      return Promise.all([navHistoriesPromise, spPromise]).then(function (res) {
+        var navHistories = res[0];
+        var spData = res[1];
+        var stockHistory = spData.stock_history || {};
+        var usdInrHistMap = spData.usd_inr_history || {};
+        var allPrices = spData.prices || {};
+        var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
+        var navByInstrument = {};
+        instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
+
+        var dateStr = formatDateISO(targetDate);
+        var total = 0;
+        instruments.forEach(function (name) {
+          var units = lastAtOrBefore(unitEvents[name], targetDate, "cumulativeUnits") || 0;
+          var nav = lastAtOrBefore(navByInstrument[name], targetDate, "nav");
+          if (units > UNITS_EPSILON && nav) total += units * nav;
+        });
+        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+          var entry = seUnitEventsByTicker[ticker];
+          var units = lastAtOrBefore(entry.events, targetDate, "cumulativeUnits") || 0;
+          if (units <= UNITS_EPSILON) return;
+          var hist = stockHistory[ticker];
+          var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+          if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
+          if (!price) return;
+          var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+          total += units * price * (isUsd ? (usdInrHistMap[dateStr] || usdInrToday) : 1);
+        });
+        return total;
+      });
     });
   }
 
