@@ -2789,7 +2789,7 @@
       if (subtitleEl) subtitleEl.textContent = mode === "cagr"
         ? "point-to-point CAGR over selected period"
         : "Based on actual investment cash flow dates";
-      if (portfolioLabelEl) portfolioLabelEl.textContent = "Your Portfolio " + label;
+      if (portfolioLabelEl) portfolioLabelEl.textContent = "Portfolio " + label;
     }
 
     function renderResult(mode, xirrResult, cagrResult) {
