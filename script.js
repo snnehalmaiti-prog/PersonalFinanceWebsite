@@ -2625,18 +2625,28 @@
     });
   }
 
+  function indexDisplayName(indexKey) {
+    return indexKey === "NIFTY50" ? "Nifty 50"
+      : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
+      : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
+      : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
+  }
+
+  // Rolling returns are driven by the benchmark card's selected period (1Y/2Y/3Y/5Y)
+  // and selected index. "All" and "10Y" have no rolling window, so a notice is shown.
   function initRollingReturnsCard() {
     var card = document.getElementById("rolling-returns-card");
     if (!card) return;
 
     var statusEl = document.getElementById("rolling-status");
     var resultEl = document.getElementById("rolling-result");
-    var windowRow = document.getElementById("rolling-window-row");
     var windowCountEl = document.getElementById("rolling-window-count");
+    var windowLabelEl = document.getElementById("rolling-window-label");
+    var subtitleEl = document.getElementById("rolling-subtitle");
     var indexColEl = document.getElementById("rolling-index-col");
 
-    var ROLLING_WINDOW_KEY = "wf-rolling-window";
-    var _window = localStorage.getItem(ROLLING_WINDOW_KEY) || "2";
+    // Windows we can compute a rolling return for. "all"/"10" are intentionally excluded.
+    var ROLLING_PERIODS = { "1": 1, "2": 1, "3": 1, "5": 1 };
 
     function fmtPct(v) {
       if (v === null || v === undefined || !isFinite(v)) return "—";
@@ -2649,18 +2659,34 @@
       else if (v < 0) el.classList.add("negative");
     }
 
-    function renderRolling(windowYears) {
+    var _renderGen = 0;
+
+    function renderForPeriod(period) {
+      _renderGen++;
+      var gen = _renderGen;
+      period = String(period || "all");
+
+      // Update the index column header to the currently selected index.
+      var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
+      if (indexColEl) indexColEl.textContent = indexDisplayName(indexKey);
+
+      // No rolling window for "All" or "10Y".
+      if (!ROLLING_PERIODS[period]) {
+        resultEl.hidden = true;
+        statusEl.hidden = false;
+        statusEl.textContent = "Rolling Return Not Available";
+        if (windowLabelEl) windowLabelEl.textContent = "";
+        return;
+      }
+
+      var windowYears = parseFloat(period);
+      if (windowLabelEl) windowLabelEl.textContent = windowYears + "Y rolling window";
       statusEl.hidden = false;
       statusEl.textContent = "Computing rolling returns…";
       resultEl.hidden = true;
 
-      var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
-      if (indexColEl) indexColEl.textContent = indexKey === "NIFTY50" ? "Nifty 50"
-        : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
-        : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
-        : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
-
       computeRollingReturns(windowYears, indexKey).then(function (result) {
+        if (gen !== _renderGen) return;
         statusEl.hidden = true;
         if (!result) {
           statusEl.hidden = false;
@@ -2683,26 +2709,20 @@
         if (windowCountEl) windowCountEl.textContent = p.count + " rolling " + windowYears + "Y windows";
         resultEl.hidden = false;
       }).catch(function () {
+        if (gen !== _renderGen) return;
         statusEl.hidden = false;
         statusEl.textContent = "Could not compute rolling returns.";
       });
     }
 
-    if (windowRow) {
-      windowRow.querySelectorAll(".range-pill").forEach(function (btn) {
-        if (btn.dataset.window === _window) btn.classList.add("active");
-        else btn.classList.remove("active");
-        btn.addEventListener("click", function () {
-          windowRow.querySelectorAll(".range-pill").forEach(function (b) { b.classList.remove("active"); });
-          btn.classList.add("active");
-          _window = btn.dataset.window;
-          localStorage.setItem(ROLLING_WINDOW_KEY, _window);
-          renderRolling(parseFloat(_window));
-        });
-      });
-    }
+    // Re-render whenever the benchmark period or index changes.
+    document.addEventListener("wf-benchmark-changed", function (e) {
+      var period = (e.detail && e.detail.period) || localStorage.getItem("wf-benchmark-period") || "all";
+      renderForPeriod(period);
+    });
 
-    renderRolling(parseFloat(_window));
+    // Initial render from the saved period (benchmark card may init before or after this).
+    renderForPeriod(localStorage.getItem("wf-benchmark-period") || "all");
   }
 
   function initBenchmarkCard() {
@@ -2805,6 +2825,9 @@
       var selected = menu.querySelector("[data-value='" + indexKey + "']");
       var indexName = selected ? selected.textContent.trim() : "Index";
       labelEl.textContent = indexName || "Select Index";
+
+      // Notify the rolling-returns card of the current period + index.
+      document.dispatchEvent(new CustomEvent("wf-benchmark-changed", { detail: { period: _period, indexKey: indexKey } }));
 
       _benchmarkGeneration++;
       var gen = _benchmarkGeneration;

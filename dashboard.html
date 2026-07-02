@@ -191,13 +191,9 @@
       <div class="rolling-returns-card" id="rolling-returns-card">
         <div class="rolling-returns-header">
           <span class="benchmark-label">ROLLING RETURNS</span>
-          <div class="bench-period-row" id="rolling-window-row" role="group" aria-label="Rolling window">
-            <button type="button" class="range-pill active" data-window="2">2Y</button>
-            <button type="button" class="range-pill" data-window="3">3Y</button>
-            <button type="button" class="range-pill" data-window="5">5Y</button>
-          </div>
+          <span class="muted small" id="rolling-window-label"></span>
         </div>
-        <p class="muted small" id="rolling-subtitle">Best / median / worst CAGR across all rolling windows in your history</p>
+        <p class="muted small" id="rolling-subtitle">Best / median / worst annualised return across all rolling windows for the selected period</p>
         <p class="muted small" id="rolling-status">Loading…</p>
         <div id="rolling-result" hidden>
           <table class="rolling-table">
