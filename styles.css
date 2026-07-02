@@ -1788,3 +1788,89 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   padding: 0 4px;
 }
 .benchmark-col-verdict { border-left: 2px solid var(--border); padding-left: 24px; }
+
+/* ===== Auth modal ===== */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.auth-overlay[hidden] { display: none; }
+.auth-modal {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+}
+.auth-modal-close {
+  position: absolute;
+  top: 16px; right: 20px;
+  background: none; border: none;
+  font-size: 1.5rem; line-height: 1;
+  color: var(--muted); cursor: pointer;
+}
+.auth-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.1rem;
+  margin-bottom: 28px;
+}
+.auth-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.auth-tab {
+  flex: 1; background: none; border: none;
+  padding: 10px 0; font-size: 0.95rem; font-weight: 600;
+  color: var(--muted); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  font-family: inherit;
+}
+.auth-tab.active { color: var(--emerald); border-bottom-color: var(--emerald); }
+.auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.auth-field label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.auth-field input {
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--emerald);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--emerald) 15%, transparent);
+}
+.auth-error {
+  color: var(--negative); font-size: 0.85rem;
+  margin-bottom: 12px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--negative) 10%, transparent);
+  border-radius: var(--radius-sm);
+}
+.auth-error[hidden] { display: none; }
+.auth-submit { width: 100%; margin-top: 4px; }
+.auth-confirm {
+  text-align: center; color: var(--emerald);
+  font-size: 0.9rem; margin-top: 16px;
+}
+.auth-confirm[hidden] { display: none; }
+
+/* User badge in header */
+.user-badge {
+  font-size: 0.82rem; color: var(--muted);
+  max-width: 160px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.user-badge[hidden] { display: none; }

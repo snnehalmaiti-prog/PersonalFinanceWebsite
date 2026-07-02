@@ -3145,6 +3145,7 @@
         if (merged && merged.length > 1) {
           addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+          document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         }
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
@@ -3562,6 +3563,7 @@
           }
           addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
           localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+          document.dispatchEvent(new CustomEvent("wf-sync-complete"));
           if (typeof afterSync === "function") afterSync(rows);
           updateDashboardStats();
           populatePortfolioSelect();
@@ -3724,6 +3726,7 @@
       localStorage.setItem(sheetsKey, JSON.stringify(configs));
       localStorage.removeItem("wf-" + prefix + "-sheet-link");
       localStorage.removeItem("wf-" + prefix + "-header-row");
+      document.dispatchEvent(new CustomEvent("wf-settings-saved"));
     }
 
     function addRow(config) {
@@ -3874,6 +3877,7 @@
         }
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
@@ -3978,6 +3982,7 @@
       localStorage.setItem("wf-gh-repo",   ghRepoEl.value.trim());
       localStorage.setItem("wf-gh-branch", ghBranchEl.value.trim());
       localStorage.setItem("wf-gh-token",  ghTokenEl.value.trim());
+      document.dispatchEvent(new CustomEvent("wf-settings-saved"));
       if (ghSaveStatus) { ghSaveStatus.textContent = "Saved."; setTimeout(function () { ghSaveStatus.textContent = ""; }, 2000); }
     });
   }
