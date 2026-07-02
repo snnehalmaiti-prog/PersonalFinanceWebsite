@@ -3227,10 +3227,104 @@
 
   // ===== Google Sheet transaction cards (Equity, Fixed Income, etc.) =====
   function parseSheetUrl(url) {
+    if (!url || !/docs\.google\.com\/spreadsheets/i.test(url)) return null;
     var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
     if (!idMatch) return null;
     var gidMatch = url.match(/[#&?]gid=([0-9]+)/);
     return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : "0" };
+  }
+
+  function detectSheetUrlType(url) {
+    if (!url) return null;
+    if (/docs\.google\.com\/spreadsheets/i.test(url)) return "google";
+    if (/drive\.google\.com/i.test(url)) return "gdrive";
+    if (/1drv\.ms|onedrive\.live\.com/i.test(url)) return "onedrive";
+    if (/sharepoint\.com/i.test(url)) return "sharepoint";
+    if (/\.csv(\?|#|$)/i.test(url) || /[?&]format=csv/i.test(url) || /export=csv/i.test(url)) return "csv";
+    return null;
+  }
+
+  function toCsvFetchUrl(url, type) {
+    if (type === "gdrive") {
+      // Google Drive file shared as "anyone with link" — export as CSV
+      var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/) || url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+      if (!idMatch) return null;
+      return "https://drive.google.com/uc?export=csv&id=" + idMatch[1];
+    }
+    if (type === "onedrive") {
+      // OneDrive personal share link → anonymous sharing API with CSV format
+      try {
+        var b64 = btoa(url).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+        return "https://api.onedrive.com/v1.0/shares/u!" + b64 + "/root/content?format=csv";
+      } catch (e) { return null; }
+    }
+    if (type === "sharepoint") {
+      // SharePoint file — append download=1 to get the file; may need manual CSV export
+      return url.replace(/\?.*$/, "") + "?download=1";
+    }
+    if (type === "csv") return url;
+    return null;
+  }
+
+  function parseCSVText(text) {
+    var rows = [];
+    var lines = text.split(/\r?\n/);
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li];
+      if (!line.trim()) continue;
+      var row = [];
+      var inQuote = false;
+      var cell = "";
+      for (var ci = 0; ci < line.length; ci++) {
+        var ch = line[ci];
+        if (ch === '"') {
+          if (inQuote && line[ci + 1] === '"') { cell += '"'; ci++; }
+          else inQuote = !inQuote;
+        } else if (ch === "," && !inQuote) {
+          row.push(cell.trim()); cell = "";
+        } else {
+          cell += ch;
+        }
+      }
+      row.push(cell.trim());
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function fetchSheetData(config, onRows, onError) {
+    var url = (config.link || "").trim();
+    var headerRow = parseInt(config.headerRow, 10) || 1;
+    var type = detectSheetUrlType(url);
+
+    if (type === "google") {
+      var parsed = parseSheetUrl(url);
+      if (!parsed) { onError("query"); return; }
+      fetchSheetJSONP(parsed.id, parsed.gid, function (data) {
+        onRows(gvizRowsFromResponse(data));
+      }, onError, headerRow);
+      return;
+    }
+
+    var csvUrl = type ? toCsvFetchUrl(url, type) : null;
+    if (!csvUrl) { onError("query"); return; }
+
+    fetch(csvUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      })
+      .then(function (text) {
+        var allRows = parseCSVText(text);
+        // Respect headerRow — skip rows before the header
+        var rows = headerRow > 1 ? allRows.slice(headerRow - 1) : allRows;
+        if (!rows.length) { onError("empty"); return; }
+        onRows(rows);
+      })
+      .catch(function (err) {
+        // CORS or network failure
+        onError(err.message && err.message.indexOf("403") !== -1 ? "private" : "timeout");
+      });
   }
 
   function gvizRowsFromResponse(data) {
@@ -3254,12 +3348,15 @@
 
   function sheetErrorMessage(reason) {
     if (reason === "private") {
-      return "This sheet appears to be private or restricted. Open it in Google Sheets, click \"Share\", and set access to \"Anyone with the link can view\", then sync again.";
+      return "This file appears to be private. For Google Sheets: Share → Anyone with the link can view. For OneDrive/Excel: Share → Anyone with the link. Then sync again.";
     }
     if (reason === "timeout") {
-      return "Couldn't reach the sheet (request timed out). Check your internet connection and the link, then try again.";
+      return "Couldn't reach the file (request timed out). Check your internet connection and the link, then try again.";
     }
-    return "Couldn't load the sheet. Double-check the link and that it's shared as \"Anyone with the link can view.\"";
+    if (reason === "empty") {
+      return "The file appears to be empty.";
+    }
+    return "Couldn't load the file. Check the link and make sure it is shared publicly (anyone with the link can view).";
   }
 
   function fetchSheetJSONP(id, gid, onData, onError, headerRow) {
@@ -3357,11 +3454,11 @@
 
   function fetchAndMergeSheets(configs, onComplete, canonicalFields) {
     var perSheetStats = configs.map(function (c) {
-      return { link: c.link, rowCount: 0, error: c.link && parseSheetUrl(c.link) ? null : "query" };
+      return { link: c.link, rowCount: 0, error: c.link && detectSheetUrlType(c.link) ? null : "query" };
     });
     var validIndexes = [];
     configs.forEach(function (c, i) {
-      if (c.link && parseSheetUrl(c.link)) validIndexes.push(i);
+      if (c.link && detectSheetUrlType(c.link)) validIndexes.push(i);
     });
     var failures = configs.length - validIndexes.length;
     if (!validIndexes.length) {
@@ -3391,12 +3488,9 @@
 
     validIndexes.forEach(function (origIndex, i) {
       var config = configs[origIndex];
-      var parsed = parseSheetUrl(config.link);
-      fetchSheetJSONP(
-        parsed.id,
-        parsed.gid,
-        function (data) {
-          var rows = gvizRowsFromResponse(data);
+      fetchSheetData(
+        config,
+        function (rows) {
           resultsByIndex[i] = rows;
           perSheetStats[origIndex].rowCount = Math.max(rows.length - 1, 0);
           pending -= 1;
@@ -3408,8 +3502,7 @@
           perSheetStats[origIndex].error = reason;
           pending -= 1;
           if (pending <= 0) finish();
-        },
-        config.headerRow
+        }
       );
     });
   }
@@ -3539,9 +3632,8 @@
     }
 
     function syncSheet(url) {
-      var parsed = parseSheetUrl(url);
-      if (!parsed) {
-        setStatus("That doesn't look like a valid Google Sheets link.", true);
+      if (!detectSheetUrlType(url)) {
+        setStatus("Paste a Google Sheets, OneDrive, or direct CSV link.", true);
         sheetTableWrap.hidden = true;
         setConnected(false);
         return;
@@ -3550,11 +3642,9 @@
 
       var headerRow = headerRowInput ? headerRowInput.value : 1;
 
-      fetchSheetJSONP(
-        parsed.id,
-        parsed.gid,
-        function (data) {
-          var rows = gvizRowsFromResponse(data);
+      fetchSheetData(
+        { link: url, headerRow: headerRow },
+        function (rows) {
           if (rows.length <= 1) {
             setStatus("The sheet appears to be empty.", true);
             sheetTableWrap.hidden = true;
@@ -3587,8 +3677,7 @@
           setStatus(sheetErrorMessage(reason), true);
           sheetTableWrap.hidden = true;
           setConnected(false);
-        },
-        headerRow
+        }
       );
     }
 
@@ -3737,7 +3826,7 @@
       var linkInput = document.createElement("input");
       linkInput.type = "url";
       linkInput.className = "sheet-row-link";
-      linkInput.placeholder = "Paste your Google Sheets link here";
+      linkInput.placeholder = "Paste your Google Sheets, Excel (OneDrive), or CSV link here";
       linkInput.value = config.link || "";
       linkInput.addEventListener("change", autoSaveConfigs);
 
@@ -3855,7 +3944,7 @@
         localStorage.removeItem("wf-" + prefix + "-data");
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
-        setStatus("Add at least one Google Sheets link.", true);
+        setStatus("Add at least one sheet link (Google Sheets, OneDrive, or CSV).", true);
         sheetTableWrap.hidden = true;
         setConnected(false);
         return;
