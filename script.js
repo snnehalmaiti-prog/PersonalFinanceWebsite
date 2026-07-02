@@ -3592,8 +3592,37 @@
     var rowCountEl = document.getElementById(prefix + "-row-count");
     var openSheetLink = document.getElementById(prefix + "-open-sheet");
     var headerRowInput = document.getElementById(prefix + "-header-row");
+    var fileInput = document.getElementById(prefix + "-file-input");
+    var uploadBtn = document.getElementById(prefix + "-upload-btn");
     var storageKey = "wf-" + prefix + "-sheet-link";
     var headerRowKey = "wf-" + prefix + "-header-row";
+    var localDataKey = "wf-" + prefix + "-local-data";
+    var _localData = null;
+
+    // Restore local data from localStorage if previously uploaded
+    try {
+      var saved = localStorage.getItem(localDataKey);
+      if (saved) _localData = JSON.parse(saved);
+    } catch (e) {}
+
+    if (uploadBtn && fileInput) {
+      uploadBtn.addEventListener("click", function () { fileInput.click(); });
+      fileInput.addEventListener("change", function () {
+        var file = fileInput.files[0];
+        if (!file) return;
+        var headerRow = headerRowInput ? headerRowInput.value : "1";
+        parseLocalFile(file, headerRow, function (rows) {
+          _localData = rows;
+          try { localStorage.setItem(localDataKey, JSON.stringify(rows)); } catch (e) {}
+          sheetLinkInput.value = "📎 " + file.name;
+          localStorage.setItem(storageKey, sheetLinkInput.value);
+          syncWithLocalData(rows);
+        }, function (err) {
+          setStatus("Could not read file: " + err, true);
+        });
+        fileInput.value = "";
+      });
+    }
 
     // Inject toggle button directly before the table wrap (scoped per-card)
     var tableToggleEl = document.createElement("button");
@@ -3674,7 +3703,44 @@
       }
     }
 
+    function syncWithLocalData(rows) {
+      if (!rows || rows.length <= 1) {
+        setStatus("The file appears to be empty.", true);
+        setConnected(false);
+        return;
+      }
+      processRows(rows);
+    }
+
+    function processRows(rows) {
+      addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
+      localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+      document.dispatchEvent(new CustomEvent("wf-sync-complete"));
+      if (typeof afterSync === "function") afterSync(rows);
+      updateDashboardStats();
+      populatePortfolioSelect();
+      var diagnostics = buildSyncDiagnostics(prefix, rows);
+      var displayRows = filterColumns(rows, options.fields);
+      if (options.showTable === false) {
+        sheetTableWrap.hidden = true;
+      } else {
+        renderTable(displayRows);
+      }
+      setStatus(diagnostics.message, diagnostics.missingColumns);
+      setConnected(diagnostics.missingColumns ? "warning" : true);
+      var rowCount = displayRows.length - 1;
+      rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
+      lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
+      meta.hidden = false;
+    }
+
     function syncSheet(url) {
+      // If the displayed value is an uploaded filename, use local data
+      if (_localData && url.startsWith("📎 ")) {
+        setStatus("Verifying and syncing…", false);
+        syncWithLocalData(_localData);
+        return;
+      }
       if (!detectSheetUrlType(url)) {
         setStatus("Paste a Google Sheets, OneDrive, or direct CSV link.", true);
         sheetTableWrap.hidden = true;
@@ -3694,27 +3760,8 @@
             setConnected(false);
             return;
           }
-          addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
-          localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
-          document.dispatchEvent(new CustomEvent("wf-sync-complete"));
-          if (typeof afterSync === "function") afterSync(rows);
-          updateDashboardStats();
-          populatePortfolioSelect();
-          var diagnostics = buildSyncDiagnostics(prefix, rows);
-          var displayRows = filterColumns(rows, options.fields);
-          if (options.showTable === false) {
-            sheetTableWrap.hidden = true;
-          } else {
-            renderTable(displayRows);
-          }
-          setStatus(diagnostics.message, diagnostics.missingColumns);
-          setConnected(diagnostics.missingColumns ? "warning" : true);
-
-          var rowCount = displayRows.length - 1;
-          rowCountEl.textContent = rowCount + (rowCount === 1 ? " row" : " rows");
-          lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
           openSheetLink.href = url;
-          meta.hidden = false;
+          processRows(rows);
         },
         function (reason) {
           setStatus(sheetErrorMessage(reason), true);
@@ -3737,6 +3784,8 @@
       if (url) {
         localStorage.setItem(storageKey, url);
       } else {
+        _localData = null;
+        localStorage.removeItem(localDataKey);
         localStorage.removeItem(storageKey);
         localStorage.removeItem("wf-" + prefix + "-data");
         sheetTableWrap.hidden = true;
