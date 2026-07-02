@@ -3292,6 +3292,31 @@
     return rows;
   }
 
+  function parseLocalFile(file, headerRow, onRows, onError) {
+    var reader = new FileReader();
+    reader.onerror = function () { onError("Could not read file."); };
+    reader.onload = function (e) {
+      try {
+        if (typeof XLSX === "undefined") { onError("Excel parser not loaded. Please refresh the page."); return; }
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, { type: "array", cellDates: true, dateNF: "yyyy-mm-dd" });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, dateNF: "yyyy-mm-dd" });
+        // Remove empty trailing rows
+        while (allRows.length && allRows[allRows.length - 1].every(function (c) { return !c; })) allRows.pop();
+        var startRow = Math.max(1, parseInt(headerRow, 10) || 1) - 1;
+        var rows = allRows.slice(startRow);
+        if (!rows.length) { onError("The file appears to be empty."); return; }
+        // Normalise all values to strings
+        rows = rows.map(function (r) { return r.map(function (c) { return c == null ? "" : String(c); }); });
+        onRows(rows);
+      } catch (err) {
+        onError(err.message || "Parse error.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   function fetchSheetData(config, onRows, onError) {
     var url = (config.link || "").trim();
     var headerRow = parseInt(config.headerRow, 10) || 1;
@@ -3462,11 +3487,13 @@
 
   function fetchAndMergeSheets(configs, onComplete, canonicalFields) {
     var perSheetStats = configs.map(function (c) {
-      return { link: c.link, rowCount: 0, error: c.link && detectSheetUrlType(c.link) ? null : "query" };
+      var valid = (c.localData && c.localData.length > 1) || (c.link && detectSheetUrlType(c.link));
+      return { link: c.link, rowCount: 0, error: valid ? null : "query" };
     });
     var validIndexes = [];
     configs.forEach(function (c, i) {
-      if (c.link && detectSheetUrlType(c.link)) validIndexes.push(i);
+      var valid = (c.localData && c.localData.length > 1) || (c.link && detectSheetUrlType(c.link));
+      if (valid) validIndexes.push(i);
     });
     var failures = configs.length - validIndexes.length;
     if (!validIndexes.length) {
@@ -3496,6 +3523,14 @@
 
     validIndexes.forEach(function (origIndex, i) {
       var config = configs[origIndex];
+      // Use pre-parsed local file data if available
+      if (config.localData && config.localData.length > 1) {
+        resultsByIndex[i] = config.localData;
+        perSheetStats[origIndex].rowCount = Math.max(config.localData.length - 1, 0);
+        pending -= 1;
+        if (pending <= 0) finish();
+        return;
+      }
       fetchSheetData(
         config,
         function (rows) {
@@ -3820,6 +3855,15 @@
 
     function autoSaveConfigs() {
       var configs = readRowConfigs().filter(function (c) { return c.link; });
+      // Persist localData for uploaded files but cap size to avoid quota errors
+      configs = configs.map(function (c) {
+        if (c.localData && c.localData.length > 50000) {
+          var trimmed = Object.assign({}, c);
+          trimmed.localData = c.localData.slice(0, 50000);
+          return trimmed;
+        }
+        return c;
+      });
       localStorage.setItem(sheetsKey, JSON.stringify(configs));
       localStorage.removeItem("wf-" + prefix + "-sheet-link");
       localStorage.removeItem("wf-" + prefix + "-header-row");
@@ -3831,12 +3875,43 @@
       var row = document.createElement("div");
       row.className = "sheet-row";
 
+      // Restore localData from saved config so re-syncs use it
+      if (config.localData) row._localData = config.localData;
+
       var linkInput = document.createElement("input");
-      linkInput.type = "url";
+      linkInput.type = "text";
       linkInput.className = "sheet-row-link";
-      linkInput.placeholder = "Paste your Google Sheets, Excel (OneDrive), or CSV link here";
+      linkInput.placeholder = "Paste link or upload a file →";
       linkInput.value = config.link || "";
-      linkInput.addEventListener("change", autoSaveConfigs);
+      linkInput.addEventListener("change", function () { row._localData = null; autoSaveConfigs(); });
+
+      var fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".xlsx,.xls,.csv";
+      fileInput.style.display = "none";
+      fileInput.addEventListener("change", function () {
+        var file = fileInput.files[0];
+        if (!file) return;
+        parseLocalFile(file, config.headerRow || "1", function (rows) {
+          row._localData = rows;
+          linkInput.value = "📎 " + file.name;
+          row.querySelector(".sheet-row-link").type = "text";
+          autoSaveConfigs();
+          document.dispatchEvent(new CustomEvent("wf-file-uploaded"));
+        }, function (err) {
+          alert("Could not read file: " + err);
+        });
+        fileInput.value = "";
+      });
+
+      var uploadBtn = document.createElement("button");
+      uploadBtn.type = "button";
+      uploadBtn.className = "btn btn-outline btn-sm sheet-row-upload";
+      uploadBtn.title = "Upload Excel or CSV file";
+      uploadBtn.innerHTML = "&#128206; Upload";
+      uploadBtn.addEventListener("click", function () { fileInput.click(); });
+
+      row.appendChild(fileInput);
 
       var headerInput = document.createElement("input");
       headerInput.type = "number";
@@ -3870,6 +3945,7 @@
       var fields = document.createElement("div");
       fields.className = "equity-link-row sheet-row-fields";
       fields.appendChild(linkInput);
+      fields.appendChild(uploadBtn);
       fields.appendChild(numberRow);
 
       var rowMeta = document.createElement("div");
@@ -3910,7 +3986,8 @@
       return Array.prototype.slice.call(listEl.querySelectorAll(".sheet-row")).map(function (row) {
         return {
           link: row.querySelector(".sheet-row-link").value.trim(),
-          headerRow: row.querySelector(".sheet-row-header-row").value || "1"
+          headerRow: row.querySelector(".sheet-row-header-row").value || "1",
+          localData: row._localData || null
         };
       });
     }
@@ -4012,6 +4089,9 @@
         syncAll();
       });
     }
+
+    // Auto-sync when a file is uploaded via the upload button
+    document.addEventListener("wf-file-uploaded", function () { syncAll(); });
 
     if (savedConfigs.length) syncAll();
   }
