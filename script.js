@@ -2330,6 +2330,8 @@
       if (!indexData || !indexData.prices) return { portfolioXirr: portfolioXirr, indexXirr: null };
       var indexFlows = buildIndexXirrCashFlows(allFlowsForIndex, indexData.prices);
       var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
+      console.log('[benchmark-xirr] periodYears:', periodYears, 'allFlowsForIndex count:', allFlowsForIndex.length, 'indexFlows count:', indexFlows && indexFlows.length, 'indexXirr:', indexXirr);
+      if (indexFlows) console.log('[benchmark-xirr] first indexFlow:', indexFlows[0], 'last indexFlow:', indexFlows[indexFlows.length-1]);
       return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
     });
   }
