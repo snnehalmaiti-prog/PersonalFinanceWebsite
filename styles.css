@@ -1619,6 +1619,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 14px);
 }
+/* Account Value chart: half width, aligned to the left. */
+#account-value-card {
+  width: 50%;
+  margin-right: auto;
+}
+@media (max-width: 760px) {
+  #account-value-card { width: 100%; }
+}
 .value-chart-header {
   display: flex;
   align-items: center;
