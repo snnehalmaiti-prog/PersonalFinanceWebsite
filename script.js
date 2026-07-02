@@ -2632,18 +2632,15 @@
       : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
   }
 
-  // Rolling returns are driven by the benchmark card's selected period (1Y/2Y/3Y/5Y)
-  // and selected index. "All" and "10Y" have no rolling window, so a notice is shown.
-  function initRollingReturnsCard() {
-    var card = document.getElementById("rolling-returns-card");
-    if (!card) return;
-
-    var statusEl = document.getElementById("rolling-status");
-    var resultEl = document.getElementById("rolling-result");
-    var windowCountEl = document.getElementById("rolling-window-count");
-    var windowLabelEl = document.getElementById("rolling-window-label");
-    var subtitleEl = document.getElementById("rolling-subtitle");
-    var indexColEl = document.getElementById("rolling-index-col");
+  // Rolling-return summary shown beside the XIRR block (right of the divider) in the
+  // benchmark card. Driven by the selected period (1Y/2Y/3Y/5Y) and index; median is the
+  // representative single figure. "All" and "10Y" have no rolling window → "N/A".
+  function initRollingReturnSummary() {
+    var sumPortEl = document.getElementById("rolling-summary-port");
+    var sumIdxEl = document.getElementById("rolling-summary-idx");
+    var sumAlphaEl = document.getElementById("rolling-summary-alpha");
+    var sumIdxLabelEl = document.getElementById("rolling-summary-idx-label");
+    if (!sumPortEl && !sumIdxEl) return;
 
     // Windows we can compute a rolling return for. "all"/"10" are intentionally excluded.
     var ROLLING_PERIODS = { "1": 1, "2": 1, "3": 1, "5": 1 };
@@ -2653,18 +2650,6 @@
       var pct = v * 100;
       return (pct > 0 ? "+" : "") + pct.toFixed(1) + "%";
     }
-    function colorEl(el, v) {
-      el.classList.remove("positive", "negative");
-      if (v > 0) el.classList.add("positive");
-      else if (v < 0) el.classList.add("negative");
-    }
-
-    // Rolling-return summary cells shown beside the XIRR block (right of the divider).
-    var sumPortEl = document.getElementById("rolling-summary-port");
-    var sumIdxEl = document.getElementById("rolling-summary-idx");
-    var sumAlphaEl = document.getElementById("rolling-summary-alpha");
-    var sumIdxLabelEl = document.getElementById("rolling-summary-idx-label");
-
     function setSummaryCell(el, v, asText) {
       if (!el) return;
       if (asText !== undefined) {
@@ -2673,7 +2658,9 @@
         return;
       }
       el.textContent = fmtPct(v);
-      colorEl(el, v);
+      el.classList.remove("positive", "negative");
+      if (v > 0) el.classList.add("positive");
+      else if (v < 0) el.classList.add("negative");
     }
     function setSummary(portMedian, idxMedian, notAvailable) {
       if (notAvailable) {
@@ -2683,8 +2670,7 @@
         return;
       }
       setSummaryCell(sumPortEl, portMedian);
-      setSummaryCell(sumIdxEl, idxMedian != null ? idxMedian : null,
-        idxMedian == null ? "—" : undefined);
+      setSummaryCell(sumIdxEl, idxMedian, idxMedian == null ? "—" : undefined);
       if (portMedian != null && isFinite(portMedian) && idxMedian != null && isFinite(idxMedian)) {
         var alpha = (portMedian - idxMedian) * 100;
         sumAlphaEl.textContent = (alpha > 0 ? "+" : "") + alpha.toFixed(1) + "%";
@@ -2702,59 +2688,21 @@
       var gen = _renderGen;
       period = String(period || "all");
 
-      // Update index labels (detailed table header + summary column) to the selected index.
       var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
-      var indexName = indexDisplayName(indexKey);
-      if (indexColEl) indexColEl.textContent = indexName;
-      if (sumIdxLabelEl) sumIdxLabelEl.textContent = indexName + " Rolling Return";
+      if (sumIdxLabelEl) sumIdxLabelEl.textContent = indexDisplayName(indexKey) + " Rolling Return";
 
-      // No rolling window for "All" or "10Y".
-      if (!ROLLING_PERIODS[period]) {
-        resultEl.hidden = true;
-        statusEl.hidden = false;
-        statusEl.textContent = "Rolling Return Not Available";
-        if (windowLabelEl) windowLabelEl.textContent = "";
-        setSummary(null, null, true);
-        return;
-      }
+      if (!ROLLING_PERIODS[period]) { setSummary(null, null, true); return; }
 
-      var windowYears = parseFloat(period);
-      if (windowLabelEl) windowLabelEl.textContent = windowYears + "Y rolling window";
-      statusEl.hidden = false;
-      statusEl.textContent = "Computing rolling returns…";
-      resultEl.hidden = true;
       setSummary(null, null, false); // reset to "—" while computing
-
+      var windowYears = parseFloat(period);
       computeRollingReturns(windowYears, indexKey).then(function (result) {
         if (gen !== _renderGen) return;
-        statusEl.hidden = true;
-        if (!result) {
-          statusEl.hidden = false;
-          statusEl.textContent = "Not enough history for " + windowYears + "Y rolling returns.";
-          setSummary(null, null, false);
-          return;
-        }
+        if (!result) { setSummary(null, null, false); return; }
         var p = result.portfolio, idx = result.index;
-        function setCell(id, v) {
-          var el = document.getElementById(id);
-          if (!el) return;
-          el.textContent = fmtPct(v);
-          colorEl(el, v);
-        }
-        setCell("rolling-port-max", p.max);
-        setCell("rolling-port-median", p.median);
-        setCell("rolling-port-min", p.min);
-        setCell("rolling-idx-max", idx ? idx.max : null);
-        setCell("rolling-idx-median", idx ? idx.median : null);
-        setCell("rolling-idx-min", idx ? idx.min : null);
-        if (windowCountEl) windowCountEl.textContent = p.count + " rolling " + windowYears + "Y windows";
-        resultEl.hidden = false;
-        // Median = representative single-figure rolling return for the summary beside XIRR.
+        // Median = representative single-figure rolling return.
         setSummary(p.median, idx ? idx.median : null, false);
       }).catch(function () {
         if (gen !== _renderGen) return;
-        statusEl.hidden = false;
-        statusEl.textContent = "Could not compute rolling returns.";
         setSummary(null, null, false);
       });
     }
@@ -6695,7 +6643,7 @@
   renderStockEtfHoldingsTable();
 
   initBenchmarkCard();
-  initRollingReturnsCard();
+  initRollingReturnSummary();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
