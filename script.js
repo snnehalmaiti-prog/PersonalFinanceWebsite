@@ -2327,7 +2327,10 @@
 
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
-      if (!indexData || !indexData.prices) return { portfolioXirr: portfolioXirr, indexXirr: null };
+      var indexPriceDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
+      var indexHasHistory = indexPriceDates.length >= 30 &&
+        (new Date(indexPriceDates[indexPriceDates.length - 1]) - new Date(indexPriceDates[0])) > 180 * 24 * 60 * 60 * 1000;
+      if (!indexHasHistory) return { portfolioXirr: portfolioXirr, indexXirr: null };
       // Only pass buy (negative) flows to the index simulation. Including sells creates
       // multiple sign changes → multiple IRR solutions → Newton-Raphson finds a spurious root.
       var buyFlowsForIndex = allFlowsForIndex.filter(function(f) { return f.amount < 0; });
@@ -2367,17 +2370,22 @@
 
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
-      if (!indexData || !indexData.prices) return { indexCagr: null, years: yearsHeld };
+      var sortedDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
+      var indexHasCagrHistory = sortedDates.length >= 30 &&
+        (new Date(sortedDates[sortedDates.length - 1]) - new Date(sortedDates[0])) > 180 * 24 * 60 * 60 * 1000;
+      if (!indexHasCagrHistory) return { indexCagr: null, years: yearsHeld };
 
       var prices = indexData.prices;
       var startDateStr = formatDateISO(startDate);
-      var sortedDates = Object.keys(prices).sort();
       var startPrice = null;
       for (var i = 0; i < sortedDates.length; i++) {
         if (sortedDates[i] >= startDateStr) { startPrice = prices[sortedDates[i]]; break; }
       }
       var endPrice = prices[sortedDates[sortedDates.length - 1]];
-      var indexCagr = (startPrice && endPrice)
+      // Require at least 30 days between start and end price dates to avoid near-zero CAGR from same-day lookup
+      var startPriceDate = startPrice ? sortedDates.find(function(d) { return prices[d] === startPrice && d >= startDateStr; }) : null;
+      var spanDays = startPriceDate ? (new Date(sortedDates[sortedDates.length-1]) - new Date(startPriceDate)) / (24*60*60*1000) : 0;
+      var indexCagr = (startPrice && endPrice && spanDays > 30)
         ? Math.pow(endPrice / startPrice, 1 / yearsHeld) - 1
         : null;
 

@@ -213,6 +213,9 @@ def fetch_index_history(years=10):
             for ts, val in series.items():
                 date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
                 history[date_str] = round(float(val), 4)
+            if len(history) < 30:
+                print(f"  WARNING: {idx['ticker']}: only {len(history)} days — skipping (insufficient history)")
+                continue
             result[idx["key"]] = {"label": idx["label"], "ticker": idx["ticker"], "prices": history}
             print(f"  {idx['ticker']}: {len(history)} days")
         except Exception as e:
