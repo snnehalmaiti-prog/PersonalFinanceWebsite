@@ -2330,8 +2330,21 @@
       if (!indexData || !indexData.prices) return { portfolioXirr: portfolioXirr, indexXirr: null };
       var indexFlows = buildIndexXirrCashFlows(allFlowsForIndex, indexData.prices);
       var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
-      console.log('[benchmark-xirr] periodYears:', periodYears, 'allFlowsForIndex count:', allFlowsForIndex.length, 'indexFlows count:', indexFlows && indexFlows.length, 'indexXirr:', indexXirr);
-      if (indexFlows) console.log('[benchmark-xirr] first indexFlow:', indexFlows[0], 'last indexFlow:', indexFlows[indexFlows.length-1]);
+      if (indexFlows) {
+        var f0 = indexFlows[0], fN = indexFlows[indexFlows.length-1];
+        console.log('[benchmark-xirr] periodYears:', periodYears, 'flows:', allFlowsForIndex.length, '→', indexFlows.length, 'indexXirr:', indexXirr);
+        console.log('[benchmark-xirr] firstFlow date:', f0.date.toISOString().slice(0,10), 'amount:', f0.amount);
+        console.log('[benchmark-xirr] lastFlow (terminal) date:', fN.date.toISOString().slice(0,10), 'amount:', fN.amount);
+        var totalInvested = indexFlows.filter(function(f){return f.amount<0;}).reduce(function(s,f){return s+Math.abs(f.amount);},0);
+        console.log('[benchmark-xirr] totalInvested:', totalInvested, 'terminal:', fN.amount, 'ratio:', fN.amount/totalInvested);
+        // log a sample of input flows to check price scale
+        var sample = allFlowsForIndex.slice(0,3);
+        sample.forEach(function(cf,i){
+          var dateStr = cf.date.toISOString().slice(0,10);
+          var price = lookupIndexPrice(indexData.prices, dateStr);
+          console.log('[benchmark-xirr] sampleFlow['+i+'] date:', dateStr, 'amount:', cf.amount, 'indexPrice:', price, 'units:', price ? Math.abs(cf.amount)/price : 'n/a');
+        });
+      }
       return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
     });
   }
