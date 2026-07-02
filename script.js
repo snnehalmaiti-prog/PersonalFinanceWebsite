@@ -2305,12 +2305,24 @@
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
     }
 
-    // Compute portfolio XIRR directly — never read it from the DOM
-    var portfolioXirr = calculateXIRR(allFlows);
+    // For portfolioXirr we need a terminal value (current portfolio worth) — use the
+    // already-computed overview flows which include the terminal, or fall back to adding
+    // the current value from _ov manually.
+    var flowsWithTerminal;
+    if (_ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
+      flowsWithTerminal = _ov._overviewBaseFlows.concat(_ov.seXirrFlows || []);
+    } else {
+      // _ov not yet populated — build a best-effort terminal from known current values
+      var currentVal = _ov.mfCurrent + _ov.seCurrent + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
+      flowsWithTerminal = allFlows.slice();
+      if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
+    }
+    var portfolioXirr = calculateXIRR(flowsWithTerminal);
 
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
       if (!indexData || !indexData.prices) return { portfolioXirr: portfolioXirr, indexXirr: null };
+      // allFlows (without terminal) is correct here — buildIndexXirrCashFlows adds its own terminal
       var indexFlows = buildIndexXirrCashFlows(allFlows, indexData.prices);
       var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
       return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
