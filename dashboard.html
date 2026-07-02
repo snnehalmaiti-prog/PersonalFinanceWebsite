@@ -134,6 +134,46 @@
         </div>
       </div>
 
+      <!-- Benchmark XIRR comparison -->
+      <div class="benchmark-card" id="benchmark-card">
+        <div class="benchmark-header">
+          <div class="benchmark-title-group">
+            <span class="benchmark-label">BENCHMARK COMPARISON</span>
+            <p class="muted small" style="margin:4px 0 0;">XIRR calculated using your actual investment cash flow dates</p>
+          </div>
+          <div class="portfolio-dropdown" id="benchmark-dropdown-wrap">
+            <button type="button" id="benchmark-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
+              <span id="benchmark-label">Select Index</span>
+              <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <ul id="benchmark-menu" class="portfolio-menu" role="listbox" aria-label="Select benchmark index" hidden>
+              <li role="option" data-value="" class="portfolio-option">— None —</li>
+              <li role="option" data-value="NIFTY50" class="portfolio-option">Nifty 50</li>
+              <li role="option" data-value="NIFTYMIDCAP150" class="portfolio-option">Nifty Midcap 150</li>
+              <li role="option" data-value="NIFTYSMLCAP250" class="portfolio-option">Nifty Smlcap 250</li>
+              <li role="option" data-value="NIFTYNEXT50" class="portfolio-option">Nifty Next 50</li>
+              <li role="option" data-value="NIFTY500" class="portfolio-option">Nifty 500</li>
+            </ul>
+          </div>
+        </div>
+        <div id="benchmark-result" class="benchmark-result" hidden>
+          <div class="benchmark-col">
+            <span class="benchmark-col-label">Your Portfolio XIRR</span>
+            <span class="benchmark-col-value" id="benchmark-portfolio-xirr">—</span>
+          </div>
+          <div class="benchmark-vs">vs</div>
+          <div class="benchmark-col">
+            <span class="benchmark-col-label" id="benchmark-index-name">Index XIRR</span>
+            <span class="benchmark-col-value" id="benchmark-index-xirr">—</span>
+          </div>
+          <div class="benchmark-col benchmark-col-verdict">
+            <span class="benchmark-col-label">Alpha</span>
+            <span class="benchmark-col-value" id="benchmark-alpha">—</span>
+          </div>
+        </div>
+        <p class="muted small" id="benchmark-status" hidden></p>
+      </div>
+
       <p class="muted small" style="margin-top:24px;">Connect your transaction sheets in <a href="settings.html">Settings</a> to populate this overview.</p>
 
       <div class="value-chart-card">

@@ -22,6 +22,14 @@ OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "stock_prices.json")
 USD_INR_TICKER = "USDINR=X"
 USD_INR_HISTORY_YEARS = 3
 
+INDEX_TICKERS = [
+    {"key": "NIFTY50",         "ticker": "^NSEI",               "label": "Nifty 50"},
+    {"key": "NIFTYMIDCAP150",  "ticker": "NIFTYMIDCAP150.NS",   "label": "Nifty Midcap 150"},
+    {"key": "NIFTYSMLCAP250",  "ticker": "NIFTYSMLCAP250.NS",   "label": "Nifty Smlcap 250"},
+    {"key": "NIFTYNEXT50",     "ticker": "^NSMIDCP",            "label": "Nifty Next 50"},
+    {"key": "NIFTY500",        "ticker": "^CRSLDX",             "label": "Nifty 500"},
+]
+
 
 def load_tickers_from_mapping():
     """Derive ticker config from stocksetf_mapping.json (pushed by the dashboard on every sync)."""
@@ -192,6 +200,26 @@ def fetch_usd_inr_history(years=USD_INR_HISTORY_YEARS):
         return {}
 
 
+def fetch_index_history(years=10):
+    """Fetch multi-year daily closing prices for benchmark indices."""
+    print(f"Fetching {years}-year index history…")
+    result = {}
+    for idx in INDEX_TICKERS:
+        try:
+            t = yf.Ticker(idx["ticker"])
+            hist = t.history(period=f"{years}y", interval="1d", auto_adjust=True)
+            series = hist["Close"].dropna()
+            history = {}
+            for ts, val in series.items():
+                date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                history[date_str] = round(float(val), 4)
+            result[idx["key"]] = {"label": idx["label"], "ticker": idx["ticker"], "prices": history}
+            print(f"  {idx['ticker']}: {len(history)} days")
+        except Exception as e:
+            print(f"WARNING: Failed to fetch index {idx['ticker']}: {e}")
+    return result
+
+
 def main():
     if os.path.exists(MAPPING_FILE):
         print(f"Reading tickers from {MAPPING_FILE}")
@@ -214,6 +242,7 @@ def main():
     prices = fetch_prices(tickers_config)
 
     usd_inr_history = fetch_usd_inr_history()
+    index_history = fetch_index_history()
 
     corporate_actions = fetch_corporate_actions(tickers_config)
 
@@ -221,13 +250,14 @@ def main():
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "prices": prices,
         "usd_inr_history": usd_inr_history,
+        "index_history": index_history,
         "corporate_actions": corporate_actions,
     }
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, and {len(corporate_actions)} ticker(s) with corporate actions.")
+    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, {len(index_history)} index(es), and {len(corporate_actions)} ticker(s) with corporate actions.")
 
 
 if __name__ == "__main__":

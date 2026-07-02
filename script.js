@@ -2222,6 +2222,199 @@
       });
   }
 
+  // ─── Benchmark index XIRR comparison ──────────────────────────────────────
+
+  var _indexHistoryCache = null;
+
+  function fetchIndexHistory() {
+    if (_indexHistoryCache) return Promise.resolve(_indexHistoryCache);
+    return fetchAllStockPrices().then(function (data) {
+      _indexHistoryCache = (data && data.index_history) || {};
+      return _indexHistoryCache;
+    }).catch(function () {
+      _indexHistoryCache = {};
+      return _indexHistoryCache;
+    });
+  }
+
+  function lookupIndexPrice(prices, dateStr) {
+    // exact match
+    if (prices[dateStr] !== undefined) return prices[dateStr];
+    // search up to 5 trading days back for a price on or before this date
+    var d = new Date(dateStr);
+    for (var i = 1; i <= 5; i++) {
+      d.setDate(d.getDate() - 1);
+      var s = d.toISOString().slice(0, 10);
+      if (prices[s] !== undefined) return prices[s];
+    }
+    return null;
+  }
+
+  function buildIndexXirrCashFlows(allCashFlows, indexPrices) {
+    // allCashFlows: [{date: Date, amount: Number}] — negative = invest, positive = redeem
+    // For each outflow (buy), simulate buying index units; for each inflow (sell), simulate selling.
+    // Terminal: remaining units × current index price.
+    if (!allCashFlows || !allCashFlows.length || !indexPrices) return null;
+
+    var indexDates = Object.keys(indexPrices).sort();
+    if (!indexDates.length) return null;
+    var latestPrice = indexPrices[indexDates[indexDates.length - 1]];
+
+    var unitsHeld = 0;
+    var flows = [];
+
+    allCashFlows.forEach(function (cf) {
+      var dateStr = cf.date.toISOString().slice(0, 10);
+      var price = lookupIndexPrice(indexPrices, dateStr);
+      if (!price) return; // skip if no index price near this date
+      if (cf.amount < 0) {
+        // buy: invest |amount| into index
+        var units = Math.abs(cf.amount) / price;
+        unitsHeld += units;
+        flows.push({ date: cf.date, amount: cf.amount }); // outflow
+      } else {
+        // sell: redeem proportional units
+        var sellUnits = Math.min(unitsHeld, cf.amount / price);
+        unitsHeld = Math.max(0, unitsHeld - sellUnits);
+        flows.push({ date: cf.date, amount: cf.amount }); // inflow
+      }
+    });
+
+    if (unitsHeld > 0) {
+      flows.push({ date: new Date(), amount: unitsHeld * latestPrice });
+    }
+
+    return flows;
+  }
+
+  function computeBenchmarkXirr(indexKey) {
+    // Collect all portfolio cash flows (same as overview XIRR)
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var equityRows = getSheetRows("equity");
+    var seRows = getSheetRows("stocksetf");
+    var fdRows = getSheetRows("fd");
+
+    var allFlows = buildXirrCashFlows(equityRows, selected);
+
+    if (seRows) {
+      var seFlows = buildXirrCashFlows(seRows, selected);
+      allFlows = allFlows.concat(seFlows);
+    }
+    if (fdRows && !isFixedIncomeExcluded()) {
+      allFlows = allFlows
+        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
+        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+    }
+
+    return fetchIndexHistory().then(function (indexHistory) {
+      var indexData = indexHistory[indexKey];
+      if (!indexData || !indexData.prices) return null;
+      var indexFlows = buildIndexXirrCashFlows(allFlows, indexData.prices);
+      if (!indexFlows) return null;
+      return calculateXIRR(indexFlows);
+    });
+  }
+
+  function initBenchmarkCard() {
+    var toggle = document.getElementById("benchmark-toggle");
+    var menu = document.getElementById("benchmark-menu");
+    var labelEl = document.getElementById("benchmark-label");
+    var resultEl = document.getElementById("benchmark-result");
+    var statusEl = document.getElementById("benchmark-status");
+    var portfolioXirrEl = document.getElementById("benchmark-portfolio-xirr");
+    var indexXirrEl = document.getElementById("benchmark-index-xirr");
+    var alphaEl = document.getElementById("benchmark-alpha");
+    var indexNameEl = document.getElementById("benchmark-index-name");
+    if (!toggle || !menu) return;
+
+    var BENCH_KEY = "wf-benchmark-index";
+    var savedKey = localStorage.getItem(BENCH_KEY) || "";
+
+    function fmtXirr(val) {
+      if (val === null || val === undefined || !isFinite(val)) return "—";
+      return (val > 0 ? "+" : "") + (val * 100).toFixed(2) + "%";
+    }
+
+    function applyBenchmark(indexKey) {
+      localStorage.setItem(BENCH_KEY, indexKey);
+      var options = menu.querySelectorAll("[data-value]");
+      options.forEach(function (o) { o.classList.toggle("selected", o.dataset.value === indexKey); });
+      var selected = menu.querySelector("[data-value='" + indexKey + "']");
+      var indexName = selected ? selected.textContent.trim() : "Index";
+      labelEl.textContent = indexName || "Select Index";
+
+      if (!indexKey) {
+        resultEl.hidden = true;
+        statusEl.hidden = true;
+        return;
+      }
+
+      resultEl.hidden = true;
+      statusEl.hidden = false;
+      statusEl.textContent = "Calculating index XIRR…";
+      if (indexNameEl) indexNameEl.textContent = indexName + " XIRR";
+
+      // Get portfolio XIRR from the already-computed value
+      var portXirrText = (document.getElementById("overview-xirr") || {}).textContent || "—";
+
+      computeBenchmarkXirr(indexKey).then(function (indexXirr) {
+        statusEl.hidden = true;
+        resultEl.hidden = false;
+
+        // Portfolio XIRR — parse from overview-xirr element
+        var portXirrEl2 = document.getElementById("overview-xirr");
+        var portXirrRaw = portXirrEl2 ? portXirrEl2.textContent.replace(/[^0-9.\-+]/g, "") : "";
+        var portXirrVal = parseFloat(portXirrRaw) / 100;
+        portfolioXirrEl.textContent = portXirrEl2 ? portXirrEl2.textContent : "—";
+        portfolioXirrEl.className = "benchmark-col-value " + (portXirrVal > 0 ? "positive" : portXirrVal < 0 ? "negative" : "");
+
+        var idxPct = indexXirr !== null && isFinite(indexXirr) ? indexXirr * 100 : null;
+        indexXirrEl.textContent = fmtXirr(indexXirr);
+        indexXirrEl.className = "benchmark-col-value " + (idxPct !== null ? (idxPct > 0 ? "positive" : idxPct < 0 ? "negative" : "") : "");
+
+        if (idxPct !== null && !isNaN(portXirrVal) && isFinite(portXirrVal)) {
+          var alpha = portXirrVal * 100 - idxPct;
+          alphaEl.textContent = (alpha > 0 ? "+" : "") + alpha.toFixed(2) + "%";
+          alphaEl.className = "benchmark-col-value " + (alpha > 0 ? "positive" : alpha < 0 ? "negative" : "");
+        } else {
+          alphaEl.textContent = "—";
+          alphaEl.className = "benchmark-col-value";
+        }
+      }).catch(function () {
+        statusEl.hidden = false;
+        statusEl.textContent = "Could not compute index XIRR — index price history may not be available (run the Fetch Stock Prices workflow).";
+        resultEl.hidden = true;
+      });
+    }
+
+    // Dropdown open/close
+    toggle.addEventListener("click", function () {
+      var isOpen = !menu.hidden;
+      menu.hidden = isOpen;
+      toggle.setAttribute("aria-expanded", String(!isOpen));
+      if (!isOpen) menu.classList.add("open");
+      else menu.classList.remove("open");
+    });
+    document.addEventListener("click", function (e) {
+      if (!toggle.contains(e.target) && !menu.contains(e.target)) {
+        menu.hidden = true;
+        menu.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    });
+    menu.querySelectorAll("[data-value]").forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        menu.hidden = true;
+        menu.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+        applyBenchmark(opt.dataset.value);
+      });
+    });
+
+    // Restore saved selection
+    if (savedKey) applyBenchmark(savedKey);
+  }
+
   function buildCommodityHoldingsList(rows, portfolioFilter, goldPricePerGram, historicalPrices) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -5697,6 +5890,8 @@
   }
 
   renderStockEtfHoldingsTable();
+
+  initBenchmarkCard();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");
