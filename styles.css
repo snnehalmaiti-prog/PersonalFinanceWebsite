@@ -1774,8 +1774,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .benchmark-result[hidden] { display: none; }
 .bench-period-row {
   display: flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 12px;
 }
 .bench-mode-toggle {
   display: flex;
