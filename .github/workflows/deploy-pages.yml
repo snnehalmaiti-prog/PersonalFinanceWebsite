@@ -1,0 +1,55 @@
+name: Deploy static site to Pages
+
+# Self-controlled GitHub Pages deployment using the official actions on the
+# Node 24 runtime (replaces the GitHub-managed "pages build and deployment"
+# pipeline, which still runs Node-20 actions and has been wedging).
+#
+# ACTIVATION (one-time):
+#   1. Repo Settings -> Pages -> Source: switch from "Deploy from a branch"
+#      to "GitHub Actions".
+#   2. Run this workflow (Actions tab -> "Deploy static site to Pages" ->
+#      "Run workflow"), or uncomment the `push:` trigger below so it deploys
+#      automatically on every push to the branch.
+#
+# While the Pages source is still "Deploy from a branch", this workflow's
+# deploy step cannot create a Pages deployment and will error — so it is
+# left on manual (workflow_dispatch) only until the source is switched.
+
+on:
+  workflow_dispatch: {}
+  # push:
+  #   branches: [claude/gracious-gates-yxh1l8]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; do not cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
