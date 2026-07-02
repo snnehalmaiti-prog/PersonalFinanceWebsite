@@ -2361,18 +2361,17 @@
     var yearsHeld = (new Date() - firstDate) / (1000 * 60 * 60 * 24 * 365.25);
     if (yearsHeld < 0.05) return Promise.resolve({ portfolioCagr: null, indexCagr: null, years: yearsHeld });
 
-    // Portfolio CAGR = (currentValue / totalInvested)^(1/years) - 1
-    var totalInvested = _ov.mfInvested + _ov.seInvested + (isFixedIncomeExcluded() ? 0 : _ov.fiInvested) + _ov.commInvested;
-    var totalCurrent = _ov.mfCurrent + (_ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested) + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
-    var portfolioCagr = (totalInvested > 0 && totalCurrent > 0)
-      ? Math.pow(totalCurrent / totalInvested, 1 / yearsHeld) - 1
-      : null;
+    // Portfolio "CAGR" = XIRR — for an SIP portfolio (currentValue/invested)^(1/years)
+    // is misleading because most capital was invested recently, not at year 0.
+    // XIRR is the correct money-weighted annualised return and equals the intuitive CAGR
+    // for a lump-sum investor. We reuse the already-computed XIRR result.
+    // portfolioCagr is set later from the XIRR result in renderResult.
 
     return fetchIndexHistory().then(function (indexHistory) {
       var indexData = indexHistory[indexKey];
-      if (!indexData || !indexData.prices) return { portfolioCagr: portfolioCagr, indexCagr: null, years: yearsHeld };
+      if (!indexData || !indexData.prices) return { indexCagr: null, years: yearsHeld };
 
-      // Find index price on or just after the first investment date
+      // Index CAGR = simple point-to-point from first investment date to today
       var prices = indexData.prices;
       var startDateStr = formatDateISO(firstDate);
       var sortedDates = Object.keys(prices).sort();
@@ -2385,7 +2384,7 @@
         ? Math.pow(endPrice / startPrice, 1 / yearsHeld) - 1
         : null;
 
-      return { portfolioCagr: portfolioCagr, indexCagr: indexCagr, years: yearsHeld };
+      return { indexCagr: indexCagr, years: yearsHeld };
     });
   }
 
@@ -2425,7 +2424,7 @@
       if (modeCagrBtn) modeCagrBtn.classList.toggle("active", mode === "cagr");
       var label = mode === "cagr" ? "CAGR" : "XIRR";
       if (subtitleEl) subtitleEl.textContent = mode === "cagr"
-        ? "CAGR from your first investment date to today"
+        ? "Portfolio: money-weighted return (XIRR). Index: point-to-point CAGR from your first investment date."
         : "XIRR calculated using your actual investment cash flow dates";
       if (portfolioLabelEl) portfolioLabelEl.textContent = "Your Portfolio " + label;
     }
@@ -2438,14 +2437,13 @@
       if (indexNameEl) indexNameEl.textContent = indexName + " " + label;
 
       var portVal, idxVal;
-      if (mode === "cagr" && cagrResult) {
-        portVal = cagrResult.portfolioCagr;
-        idxVal = cagrResult.indexCagr;
-      } else if (xirrResult) {
-        portVal = xirrResult.portfolioXirr;
-        idxVal = xirrResult.indexXirr;
+      if (mode === "cagr") {
+        // Portfolio CAGR = Portfolio XIRR (correct money-weighted return for SIP portfolios)
+        portVal = xirrResult ? xirrResult.portfolioXirr : null;
+        idxVal = cagrResult ? cagrResult.indexCagr : null;
       } else {
-        portVal = null; idxVal = null;
+        portVal = xirrResult ? xirrResult.portfolioXirr : null;
+        idxVal = xirrResult ? xirrResult.indexXirr : null;
       }
 
       portfolioXirrEl.textContent = fmtRate(portVal);
