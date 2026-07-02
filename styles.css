@@ -1823,6 +1823,22 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-top: 1px solid var(--border);
 }
 .benchmark-result[hidden] { display: none; }
+.benchmark-group {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.benchmark-divider {
+  align-self: stretch;
+  width: 1px;
+  min-height: 56px;
+  background: var(--border);
+  margin: 0 4px;
+}
+@media (max-width: 760px) {
+  .benchmark-divider { width: 100%; min-height: 1px; margin: 4px 0; }
+}
 .bench-period-row {
   display: flex;
   align-items: center;

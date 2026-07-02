@@ -2659,6 +2659,42 @@
       else if (v < 0) el.classList.add("negative");
     }
 
+    // Rolling-return summary cells shown beside the XIRR block (right of the divider).
+    var sumPortEl = document.getElementById("rolling-summary-port");
+    var sumIdxEl = document.getElementById("rolling-summary-idx");
+    var sumAlphaEl = document.getElementById("rolling-summary-alpha");
+    var sumIdxLabelEl = document.getElementById("rolling-summary-idx-label");
+
+    function setSummaryCell(el, v, asText) {
+      if (!el) return;
+      if (asText !== undefined) {
+        el.textContent = asText;
+        el.classList.remove("positive", "negative");
+        return;
+      }
+      el.textContent = fmtPct(v);
+      colorEl(el, v);
+    }
+    function setSummary(portMedian, idxMedian, notAvailable) {
+      if (notAvailable) {
+        setSummaryCell(sumPortEl, null, "N/A");
+        setSummaryCell(sumIdxEl, null, "N/A");
+        setSummaryCell(sumAlphaEl, null, "—");
+        return;
+      }
+      setSummaryCell(sumPortEl, portMedian);
+      setSummaryCell(sumIdxEl, idxMedian != null ? idxMedian : null,
+        idxMedian == null ? "—" : undefined);
+      if (portMedian != null && isFinite(portMedian) && idxMedian != null && isFinite(idxMedian)) {
+        var alpha = (portMedian - idxMedian) * 100;
+        sumAlphaEl.textContent = (alpha > 0 ? "+" : "") + alpha.toFixed(1) + "%";
+        sumAlphaEl.classList.remove("positive", "negative");
+        sumAlphaEl.classList.add(alpha > 0 ? "positive" : alpha < 0 ? "negative" : "");
+      } else {
+        setSummaryCell(sumAlphaEl, null, "—");
+      }
+    }
+
     var _renderGen = 0;
 
     function renderForPeriod(period) {
@@ -2666,9 +2702,11 @@
       var gen = _renderGen;
       period = String(period || "all");
 
-      // Update the index column header to the currently selected index.
+      // Update index labels (detailed table header + summary column) to the selected index.
       var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
-      if (indexColEl) indexColEl.textContent = indexDisplayName(indexKey);
+      var indexName = indexDisplayName(indexKey);
+      if (indexColEl) indexColEl.textContent = indexName;
+      if (sumIdxLabelEl) sumIdxLabelEl.textContent = indexName + " Rolling Return";
 
       // No rolling window for "All" or "10Y".
       if (!ROLLING_PERIODS[period]) {
@@ -2676,6 +2714,7 @@
         statusEl.hidden = false;
         statusEl.textContent = "Rolling Return Not Available";
         if (windowLabelEl) windowLabelEl.textContent = "";
+        setSummary(null, null, true);
         return;
       }
 
@@ -2684,6 +2723,7 @@
       statusEl.hidden = false;
       statusEl.textContent = "Computing rolling returns…";
       resultEl.hidden = true;
+      setSummary(null, null, false); // reset to "—" while computing
 
       computeRollingReturns(windowYears, indexKey).then(function (result) {
         if (gen !== _renderGen) return;
@@ -2691,6 +2731,7 @@
         if (!result) {
           statusEl.hidden = false;
           statusEl.textContent = "Not enough history for " + windowYears + "Y rolling returns.";
+          setSummary(null, null, false);
           return;
         }
         var p = result.portfolio, idx = result.index;
@@ -2708,10 +2749,13 @@
         setCell("rolling-idx-min", idx ? idx.min : null);
         if (windowCountEl) windowCountEl.textContent = p.count + " rolling " + windowYears + "Y windows";
         resultEl.hidden = false;
+        // Median = representative single-figure rolling return for the summary beside XIRR.
+        setSummary(p.median, idx ? idx.median : null, false);
       }).catch(function () {
         if (gen !== _renderGen) return;
         statusEl.hidden = false;
         statusEl.textContent = "Could not compute rolling returns.";
+        setSummary(null, null, false);
       });
     }
 

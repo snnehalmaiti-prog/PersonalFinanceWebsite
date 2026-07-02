@@ -170,18 +170,38 @@
           </div>
         </div>
         <div id="benchmark-result" class="benchmark-result" hidden>
-          <div class="benchmark-col">
-            <span class="benchmark-col-label" id="benchmark-portfolio-label">Your Portfolio XIRR</span>
-            <span class="benchmark-col-value" id="benchmark-portfolio-xirr">—</span>
+          <div class="benchmark-group">
+            <div class="benchmark-col">
+              <span class="benchmark-col-label" id="benchmark-portfolio-label">Your Portfolio XIRR</span>
+              <span class="benchmark-col-value" id="benchmark-portfolio-xirr">—</span>
+            </div>
+            <div class="benchmark-vs">vs</div>
+            <div class="benchmark-col">
+              <span class="benchmark-col-label" id="benchmark-index-name">Index XIRR</span>
+              <span class="benchmark-col-value" id="benchmark-index-xirr">—</span>
+            </div>
+            <div class="benchmark-col benchmark-col-verdict">
+              <span class="benchmark-col-label">Alpha</span>
+              <span class="benchmark-col-value" id="benchmark-alpha">—</span>
+            </div>
           </div>
-          <div class="benchmark-vs">vs</div>
-          <div class="benchmark-col">
-            <span class="benchmark-col-label" id="benchmark-index-name">Index XIRR</span>
-            <span class="benchmark-col-value" id="benchmark-index-xirr">—</span>
-          </div>
-          <div class="benchmark-col benchmark-col-verdict">
-            <span class="benchmark-col-label">Alpha</span>
-            <span class="benchmark-col-value" id="benchmark-alpha">—</span>
+
+          <div class="benchmark-divider" aria-hidden="true"></div>
+
+          <div class="benchmark-group" id="benchmark-rolling-group">
+            <div class="benchmark-col">
+              <span class="benchmark-col-label" id="rolling-summary-port-label">Your Portfolio Rolling Return</span>
+              <span class="benchmark-col-value" id="rolling-summary-port">—</span>
+            </div>
+            <div class="benchmark-vs">vs</div>
+            <div class="benchmark-col">
+              <span class="benchmark-col-label" id="rolling-summary-idx-label">Index Rolling Return</span>
+              <span class="benchmark-col-value" id="rolling-summary-idx">—</span>
+            </div>
+            <div class="benchmark-col benchmark-col-verdict">
+              <span class="benchmark-col-label">Alpha</span>
+              <span class="benchmark-col-value" id="rolling-summary-alpha">—</span>
+            </div>
           </div>
         </div>
         <p class="muted small" id="benchmark-status" hidden></p>
