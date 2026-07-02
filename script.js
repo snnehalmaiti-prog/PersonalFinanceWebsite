@@ -293,7 +293,8 @@
     var settingsTabs = [
       { tab: settingsTabProfile, panel: document.getElementById("panel-profile"), key: "profile" },
       { tab: settingsTabTransactions, panel: document.getElementById("panel-transactions"), key: "transactions" },
-      { tab: settingsTabMapping, panel: document.getElementById("panel-mapping"), key: "mapping" }
+      { tab: settingsTabMapping, panel: document.getElementById("panel-mapping"), key: "mapping" },
+      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" }
     ];
 
     function showSettingsTab(tab) {
