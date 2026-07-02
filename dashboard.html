@@ -140,8 +140,13 @@
         <div class="benchmark-header">
           <div class="benchmark-title-group">
             <span class="benchmark-label">BENCHMARK COMPARISON</span>
-            <p class="muted small" style="margin:4px 0 0;">XIRR calculated using your actual investment cash flow dates</p>
+            <p class="muted small" id="benchmark-subtitle" style="margin:4px 0 0;">XIRR calculated using your actual investment cash flow dates</p>
           </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="bench-mode-toggle" role="group" aria-label="Metric mode">
+              <button type="button" class="bench-mode-btn active" id="bench-mode-xirr" data-mode="xirr">XIRR</button>
+              <button type="button" class="bench-mode-btn" id="bench-mode-cagr" data-mode="cagr">CAGR</button>
+            </div>
           <div class="portfolio-dropdown" id="benchmark-dropdown-wrap">
             <button type="button" id="benchmark-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
               <span id="benchmark-label">Select Index</span>
@@ -155,10 +160,11 @@
               <li role="option" data-value="NIFTY500" class="portfolio-option">Nifty 500</li>
             </ul>
           </div>
+          </div>
         </div>
         <div id="benchmark-result" class="benchmark-result" hidden>
           <div class="benchmark-col">
-            <span class="benchmark-col-label">Your Portfolio XIRR</span>
+            <span class="benchmark-col-label" id="benchmark-portfolio-label">Your Portfolio XIRR</span>
             <span class="benchmark-col-value" id="benchmark-portfolio-xirr">—</span>
           </div>
           <div class="benchmark-vs">vs</div>

@@ -1772,6 +1772,31 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-top: 1px solid var(--border);
 }
 .benchmark-result[hidden] { display: none; }
+.bench-mode-toggle {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.bench-mode-btn {
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.bench-mode-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
 .benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
 .benchmark-col-label {
   font-size: 0.74rem;
