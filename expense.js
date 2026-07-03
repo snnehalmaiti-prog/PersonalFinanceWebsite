@@ -5,8 +5,18 @@
 
   var ACCT = "expense_accounts";
   var CATS = "expense_categories";
+  var PMS = "expense_payment_methods";
 
-  var state = { accounts: [], categories: [], loaded: false };
+  var state = { accounts: [], categories: [], paymentMethods: [], loaded: false };
+
+  var DEFAULT_PAYMENT_METHODS = [
+    { name: "Cash", icon: "💵", color: "#10B981" },
+    { name: "UPI", icon: "📲", color: "#6366F1" },
+    { name: "Debit Card", icon: "💳", color: "#3B82F6" },
+    { name: "Credit Card", icon: "💳", color: "#EF4444" },
+    { name: "Netbanking", icon: "🏦", color: "#0EA5E9" },
+    { name: "Wallet", icon: "👛", color: "#F97316" }
+  ];
   var wired = false;
 
   var COLORS = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#6366F1", "#8B5CF6",
@@ -74,12 +84,16 @@
     if (accStatus) accStatus.textContent = "Loading…";
     if (catStatus) catStatus.textContent = "Loading…";
 
+    var pmStatus = el("exp-payment-methods-status");
+    if (pmStatus) pmStatus.textContent = "Loading…";
     return Promise.all([
       WfDb.select(ACCT, "select=*&order=sort_order.asc,created_at.asc"),
-      WfDb.select(CATS, "select=*&order=sort_order.asc,created_at.asc")
+      WfDb.select(CATS, "select=*&order=sort_order.asc,created_at.asc"),
+      WfDb.select(PMS, "select=*&order=sort_order.asc,created_at.asc")
     ]).then(function (res) {
       state.accounts = res[0] || [];
       state.categories = res[1] || [];
+      state.paymentMethods = res[2] || [];
       state.loaded = true;
       var uid = WfAuth.getUserId();
       var seededKey = "wf-exp-seeded-" + uid;
@@ -91,9 +105,11 @@
       }
       renderAccounts();
       renderCategories();
+      renderPaymentMethods();
     }).catch(function (err) {
       if (accStatus) accStatus.textContent = "Could not load: " + err.message;
       if (catStatus) catStatus.textContent = "Could not load: " + err.message;
+      if (pmStatus) pmStatus.textContent = "Could not load: " + err.message;
     });
   }
 
@@ -123,7 +139,10 @@
       });
       return subs.length ? WfDb.insert(CATS, subs) : null;
     });
-    return Promise.all([seedAcct, seedCats]);
+    var seedPms = WfDb.insert(PMS, DEFAULT_PAYMENT_METHODS.map(function (p, i) {
+      return { name: p.name, icon: p.icon, color: p.color, sort_order: i };
+    }));
+    return Promise.all([seedAcct, seedCats, seedPms]);
   }
 
   // Generic BudgetBakers-style row: circular icon, name, optional meta, chevron, kebab.
@@ -154,6 +173,62 @@
       return rowHtml({ id: a.id, icon: a.icon, color: a.color, name: a.name,
         sub: typeLabel, meta: "Opening " + fmtMoney(a.initial_balance), kebab: "acct" });
     }).join("");
+  }
+
+  // ── Rendering: Payment methods ──────────────────────────────────────────────
+  function renderPaymentMethods() {
+    var list = el("exp-payment-methods-list");
+    var status = el("exp-payment-methods-status");
+    if (!list) return;
+    if (!state.paymentMethods.length) {
+      if (status) { status.hidden = false; status.textContent = "No payment methods yet — add your first one."; }
+      list.innerHTML = "";
+      return;
+    }
+    if (status) status.hidden = true;
+    list.innerHTML = state.paymentMethods.map(function (p) {
+      return rowHtml({ id: p.id, icon: p.icon, color: p.color, name: p.name, kebab: "pm" });
+    }).join("");
+  }
+
+  function findPm(id) { return state.paymentMethods.find(function (p) { return p.id === id; }); }
+
+  function openPaymentMethodModal(record) {
+    modalCtx = { kind: "pm", id: record ? record.id : null,
+      draft: {
+        name: record ? record.name : "",
+        icon: record ? record.icon : "💳",
+        color: record ? record.color : "#6366F1"
+      } };
+    var d = modalCtx.draft;
+    var body =
+      '<label class="exp-field"><span>Name</span><input id="exp-pm-name" type="text" value="' + esc(d.name) + '" placeholder="e.g. UPI, Cash"/></label>' +
+      '<label class="exp-field"><span>Icon</span>' + pickerGrid(ACC_EMOJIS.concat(CAT_EMOJIS), d.icon, "icon") + '</label>' +
+      '<label class="exp-field"><span>Color</span>' + pickerGrid(COLORS, d.color, "color") + '</label>';
+    openModal(record ? "Edit payment method" : "Add payment method", body, modalCtx);
+    wirePickers();
+    el("exp-pm-name").addEventListener("input", function (e) { d.name = e.target.value; });
+  }
+
+  function savePaymentMethod() {
+    var d = modalCtx.draft;
+    if (!d.name.trim()) return;
+    var payload = { name: d.name.trim(), icon: d.icon, color: d.color };
+    var p = modalCtx.id ? WfDb.update(PMS, modalCtx.id, payload)
+      : WfDb.insert(PMS, Object.assign({ sort_order: state.paymentMethods.length }, payload));
+    return p.then(function () { closeModal(); return loadData(); });
+  }
+
+  function deletePaymentMethod(id) {
+    if (!confirm("Delete this payment method?")) return;
+    WfDb.remove(PMS, id).then(function () { return loadData(); });
+  }
+
+  function paymentMethodMenu(id) {
+    return [
+      { label: "Edit", onClick: function () { var p = findPm(id); if (p) openPaymentMethodModal(p); } },
+      { label: "Delete", danger: true, onClick: function () { deletePaymentMethod(id); } }
+    ];
   }
 
   // ── Rendering: Categories (row list + drill-down into subcategories) ────────
@@ -396,6 +471,8 @@
 
     var addAcct = el("exp-add-account-btn");
     if (addAcct) addAcct.addEventListener("click", function () { openAccountModal(null); });
+    var addPm = el("exp-add-payment-method-btn");
+    if (addPm) addPm.addEventListener("click", function () { openPaymentMethodModal(null); });
     var addCat = el("exp-add-category-btn");
     if (addCat) addCat.addEventListener("click", function () {
       if (catNav.parentId) openCategoryModal(null, findCat(catNav.parentId)); // add subcategory
@@ -407,6 +484,13 @@
     if (accList) accList.addEventListener("click", function (e) {
       var kb = e.target.closest("[data-kebab]");
       if (kb) { openKebab(kb, accountMenu(kb.getAttribute("data-id"))); return; }
+    });
+
+    // Payment methods list: kebab menu only
+    var pmList = el("exp-payment-methods-list");
+    if (pmList) pmList.addEventListener("click", function (e) {
+      var kb = e.target.closest("[data-kebab]");
+      if (kb) { openKebab(kb, paymentMethodMenu(kb.getAttribute("data-id"))); return; }
     });
 
     // Categories body: row drill-down + kebab menu
@@ -428,6 +512,7 @@
       if (!modalCtx) return;
       if (modalCtx.kind === "account") saveAccount();
       else if (modalCtx.kind === "category") saveCategory();
+      else if (modalCtx.kind === "pm") savePaymentMethod();
     });
 
     // Close the kebab menu on outside click / scroll / escape

@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=responsive1" />
-<script src="supabase-client.js?v=responsive1"></script>
+<link rel="stylesheet" href="styles.css?v=paymethod1" />
+<script src="supabase-client.js?v=paymethod1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -277,6 +277,16 @@
 
         <div class="equity-card">
           <div class="equity-card-header">
+            <h3>Payment methods</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="exp-add-payment-method-btn">+ Add method</button>
+          </div>
+          <p class="muted small equity-desc">UPI, cash, debit/credit card, netbanking, wallet, etc. Attach one to every transaction.</p>
+          <p class="muted small" id="exp-payment-methods-status">Loading…</p>
+          <div id="exp-payment-methods-list" class="exp-list"></div>
+        </div>
+
+        <div class="equity-card">
+          <div class="equity-card-header">
             <h3 id="exp-categories-heading">Categories</h3>
             <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
           </div>
@@ -304,8 +314,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=responsive1"></script>
-  <script src="expense.js?v=responsive1"></script>
+  <script src="script.js?v=paymethod1"></script>
+  <script src="expense.js?v=paymethod1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

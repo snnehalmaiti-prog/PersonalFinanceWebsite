@@ -31,6 +31,17 @@ CREATE TABLE IF NOT EXISTS expense_categories (
   created_at timestamptz DEFAULT now()
 );
 
+-- Payment methods (UPI, Cash, Debit card, Credit card, Netbanking, …). Flat list.
+CREATE TABLE IF NOT EXISTS expense_payment_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  name text NOT NULL,
+  icon text DEFAULT '💳',
+  color text DEFAULT '#6366F1',
+  sort_order int DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
 -- Budget envelopes: a spending limit per period over one or more categories.
 CREATE TABLE IF NOT EXISTS expense_budgets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,6 +65,7 @@ CREATE TABLE IF NOT EXISTS expense_records (
   account_id uuid REFERENCES expense_accounts(id) ON DELETE SET NULL,
   category_id uuid REFERENCES expense_categories(id) ON DELETE SET NULL,
   subcategory_id uuid REFERENCES expense_categories(id) ON DELETE SET NULL,
+  payment_method_id uuid REFERENCES expense_payment_methods(id) ON DELETE SET NULL,
   note text DEFAULT '',
   created_at timestamptz DEFAULT now()
 );
@@ -65,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_expense_categories_user_parent ON expense_categor
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['expense_accounts','expense_categories','expense_budgets','expense_records']
+  FOREACH t IN ARRAY ARRAY['expense_accounts','expense_categories','expense_payment_methods','expense_budgets','expense_records']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
     EXECUTE format('DROP POLICY IF EXISTS "own_select" ON %I;', t);
