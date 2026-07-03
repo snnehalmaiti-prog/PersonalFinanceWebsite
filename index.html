@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=profile1" />
+<link rel="stylesheet" href="styles.css?v=profile2" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -415,7 +415,7 @@
     </div>
   </div>
 
-  <script src="script.js?v=profile1"></script>
+  <script src="script.js?v=profile2"></script>
 
   <!-- Auth modal -->
   <div id="auth-overlay" class="auth-overlay" hidden>
@@ -471,7 +471,7 @@
       </form>
     </div>
   </div>
-  <script src="supabase-client.js?v=profile1"></script>
+  <script src="supabase-client.js?v=profile2"></script>
   <script>
     // Detect Supabase recovery / access-token hash (from password reset email)
     var _recoveryTokens = null;
@@ -569,16 +569,15 @@
         ? WfAuth.signUp(email, password, { first_name: firstName.trim(), last_name: lastName.trim() })
         : WfAuth.signIn(email, password);
       action.then(function (data) {
-        if (isSignUp) {
-          // Supabase sends a confirmation email by default
+        if (isSignUp && !WfAuth.isLoggedIn()) {
+          // Fallback: email-confirmation is on, session not yet issued
           authConfirm.hidden = false;
           authForm.hidden = true;
-        } else {
-          // Load settings then redirect
-          WfAuth.loadSettingsFromCloud().then(function () {
-            window.location.href = "dashboard.html";
-          });
+          return;
         }
+        WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () {
+          window.location.href = "dashboard.html";
+        });
       }).catch(function (err) {
         authError.textContent = err.message || "Something went wrong.";
         authError.hidden = false;
