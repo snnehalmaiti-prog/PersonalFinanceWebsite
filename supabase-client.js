@@ -65,7 +65,9 @@
       headers: authHeaders(),
       body: JSON.stringify({ email: email, password: password })
     }).then(function (r) { return r.json(); }).then(function (data) {
-      if (data.error || data.msg) throw new Error(data.error_description || data.msg || data.error);
+      if (data.error || data.msg || data.error_code || (data.code && data.code >= 400)) {
+        throw new Error(data.error_description || data.msg || data.error || "Sign up failed");
+      }
       if (data.session) setSession(data.session);
       else if (data.access_token) setSession(data);
       return data;
@@ -78,7 +80,9 @@
       headers: authHeaders(),
       body: JSON.stringify({ email: email, password: password })
     }).then(function (r) { return r.json(); }).then(function (data) {
-      if (data.error || data.error_description) throw new Error(data.error_description || data.error);
+      if (data.error || data.error_description || data.msg || data.error_code || (data.code && data.code >= 400) || !data.access_token) {
+        throw new Error(data.error_description || data.msg || data.error || "Invalid login credentials");
+      }
       setSession(data);
       return data;
     });
