@@ -585,16 +585,91 @@
 
     </section><!-- /panel-investment -->
 
-    <section id="panel-expense" class="settings-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
-      <div class="panel-title-row">
-        <h2>Expense</h2>
+    <section id="panel-expense" class="invest-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
+      <div class="invest-sub-tabs" role="tablist" aria-label="Expense sections">
+        <button type="button" class="invest-sub-tab active" id="subtab-exp-overview" role="tab" aria-selected="true" aria-controls="subpanel-exp-overview">Overview</button>
+        <button type="button" class="invest-sub-tab" id="subtab-exp-records" role="tab" aria-selected="false" aria-controls="subpanel-exp-records">Records</button>
+        <button type="button" class="invest-sub-tab" id="subtab-exp-categories" role="tab" aria-selected="false" aria-controls="subpanel-exp-categories">Categories</button>
+        <button type="button" class="invest-sub-tab" id="subtab-exp-accounts" role="tab" aria-selected="false" aria-controls="subpanel-exp-accounts">Accounts</button>
+        <button type="button" class="invest-sub-tab" id="subtab-exp-budgets" role="tab" aria-selected="false" aria-controls="subpanel-exp-budgets">Budgets</button>
       </div>
-      <p class="muted small">Expense tracking is coming soon. Connect an expense sheet in <a href="settings.html">Settings</a> once available.</p>
+
+      <!-- Sign-in gate: expense data is per-user and lives in the cloud -->
+      <div id="exp-signin-gate" class="settings-panel" hidden>
+        <h2>Expense</h2>
+        <p class="muted">Sign in to create accounts, categories and track your expenses. Your expense data is private to your account.</p>
+      </div>
+
+      <div id="exp-content">
+        <div id="subpanel-exp-overview">
+          <section class="settings-panel" role="tabpanel" aria-labelledby="subtab-exp-overview">
+            <div class="panel-title-row"><h2>Overview</h2></div>
+            <p class="muted small">Analytics arrive in a later phase. Set up your Accounts and Categories to get started.</p>
+          </section>
+        </div>
+
+        <div id="subpanel-exp-records" hidden>
+          <section class="settings-panel" role="tabpanel" aria-labelledby="subtab-exp-records">
+            <div class="panel-title-row"><h2>Records</h2></div>
+            <p class="muted small">Transaction entry arrives in the next phase.</p>
+          </section>
+        </div>
+
+        <div id="subpanel-exp-categories" hidden>
+          <section class="settings-panel" role="tabpanel" aria-labelledby="subtab-exp-categories">
+            <div class="panel-title-row">
+              <h2>Categories</h2>
+              <div class="panel-title-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
+              </div>
+            </div>
+            <p class="muted small" id="exp-categories-status">Loading…</p>
+            <div id="exp-categories-expense" class="exp-cat-group"></div>
+            <div id="exp-categories-income" class="exp-cat-group"></div>
+          </section>
+        </div>
+
+        <div id="subpanel-exp-accounts" hidden>
+          <section class="settings-panel" role="tabpanel" aria-labelledby="subtab-exp-accounts">
+            <div class="panel-title-row">
+              <h2>Accounts</h2>
+              <div class="panel-title-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
+              </div>
+            </div>
+            <p class="muted small" id="exp-accounts-status">Loading…</p>
+            <div id="exp-accounts-list" class="exp-account-grid"></div>
+          </section>
+        </div>
+
+        <div id="subpanel-exp-budgets" hidden>
+          <section class="settings-panel" role="tabpanel" aria-labelledby="subtab-exp-budgets">
+            <div class="panel-title-row"><h2>Budgets</h2></div>
+            <p class="muted small">Budget envelopes arrive in a later phase.</p>
+          </section>
+        </div>
+      </div>
     </section><!-- /panel-expense -->
+
+    <!-- Expense add/edit modal (shared by accounts & categories) -->
+    <div id="exp-modal-overlay" class="exp-modal-overlay" hidden>
+      <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="exp-modal-title">
+        <div class="exp-modal-header">
+          <h3 id="exp-modal-title">Add</h3>
+          <button type="button" class="exp-modal-close" id="exp-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="exp-modal-body" id="exp-modal-body"></div>
+        <div class="exp-modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" id="exp-modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="exp-modal-save">Save</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script src="script.js?v=86230fa"></script>
   <script src="supabase-client.js"></script>
+  <script src="expense.js?v=86230fa"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

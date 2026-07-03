@@ -168,6 +168,73 @@
     });
   }
 
+  // ── Generic per-user table CRUD (used by the Expense manager) ───────────────
+  // All helpers scope to the signed-in user; RLS enforces it server-side too.
+
+  function dbRequest(method, path, body, token, extraPrefer) {
+    var headers = authHeaders(token);
+    if (extraPrefer) headers = Object.assign({}, headers, { "Prefer": extraPrefer });
+    return fetch(SUPABASE_URL + "/rest/v1/" + path, {
+      method: method,
+      headers: headers,
+      body: body != null ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      if (r.status === 204) return [];
+      return r.json().then(function (data) {
+        if (data && data.code && data.message) throw new Error(data.message);
+        return data;
+      });
+    });
+  }
+
+  // query: extra PostgREST params, e.g. "select=*&order=sort_order.asc"
+  function dbSelect(table, query) {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      var uid = getUserId();
+      if (!uid) return null;
+      var q = "user_id=eq." + uid + (query ? "&" + query : "&select=*");
+      return dbRequest("GET", table + "?" + q, null, token);
+    });
+  }
+
+  function dbInsert(table, row) {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      var uid = getUserId();
+      if (!uid) return null;
+      var payload = Array.isArray(row)
+        ? row.map(function (r) { return Object.assign({ user_id: uid }, r); })
+        : Object.assign({ user_id: uid }, row);
+      return dbRequest("POST", table, payload, token);
+    });
+  }
+
+  function dbUpdate(table, id, patch) {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      var uid = getUserId();
+      if (!uid) return null;
+      return dbRequest("PATCH", table + "?id=eq." + encodeURIComponent(id) + "&user_id=eq." + uid, patch, token);
+    });
+  }
+
+  function dbDelete(table, id) {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      var uid = getUserId();
+      if (!uid) return null;
+      return dbRequest("DELETE", table + "?id=eq." + encodeURIComponent(id) + "&user_id=eq." + uid, null, token);
+    });
+  }
+
+  window.WfDb = {
+    select: dbSelect,
+    insert: dbInsert,
+    update: dbUpdate,
+    remove: dbDelete
+  };
+
   // ── Exported API ───────────────────────────────────────────────────────────
 
   window.WfAuth = {

@@ -366,6 +366,7 @@
         var activeKey = activeSubTab ? activeSubTab.key : "equity";
         showInvestmentSubTab(activeKey);
       }
+      if (tab === "expense" && window.WfExpense) window.WfExpense.onShow();
     }
 
     dashTabs.forEach(function (entry) {

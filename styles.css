@@ -1946,3 +1946,54 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   text-overflow: ellipsis; white-space: nowrap;
 }
 .user-badge[hidden] { display: none; }
+
+/* ===== Expense Manager ===== */
+.exp-account-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 8px; }
+.exp-account-card {
+  position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-left: 4px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px;
+}
+.exp-account-top { display: flex; align-items: center; gap: 10px; }
+.exp-account-name { font-weight: 700; }
+.exp-account-type { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 6px 0 2px; }
+.exp-account-bal { font-family: var(--font-display, inherit); font-weight: 700; }
+
+.exp-cat-group { margin-top: 8px; }
+.exp-group-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 20px 0 10px; }
+.exp-cat { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 10px; background: var(--surface); }
+.exp-cat-head { display: flex; align-items: center; gap: 10px; }
+.exp-cat-name { font-weight: 600; flex: 1; }
+.exp-cat-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; font-size: 1.05rem; color: #fff; flex: 0 0 auto;
+}
+.exp-row-actions { display: flex; align-items: center; gap: 6px; }
+.exp-icon-btn { background: transparent; border: none; cursor: pointer; font-size: 0.95rem; padding: 4px; border-radius: 6px; line-height: 1; }
+.exp-icon-btn:hover { background: var(--bg); }
+.exp-subcat-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-left: 44px; }
+.exp-subcat {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 3px 6px 3px 12px;
+}
+
+/* Modal */
+.exp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.exp-modal-overlay[hidden] { display: none; }
+.exp-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); width: 100%; max-width: 460px; max-height: 90vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+.exp-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.exp-modal-header h3 { margin: 0; }
+.exp-modal-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--muted); }
+.exp-modal-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.exp-modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
+.exp-field { display: flex; flex-direction: column; gap: 6px; }
+.exp-field > span { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.exp-field input, .exp-field select { padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 0.95rem; }
+.exp-readonly { padding: 9px 11px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); }
+.exp-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.exp-emoji { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
+.exp-emoji.selected { border-color: #3B82F6; box-shadow: 0 0 0 2px rgba(59,130,246,0.3); }
+.exp-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.exp-swatch.selected { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px rgba(59,130,246,0.4); }
+.exp-type-toggle { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.exp-type-toggle button { padding: 6px 16px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-weight: 600; color: var(--muted); }
+.exp-type-toggle button.active { background: #3B82F6; color: #fff; }
