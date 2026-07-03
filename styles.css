@@ -1103,25 +1103,27 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   display: inline-flex;
   gap: 4px;
   background: var(--surface-alt);
-  border-radius: 10px;
+  border-radius: 999px;
   padding: 4px;
   margin-bottom: 28px;
   overflow-x: auto;
+  width: fit-content;
+  max-width: 100%;
 }
 .invest-sub-tab {
   border: none;
   background: transparent;
   padding: 8px 18px;
-  border-radius: 7px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.2s, color 0.2s;
 }
 .invest-sub-tab:hover { color: var(--text); }
-.invest-sub-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 600; }
+.invest-sub-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 
 /* Investment panel wrapper — no card background, sub-panels provide their own cards */
 .invest-panel:not([hidden]) { width: 100%; display: flex; flex-direction: column; gap: 0; }
