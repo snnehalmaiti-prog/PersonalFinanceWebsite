@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=exptabs1" />
-<script src="supabase-client.js?v=exptabs1"></script>
+<link rel="stylesheet" href="styles.css?v=exptabs2" />
+<script src="supabase-client.js?v=exptabs2"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -265,56 +265,34 @@
       </div>
 
       <div id="exp-content" style="max-width:560px;">
-        <div class="exp-subtabs" role="tablist" aria-label="Expense sections" style="display:flex; gap:4px; margin-top:16px; padding:4px; background:var(--surface-alt); border-radius:999px; width:fit-content;">
-          <button type="button" class="exp-subtab active" data-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
-          <button type="button" class="exp-subtab" data-exp-subtab="records" role="tab" aria-selected="false">Records</button>
-          <button type="button" class="exp-subtab" data-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
+        <div class="equity-card" style="margin-top:20px;">
+          <div class="equity-card-header">
+            <h3>Accounts</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
+          </div>
+          <p class="muted small equity-desc">Cash, bank, credit card or wallet accounts. Every transaction is linked to one account.</p>
+          <p class="muted small" id="exp-accounts-status">Loading…</p>
+          <div id="exp-accounts-list" class="exp-list"></div>
         </div>
 
-        <div id="exp-subpanel-accounts" class="exp-subpanel">
-          <div class="equity-card" style="margin-top:20px;">
-            <div class="equity-card-header">
-              <h3>Accounts</h3>
-              <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
-            </div>
-            <p class="muted small equity-desc">Cash, bank, credit card or wallet accounts. Every transaction is linked to one account.</p>
-            <p class="muted small" id="exp-accounts-status">Loading…</p>
-            <div id="exp-accounts-list" class="exp-list"></div>
+        <div class="equity-card">
+          <div class="equity-card-header">
+            <h3>Payment methods</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="exp-add-payment-method-btn">+ Add method</button>
           </div>
-
-          <div class="equity-card">
-            <div class="equity-card-header">
-              <h3>Payment methods</h3>
-              <button type="button" class="btn btn-primary btn-sm" id="exp-add-payment-method-btn">+ Add method</button>
-            </div>
-            <p class="muted small equity-desc">UPI, cash, debit/credit card, netbanking, wallet, etc. Attach one to every transaction.</p>
-            <p class="muted small" id="exp-payment-methods-status">Loading…</p>
-            <div id="exp-payment-methods-list" class="exp-list"></div>
-          </div>
-
-          <div class="equity-card">
-            <div class="equity-card-header">
-              <h3 id="exp-categories-heading">Categories</h3>
-              <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
-            </div>
-            <p class="muted small equity-desc">Expense and income categories with subcategories. When adding a record, choosing a category filters its subcategories.</p>
-            <p class="muted small" id="exp-categories-status">Loading…</p>
-            <div id="exp-categories-body"></div>
-          </div>
+          <p class="muted small equity-desc">UPI, cash, debit/credit card, netbanking, wallet, etc. Attach one to every transaction.</p>
+          <p class="muted small" id="exp-payment-methods-status">Loading…</p>
+          <div id="exp-payment-methods-list" class="exp-list"></div>
         </div>
 
-        <div id="exp-subpanel-records" class="exp-subpanel" hidden>
-          <div class="equity-card" style="margin-top:20px;">
-            <h3>Records</h3>
-            <p class="muted small equity-desc">Log income and expense transactions here. Coming soon.</p>
+        <div class="equity-card">
+          <div class="equity-card-header">
+            <h3 id="exp-categories-heading">Categories</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
           </div>
-        </div>
-
-        <div id="exp-subpanel-analytics" class="exp-subpanel" hidden>
-          <div class="equity-card" style="margin-top:20px;">
-            <h3>Analytics</h3>
-            <p class="muted small equity-desc">Spending by category, budget usage, monthly trends. Coming soon.</p>
-          </div>
+          <p class="muted small equity-desc">Expense and income categories with subcategories. When adding a record, choosing a category filters its subcategories.</p>
+          <p class="muted small" id="exp-categories-status">Loading…</p>
+          <div id="exp-categories-body"></div>
         </div>
       </div>
     </section>
@@ -336,8 +314,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=exptabs1"></script>
-  <script src="expense.js?v=exptabs1"></script>
+  <script src="script.js?v=exptabs2"></script>
+  <script src="expense.js?v=exptabs2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
