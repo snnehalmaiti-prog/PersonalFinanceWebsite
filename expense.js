@@ -469,6 +469,22 @@
       if (t) t.addEventListener("click", function () { showSubTab(s.tab); });
     });
 
+    // Expense sub-tabs (Accounts / Records / Analytics)
+    document.querySelectorAll(".exp-subtab").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var key = btn.getAttribute("data-exp-subtab");
+        document.querySelectorAll(".exp-subtab").forEach(function (b) {
+          var active = b === btn;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-selected", String(active));
+        });
+        ["accounts", "records", "analytics"].forEach(function (k) {
+          var panel = el("exp-subpanel-" + k);
+          if (panel) panel.hidden = (k !== key);
+        });
+      });
+    });
+
     var addAcct = el("exp-add-account-btn");
     if (addAcct) addAcct.addEventListener("click", function () { openAccountModal(null); });
     var addPm = el("exp-add-payment-method-btn");
