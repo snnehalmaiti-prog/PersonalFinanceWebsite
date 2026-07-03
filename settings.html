@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=exptabs2" />
-<script src="supabase-client.js?v=exptabs2"></script>
+<link rel="stylesheet" href="styles.css?v=exptabs3" />
+<script src="supabase-client.js?v=exptabs3"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -264,25 +264,27 @@
         </div>
       </div>
 
-      <div id="exp-content" style="max-width:560px;">
-        <div class="equity-card" style="margin-top:20px;">
-          <div class="equity-card-header">
-            <h3>Accounts</h3>
-            <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
+      <div id="exp-content" style="max-width:1160px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-top:20px; align-items:start;">
+          <div class="equity-card" style="margin:0;">
+            <div class="equity-card-header">
+              <h3>Accounts</h3>
+              <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
+            </div>
+            <p class="muted small equity-desc">Cash, bank, credit card or wallet accounts. Every transaction is linked to one account.</p>
+            <p class="muted small" id="exp-accounts-status">Loading…</p>
+            <div id="exp-accounts-list" class="exp-list"></div>
           </div>
-          <p class="muted small equity-desc">Cash, bank, credit card or wallet accounts. Every transaction is linked to one account.</p>
-          <p class="muted small" id="exp-accounts-status">Loading…</p>
-          <div id="exp-accounts-list" class="exp-list"></div>
-        </div>
 
-        <div class="equity-card">
-          <div class="equity-card-header">
-            <h3>Payment methods</h3>
-            <button type="button" class="btn btn-primary btn-sm" id="exp-add-payment-method-btn">+ Add method</button>
+          <div class="equity-card" style="margin:0;">
+            <div class="equity-card-header">
+              <h3>Payment methods</h3>
+              <button type="button" class="btn btn-primary btn-sm" id="exp-add-payment-method-btn">+ Add method</button>
+            </div>
+            <p class="muted small equity-desc">UPI, cash, debit/credit card, netbanking, wallet, etc. Attach one to every transaction.</p>
+            <p class="muted small" id="exp-payment-methods-status">Loading…</p>
+            <div id="exp-payment-methods-list" class="exp-list"></div>
           </div>
-          <p class="muted small equity-desc">UPI, cash, debit/credit card, netbanking, wallet, etc. Attach one to every transaction.</p>
-          <p class="muted small" id="exp-payment-methods-status">Loading…</p>
-          <div id="exp-payment-methods-list" class="exp-list"></div>
         </div>
 
         <div class="equity-card">
@@ -314,8 +316,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=exptabs2"></script>
-  <script src="expense.js?v=exptabs2"></script>
+  <script src="script.js?v=exptabs3"></script>
+  <script src="expense.js?v=exptabs3"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
