@@ -1147,9 +1147,21 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 .overview-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin-top: 18px;
+}
+@media (max-width: 1200px) {
+  .overview-stats { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 900px) {
+  .overview-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+  .overview-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 380px) {
+  .overview-stats { grid-template-columns: 1fr; }
 }
 .overview-stat-card {
   display: flex;
@@ -2072,3 +2084,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-size: 14px;
 }
 .user-menu-item:hover { background: rgba(0,0,0,0.05); }
+
+/* Prevent horizontal overflow on any child breaking the page */
+body, html { overflow-x: hidden; }
+main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
+.benchmark-card, .equity-card, .value-chart-card { max-width: 100%; box-sizing: border-box; }
+.benchmark-header, .benchmark-result, .benchmark-group { flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .benchmark-title-group { width: 100%; }
+  .benchmark-card { padding: 14px; }
+  .panel-title-row { flex-wrap: wrap; }
+}
