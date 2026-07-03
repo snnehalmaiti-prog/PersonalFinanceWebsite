@@ -1070,8 +1070,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .settings-main h1 { margin-bottom: 32px; }
 
 .settings-tabs {
-  position: sticky;
-  top: 76px;
+  position: relative;
   z-index: 20;
   display: inline-flex;
   gap: 4px;
@@ -1147,10 +1146,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 .overview-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(7, 1fr);
   gap: 10px;
   margin-top: 18px;
 }
+.overview-stat-label { min-height: 2.4em; line-height: 1.2; }
 @media (max-width: 1200px) {
   .overview-stats { grid-template-columns: repeat(4, 1fr); }
 }
