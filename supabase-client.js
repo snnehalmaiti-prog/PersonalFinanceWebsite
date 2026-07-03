@@ -59,11 +59,13 @@
     return s && s.user ? s.user.email : null;
   }
 
-  function signUp(email, password) {
+  function signUp(email, password, metadata) {
+    var body = { email: email, password: password };
+    if (metadata) body.data = metadata;
     return fetch(SUPABASE_URL + "/auth/v1/signup", {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ email: email, password: password })
+      body: JSON.stringify(body)
     }).then(function (r) { return r.json(); }).then(function (data) {
       if (data.error || data.msg || data.error_code || (data.code && data.code >= 400)) {
         throw new Error(data.error_description || data.msg || data.error || "Sign up failed");
@@ -99,6 +101,45 @@
         throw new Error(data.error_description || data.msg || data.error || "Could not send reset email");
       }
       return data;
+    });
+  }
+
+  function getUser() {
+    var s = getSession();
+    return s && s.user ? s.user : null;
+  }
+
+  function refreshUser() {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      return fetch(SUPABASE_URL + "/auth/v1/user", { headers: authHeaders(token) })
+        .then(function (r) { return r.json(); }).then(function (user) {
+          if (user && user.id) {
+            var s = getSession() || {};
+            s.user = user;
+            setSession(s);
+          }
+          return user;
+        });
+    });
+  }
+
+  function updateUserMetadata(metadata) {
+    return getValidToken().then(function (token) {
+      if (!token) return Promise.reject(new Error("Not authenticated"));
+      return fetch(SUPABASE_URL + "/auth/v1/user", {
+        method: "PUT",
+        headers: authHeaders(token),
+        body: JSON.stringify({ data: metadata })
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        if (data.error || data.msg || data.error_code || (data.code && data.code >= 400)) {
+          throw new Error(data.error_description || data.msg || data.error || "Could not update profile");
+        }
+        var s = getSession() || {};
+        s.user = data;
+        setSession(s);
+        return data;
+      });
     });
   }
 
@@ -281,6 +322,9 @@
     sendPasswordReset: sendPasswordReset,
     updatePassword: updatePassword,
     setSessionFromTokens: setSessionFromTokens,
+    getUser: getUser,
+    refreshUser: refreshUser,
+    updateUserMetadata: updateUserMetadata,
     getSession: getSession,
     getUserEmail: getUserEmail,
     getUserId: getUserId,

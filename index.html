@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=authb3" />
+<link rel="stylesheet" href="styles.css?v=profile1" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -415,7 +415,7 @@
     </div>
   </div>
 
-  <script src="script.js?v=authb3"></script>
+  <script src="script.js?v=profile1"></script>
 
   <!-- Auth modal -->
   <div id="auth-overlay" class="auth-overlay" hidden>
@@ -430,6 +430,14 @@
         <button class="auth-tab" id="auth-tab-signup">Sign Up</button>
       </div>
       <form id="auth-form" autocomplete="on">
+        <div class="auth-field auth-name-field" id="auth-first-name-field" style="display:none;">
+          <label for="auth-first-name">First name</label>
+          <input type="text" id="auth-first-name" name="first_name" autocomplete="given-name" placeholder="Jane" />
+        </div>
+        <div class="auth-field auth-name-field" id="auth-last-name-field" style="display:none;">
+          <label for="auth-last-name">Last name</label>
+          <input type="text" id="auth-last-name" name="last_name" autocomplete="family-name" placeholder="Doe" />
+        </div>
         <div class="auth-field">
           <label for="auth-email">Email</label>
           <input type="email" id="auth-email" name="email" required autocomplete="email" placeholder="you@example.com" />
@@ -463,7 +471,7 @@
       </form>
     </div>
   </div>
-  <script src="supabase-client.js?v=authb3"></script>
+  <script src="supabase-client.js?v=profile1"></script>
   <script>
     // Detect Supabase recovery / access-token hash (from password reset email)
     var _recoveryTokens = null;
@@ -524,6 +532,14 @@
       var rf = document.getElementById("auth-reset-form");
       if (ff) ff.style.display = "none";
       if (rf) rf.style.display = "none";
+      var fnField = document.getElementById("auth-first-name-field");
+      var lnField = document.getElementById("auth-last-name-field");
+      var fnInput = document.getElementById("auth-first-name");
+      var lnInput = document.getElementById("auth-last-name");
+      if (fnField) fnField.style.display = isSignUp ? "" : "none";
+      if (lnField) lnField.style.display = isSignUp ? "" : "none";
+      if (fnInput) fnInput.required = isSignUp;
+      if (lnInput) lnInput.required = isSignUp;
     }
 
     // Wire up all Get Started / Sign In buttons on the page
@@ -547,7 +563,11 @@
       authSubmit.textContent = isSignUp ? "Creating…" : "Signing in…";
       var email = authEmail.value.trim();
       var password = authPassword.value;
-      var action = isSignUp ? WfAuth.signUp(email, password) : WfAuth.signIn(email, password);
+      var firstName = (document.getElementById("auth-first-name") || {}).value || "";
+      var lastName = (document.getElementById("auth-last-name") || {}).value || "";
+      var action = isSignUp
+        ? WfAuth.signUp(email, password, { first_name: firstName.trim(), last_name: lastName.trim() })
+        : WfAuth.signIn(email, password);
       action.then(function (data) {
         if (isSignUp) {
           // Supabase sends a confirmation email by default

@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=authb3" />
-<script src="supabase-client.js?v=authb3"></script>
+<link rel="stylesheet" href="styles.css?v=profile1" />
+<script src="supabase-client.js?v=profile1"></script>
 </head>
 <body>
   <header class="site-header">
@@ -55,7 +55,29 @@
     <section id="panel-profile" class="settings-panel" role="tabpanel" aria-labelledby="tab-profile">
       <h2>Profile</h2>
       <p class="muted">Manage your personal information.</p>
-      <p class="muted small" style="margin-top:24px;">Profile fields coming soon.</p>
+
+      <div class="equity-card" style="max-width:520px;">
+        <p class="muted small" id="profile-signin-msg" hidden>Sign in to view and edit your profile.</p>
+        <form id="profile-form" style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <label for="profile-first-name" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">First name</label>
+            <input type="text" id="profile-first-name" required
+              style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+          </div>
+          <div>
+            <label for="profile-last-name" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">Last name</label>
+            <input type="text" id="profile-last-name" required
+              style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+          </div>
+          <div>
+            <label for="profile-email" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">Email</label>
+            <input type="email" id="profile-email" readonly
+              style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#f3f4f6;" />
+          </div>
+          <p id="profile-status" class="muted small" style="margin:0; min-height:18px;"></p>
+          <button type="submit" class="btn btn-primary" id="profile-save" style="align-self:flex-start;">Save changes</button>
+        </form>
+      </div>
     </section>
 
     <section id="panel-transactions" class="settings-panel" role="tabpanel" aria-labelledby="tab-transactions" hidden>
@@ -269,8 +291,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=authb3"></script>
-  <script src="expense.js?v=authb3"></script>
+  <script src="script.js?v=profile1"></script>
+  <script src="expense.js?v=profile1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
@@ -299,6 +321,56 @@
       // Also hook into the Sync buttons — after a successful sync the data is in localStorage, push to cloud
       document.addEventListener("wf-sync-complete", function () {
         if (WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
+      });
+
+      // ── Profile panel ────────────────────────────────────────────────────
+      var profileForm = document.getElementById("profile-form");
+      var profileMsg = document.getElementById("profile-signin-msg");
+      var profileStatus = document.getElementById("profile-status");
+      var profileFN = document.getElementById("profile-first-name");
+      var profileLN = document.getElementById("profile-last-name");
+      var profileEmail = document.getElementById("profile-email");
+      var profileSave = document.getElementById("profile-save");
+
+      function fillProfile(user) {
+        var md = (user && user.user_metadata) || {};
+        if (profileFN) profileFN.value = md.first_name || "";
+        if (profileLN) profileLN.value = md.last_name || "";
+        if (profileEmail) profileEmail.value = (user && user.email) || "";
+      }
+
+      if (WfAuth.isLoggedIn()) {
+        if (profileMsg) profileMsg.hidden = true;
+        if (profileForm) profileForm.style.display = "";
+        fillProfile(WfAuth.getUser());
+        WfAuth.refreshUser().then(function (user) { if (user) fillProfile(user); }).catch(function () {});
+      } else {
+        if (profileMsg) profileMsg.hidden = false;
+        if (profileForm) profileForm.style.display = "none";
+      }
+
+      if (profileForm) profileForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!WfAuth.isLoggedIn()) return;
+        profileStatus.textContent = "";
+        profileStatus.style.color = "";
+        profileSave.disabled = true;
+        var origText = profileSave.textContent;
+        profileSave.textContent = "Saving…";
+        WfAuth.updateUserMetadata({
+          first_name: profileFN.value.trim(),
+          last_name: profileLN.value.trim()
+        }).then(function () {
+          profileStatus.style.color = "#059669";
+          profileStatus.textContent = "Profile saved.";
+          profileSave.disabled = false;
+          profileSave.textContent = origText;
+        }).catch(function (err) {
+          profileStatus.style.color = "#dc2626";
+          profileStatus.textContent = (err && err.message) || "Could not save profile.";
+          profileSave.disabled = false;
+          profileSave.textContent = origText;
+        });
       });
     })();
   </script>
