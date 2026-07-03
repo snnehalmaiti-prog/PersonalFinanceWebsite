@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=exptabalign" />
+<link rel="stylesheet" href="styles.css?v=exptabalign2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -594,7 +594,7 @@
 
     </section><!-- /panel-investment -->
 
-    <section id="panel-expense" class="settings-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
+    <section id="panel-expense" class="invest-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
       <div class="invest-sub-tabs" role="tablist" aria-label="Expense sections">
         <button type="button" class="invest-sub-tab active" data-dash-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
         <button type="button" class="invest-sub-tab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
@@ -642,7 +642,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=exptabalign"></script>
+  <script src="supabase-client.js?v=exptabalign2"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -658,7 +658,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=exptabalign"></script>
+  <script src="script.js?v=exptabalign2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
