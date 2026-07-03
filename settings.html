@@ -207,13 +207,55 @@
 
     <section id="panel-expense" class="settings-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
       <h2>Expense</h2>
-      <p class="muted">Connect your expense sheet to track spending on the dashboard.</p>
-      <p class="muted small" style="margin-top:24px;">Expense sheet connection coming soon.</p>
+      <p class="muted">Set up the accounts and categories used to track your spending on the dashboard.</p>
+
+      <div id="exp-signin-gate" hidden>
+        <p class="muted small" style="margin-top:20px;">Sign in to manage your expense accounts and categories. This data is private to your account.</p>
+      </div>
+
+      <div id="exp-content">
+        <div class="equity-card" style="margin-top:20px;">
+          <div class="equity-card-header">
+            <h3>Accounts</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
+          </div>
+          <p class="muted small equity-desc">Cash, bank, credit card or wallet accounts. Every transaction is linked to one account.</p>
+          <p class="muted small" id="exp-accounts-status">Loading…</p>
+          <div id="exp-accounts-list" class="exp-account-grid"></div>
+        </div>
+
+        <div class="equity-card">
+          <div class="equity-card-header">
+            <h3>Categories</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
+          </div>
+          <p class="muted small equity-desc">Expense and income categories with subcategories. When adding a record, choosing a category filters its subcategories.</p>
+          <p class="muted small" id="exp-categories-status">Loading…</p>
+          <div id="exp-categories-expense" class="exp-cat-group"></div>
+          <div id="exp-categories-income" class="exp-cat-group"></div>
+        </div>
+      </div>
     </section>
+
+    <!-- Expense add/edit modal (shared by accounts & categories) -->
+    <div id="exp-modal-overlay" class="exp-modal-overlay" hidden>
+      <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="exp-modal-title">
+        <div class="exp-modal-header">
+          <h3 id="exp-modal-title">Add</h3>
+          <button type="button" class="exp-modal-close" id="exp-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="exp-modal-body" id="exp-modal-body"></div>
+        <div class="exp-modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" id="exp-modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="exp-modal-save">Save</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="script.js?v=65dc633"></script>
+  <script src="expense.js?v=65dc633"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

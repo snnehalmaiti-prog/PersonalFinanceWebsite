@@ -305,6 +305,7 @@
         entry.tab.setAttribute("aria-selected", String(isActive));
         entry.panel.hidden = !isActive;
       });
+      if (tab === "expense" && window.WfExpense) window.WfExpense.onShow();
     }
 
     settingsTabs.forEach(function (entry) {
@@ -366,7 +367,6 @@
         var activeKey = activeSubTab ? activeSubTab.key : "equity";
         showInvestmentSubTab(activeKey);
       }
-      if (tab === "expense" && window.WfExpense) window.WfExpense.onShow();
     }
 
     dashTabs.forEach(function (entry) {
