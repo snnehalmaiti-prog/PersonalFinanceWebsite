@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=authb1" />
+<link rel="stylesheet" href="styles.css?v=authb2" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -415,7 +415,7 @@
     </div>
   </div>
 
-  <script src="script.js?v=authb1"></script>
+  <script src="script.js?v=authb2"></script>
 
   <!-- Auth modal -->
   <div id="auth-overlay" class="auth-overlay" hidden>
@@ -444,7 +444,7 @@
       </form>
       <p class="auth-confirm" id="auth-confirm" hidden>Check your email to confirm your account, then sign in.</p>
 
-      <form id="auth-forgot-form" hidden style="display:flex; flex-direction:column; gap:10px;">
+      <form id="auth-forgot-form" style="display:none; flex-direction:column; gap:10px;">
         <p class="muted small" style="margin:0;">Enter your account email and we'll send a reset link.</p>
         <input type="email" id="auth-forgot-email" placeholder="Email address" required
           style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
@@ -454,7 +454,7 @@
         <p style="margin:0; text-align:center;"><a href="#" id="auth-forgot-back" style="color:#2563eb; font-size:13px;">Back to sign in</a></p>
       </form>
 
-      <form id="auth-reset-form" hidden style="display:flex; flex-direction:column; gap:10px;">
+      <form id="auth-reset-form" style="display:none; flex-direction:column; gap:10px;">
         <p class="muted small" style="margin:0;">Set a new password for your account.</p>
         <input type="password" id="auth-reset-password" placeholder="New password (min 6 chars)" required minlength="6"
           style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
@@ -463,7 +463,7 @@
       </form>
     </div>
   </div>
-  <script src="supabase-client.js?v=authb1"></script>
+  <script src="supabase-client.js?v=authb2"></script>
   <script>
     // Detect Supabase recovery / access-token hash (from password reset email)
     var _recoveryTokens = null;
@@ -518,6 +518,12 @@
       if (pwInput) pwInput.setAttribute("autocomplete", isSignUp ? "new-password" : "current-password");
       authError.hidden = true;
       authConfirm.hidden = true;
+      authForm.style.display = "";
+      authForm.hidden = false;
+      var ff = document.getElementById("auth-forgot-form");
+      var rf = document.getElementById("auth-reset-form");
+      if (ff) ff.style.display = "none";
+      if (rf) rf.style.display = "none";
     }
 
     // Wire up all Get Started / Sign In buttons on the page
@@ -593,16 +599,18 @@
     var forgotSubmit = document.getElementById("auth-forgot-submit");
 
     function showForgot() {
-      authForm.hidden = true;
-      forgotForm.hidden = false;
+      authForm.style.display = "none";
+      resetForm.style.display = "none";
+      forgotForm.style.display = "flex";
       forgotErr.hidden = true;
       forgotSent.hidden = true;
       forgotEmail.value = authEmail.value;
       forgotEmail.focus();
     }
     function showLogin() {
-      forgotForm.hidden = true;
-      authForm.hidden = false;
+      forgotForm.style.display = "none";
+      resetForm.style.display = "none";
+      authForm.style.display = "";
       authError.hidden = true;
     }
     if (forgotLink) forgotLink.addEventListener("click", function (e) { e.preventDefault(); showForgot(); });
@@ -636,8 +644,9 @@
 
     if (_recoveryTokens) {
       openModal("signin");
-      authForm.hidden = true;
-      resetForm.hidden = false;
+      authForm.style.display = "none";
+      forgotForm.style.display = "none";
+      resetForm.style.display = "flex";
       document.getElementById("login-title").textContent = "Reset password";
     }
 
