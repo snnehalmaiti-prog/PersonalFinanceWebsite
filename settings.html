@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=gate4" />
-<script src="supabase-client.js?v=gate4"></script>
+<link rel="stylesheet" href="styles.css?v=usermenu1" />
+<script src="supabase-client.js?v=usermenu1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -33,6 +33,17 @@
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
         <a href="dashboard.html" class="btn btn-ghost hide-mobile">Back to Dashboard</a>
+        <div class="user-menu hide-mobile" id="user-menu">
+          <button type="button" class="user-menu-trigger" id="user-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="user-menu-avatar" id="user-menu-avatar">?</span>
+            <span class="user-menu-name" id="user-menu-name">Account</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
+            <a href="settings.html" class="user-menu-item">Settings</a>
+            <button type="button" class="user-menu-item" id="user-menu-signout">Sign out</button>
+          </div>
+        </div>
         <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
           <span></span><span></span><span></span>
         </button>
@@ -77,10 +88,7 @@
               style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#f3f4f6;" />
           </div>
           <p id="profile-status" class="muted small" style="margin:0; min-height:18px;"></p>
-          <div style="display:flex; gap:10px; align-items:center;">
-            <button type="submit" class="btn btn-primary" id="profile-save">Save changes</button>
-            <button type="button" class="btn btn-ghost" id="sign-out-btn">Sign out</button>
-          </div>
+          <button type="submit" class="btn btn-primary" id="profile-save" style="align-self:flex-start;">Save changes</button>
         </form>
       </div>
     </section>
@@ -296,17 +304,13 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=gate4"></script>
-  <script src="expense.js?v=gate4"></script>
+  <script src="script.js?v=usermenu1"></script>
+  <script src="expense.js?v=usermenu1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
-      var signOutBtn = document.getElementById("sign-out-btn");
-      if (signOutBtn) {
-        signOutBtn.addEventListener("click", function () {
-          WfAuth.signOut().then(function () { window.location.href = "index.html"; });
-        });
-      }
+      wireUserMenu();
+      WfAuth.refreshUser().then(function () { wireUserMenu(); }).catch(function () {});
       // After any settings save, sync to cloud
       document.addEventListener("wf-settings-saved", function () {
         if (WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
@@ -366,6 +370,38 @@
         });
       });
     })();
+
+    function wireUserMenu() {
+      var user = WfAuth.getUser() || {};
+      var md = user.user_metadata || {};
+      var first = (md.first_name || "").trim();
+      var display = first || (user.email ? user.email.split("@")[0] : "Account");
+      var initial = (first || user.email || "?").charAt(0).toUpperCase();
+      var nameEl = document.getElementById("user-menu-name");
+      var avEl = document.getElementById("user-menu-avatar");
+      if (nameEl) nameEl.textContent = display;
+      if (avEl) avEl.textContent = initial;
+      var trigger = document.getElementById("user-menu-trigger");
+      var dropdown = document.getElementById("user-menu-dropdown");
+      var signout = document.getElementById("user-menu-signout");
+      if (!trigger || !dropdown || trigger._wired) return;
+      trigger._wired = true;
+      trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var open = !dropdown.hidden;
+        dropdown.hidden = open;
+        trigger.setAttribute("aria-expanded", String(!open));
+      });
+      document.addEventListener("click", function (e) {
+        if (!dropdown.hidden && !dropdown.contains(e.target) && e.target !== trigger) {
+          dropdown.hidden = true;
+          trigger.setAttribute("aria-expanded", "false");
+        }
+      });
+      if (signout) signout.addEventListener("click", function () {
+        WfAuth.signOut().then(function () { window.location.href = "index.html"; });
+      });
+    }
   </script>
 </body>
 </html>

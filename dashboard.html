@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=gate4" />
+<link rel="stylesheet" href="styles.css?v=usermenu1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -65,7 +65,17 @@
             <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
           </ul>
         </div>
-        <a href="settings.html" class="btn btn-ghost hide-mobile">Settings</a>
+        <div class="user-menu hide-mobile" id="user-menu">
+          <button type="button" class="user-menu-trigger" id="user-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="user-menu-avatar" id="user-menu-avatar">?</span>
+            <span class="user-menu-name" id="user-menu-name">Account</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
+            <a href="settings.html" class="user-menu-item">Settings</a>
+            <button type="button" class="user-menu-item" id="user-menu-signout">Sign out</button>
+          </div>
+        </div>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -591,20 +601,55 @@
 
   </main>
 
-  <script src="supabase-client.js?v=gate4"></script>
+  <script src="supabase-client.js?v=usermenu1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
     }
   </script>
-  <script src="script.js?v=gate4"></script>
+  <script src="script.js?v=usermenu1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
       if (WfAuth.isLoggedIn()) {
         WfAuth.loadSettingsFromCloud().catch(function () {});
       }
+      wireUserMenu();
+      WfAuth.refreshUser().then(function () { wireUserMenu(); }).catch(function () {});
     })();
+
+    function wireUserMenu() {
+      var user = WfAuth.getUser() || {};
+      var md = user.user_metadata || {};
+      var first = (md.first_name || "").trim();
+      var last = (md.last_name || "").trim();
+      var display = first || (user.email ? user.email.split("@")[0] : "Account");
+      var initial = (first || user.email || "?").charAt(0).toUpperCase();
+      var nameEl = document.getElementById("user-menu-name");
+      var avEl = document.getElementById("user-menu-avatar");
+      if (nameEl) nameEl.textContent = display;
+      if (avEl) avEl.textContent = initial;
+      var trigger = document.getElementById("user-menu-trigger");
+      var dropdown = document.getElementById("user-menu-dropdown");
+      var signout = document.getElementById("user-menu-signout");
+      if (!trigger || !dropdown || trigger._wired) return;
+      trigger._wired = true;
+      trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var open = !dropdown.hidden;
+        dropdown.hidden = open;
+        trigger.setAttribute("aria-expanded", String(!open));
+      });
+      document.addEventListener("click", function (e) {
+        if (!dropdown.hidden && !dropdown.contains(e.target) && e.target !== trigger) {
+          dropdown.hidden = true;
+          trigger.setAttribute("aria-expanded", "false");
+        }
+      });
+      if (signout) signout.addEventListener("click", function () {
+        WfAuth.signOut().then(function () { window.location.href = "index.html"; });
+      });
+    }
   </script>
 </body>
 </html>
