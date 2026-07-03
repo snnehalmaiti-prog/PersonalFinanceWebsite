@@ -1997,3 +1997,43 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .exp-type-toggle { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
 .exp-type-toggle button { padding: 6px 16px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-weight: 600; color: var(--muted); }
 .exp-type-toggle button.active { background: #3B82F6; color: #fff; }
+
+/* ===== Expense — BudgetBakers-style row list ===== */
+.exp-list { margin-top: 6px; }
+.exp-group-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 4px; }
+.exp-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 6px; border-bottom: 1px solid var(--border);
+}
+.exp-row[data-nav] { cursor: pointer; }
+.exp-row[data-nav]:hover { background: var(--bg); }
+.exp-row-icon {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; color: #fff;
+}
+.exp-row-name { flex: 1; font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
+.exp-row-sub { font-size: 0.78rem; font-weight: 400; color: var(--muted); }
+.exp-row-meta { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.exp-row-chevron { color: var(--muted); font-size: 1.3rem; line-height: 1; }
+.exp-kebab {
+  flex: 0 0 auto; background: transparent; border: none; cursor: pointer;
+  font-size: 1.2rem; line-height: 1; color: var(--muted); padding: 6px 8px; border-radius: 6px;
+}
+.exp-kebab:hover { background: var(--bg); color: var(--text); }
+.exp-kebab-menu {
+  position: absolute; z-index: 1100; min-width: 160px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.18); padding: 6px; display: flex; flex-direction: column;
+}
+.exp-kebab-menu button {
+  text-align: left; background: transparent; border: none; cursor: pointer;
+  padding: 9px 12px; border-radius: 7px; font-size: 0.9rem; color: var(--text);
+}
+.exp-kebab-menu button:hover { background: var(--bg); }
+.exp-kebab-menu button.danger { color: var(--negative, #EF4444); }
+.exp-back {
+  background: transparent; border: none; cursor: pointer; color: var(--muted);
+  font-size: 0.95rem; font-weight: 600; padding: 0 6px 0 0;
+}
+.exp-back:hover { color: var(--text); }

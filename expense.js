@@ -126,6 +126,18 @@
     return Promise.all([seedAcct, seedCats]);
   }
 
+  // Generic BudgetBakers-style row: circular icon, name, optional meta, chevron, kebab.
+  function rowHtml(opts) {
+    return '<div class="exp-row"' + (opts.clickable ? ' data-nav="' + opts.id + '"' : "") + '>' +
+      '<span class="exp-row-icon" style="background:' + esc(opts.color) + '">' + esc(opts.icon) + '</span>' +
+      '<span class="exp-row-name">' + esc(opts.name) +
+        (opts.sub ? '<span class="exp-row-sub">' + esc(opts.sub) + '</span>' : "") + '</span>' +
+      (opts.meta ? '<span class="exp-row-meta">' + esc(opts.meta) + '</span>' : "") +
+      (opts.chevron ? '<span class="exp-row-chevron">›</span>' : "") +
+      '<button type="button" class="exp-kebab" data-kebab="' + opts.kebab + '" data-id="' + opts.id + '" aria-label="More">⋮</button>' +
+      '</div>';
+  }
+
   // ── Rendering: Accounts ─────────────────────────────────────────────────────
   function renderAccounts() {
     var list = el("exp-accounts-list");
@@ -139,54 +151,60 @@
     if (status) status.hidden = true;
     list.innerHTML = state.accounts.map(function (a) {
       var typeLabel = (ACC_TYPES.find(function (t) { return t.v === a.type; }) || {}).label || a.type;
-      return '<div class="exp-account-card" style="border-left-color:' + esc(a.color) + '">' +
-        '<div class="exp-account-top"><span class="exp-cat-icon" style="background:' + esc(a.color) + '">' + esc(a.icon) + '</span>' +
-        '<span class="exp-account-name">' + esc(a.name) + '</span></div>' +
-        '<div class="exp-account-type">' + esc(typeLabel) + '</div>' +
-        '<div class="exp-account-bal">Opening: ' + fmtMoney(a.initial_balance) + '</div>' +
-        '<div class="exp-row-actions">' +
-        '<button type="button" class="exp-icon-btn" data-act="edit-acct" data-id="' + a.id + '" title="Edit">✏️</button>' +
-        '<button type="button" class="exp-icon-btn" data-act="del-acct" data-id="' + a.id + '" title="Delete">🗑️</button>' +
-        '</div></div>';
+      return rowHtml({ id: a.id, icon: a.icon, color: a.color, name: a.name,
+        sub: typeLabel, meta: "Opening " + fmtMoney(a.initial_balance), kebab: "acct" });
     }).join("");
   }
 
-  // ── Rendering: Categories (grouped by type, with subcategories) ─────────────
+  // ── Rendering: Categories (row list + drill-down into subcategories) ────────
+  var catNav = { parentId: null }; // null = top-level list; else showing a category's subs
+
   function renderCategories() {
     var status = el("exp-categories-status");
-    if (status) status.hidden = !!state.categories.length;
-    if (status && !state.categories.length) status.textContent = "No categories yet — add your first category.";
-    renderCatGroup("expense", el("exp-categories-expense"), "Expense Categories");
-    renderCatGroup("income", el("exp-categories-income"), "Income Categories");
-  }
+    var body = el("exp-categories-body");
+    var heading = el("exp-categories-heading");
+    var addBtn = el("exp-add-category-btn");
+    if (!body) return;
 
-  function renderCatGroup(type, container, heading) {
-    if (!container) return;
-    var tops = state.categories.filter(function (c) { return c.type === type && !c.parent_id; });
-    if (!tops.length) { container.innerHTML = ""; return; }
-    var html = '<h3 class="exp-group-title">' + heading + '</h3>';
-    tops.forEach(function (cat) {
-      var subs = state.categories.filter(function (c) { return c.parent_id === cat.id; });
-      html += '<div class="exp-cat">' +
-        '<div class="exp-cat-head">' +
-        '<span class="exp-cat-icon" style="background:' + esc(cat.color) + '">' + esc(cat.icon) + '</span>' +
-        '<span class="exp-cat-name">' + esc(cat.name) + '</span>' +
-        '<div class="exp-row-actions">' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-act="add-sub" data-id="' + cat.id + '">+ Subcategory</button>' +
-        '<button type="button" class="exp-icon-btn" data-act="edit-cat" data-id="' + cat.id + '" title="Edit">✏️</button>' +
-        '<button type="button" class="exp-icon-btn" data-act="del-cat" data-id="' + cat.id + '" title="Delete">🗑️</button>' +
-        '</div></div>';
-      if (subs.length) {
-        html += '<div class="exp-subcat-list">' + subs.map(function (s) {
-          return '<span class="exp-subcat">' + esc(s.name) +
-            '<button type="button" class="exp-icon-btn" data-act="edit-cat" data-id="' + s.id + '" title="Edit">✏️</button>' +
-            '<button type="button" class="exp-icon-btn" data-act="del-cat" data-id="' + s.id + '" title="Delete">🗑️</button>' +
-            '</span>';
-        }).join("") + '</div>';
-      }
-      html += '</div>';
+    if (!state.categories.length) {
+      if (status) { status.hidden = false; status.textContent = "No categories yet — add your first category."; }
+      if (heading) heading.textContent = "Categories";
+      body.innerHTML = "";
+      return;
+    }
+    if (status) status.hidden = true;
+
+    if (catNav.parentId) {
+      // Drill-down: show one category's subcategories
+      var parent = findCat(catNav.parentId);
+      if (!parent) { catNav.parentId = null; return renderCategories(); }
+      if (heading) heading.innerHTML = '<button type="button" class="exp-back" id="exp-cat-back">‹ Categories</button> ' + esc(parent.name);
+      if (addBtn) addBtn.textContent = "+ Add subcategory";
+      var subs = state.categories.filter(function (c) { return c.parent_id === parent.id; });
+      body.innerHTML = subs.length
+        ? subs.map(function (s) { return rowHtml({ id: s.id, icon: s.icon, color: s.color, name: s.name, kebab: "cat" }); }).join("")
+        : '<p class="muted small">No subcategories yet — add one.</p>';
+      var back = el("exp-cat-back");
+      if (back) back.addEventListener("click", function () { catNav.parentId = null; renderCategories(); });
+      return;
+    }
+
+    // Top-level: grouped by expense / income
+    if (heading) heading.textContent = "Categories";
+    if (addBtn) addBtn.textContent = "+ Add category";
+    var html = "";
+    [["expense", "Expense"], ["income", "Income"]].forEach(function (g) {
+      var tops = state.categories.filter(function (c) { return c.type === g[0] && !c.parent_id; });
+      if (!tops.length) return;
+      html += '<h4 class="exp-group-title">' + g[1] + '</h4>';
+      html += tops.map(function (cat) {
+        var subCount = state.categories.filter(function (c) { return c.parent_id === cat.id; }).length;
+        return rowHtml({ id: cat.id, icon: cat.icon, color: cat.color, name: cat.name,
+          sub: subCount ? subCount + " subcategor" + (subCount > 1 ? "ies" : "y") : "",
+          chevron: true, clickable: true, kebab: "cat" });
+      }).join("");
     });
-    container.innerHTML = html;
+    body.innerHTML = html;
   }
 
   // ── Modal plumbing ──────────────────────────────────────────────────────────
@@ -327,6 +345,45 @@
     WfDb.remove(ACCT, id).then(function () { return loadData(); });
   }
 
+  // ── Kebab (⋮) context menu ──────────────────────────────────────────────────
+  var _kebabEl = null;
+  function closeKebab() { if (_kebabEl) { _kebabEl.remove(); _kebabEl = null; } }
+
+  function openKebab(anchor, items) {
+    closeKebab();
+    var menu = document.createElement("div");
+    menu.className = "exp-kebab-menu";
+    menu.innerHTML = items.map(function (it, i) {
+      return '<button type="button" data-i="' + i + '"' + (it.danger ? ' class="danger"' : "") + '>' + esc(it.label) + '</button>';
+    }).join("");
+    document.body.appendChild(menu);
+    var r = anchor.getBoundingClientRect();
+    menu.style.top = (window.scrollY + r.bottom + 4) + "px";
+    // right-align the menu to the kebab
+    menu.style.left = (window.scrollX + r.right - menu.offsetWidth) + "px";
+    menu.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-i]"); if (!b) return;
+      var idx = Number(b.getAttribute("data-i"));
+      closeKebab();
+      if (items[idx] && items[idx].fn) items[idx].fn();
+    });
+    _kebabEl = menu;
+  }
+
+  function accountMenu(id) {
+    return [
+      { label: "Edit", fn: function () { openAccountModal(findAcct(id)); } },
+      { label: "Delete", danger: true, fn: function () { deleteAccount(id); } }
+    ];
+  }
+  function categoryMenu(id) {
+    var cat = findCat(id);
+    var items = [{ label: "Edit", fn: function () { openCategoryModal(findCat(id)); } }];
+    if (cat && !cat.parent_id) items.push({ label: "Add subcategory", fn: function () { openCategoryModal(null, findCat(id)); } });
+    items.push({ label: "Delete", danger: true, fn: function () { deleteCategory(id); } });
+    return items;
+  }
+
   // ── Wiring (once) ───────────────────────────────────────────────────────────
   function wireOnce() {
     if (wired) return;
@@ -340,29 +397,25 @@
     var addAcct = el("exp-add-account-btn");
     if (addAcct) addAcct.addEventListener("click", function () { openAccountModal(null); });
     var addCat = el("exp-add-category-btn");
-    if (addCat) addCat.addEventListener("click", function () { openCategoryModal(null, null, "expense"); });
-
-    // Delegated actions on accounts list
-    var accList = el("exp-accounts-list");
-    if (accList) accList.addEventListener("click", function (e) {
-      var btn = e.target.closest("[data-act]"); if (!btn) return;
-      var id = btn.getAttribute("data-id");
-      if (btn.getAttribute("data-act") === "edit-acct") openAccountModal(findAcct(id));
-      if (btn.getAttribute("data-act") === "del-acct") deleteAccount(id);
+    if (addCat) addCat.addEventListener("click", function () {
+      if (catNav.parentId) openCategoryModal(null, findCat(catNav.parentId)); // add subcategory
+      else openCategoryModal(null, null, "expense");
     });
 
-    // Delegated actions on category groups
-    ["exp-categories-expense", "exp-categories-income"].forEach(function (gid) {
-      var g = el(gid);
-      if (!g) return;
-      g.addEventListener("click", function (e) {
-        var btn = e.target.closest("[data-act]"); if (!btn) return;
-        var id = btn.getAttribute("data-id");
-        var act = btn.getAttribute("data-act");
-        if (act === "edit-cat") openCategoryModal(findCat(id));
-        else if (act === "del-cat") deleteCategory(id);
-        else if (act === "add-sub") openCategoryModal(null, findCat(id));
-      });
+    // Accounts list: kebab menu only (no drill-down)
+    var accList = el("exp-accounts-list");
+    if (accList) accList.addEventListener("click", function (e) {
+      var kb = e.target.closest("[data-kebab]");
+      if (kb) { openKebab(kb, accountMenu(kb.getAttribute("data-id"))); return; }
+    });
+
+    // Categories body: row drill-down + kebab menu
+    var catBody = el("exp-categories-body");
+    if (catBody) catBody.addEventListener("click", function (e) {
+      var kb = e.target.closest("[data-kebab]");
+      if (kb) { e.stopPropagation(); openKebab(kb, categoryMenu(kb.getAttribute("data-id"))); return; }
+      var row = e.target.closest("[data-nav]");
+      if (row) { catNav.parentId = row.getAttribute("data-nav"); renderCategories(); }
     });
 
     // Modal controls
@@ -376,6 +429,13 @@
       if (modalCtx.kind === "account") saveAccount();
       else if (modalCtx.kind === "category") saveCategory();
     });
+
+    // Close the kebab menu on outside click / scroll / escape
+    document.addEventListener("click", function (e) {
+      if (_kebabEl && !e.target.closest(".exp-kebab-menu") && !e.target.closest("[data-kebab]")) closeKebab();
+    });
+    window.addEventListener("scroll", closeKebab, true);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeKebab(); });
   }
 
   // ── Entry point (called by script.js when the Expense tab is shown) ─────────
