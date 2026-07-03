@@ -438,6 +438,47 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeKebab(); });
   }
 
+  var _authMode = "signin";
+  var _authWired = false;
+
+  function wireAuthOnce() {
+    if (_authWired) return;
+    _authWired = true;
+    var form = el("exp-auth-form");
+    var toggle = el("exp-auth-toggle");
+    var errEl = el("exp-auth-error");
+    if (!form) return;
+    toggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      _authMode = _authMode === "signin" ? "signup" : "signin";
+      el("exp-auth-title").textContent = _authMode === "signin" ? "Sign in" : "Create account";
+      el("exp-auth-submit").textContent = _authMode === "signin" ? "Sign in" : "Create account";
+      el("exp-auth-toggle-prompt").textContent = _authMode === "signin" ? "No account?" : "Already have one?";
+      toggle.textContent = _authMode === "signin" ? "Create one" : "Sign in";
+      errEl.textContent = "";
+    });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      errEl.textContent = "";
+      var email = el("exp-auth-email").value.trim();
+      var pw = el("exp-auth-password").value;
+      var btn = el("exp-auth-submit");
+      btn.disabled = true;
+      var origText = btn.textContent;
+      btn.textContent = _authMode === "signin" ? "Signing in…" : "Creating…";
+      var p = _authMode === "signin" ? WfAuth.signIn(email, pw) : WfAuth.signUp(email, pw);
+      p.then(function () {
+        btn.disabled = false;
+        btn.textContent = origText;
+        onShow();
+      }).catch(function (err) {
+        btn.disabled = false;
+        btn.textContent = origText;
+        errEl.textContent = (err && err.message) || "Something went wrong. Please try again.";
+      });
+    });
+  }
+
   // ── Entry point (called by script.js when the Expense tab is shown) ─────────
   function onShow() {
     var gate = el("exp-signin-gate");
@@ -445,6 +486,7 @@
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       if (gate) gate.hidden = false;
       if (content) content.hidden = true;
+      wireAuthOnce();
       return;
     }
     if (gate) gate.hidden = true;

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=b150142" />
+<link rel="stylesheet" href="styles.css?v=authinline" />
 <script src="supabase-client.js?v=authfix1"></script>
 </head>
 <body>
@@ -210,7 +210,22 @@
       <p class="muted">Set up the accounts and categories used to track your spending on the dashboard.</p>
 
       <div id="exp-signin-gate" hidden>
-        <p class="muted small" style="margin-top:20px;">Sign in to manage your expense accounts and categories. This data is private to your account.</p>
+        <div class="equity-card" style="margin-top:20px; max-width:420px;">
+          <h3 id="exp-auth-title">Sign in</h3>
+          <p class="muted small">Your expense data is private and synced to your account.</p>
+          <form id="exp-auth-form" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+            <input type="email" id="exp-auth-email" placeholder="Email" required
+              style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+            <input type="password" id="exp-auth-password" placeholder="Password (min 6 chars)" required minlength="6"
+              style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+            <p id="exp-auth-error" style="color:#dc2626; font-size:13px; margin:0; min-height:18px;"></p>
+            <button type="submit" class="btn btn-primary" id="exp-auth-submit">Sign in</button>
+            <p class="muted small" style="margin:0; text-align:center;">
+              <span id="exp-auth-toggle-prompt">No account?</span>
+              <a href="#" id="exp-auth-toggle" style="color:#2563eb;">Create one</a>
+            </p>
+          </form>
+        </div>
       </div>
 
       <div id="exp-content">
@@ -253,8 +268,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=b150142"></script>
-  <script src="expense.js?v=b150142"></script>
+  <script src="script.js?v=authinline"></script>
+  <script src="expense.js?v=authinline"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
