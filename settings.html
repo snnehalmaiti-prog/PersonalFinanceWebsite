@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=gate3" />
-<script src="supabase-client.js?v=gate3"></script>
+<link rel="stylesheet" href="styles.css?v=gate4" />
+<script src="supabase-client.js?v=gate4"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -33,9 +33,6 @@
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
         <a href="dashboard.html" class="btn btn-ghost hide-mobile">Back to Dashboard</a>
-        <span class="user-badge hide-mobile" id="user-badge" hidden></span>
-        <a href="index.html" class="btn btn-primary hide-mobile" id="sign-in-btn" hidden>Log in</a>
-        <button type="button" class="btn btn-ghost hide-mobile" id="sign-out-btn" hidden>Sign out</button>
         <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
           <span></span><span></span><span></span>
         </button>
@@ -80,7 +77,10 @@
               style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#f3f4f6;" />
           </div>
           <p id="profile-status" class="muted small" style="margin:0; min-height:18px;"></p>
-          <button type="submit" class="btn btn-primary" id="profile-save" style="align-self:flex-start;">Save changes</button>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button type="submit" class="btn btn-primary" id="profile-save">Save changes</button>
+            <button type="button" class="btn btn-ghost" id="sign-out-btn">Sign out</button>
+          </div>
         </form>
       </div>
     </section>
@@ -296,24 +296,12 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=gate3"></script>
-  <script src="expense.js?v=gate3"></script>
+  <script src="script.js?v=gate4"></script>
+  <script src="expense.js?v=gate4"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
-      var badge = document.getElementById("user-badge");
       var signOutBtn = document.getElementById("sign-out-btn");
-      var signInBtn = document.getElementById("sign-in-btn");
-      if (WfAuth.isLoggedIn()) {
-        var email = WfAuth.getUserEmail();
-        if (badge && email) { badge.textContent = email; badge.hidden = false; }
-        if (signOutBtn) signOutBtn.hidden = false;
-        if (signInBtn) signInBtn.hidden = true;
-      } else {
-        if (signInBtn) signInBtn.hidden = false;
-        if (signOutBtn) signOutBtn.hidden = true;
-        if (badge) badge.hidden = true;
-      }
       if (signOutBtn) {
         signOutBtn.addEventListener("click", function () {
           WfAuth.signOut().then(function () { window.location.href = "index.html"; });
