@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=authinline" />
+<link rel="stylesheet" href="styles.css?v=authb1" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -415,7 +415,7 @@
     </div>
   </div>
 
-  <script src="script.js?v=authinline"></script>
+  <script src="script.js?v=authb1"></script>
 
   <!-- Auth modal -->
   <div id="auth-overlay" class="auth-overlay" hidden>
@@ -440,14 +440,49 @@
         </div>
         <p class="auth-error" id="auth-error" hidden></p>
         <button type="submit" class="btn btn-primary auth-submit" id="auth-submit">Sign In</button>
+        <p style="margin:12px 0 0; text-align:center;"><a href="#" id="auth-forgot" style="color:#2563eb; font-size:13px;">Forgot password?</a></p>
       </form>
       <p class="auth-confirm" id="auth-confirm" hidden>Check your email to confirm your account, then sign in.</p>
+
+      <form id="auth-forgot-form" hidden style="display:flex; flex-direction:column; gap:10px;">
+        <p class="muted small" style="margin:0;">Enter your account email and we'll send a reset link.</p>
+        <input type="email" id="auth-forgot-email" placeholder="Email address" required
+          style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+        <p class="auth-error" id="auth-forgot-error" hidden></p>
+        <p class="auth-confirm" id="auth-forgot-sent" hidden>Reset link sent. Check your email.</p>
+        <button type="submit" class="btn btn-primary" id="auth-forgot-submit">Send reset link</button>
+        <p style="margin:0; text-align:center;"><a href="#" id="auth-forgot-back" style="color:#2563eb; font-size:13px;">Back to sign in</a></p>
+      </form>
+
+      <form id="auth-reset-form" hidden style="display:flex; flex-direction:column; gap:10px;">
+        <p class="muted small" style="margin:0;">Set a new password for your account.</p>
+        <input type="password" id="auth-reset-password" placeholder="New password (min 6 chars)" required minlength="6"
+          style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+        <p class="auth-error" id="auth-reset-error" hidden></p>
+        <button type="submit" class="btn btn-primary" id="auth-reset-submit">Update password</button>
+      </form>
     </div>
   </div>
-  <script src="supabase-client.js?v=authfix1"></script>
+  <script src="supabase-client.js?v=authb1"></script>
   <script>
-    // If already logged in, go straight to dashboard
-    if (window.WfAuth && window.WfAuth.isLoggedIn()) {
+    // Detect Supabase recovery / access-token hash (from password reset email)
+    var _recoveryTokens = null;
+    (function () {
+      var h = window.location.hash || "";
+      if (h.indexOf("access_token=") === -1) return;
+      var params = {};
+      h.replace(/^#/, "").split("&").forEach(function (p) {
+        var kv = p.split("=");
+        params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");
+      });
+      if (params.type === "recovery" && params.access_token) {
+        _recoveryTokens = { access_token: params.access_token, refresh_token: params.refresh_token };
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    })();
+
+    // If already logged in AND not in recovery flow, go straight to dashboard
+    if (window.WfAuth && window.WfAuth.isLoggedIn() && !_recoveryTokens) {
       window.location.href = "dashboard.html";
     }
 
@@ -546,6 +581,82 @@
     // Wire Get Started buttons in hero
     document.querySelectorAll("a[href='#get-started']").forEach(function (el) {
       el.addEventListener("click", function (e) { e.preventDefault(); openModal("signup"); });
+    });
+
+    // ── Forgot password flow ────────────────────────────────────────────────
+    var forgotLink = document.getElementById("auth-forgot");
+    var forgotForm = document.getElementById("auth-forgot-form");
+    var forgotBack = document.getElementById("auth-forgot-back");
+    var forgotEmail = document.getElementById("auth-forgot-email");
+    var forgotErr = document.getElementById("auth-forgot-error");
+    var forgotSent = document.getElementById("auth-forgot-sent");
+    var forgotSubmit = document.getElementById("auth-forgot-submit");
+
+    function showForgot() {
+      authForm.hidden = true;
+      forgotForm.hidden = false;
+      forgotErr.hidden = true;
+      forgotSent.hidden = true;
+      forgotEmail.value = authEmail.value;
+      forgotEmail.focus();
+    }
+    function showLogin() {
+      forgotForm.hidden = true;
+      authForm.hidden = false;
+      authError.hidden = true;
+    }
+    if (forgotLink) forgotLink.addEventListener("click", function (e) { e.preventDefault(); showForgot(); });
+    if (forgotBack) forgotBack.addEventListener("click", function (e) { e.preventDefault(); showLogin(); });
+
+    if (forgotForm) forgotForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      forgotErr.hidden = true;
+      forgotSent.hidden = true;
+      var email = forgotEmail.value.trim();
+      forgotSubmit.disabled = true;
+      forgotSubmit.textContent = "Sending…";
+      WfAuth.sendPasswordReset(email, window.location.origin + window.location.pathname)
+        .then(function () {
+          forgotSent.hidden = false;
+          forgotSubmit.disabled = false;
+          forgotSubmit.textContent = "Send reset link";
+        }).catch(function (err) {
+          forgotErr.textContent = err.message || "Could not send reset email.";
+          forgotErr.hidden = false;
+          forgotSubmit.disabled = false;
+          forgotSubmit.textContent = "Send reset link";
+        });
+    });
+
+    // ── Recovery: set new password ─────────────────────────────────────────
+    var resetForm = document.getElementById("auth-reset-form");
+    var resetPassword = document.getElementById("auth-reset-password");
+    var resetErr = document.getElementById("auth-reset-error");
+    var resetSubmit = document.getElementById("auth-reset-submit");
+
+    if (_recoveryTokens) {
+      openModal("signin");
+      authForm.hidden = true;
+      resetForm.hidden = false;
+      document.getElementById("login-title").textContent = "Reset password";
+    }
+
+    if (resetForm) resetForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      resetErr.hidden = true;
+      var pw = resetPassword.value;
+      resetSubmit.disabled = true;
+      resetSubmit.textContent = "Updating…";
+      WfAuth.updatePassword(pw, _recoveryTokens.access_token)
+        .then(function () {
+          WfAuth.setSessionFromTokens(_recoveryTokens.access_token, _recoveryTokens.refresh_token);
+          window.location.href = "dashboard.html";
+        }).catch(function (err) {
+          resetErr.textContent = err.message || "Could not update password.";
+          resetErr.hidden = false;
+          resetSubmit.disabled = false;
+          resetSubmit.textContent = "Update password";
+        });
     });
   </script>
 </body>

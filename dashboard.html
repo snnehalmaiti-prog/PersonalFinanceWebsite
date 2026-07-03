@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=authinline" />
+<link rel="stylesheet" href="styles.css?v=authb1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -71,7 +71,8 @@
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
         <span class="user-badge hide-mobile" id="user-badge" hidden></span>
-        <button type="button" class="btn btn-ghost hide-mobile" id="sign-out-btn">Sign out</button>
+        <a href="index.html" class="btn btn-primary hide-mobile" id="sign-in-btn" hidden>Log in</a>
+        <button type="button" class="btn btn-ghost hide-mobile" id="sign-out-btn" hidden>Sign out</button>
         <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
           <span></span><span></span><span></span>
         </button>
@@ -592,17 +593,21 @@
 
   </main>
 
-  <script src="script.js?v=authinline"></script>
-  <script src="supabase-client.js?v=authfix1"></script>
+  <script src="script.js?v=authb1"></script>
+  <script src="supabase-client.js?v=authb1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
       var badge = document.getElementById("user-badge");
       var signOutBtn = document.getElementById("sign-out-btn");
+      var signInBtn = document.getElementById("sign-in-btn");
       if (WfAuth.isLoggedIn()) {
         var email = WfAuth.getUserEmail();
         if (badge && email) { badge.textContent = email; badge.hidden = false; }
+        if (signOutBtn) signOutBtn.hidden = false;
         WfAuth.loadSettingsFromCloud().catch(function () {});
+      } else {
+        if (signInBtn) signInBtn.hidden = false;
       }
       if (signOutBtn) {
         signOutBtn.addEventListener("click", function () {

@@ -88,6 +88,39 @@
     });
   }
 
+  function sendPasswordReset(email, redirectTo) {
+    var body = { email: email };
+    return fetch(SUPABASE_URL + "/auth/v1/recover" + (redirectTo ? "?redirect_to=" + encodeURIComponent(redirectTo) : ""), {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (data) {
+      if (data.error || data.msg || data.error_code || (data.code && data.code >= 400)) {
+        throw new Error(data.error_description || data.msg || data.error || "Could not send reset email");
+      }
+      return data;
+    });
+  }
+
+  function updatePassword(newPassword, accessToken) {
+    var token = accessToken || getAccessToken();
+    if (!token) return Promise.reject(new Error("Not authenticated"));
+    return fetch(SUPABASE_URL + "/auth/v1/user", {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify({ password: newPassword })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data.error || data.msg || data.error_code || (data.code && data.code >= 400)) {
+        throw new Error(data.error_description || data.msg || data.error || "Could not update password");
+      }
+      return data;
+    });
+  }
+
+  function setSessionFromTokens(accessToken, refreshToken) {
+    setSession({ access_token: accessToken, refresh_token: refreshToken, token_type: "bearer" });
+  }
+
   function signOut() {
     var token = getAccessToken();
     setSession(null);
@@ -245,6 +278,9 @@
     signUp: signUp,
     signIn: signIn,
     signOut: signOut,
+    sendPasswordReset: sendPasswordReset,
+    updatePassword: updatePassword,
+    setSessionFromTokens: setSessionFromTokens,
     getSession: getSession,
     getUserEmail: getUserEmail,
     getUserId: getUserId,
