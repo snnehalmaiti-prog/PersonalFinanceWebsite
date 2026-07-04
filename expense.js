@@ -264,19 +264,31 @@
       return;
     }
 
-    // Top-level: grouped by expense / income
+    // Top-level: grouped by expense / income / budget
     if (heading) heading.textContent = "Categories";
     if (addBtn) addBtn.textContent = "+ Add category";
     var html = "";
-    [["expense", "Expense"], ["income", "Income"]].forEach(function (g) {
+    [["expense", "Expense (outflow)"], ["income", "Income (inflow)"], ["budget", "Budget (inflow)"]].forEach(function (g) {
       var tops = state.categories.filter(function (c) { return c.type === g[0] && !c.parent_id; });
       if (!tops.length) return;
       html += '<h4 class="exp-group-title">' + g[1] + '</h4>';
       html += tops.map(function (cat) {
-        var subCount = state.categories.filter(function (c) { return c.parent_id === cat.id; }).length;
+        if (g[0] === "expense") {
+          var subCount = state.categories.filter(function (c) { return c.parent_id === cat.id; }).length;
+          return rowHtml({ id: cat.id, icon: cat.icon, color: cat.color, name: cat.name,
+            sub: subCount ? subCount + " subcategor" + (subCount > 1 ? "ies" : "y") : "",
+            chevron: true, clickable: true, kebab: "cat" });
+        }
+        // Income + Budget: no subcategories, no drill-down chevron
+        var meta = "";
+        if (g[0] === "budget") {
+          var acct = findAcct(cat.account_id);
+          meta = acct ? acct.name : "No account";
+        } else {
+          meta = "All accounts";
+        }
         return rowHtml({ id: cat.id, icon: cat.icon, color: cat.color, name: cat.name,
-          sub: subCount ? subCount + " subcategor" + (subCount > 1 ? "ies" : "y") : "",
-          chevron: true, clickable: true, kebab: "cat" });
+          meta: meta, kebab: "cat" });
       }).join("");
     });
     body.innerHTML = html;
@@ -363,7 +375,14 @@
       html += '<div class="exp-field"><span>Type</span><div class="exp-type-toggle" id="exp-f-type-toggle">' +
         '<button type="button" data-type="expense" class="' + (typeVal === "expense" ? "active" : "") + '">Expense</button>' +
         '<button type="button" data-type="income" class="' + (typeVal === "income" ? "active" : "") + '">Income</button>' +
+        '<button type="button" data-type="budget" class="' + (typeVal === "budget" ? "active" : "") + '">Budget</button>' +
         '</div></div>';
+      // Account picker (shown only for budget)
+      var acctOptions = '<option value="">— select —</option>' + state.accounts.map(function (a) {
+        return '<option value="' + a.id + '"' + (record && record.account_id === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>';
+      }).join("");
+      html += '<div class="exp-field" id="exp-f-acct-field" style="display:' + (typeVal === "budget" ? "" : "none") + ';">' +
+        '<span>Assigned account</span><select id="exp-f-acct" style="padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px;">' + acctOptions + '</select></div>';
     } else {
       var pName = parent ? parent.name : (findCat(record.parent_id) || {}).name;
       html += '<div class="exp-field"><span>Under category</span><div class="exp-readonly">' + esc(pName || "") + '</div></div>';
@@ -378,7 +397,10 @@
     if (tt) tt.addEventListener("click", function (e) {
       var b = e.target.closest("[data-type]"); if (!b) return;
       tt.querySelectorAll("[data-type]").forEach(function (x) { x.classList.remove("active"); });
-      b.classList.add("active"); modalCtx.type = b.getAttribute("data-type");
+      b.classList.add("active");
+      modalCtx.type = b.getAttribute("data-type");
+      var acctField = el("exp-f-acct-field");
+      if (acctField) acctField.style.display = (modalCtx.type === "budget") ? "" : "none";
     });
   }
 
@@ -386,6 +408,12 @@
     var name = el("exp-f-name").value.trim();
     if (!name) { el("exp-f-name").focus(); return; }
     var row = { name: name, type: modalCtx.type, icon: modalCtx.icon, color: modalCtx.color };
+    if (modalCtx.type === "budget") {
+      var acctEl = el("exp-f-acct");
+      row.account_id = acctEl ? (acctEl.value || null) : null;
+    } else {
+      row.account_id = null;
+    }
     var op;
     if (modalCtx.mode === "edit") {
       op = WfDb.update(CATS, modalCtx.record.id, row);
@@ -454,7 +482,7 @@
   function categoryMenu(id) {
     var cat = findCat(id);
     var items = [{ label: "Edit", fn: function () { openCategoryModal(findCat(id)); } }];
-    if (cat && !cat.parent_id) items.push({ label: "Add subcategory", fn: function () { openCategoryModal(null, findCat(id)); } });
+    if (cat && !cat.parent_id && cat.type === "expense") items.push({ label: "Add subcategory", fn: function () { openCategoryModal(null, findCat(id)); } });
     items.push({ label: "Delete", danger: true, fn: function () { deleteCategory(id); } });
     return items;
   }
