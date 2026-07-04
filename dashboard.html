@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=modalbtn" />
+<link rel="stylesheet" href="styles.css?v=periodhint" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1193,7 +1193,28 @@
         var net = rows.reduce(function (s, r) { return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount); }, 0);
         if (totalEl) { totalEl.textContent = fmtMoney(net); totalEl.style.color = net < 0 ? "#EF4444" : "#10B981"; }
 
-        if (!rows.length) { if (empty) empty.hidden = false; list.innerHTML = ""; return; }
+        if (!rows.length) {
+          if (empty) {
+            empty.hidden = false;
+            var totalAll = dashExpState.records.length;
+            if (totalAll > 0) {
+              empty.innerHTML = "No records match the current filters. There are <strong>" + totalAll + "</strong> record(s) outside this period — " +
+                '<a href="#" id="rec-show-all-link" style="color:#2563eb;">show all</a>.';
+              var link = document.getElementById("rec-show-all-link");
+              if (link) link.addEventListener("click", function (ev) {
+                ev.preventDefault();
+                recPeriod.kind = "custom";
+                recPeriod.customStart = null;
+                recPeriod.customEnd = null;
+                renderDashRecords();
+              });
+            } else {
+              empty.innerHTML = 'No records yet — click <strong>+ Add record</strong> to log your first transaction.';
+            }
+          }
+          list.innerHTML = "";
+          return;
+        }
         if (empty) empty.hidden = true;
 
         // group by date
@@ -1601,7 +1622,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=modalbtn"></script>
+  <script src="supabase-client.js?v=periodhint"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1617,7 +1638,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=modalbtn"></script>
+  <script src="script.js?v=periodhint"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
