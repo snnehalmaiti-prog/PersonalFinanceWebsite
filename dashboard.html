@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=dtpicker2" />
+<link rel="stylesheet" href="styles.css?v=recreq" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -714,6 +714,11 @@
                 <select id="rec-category" required></select>
               </label>
 
+              <label class="rec-field" id="rec-payment-field" style="display:none;">
+                <span>Payment type <span id="rec-payment-req" style="color:#EF4444;">*</span></span>
+                <select id="rec-payment-method"></select>
+              </label>
+
               <label class="rec-field" style="position:relative;">
                 <span>Date &amp; Time</span>
                 <input type="text" id="rec-date-display" readonly placeholder="Pick date &amp; time" style="cursor:pointer;" />
@@ -736,7 +741,7 @@
               </label>
             </div>
 
-            <div class="rec-col">
+            <div class="rec-col" id="rec-other-col">
               <h4 style="margin:0 0 8px;">Other details</h4>
               <label class="rec-field">
                 <span>Note</span>
@@ -745,10 +750,6 @@
               <label class="rec-field">
                 <span>Payer</span>
                 <input type="text" id="rec-payer" />
-              </label>
-              <label class="rec-field">
-                <span>Payment type</span>
-                <select id="rec-payment-method"></select>
               </label>
             </div>
           </div>
@@ -1209,6 +1210,10 @@
         });
         document.getElementById("rec-account-to-field").style.display = "none";
         document.getElementById("rec-category-field").style.display = "";
+        var pmField = document.getElementById("rec-payment-field");
+        if (pmField) pmField.style.display = (t === "expense") ? "" : "none";
+        var otherCol = document.getElementById("rec-other-col");
+        if (otherCol) otherCol.style.display = (t === "budget") ? "none" : "";
         fillRecCategories();
       }
       function fillRecDropdowns() {
@@ -1252,6 +1257,7 @@
         var catId = document.getElementById("rec-category").value;
         if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
         var pmId = document.getElementById("rec-payment-method").value || null;
+        if (t === "expense" && !pmId) { document.getElementById("rec-modal-error").textContent = "Choose a payment type."; return; }
         var dt = document.getElementById("rec-date").value || "";
         var datePart = dt.slice(0, 10) || new Date().toISOString().slice(0, 10);
         var txnAt = dt ? new Date(dt).toISOString() : new Date().toISOString();
@@ -1293,7 +1299,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=dtpicker2"></script>
+  <script src="supabase-client.js?v=recreq"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1309,7 +1315,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=dtpicker2"></script>
+  <script src="script.js?v=recreq"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
