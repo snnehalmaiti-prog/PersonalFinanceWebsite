@@ -342,6 +342,10 @@
         ACC_TYPES.map(function (t) { return '<option value="' + t.v + '"' + (t.v === r.type ? " selected" : "") + '>' + t.label + '</option>'; }).join("") +
       '</select></label>' +
       '<label class="exp-field"><span>Opening balance</span><input type="number" id="exp-f-bal" value="' + (Number(r.initial_balance) || 0) + '" step="0.01" /></label>' +
+      '<label class="exp-field" style="flex-direction:row; align-items:center; gap:8px;">' +
+        '<input type="checkbox" id="exp-f-contrib"' + (r.contributing_account ? " checked" : "") + ' style="width:auto;" />' +
+        '<span style="margin:0;">Contributing account</span>' +
+      '</label>' +
       '<div class="exp-field"><span>Icon</span>' + pickerGrid(ACC_EMOJIS, r.icon, "icon") + '</div>' +
       '<div class="exp-field"><span>Color</span>' + pickerGrid(COLORS, r.color, "color") + '</div>';
     openModal(record ? "Edit account" : "Add account", html, ctx);
@@ -354,6 +358,7 @@
       name: name,
       type: el("exp-f-type").value,
       initial_balance: Number(el("exp-f-bal").value) || 0,
+      contributing_account: el("exp-f-contrib").checked,
       icon: modalCtx.icon,
       color: modalCtx.color
     };
