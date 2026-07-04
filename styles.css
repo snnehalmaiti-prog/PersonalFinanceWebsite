@@ -2252,6 +2252,33 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-item-body { min-width: 0; }
 .rec-item-title { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-item-title-acct { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+
+/* Analytics table (current period vs previous period) */
+.ana-table {
+  width: 100%; border-collapse: collapse; font-size: 0.9rem;
+}
+.ana-table td {
+  padding: 12px 16px; border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+.ana-table td:nth-child(2), .ana-table td:nth-child(3) {
+  text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;
+  width: 22%;
+}
+.ana-table td:nth-child(3) { color: var(--muted); font-weight: 500; }
+.ana-period-row td { color: var(--text); font-weight: 700; padding: 14px 16px 6px; border-top: 0; }
+.ana-total-row td { font-weight: 700; background: var(--surface); }
+.ana-cat-row td { background: rgba(0,0,0,0.02); }
+.ana-sub-row td { background: transparent; padding-left: 40px; color: var(--muted); }
+.ana-sub-row td:first-child { padding-left: 56px; }
+.ana-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%; color: #fff;
+  font-size: 0.85rem; margin-right: 10px; vertical-align: middle;
+}
+.ana-icon-sm { width: 20px; height: 20px; font-size: 0.7rem; opacity: 0.75; }
+.ana-neg { color: #EF4444; }
+.ana-zero { color: var(--muted); font-weight: 500; }
 .rec-item-sub { font-size: 0.8rem; color: var(--muted); }
 .rec-item-chip {
   padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;

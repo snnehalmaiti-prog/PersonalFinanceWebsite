@@ -855,9 +855,8 @@
                 <button type="button" id="ana-period-next" class="rec-period-nav" aria-label="Next">›</button>
               </div>
             </div>
-            <div class="equity-card">
-              <h3 style="margin:0 0 6px;">Analytics</h3>
-              <p class="muted small equity-desc">Spending by category, budget usage, monthly trends. Coming soon.</p>
+            <div class="equity-card" style="padding:0; overflow:hidden;">
+              <table class="ana-table" id="ana-table"><tbody></tbody></table>
             </div>
           </div>
         </div>
@@ -946,6 +945,7 @@
           renderDashRecords();
           renderExpMonthlyChart();
           renderExpWaterfallChart();
+          renderAnalyticsTable();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
           if (status) status.textContent = "Could not load accounts: " + err.message;
@@ -1010,6 +1010,101 @@
         if (expMonthlyChart) { expMonthlyChart.destroy(); }
         expMonthlyChart = new Chart(canvas.getContext("2d"), { type: "bar", data: data, options: opts });
       }
+
+      // ── Analytics table: category × (this period, previous period) ──────
+      var anaPeriod = (function () {
+        var d = new Date();
+        return { year: d.getFullYear(), month: d.getMonth() };
+      })();
+      function anaMonthLabel(y, m) {
+        var names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        return names[m] + " " + y;
+      }
+      function anaPrev(y, m) { return m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }; }
+      function anaSumByCat(records, y, m) {
+        // Returns { cats: {catId: {expense: n, budget: n, income: n, subs: {subId: n}}}, totals: {expense, budget, income} }
+        var result = { cats: {}, totals: { expense: 0, budget: 0, income: 0 } };
+        var key = String(y) + "-" + String(m + 1).padStart(2, "0");
+        records.forEach(function (r) {
+          if (!r.txn_date || r.txn_date.slice(0, 7) !== key) return;
+          var amt = Number(r.amount) || 0;
+          var t = r.type;
+          if (t === "expense" || t === "budget" || t === "income") result.totals[t] += amt;
+          if (!r.category_id) return;
+          var c = result.cats[r.category_id] = result.cats[r.category_id] || { expense: 0, budget: 0, income: 0, subs: {} };
+          if (t === "expense" || t === "budget" || t === "income") c[t] += amt;
+          if (r.subcategory_id) c.subs[r.subcategory_id] = (c.subs[r.subcategory_id] || 0) + amt;
+        });
+        return result;
+      }
+      function anaFmtSigned(v, isExpense) {
+        if (v === 0) return "₹0";
+        var sign = isExpense ? "-" : "";
+        return sign + fmtMoney(Math.abs(v));
+      }
+      function renderAnalyticsTable() {
+        var table = document.getElementById("ana-table");
+        var lbl = document.getElementById("ana-period-label");
+        if (!table) return;
+        var cur = { year: anaPeriod.year, month: anaPeriod.month };
+        var prev = anaPrev(cur.year, cur.month);
+        if (lbl) lbl.textContent = anaMonthLabel(cur.year, cur.month);
+        var records = dashExpState.records || [];
+        var curAgg = anaSumByCat(records, cur.year, cur.month);
+        var prvAgg = anaSumByCat(records, prev.year, prev.month);
+
+        var curLbl = anaMonthLabel(cur.year, cur.month);
+        var prvLbl = anaMonthLabel(prev.year, prev.month);
+        var html = "";
+        // ── Income section ─────────────────────────────────────────────
+        html += '<tr class="ana-period-row"><td></td><td>' + curLbl + '</td><td>' + prvLbl + '</td></tr>';
+        html += '<tr class="ana-total-row"><td>Total Income</td>' +
+                '<td>' + fmtMoney(curAgg.totals.income) + '</td>' +
+                '<td>' + fmtMoney(prvAgg.totals.income) + '</td></tr>';
+        html += '<tr class="ana-cat-row"><td><span class="ana-icon" style="background:#10B981;">💰</span>Budget</td>' +
+                '<td>' + fmtMoney(curAgg.totals.budget) + '</td>' +
+                '<td>' + fmtMoney(prvAgg.totals.budget) + '</td></tr>';
+
+        // ── Expense section: totals + per-category with subcategories ──
+        html += '<tr class="ana-period-row"><td></td><td>' + curLbl + '</td><td>' + prvLbl + '</td></tr>';
+        html += '<tr class="ana-total-row"><td>Total Expense</td>' +
+                '<td class="ana-neg">' + anaFmtSigned(curAgg.totals.expense, true) + '</td>' +
+                '<td class="ana-neg">' + anaFmtSigned(prvAgg.totals.expense, true) + '</td></tr>';
+
+        // Which expense categories to show? Union of any that appear in either period.
+        var expCats = dashExpState.categories.filter(function (c) { return c.type === "expense" && !c.parent_id; });
+        expCats.forEach(function (cat) {
+          var curC = curAgg.cats[cat.id] || { expense: 0, subs: {} };
+          var prvC = prvAgg.cats[cat.id] || { expense: 0, subs: {} };
+          if (!curC.expense && !prvC.expense && !Object.keys(curC.subs).length && !Object.keys(prvC.subs).length) return;
+          html += '<tr class="ana-cat-row"><td><span class="ana-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' + esc(cat.name) + '</td>' +
+                  '<td class="ana-neg">' + anaFmtSigned(curC.expense, true) + '</td>' +
+                  '<td class="ana-neg">' + anaFmtSigned(prvC.expense, true) + '</td></tr>';
+          var subs = dashExpState.categories.filter(function (s) { return s.parent_id === cat.id; });
+          subs.forEach(function (sub) {
+            var curS = curC.subs[sub.id] || 0;
+            var prvS = prvC.subs[sub.id] || 0;
+            if (!curS && !prvS) return;
+            html += '<tr class="ana-sub-row"><td><span class="ana-icon ana-icon-sm" style="background:' + esc(sub.color || cat.color || "#9CA3AF") + ';">' + esc(sub.icon || cat.icon || "•") + '</span>' + esc(sub.name) + '</td>' +
+                    '<td class="' + (curS ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(curS, true) + '</td>' +
+                    '<td class="' + (prvS ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(prvS, true) + '</td></tr>';
+          });
+        });
+        table.tBodies[0].innerHTML = html;
+      }
+      function anaNudge(dir) {
+        var m = anaPeriod.month + dir;
+        var y = anaPeriod.year + Math.floor(m / 12);
+        m = ((m % 12) + 12) % 12;
+        anaPeriod.year = y; anaPeriod.month = m;
+        renderAnalyticsTable();
+      }
+      (function wireAnaPeriod() {
+        var prev = document.getElementById("ana-period-prev");
+        var next = document.getElementById("ana-period-next");
+        if (prev) prev.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); anaNudge(-1); });
+        if (next) next.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); anaNudge(1); });
+      })();
 
       // ── Budget Variance Waterfall (Chart.js stacked-bar trick + running line) ──
       var expWfChart = null;
