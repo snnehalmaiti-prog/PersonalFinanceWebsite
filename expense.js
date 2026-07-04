@@ -534,10 +534,18 @@
     return null;
   }
 
+  function normName(s) {
+    return String(s == null ? "" : s)
+      .replace(/[\p{Extended_Pictographic}️]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
   function findByName(list, name) {
     if (!name) return null;
-    var n = String(name).trim().toLowerCase();
-    return list.find(function (x) { return String(x.name || "").trim().toLowerCase() === n; }) || null;
+    var n = normName(name);
+    if (!n) return null;
+    return list.find(function (x) { return normName(x.name) === n; }) || null;
   }
 
   function csvEscape(v) {
@@ -620,8 +628,13 @@
         var acct = findByName(state.accounts, acctName);
         if (type !== "income" && !acct) { errors.push("Line " + lineNo + ": account \"" + acctName + "\" not found"); continue; }
         var catName = iCat >= 0 ? row[iCat] : "";
-        var cat = findByName(state.categories.filter(function (c) { return c.type === type && !c.parent_id; }), catName);
-        if (type !== "income" && catName && !cat) { errors.push("Line " + lineNo + ": category \"" + catName + "\" not found"); continue; }
+        var catCandidates = state.categories.filter(function (c) { return c.type === type && !c.parent_id; });
+        var cat = findByName(catCandidates, catName);
+        if (type !== "income" && catName && !cat) {
+          var avail = catCandidates.map(function (c) { return c.name; }).join(", ") || "(none)";
+          errors.push("Line " + lineNo + ": category \"" + catName + "\" not found under type " + type + ". Available: " + avail);
+          continue;
+        }
         var subName = iSub >= 0 ? row[iSub] : "";
         var sub = null;
         if (subName && cat) {
