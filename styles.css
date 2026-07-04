@@ -2194,6 +2194,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   padding: 14px 20px; border-top: 1px solid var(--border);
 }
 .rec-modal-footer > div { display: flex; gap: 10px; }
+.rec-modal-footer .btn { min-height: 0; padding: 8px 16px; font-size: 0.9rem; }
 
 /* Records page (BudgetBakers-style) */
 .rec-page {
