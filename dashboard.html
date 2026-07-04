@@ -1468,8 +1468,10 @@
             var color = isOutflow ? "#EF4444" : "#10B981";
             var checked = recSelected[r.id] ? "checked" : "";
             var selClass = recSelected[r.id] ? " selected" : "";
-            var titleParts = [cat.name || "(uncategorized)"];
-            if (acct.name) titleParts.push(acct.name);
+            var titleHtml = esc(cat.name || "(uncategorized)");
+            if (acct.name) {
+              titleHtml += ' <span class="rec-item-title-acct">· ' + esc(acct.name) + '</span>';
+            }
             var subParts = [];
             if (sub.name) subParts.push(sub.name);
             if (pm.name) subParts.push(pm.name);
@@ -1478,7 +1480,7 @@
               '<span class="rec-item-check"><input type="checkbox" data-rec-id="' + esc(r.id) + '" ' + checked + '></span>' +
               '<span class="rec-item-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
               '<div class="rec-item-body">' +
-                '<div class="rec-item-title">' + titleParts.map(esc).join(" · ") + '</div>' +
+                '<div class="rec-item-title">' + titleHtml + '</div>' +
                 '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
               '</div>' +
               '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) +

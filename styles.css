@@ -2242,6 +2242,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .rec-item-body { min-width: 0; }
 .rec-item-title { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-item-title-acct { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
 .rec-item-sub { font-size: 0.8rem; color: var(--muted); }
 .rec-item-chip {
   padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
