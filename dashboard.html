@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=balance1" />
+<link rel="stylesheet" href="styles.css?v=recpage1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -611,10 +611,45 @@
       </div>
 
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
-        <div class="equity-card" style="margin-top:20px;">
-          <h3>Records</h3>
-          <p class="muted small equity-desc" id="rec-list-empty">No records yet — click <strong>+ Add record</strong> to log your first transaction.</p>
-          <div id="rec-list"></div>
+        <div class="rec-page" style="margin-top:20px;">
+          <aside class="rec-sidebar equity-card">
+            <h3 style="margin:0 0 16px;">Records</h3>
+            <label class="rec-field"><span>Search</span>
+              <input type="search" id="rec-filter-search" placeholder="Search notes, categories…" />
+            </label>
+            <label class="rec-field"><span>Sort by</span>
+              <select id="rec-filter-sort">
+                <option value="date-desc">Time (newest first)</option>
+                <option value="date-asc">Time (oldest first)</option>
+                <option value="amount-desc">Amount (high → low)</option>
+                <option value="amount-asc">Amount (low → high)</option>
+              </select>
+            </label>
+            <label class="rec-field"><span>Account</span>
+              <select id="rec-filter-account"><option value="">All accounts</option></select>
+            </label>
+            <label class="rec-field"><span>Category</span>
+              <select id="rec-filter-category"><option value="">All categories</option></select>
+            </label>
+            <label class="rec-field"><span>Type</span>
+              <select id="rec-filter-type">
+                <option value="">All</option>
+                <option value="expense">Expense</option>
+                <option value="budget">Budget</option>
+                <option value="income">Income</option>
+              </select>
+            </label>
+            <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
+          </aside>
+
+          <div class="rec-main">
+            <div class="rec-summary">
+              <div><strong id="rec-count">0 records</strong></div>
+              <div class="rec-total" id="rec-total">₹0.00</div>
+            </div>
+            <p class="muted small" id="rec-list-empty">No records yet — click <strong>+ Add record</strong> to log your first transaction.</p>
+            <div id="rec-list"></div>
+          </div>
         </div>
       </div>
 
@@ -777,6 +812,7 @@
           dashExpState.paymentMethods = res[2] || [];
           dashExpState.records = res[3] || [];
           renderDashAccountTiles(dashExpState.accounts);
+          fillRecFilterDropdowns();
           renderDashRecords();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
@@ -787,26 +823,108 @@
 
       function findById(list, id) { return list.find(function (x) { return x.id === id; }); }
 
+      function fillRecFilterDropdowns() {
+        var acctSel = document.getElementById("rec-filter-account");
+        var catSel = document.getElementById("rec-filter-category");
+        if (acctSel) acctSel.innerHTML = '<option value="">All accounts</option>' +
+          dashExpState.accounts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join("");
+        if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
+          dashExpState.categories.filter(function (c) { return !c.parent_id; })
+            .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
+      }
+
+      function currentFilters() {
+        return {
+          q: (document.getElementById("rec-filter-search").value || "").toLowerCase(),
+          sort: document.getElementById("rec-filter-sort").value,
+          account: document.getElementById("rec-filter-account").value,
+          category: document.getElementById("rec-filter-category").value,
+          type: document.getElementById("rec-filter-type").value
+        };
+      }
+
       function renderDashRecords() {
         var list = document.getElementById("rec-list");
         var empty = document.getElementById("rec-list-empty");
+        var countEl = document.getElementById("rec-count");
+        var totalEl = document.getElementById("rec-total");
         if (!list) return;
-        if (!dashExpState.records.length) { if (empty) empty.hidden = false; list.innerHTML = ""; return; }
+        var f = currentFilters();
+        var rows = dashExpState.records.filter(function (r) {
+          if (f.account && r.account_id !== f.account) return false;
+          if (f.type && r.type !== f.type) return false;
+          if (f.category) {
+            var cat = findById(dashExpState.categories, r.category_id);
+            if (!cat) return false;
+            if (r.category_id !== f.category && cat.parent_id !== f.category) return false;
+          }
+          if (f.q) {
+            var cat2 = findById(dashExpState.categories, r.category_id) || {};
+            var hay = ((r.note || "") + " " + (cat2.name || "")).toLowerCase();
+            if (hay.indexOf(f.q) === -1) return false;
+          }
+          return true;
+        });
+        rows.sort(function (a, b) {
+          if (f.sort === "amount-desc") return Number(b.amount) - Number(a.amount);
+          if (f.sort === "amount-asc") return Number(a.amount) - Number(b.amount);
+          var d = (b.txn_date || "").localeCompare(a.txn_date || "");
+          return f.sort === "date-asc" ? -d : d;
+        });
+
+        if (countEl) countEl.textContent = "Found " + rows.length + " record" + (rows.length === 1 ? "" : "s");
+        var net = rows.reduce(function (s, r) { return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount); }, 0);
+        if (totalEl) { totalEl.textContent = fmtMoney(net); totalEl.style.color = net < 0 ? "#EF4444" : "#10B981"; }
+
+        if (!rows.length) { if (empty) empty.hidden = false; list.innerHTML = ""; return; }
         if (empty) empty.hidden = true;
-        list.innerHTML = dashExpState.records.map(function (r) {
-          var acct = findById(dashExpState.accounts, r.account_id) || {};
-          var cat = findById(dashExpState.categories, r.category_id) || {};
-          var isOutflow = r.type === "expense";
-          var sign = isOutflow ? "-" : "+";
-          var color = isOutflow ? "#EF4444" : "#10B981";
-          return '<div class="exp-row" style="cursor:default;">' +
-            '<span class="exp-row-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
-            '<span class="exp-row-name">' + esc(cat.name || "(uncategorized)") +
-              '<span class="exp-row-sub">' + esc(acct.name || "") + ' · ' + esc(r.txn_date || "") + '</span></span>' +
-            '<span class="exp-row-meta" style="color:' + color + '; font-weight:700;">' + sign + fmtMoney(r.amount).replace("₹", "₹") + '</span>' +
+
+        // group by date
+        var groups = {};
+        rows.forEach(function (r) { (groups[r.txn_date] = groups[r.txn_date] || []).push(r); });
+        var dates = Object.keys(groups).sort(function (a, b) {
+          var d = b.localeCompare(a);
+          return f.sort === "date-asc" ? -d : d;
+        });
+
+        list.innerHTML = dates.map(function (date) {
+          var dayRows = groups[date];
+          var dayNet = dayRows.reduce(function (s, r) { return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount); }, 0);
+          var dayHdr = '<div class="rec-day-header"><span>' + esc(new Date(date).toDateString()) + '</span>' +
+            '<span class="rec-day-total" style="color:' + (dayNet < 0 ? "#EF4444" : "#10B981") + ';">' + fmtMoney(dayNet) + '</span></div>';
+          var items = dayRows.map(function (r) {
+            var acct = findById(dashExpState.accounts, r.account_id) || {};
+            var cat = findById(dashExpState.categories, r.category_id) || {};
+            var isOutflow = r.type === "expense";
+            var sign = isOutflow ? "-" : "+";
+            var color = isOutflow ? "#EF4444" : "#10B981";
+            return '<div class="rec-item">' +
+              '<span class="rec-item-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
+              '<div class="rec-item-body">' +
+                '<div class="rec-item-title">' + esc(cat.name || "(uncategorized)") + (r.note ? " · " + esc(r.note) : "") + '</div>' +
+                '<div class="rec-item-sub">' + esc(acct.name || "—") + '</div>' +
+              '</div>' +
+              '<span class="rec-item-chip" style="background:' + esc(acct.color || "#6B7280") + ';">' + esc(acct.name || "—") + '</span>' +
+              '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) + '</div>' +
             '</div>';
+          }).join("");
+          return dayHdr + items;
         }).join("");
       }
+
+      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener("input", renderDashRecords);
+        if (el) el.addEventListener("change", renderDashRecords);
+      });
+      document.getElementById("rec-filter-reset").addEventListener("click", function () {
+        document.getElementById("rec-filter-search").value = "";
+        document.getElementById("rec-filter-sort").value = "date-desc";
+        document.getElementById("rec-filter-account").value = "";
+        document.getElementById("rec-filter-category").value = "";
+        document.getElementById("rec-filter-type").value = "";
+        renderDashRecords();
+      });
 
       // ── Record modal ──────────────────────────────────────────────────────
       function openRecModal() {
@@ -904,7 +1022,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=balance1"></script>
+  <script src="supabase-client.js?v=recpage1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -920,7 +1038,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=balance1"></script>
+  <script src="script.js?v=recpage1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

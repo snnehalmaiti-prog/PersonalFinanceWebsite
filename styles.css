@@ -2192,3 +2192,49 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   padding: 14px 20px; border-top: 1px solid var(--border);
 }
 .rec-modal-footer > div { display: flex; gap: 10px; }
+
+/* Records page (BudgetBakers-style) */
+.rec-page {
+  display: grid; grid-template-columns: 300px 1fr; gap: 20px;
+}
+@media (max-width: 900px) {
+  .rec-page { grid-template-columns: 1fr; }
+}
+.rec-sidebar { padding: 20px; align-self: start; }
+.rec-sidebar .rec-field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
+.rec-sidebar .rec-field > span { font-size: 0.85rem; font-weight: 600; }
+.rec-sidebar input, .rec-sidebar select {
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; font: inherit; background: var(--surface); color: var(--text);
+}
+.rec-main { display: flex; flex-direction: column; gap: 10px; }
+.rec-summary {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.rec-total { font-weight: 700; font-size: 1rem; }
+.rec-day-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 4px; margin-top: 10px;
+  font-weight: 700; font-size: 0.95rem;
+}
+.rec-day-total { font-weight: 700; }
+.rec-item {
+  display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center;
+  padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 8px;
+}
+.rec-item-icon {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 1.15rem;
+}
+.rec-item-body { min-width: 0; }
+.rec-item-title { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-item-sub { font-size: 0.8rem; color: var(--muted); }
+.rec-item-chip {
+  padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+  color: #fff; white-space: nowrap;
+}
+.rec-item-amount { text-align: right; font-weight: 700; font-size: 0.98rem; }
+.rec-item-amount .time { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
