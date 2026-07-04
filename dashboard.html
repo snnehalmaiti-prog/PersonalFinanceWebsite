@@ -810,9 +810,56 @@
       </div>
 
       <div id="dash-exp-subpanel-analytics" class="exp-subpanel" hidden>
-        <div class="equity-card" style="margin-top:20px;">
-          <h3>Analytics</h3>
-          <p class="muted small equity-desc">Spending by category, budget usage, monthly trends. Coming soon.</p>
+        <div class="rec-page" style="margin-top:20px;">
+          <aside class="rec-sidebar equity-card">
+            <h3 style="margin:0 0 16px;">Filter Options</h3>
+            <label class="rec-field"><span>Search</span>
+              <input type="search" id="ana-filter-search" placeholder="Search notes, categories…" />
+            </label>
+            <label class="rec-field"><span>Sort by</span>
+              <select id="ana-filter-sort">
+                <option value="date-desc">Time (newest first)</option>
+                <option value="date-asc">Time (oldest first)</option>
+                <option value="amount-desc">Amount (high → low)</option>
+                <option value="amount-asc">Amount (low → high)</option>
+              </select>
+            </label>
+            <label class="rec-field"><span>Account</span>
+              <select id="ana-filter-account"><option value="">All accounts</option></select>
+            </label>
+            <label class="rec-field"><span>Category</span>
+              <select id="ana-filter-category"><option value="">All categories</option></select>
+            </label>
+            <label class="rec-field"><span>Type</span>
+              <select id="ana-filter-type">
+                <option value="">All</option>
+                <option value="expense">Expense</option>
+                <option value="budget">Budget</option>
+                <option value="income">Income</option>
+              </select>
+            </label>
+            <label class="rec-field"><span>Payment type</span>
+              <select id="ana-filter-payment"><option value="">All</option></select>
+            </label>
+            <button type="button" class="btn btn-outline btn-block" id="ana-filter-reset" style="margin-top:10px;">Reset filter</button>
+          </aside>
+
+          <div class="rec-main">
+            <div class="rec-period-header" style="display:flex; justify-content:center; margin-bottom:12px;">
+              <div class="rec-period-picker" style="max-width:340px; width:100%;">
+                <button type="button" id="ana-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
+                <button type="button" id="ana-period-btn" class="rec-period-main">
+                  <span id="ana-period-label">This month</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <button type="button" id="ana-period-next" class="rec-period-nav" aria-label="Next">›</button>
+              </div>
+            </div>
+            <div class="equity-card">
+              <h3 style="margin:0 0 6px;">Analytics</h3>
+              <p class="muted small equity-desc">Spending by category, budget usage, monthly trends. Coming soon.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section><!-- /panel-expense -->
