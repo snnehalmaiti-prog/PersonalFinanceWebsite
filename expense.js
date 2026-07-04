@@ -547,9 +547,11 @@
     var report = el("exp-import-report");
     if (report) report.innerHTML = "";
     if (!file) return;
+    if (!state.loaded) { status.textContent = "Please wait — expense data is still loading."; return; }
     status.textContent = "Reading " + file.name + "…";
     var reader = new FileReader();
     reader.onload = function () {
+      try {
       var rows = parseCsv(String(reader.result || ""));
       if (rows.length < 2) { status.textContent = "CSV is empty."; return; }
       var header = rows[0].map(function (h) { return String(h).trim().toLowerCase(); });
@@ -626,6 +628,10 @@
           .then(function () { done++; status.textContent = "Importing " + done + "/" + toInsert.length + "…"; next(i + 1); });
       }
       next(0);
+      } catch (err) {
+        status.textContent = "Import failed: " + ((err && err.message) || String(err));
+        if (window.console) console.error("[csv import]", err);
+      }
     };
     reader.onerror = function () { status.textContent = "Failed to read file."; };
     reader.readAsText(file);
