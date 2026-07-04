@@ -641,25 +641,6 @@
           <aside class="rec-sidebar equity-card">
             <h3 style="margin:0 0 16px;">Filter Options</h3>
 
-            <label class="rec-field"><span>Period</span>
-              <div class="rec-period-picker">
-                <button type="button" id="rec-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
-                <button type="button" id="rec-period-btn" class="rec-period-main">
-                  <span id="rec-period-label">This month</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                </button>
-                <button type="button" id="rec-period-next" class="rec-period-nav" aria-label="Next">›</button>
-                <div class="pp-popover" id="rec-period-popover" hidden>
-                  <div class="pp-tabs">
-                    <button type="button" data-pp-tab="custom">Custom</button>
-                    <button type="button" data-pp-tab="months" class="active">Months</button>
-                    <button type="button" data-pp-tab="years">Years</button>
-                  </div>
-                  <div class="pp-body" id="rec-period-body"></div>
-                </div>
-              </div>
-            </label>
-
             <label class="rec-field"><span>Search</span>
               <input type="search" id="rec-filter-search" placeholder="Search notes, categories…" />
             </label>
@@ -693,6 +674,24 @@
           </aside>
 
           <div class="rec-main">
+            <div class="rec-period-header" style="display:flex; justify-content:center; margin-bottom:12px;">
+              <div class="rec-period-picker" style="max-width:340px; width:100%;">
+                <button type="button" id="rec-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
+                <button type="button" id="rec-period-btn" class="rec-period-main">
+                  <span id="rec-period-label">This month</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <button type="button" id="rec-period-next" class="rec-period-nav" aria-label="Next">›</button>
+                <div class="pp-popover" id="rec-period-popover" hidden>
+                  <div class="pp-tabs">
+                    <button type="button" data-pp-tab="custom">Custom</button>
+                    <button type="button" data-pp-tab="months" class="active">Months</button>
+                    <button type="button" data-pp-tab="years">Years</button>
+                  </div>
+                  <div class="pp-body" id="rec-period-body"></div>
+                </div>
+              </div>
+            </div>
             <div class="rec-actions-bar">
               <label class="rec-select-all"><input type="checkbox" id="rec-select-all" /> Select all</label>
               <div class="rec-bulk-actions">
