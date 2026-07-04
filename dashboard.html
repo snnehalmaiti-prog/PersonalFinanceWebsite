@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=filteropts" />
+<link rel="stylesheet" href="styles.css?v=periodinside" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -642,6 +642,26 @@
             <label class="rec-field"><span>Payment type</span>
               <select id="rec-filter-payment"><option value="">All</option></select>
             </label>
+
+            <label class="rec-field"><span>Period</span>
+              <div class="rec-period-bar" style="position:relative; justify-content:flex-start;">
+                <button type="button" id="rec-period-prev" aria-label="Previous">‹</button>
+                <button type="button" id="rec-period-btn" class="rec-period-btn">
+                  <span id="rec-period-label">This month</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <button type="button" id="rec-period-next" aria-label="Next">›</button>
+                <div class="pp-popover" id="rec-period-popover" hidden>
+                  <div class="pp-tabs">
+                    <button type="button" data-pp-tab="custom">Custom range</button>
+                    <button type="button" data-pp-tab="months" class="active">Months</button>
+                    <button type="button" data-pp-tab="years">Years</button>
+                  </div>
+                  <div class="pp-body" id="rec-period-body"></div>
+                </div>
+              </div>
+            </label>
+
             <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
           </aside>
 
@@ -654,28 +674,6 @@
               </div>
               <div><strong id="rec-count">0 records</strong></div>
               <div class="rec-total" id="rec-total">₹0.00</div>
-            </div>
-
-            <div class="rec-list-header">
-              <span class="rec-list-col-name">Name</span>
-              <span class="rec-list-col-date">
-                <div class="rec-period-bar" style="position:relative;">
-                  <button type="button" id="rec-period-prev" aria-label="Previous">‹</button>
-                  <button type="button" id="rec-period-btn" class="rec-period-btn">
-                    <span id="rec-period-label">This month</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                  </button>
-                  <button type="button" id="rec-period-next" aria-label="Next">›</button>
-                  <div class="pp-popover" id="rec-period-popover" hidden>
-                    <div class="pp-tabs">
-                      <button type="button" data-pp-tab="custom">Custom range</button>
-                      <button type="button" data-pp-tab="months" class="active">Months</button>
-                      <button type="button" data-pp-tab="years">Years</button>
-                    </div>
-                    <div class="pp-body" id="rec-period-body"></div>
-                  </div>
-                </div>
-              </span>
             </div>
 
             <p class="muted small" id="rec-list-empty">No records yet — click <strong>+ Add record</strong> to log your first transaction.</p>
@@ -1590,7 +1588,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=filteropts"></script>
+  <script src="supabase-client.js?v=periodinside"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1606,7 +1604,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=filteropts"></script>
+  <script src="script.js?v=periodinside"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
