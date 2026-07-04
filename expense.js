@@ -515,8 +515,10 @@
   }
 
   function normDate(s) {
-    s = String(s || "").trim();
+    s = String(s || "").trim().replace(/^"|"$/g, "");
+    if (!s) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, "-");
     var m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
     if (m) return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
     var d = new Date(s);
@@ -594,9 +596,19 @@
         if (iLbl >= 0 && String(row[iLbl] || "").trim()) {
           labels = String(row[iLbl]).split(/[|;,]/).map(function (s) { return s.trim(); }).filter(Boolean);
         }
+        var txnAtIso;
+        try {
+          var d0 = new Date(date + "T00:00:00");
+          if (isNaN(d0.getTime())) d0 = new Date(date);
+          if (isNaN(d0.getTime())) { errors.push("Line " + lineNo + ": could not parse date \"" + row[iDate] + "\""); continue; }
+          txnAtIso = d0.toISOString();
+        } catch (e) {
+          errors.push("Line " + lineNo + ": bad date \"" + row[iDate] + "\"");
+          continue;
+        }
         toInsert.push({
           txn_date: date,
-          txn_at: new Date(date + "T00:00").toISOString(),
+          txn_at: txnAtIso,
           amount: amt,
           type: type,
           account_id: type === "income" ? null : acct.id,
