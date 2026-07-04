@@ -2343,3 +2343,20 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   font-size: 0.75rem; opacity: 0.9; margin: 3px 0;
 }
 .exp-account-tile-balance { font-size: 1.05rem; }
+
+/* Compact record modal on mobile */
+@media (max-width: 600px) {
+  .rec-modal-overlay { padding: 8px; }
+  .rec-modal { max-height: 96vh; border-radius: 10px; }
+  .rec-modal-header { padding: 10px 12px; }
+  .rec-modal-header h3 { font-size: 1rem; }
+  .rec-modal-body { padding: 12px; gap: 10px; }
+  .rec-col { gap: 8px; }
+  .rec-field > span { font-size: 0.72rem; }
+  .rec-field input, .rec-field select, .rec-field textarea { padding: 6px 8px; font-size: 12px; }
+  .rec-type-toggle button { padding: 6px 8px; font-size: 0.78rem; }
+  .rec-modal-footer { padding: 8px 12px; }
+  .rec-modal-footer .btn { padding: 6px 12px; font-size: 0.85rem; }
+  .dt-picker { width: 240px; padding: 8px; }
+  .dt-picker-grid button { font-size: 0.7rem; padding: 3px 0; }
+}
