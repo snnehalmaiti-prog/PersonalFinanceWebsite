@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recheader" />
+<link rel="stylesheet" href="styles.css?v=filteropts" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -613,7 +613,7 @@
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
         <div class="rec-page" style="margin-top:20px;">
           <aside class="rec-sidebar equity-card">
-            <h3 style="margin:0 0 16px;">Records</h3>
+            <h3 style="margin:0 0 16px;">Filter Options</h3>
             <label class="rec-field"><span>Search</span>
               <input type="search" id="rec-filter-search" placeholder="Search notes, categories…" />
             </label>
@@ -1590,7 +1590,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recheader"></script>
+  <script src="supabase-client.js?v=filteropts"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1606,7 +1606,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recheader"></script>
+  <script src="script.js?v=filteropts"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
