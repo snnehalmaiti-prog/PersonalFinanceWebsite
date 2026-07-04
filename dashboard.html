@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=budgetacct" />
+<link rel="stylesheet" href="styles.css?v=incomeacct" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1342,7 +1342,11 @@
             return record.txn_date ? record.txn_date + "T00:00" : nowLocalDT();
           })();
           document.getElementById("rec-account").value = record.account_id || "";
-          document.getElementById("rec-category").value = record.category_id || "";
+          if (record.type === "income" && record.account_id) {
+            document.getElementById("rec-category").value = "acct:" + record.account_id;
+          } else {
+            document.getElementById("rec-category").value = record.category_id || "";
+          }
           fillRecSubcategories(record.category_id || "");
           document.getElementById("rec-subcategory").value = record.subcategory_id || "";
           document.getElementById("rec-payment-method").value = record.payment_method_id || "";
@@ -1482,18 +1486,29 @@
       }
       function fillRecCategories() {
         var t = dashExpState.recType;
+        var sel = document.getElementById("rec-category");
+        if (!sel) return;
+        if (t === "income") {
+          var contribAccts = dashExpState.accounts.filter(function (a) { return a.contributing_account; });
+          sel.innerHTML = '<option value="">— choose —</option>' + contribAccts.map(function (a) {
+            return '<option value="acct:' + a.id + '">' + esc(a.name) + "'s Income</option>";
+          }).join("");
+          if (contribAccts.length) sel.value = "acct:" + contribAccts[0].id;
+          sel.onchange = function () { fillRecSubcategories(""); };
+          fillRecSubcategories("");
+          return;
+        }
         var cats = dashExpState.categories.filter(function (c) {
           return c.type === t && !c.parent_id;
         });
         var opts = '<option value="">— choose —</option>' + cats.map(function (c) {
           return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
         }).join("");
-        var sel = document.getElementById("rec-category");
         if (sel) {
           sel.innerHTML = opts;
-          if ((t === "income" || t === "budget") && cats.length) {
+          if (t === "budget" && cats.length) {
             sel.value = cats[0].id;
-            if (t === "budget" && cats[0].account_id) {
+            if (cats[0].account_id) {
               document.getElementById("rec-account").value = cats[0].account_id;
             }
           }
@@ -1535,9 +1550,13 @@
         if (!amt || amt <= 0) { document.getElementById("rec-modal-error").textContent = "Enter an amount."; return; }
         var acctId = document.getElementById("rec-account").value;
         if (t !== "income" && !acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
-        if (t === "income") acctId = null;
         var catId = document.getElementById("rec-category").value;
-        if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
+        if (t === "income") {
+          if (!catId || catId.indexOf("acct:") !== 0) { document.getElementById("rec-modal-error").textContent = "Choose an income source."; return; }
+          acctId = catId.slice(5);
+          catId = null;
+        }
+        if (t !== "transfer" && t !== "income" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
         if (t === "expense") {
           var subField = document.getElementById("rec-subcategory-field");
           var subVal = document.getElementById("rec-subcategory").value;
@@ -1596,7 +1615,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=budgetacct"></script>
+  <script src="supabase-client.js?v=incomeacct"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1612,7 +1631,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=budgetacct"></script>
+  <script src="script.js?v=incomeacct"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
