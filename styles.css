@@ -2290,3 +2290,50 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-type-toggle button { padding: 7px 10px; font-size: 0.82rem; }
 .rec-modal-header { padding: 12px 16px; }
 .rec-modal-footer { padding: 10px 16px; }
+
+/* Custom date+time picker */
+.dt-picker {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 1300;
+  width: 320px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  padding: 14px;
+}
+.dt-picker-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px; font-weight: 700; font-size: 0.95rem;
+}
+.dt-picker-header button {
+  background: transparent; border: none; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 50%;
+  color: var(--muted); font-size: 1.1rem;
+}
+.dt-picker-header button:hover { background: var(--surface-alt); color: var(--text); }
+.dt-picker-dows, .dt-picker-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  text-align: center;
+}
+.dt-picker-dows { font-size: 0.75rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.dt-picker-grid button {
+  padding: 8px 0; border-radius: 50%; border: none;
+  background: transparent; cursor: pointer;
+  font: inherit; font-size: 0.88rem;
+  color: var(--text); aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+}
+.dt-picker-grid button.other { color: var(--muted); opacity: 0.4; }
+.dt-picker-grid button.weekend:not(.selected) { color: #EC4899; }
+.dt-picker-grid button:hover:not(.selected) { background: var(--surface-alt); }
+.dt-picker-grid button.selected { background: #10B981; color: #fff; font-weight: 700; }
+.dt-picker-footer {
+  display: flex; gap: 8px; margin-top: 10px; align-items: center;
+}
+.dt-picker-footer input[type="time"] {
+  flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; background: var(--surface); color: var(--text);
+}
+.dt-picker-footer button {
+  width: 40px; height: 40px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface);
+  cursor: pointer; font-size: 1rem;
+}
+.dt-picker-footer button:hover { background: var(--surface-alt); }

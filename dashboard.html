@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=txnat1" />
+<link rel="stylesheet" href="styles.css?v=dtpicker" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -714,9 +714,25 @@
                 <select id="rec-category" required></select>
               </label>
 
-              <label class="rec-field">
+              <label class="rec-field" style="position:relative;">
                 <span>Date &amp; Time</span>
-                <input type="datetime-local" id="rec-date" />
+                <input type="text" id="rec-date-display" readonly placeholder="Pick date &amp; time" style="cursor:pointer;" />
+                <input type="hidden" id="rec-date" />
+                <div class="dt-picker" id="dt-picker" hidden>
+                  <div class="dt-picker-header">
+                    <button type="button" id="dt-prev" aria-label="Previous month">‹</button>
+                    <span id="dt-title"></span>
+                    <button type="button" id="dt-next" aria-label="Next month">›</button>
+                  </div>
+                  <div class="dt-picker-dows">
+                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                  </div>
+                  <div class="dt-picker-grid" id="dt-grid"></div>
+                  <div class="dt-picker-footer">
+                    <input type="time" id="dt-time" />
+                    <button type="button" id="dt-confirm" aria-label="Confirm">✓</button>
+                  </div>
+                </div>
               </label>
             </div>
 
@@ -1083,11 +1099,12 @@
           var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
           return d.toISOString().slice(0, 16);
         }
+        var initialDt = nowLocalDT();
         if (record) {
           setRecType(record.type || "expense");
           document.getElementById("rec-amount").value = record.amount || "";
           document.getElementById("rec-note").value = record.note || "";
-          document.getElementById("rec-date").value = (function () {
+          initialDt = (function () {
             if (record.txn_at) {
               var d = new Date(record.txn_at);
               d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -1102,12 +1119,89 @@
           document.getElementById("rec-amount").value = "";
           document.getElementById("rec-note").value = "";
           document.getElementById("rec-payer").value = "";
-          document.getElementById("rec-date").value = nowLocalDT();
           setRecType("expense");
         }
+        setDtValue(initialDt);
         document.getElementById("rec-modal-overlay").hidden = false;
       }
       function closeRecModal() { document.getElementById("rec-modal-overlay").hidden = true; }
+
+      // ── Custom date+time picker ─────────────────────────────────────────
+      var dtState = { view: new Date(), sel: new Date() };
+      function fmtDtLocal(d) {
+        var pad = function (n) { return String(n).padStart(2, "0"); };
+        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+      function fmtDtDisplay(d) {
+        return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) +
+          " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      }
+      function setDtValue(dtStr) {
+        var d = dtStr ? new Date(dtStr) : new Date();
+        dtState.sel = new Date(d);
+        dtState.view = new Date(d.getFullYear(), d.getMonth(), 1);
+        document.getElementById("rec-date").value = fmtDtLocal(d);
+        document.getElementById("rec-date-display").value = fmtDtDisplay(d);
+        document.getElementById("dt-time").value = fmtDtLocal(d).slice(11, 16);
+      }
+      function renderDtGrid() {
+        var view = dtState.view;
+        var year = view.getFullYear(), month = view.getMonth();
+        document.getElementById("dt-title").textContent = view.toLocaleString(undefined, { month: "long", year: "numeric" });
+        var first = new Date(year, month, 1);
+        var startOffset = (first.getDay() + 6) % 7; // Mon-first
+        var start = new Date(year, month, 1 - startOffset);
+        var cells = [];
+        for (var i = 0; i < 42; i++) {
+          var d = new Date(start); d.setDate(start.getDate() + i);
+          cells.push(d);
+        }
+        var sel = dtState.sel;
+        document.getElementById("dt-grid").innerHTML = cells.map(function (d) {
+          var isOther = d.getMonth() !== month;
+          var isSel = d.getFullYear() === sel.getFullYear() && d.getMonth() === sel.getMonth() && d.getDate() === sel.getDate();
+          var dow = d.getDay();
+          var isWknd = (dow === 0 || dow === 6);
+          var cls = ["dt-day"];
+          if (isOther) cls.push("other");
+          if (isWknd) cls.push("weekend");
+          if (isSel) cls.push("selected");
+          return '<button type="button" class="' + cls.join(" ") + '" data-y="' + d.getFullYear() + '" data-m="' + d.getMonth() + '" data-d="' + d.getDate() + '">' + d.getDate() + '</button>';
+        }).join("");
+      }
+      function openDtPicker() {
+        renderDtGrid();
+        document.getElementById("dt-picker").hidden = false;
+      }
+      function closeDtPicker() { document.getElementById("dt-picker").hidden = true; }
+      document.getElementById("rec-date-display").addEventListener("click", openDtPicker);
+      document.getElementById("dt-prev").addEventListener("click", function () {
+        dtState.view = new Date(dtState.view.getFullYear(), dtState.view.getMonth() - 1, 1); renderDtGrid();
+      });
+      document.getElementById("dt-next").addEventListener("click", function () {
+        dtState.view = new Date(dtState.view.getFullYear(), dtState.view.getMonth() + 1, 1); renderDtGrid();
+      });
+      document.getElementById("dt-grid").addEventListener("click", function (e) {
+        var b = e.target.closest("[data-y]"); if (!b) return;
+        var y = Number(b.getAttribute("data-y")), m = Number(b.getAttribute("data-m")), d = Number(b.getAttribute("data-d"));
+        dtState.sel = new Date(y, m, d, dtState.sel.getHours(), dtState.sel.getMinutes());
+        dtState.view = new Date(y, m, 1);
+        renderDtGrid();
+      });
+      document.getElementById("dt-confirm").addEventListener("click", function () {
+        var t = document.getElementById("dt-time").value || "00:00";
+        var parts = t.split(":");
+        dtState.sel.setHours(Number(parts[0] || 0), Number(parts[1] || 0));
+        setDtValue(fmtDtLocal(dtState.sel));
+        closeDtPicker();
+      });
+      // Close picker when clicking outside
+      document.addEventListener("click", function (e) {
+        var picker = document.getElementById("dt-picker");
+        if (!picker || picker.hidden) return;
+        if (e.target.closest("#dt-picker") || e.target.closest("#rec-date-display")) return;
+        closeDtPicker();
+      });
       function setRecType(t) {
         dashExpState.recType = t;
         document.querySelectorAll("[data-rec-type]").forEach(function (b) {
@@ -1199,7 +1293,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=txnat1"></script>
+  <script src="supabase-client.js?v=dtpicker"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1215,7 +1309,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=txnat1"></script>
+  <script src="script.js?v=dtpicker"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
