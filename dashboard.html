@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=monthlychart" />
+<link rel="stylesheet" href="styles.css?v=bvachart" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -617,6 +617,22 @@
             <canvas id="dash-exp-monthly-chart"></canvas>
           </div>
         </div>
+
+        <div class="equity-card" style="margin-top:24px;">
+          <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0;">Budget vs Actual Spend</h3>
+            <div style="display:flex; gap:8px;">
+              <select id="dash-exp-bva-account" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);">
+                <option value="">All accounts</option>
+              </select>
+              <select id="dash-exp-bva-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
+            </div>
+          </div>
+          <p class="muted small" id="dash-exp-bva-status" style="margin:6px 0 10px;"></p>
+          <div style="position:relative; height:320px;">
+            <canvas id="dash-exp-bva-chart"></canvas>
+          </div>
+        </div>
       </div>
 
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
@@ -882,6 +898,7 @@
           fillRecFilterDropdowns();
           renderDashRecords();
           renderExpMonthlyChart();
+          renderExpBvaChart();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
           if (status) status.textContent = "Could not load accounts: " + err.message;
@@ -944,6 +961,73 @@
         };
         if (expMonthlyChart) { expMonthlyChart.destroy(); }
         expMonthlyChart = new Chart(canvas.getContext("2d"), { type: "bar", data: data, options: opts });
+      }
+
+      // ── Budget vs Actual Spend (per account, month-over-month) ─────────
+      var expBvaChart = null;
+      function renderExpBvaChart() {
+        var canvas = document.getElementById("dash-exp-bva-chart");
+        var status = document.getElementById("dash-exp-bva-status");
+        var yearSel = document.getElementById("dash-exp-bva-year");
+        var acctSel = document.getElementById("dash-exp-bva-account");
+        if (!canvas || !window.Chart) return;
+        var records = dashExpState.records || [];
+        if (!records.length) {
+          if (status) status.textContent = "No records yet.";
+          if (expBvaChart) { expBvaChart.destroy(); expBvaChart = null; }
+          return;
+        }
+        // Populate account dropdown
+        if (acctSel) {
+          var prev = acctSel.value || "";
+          acctSel.innerHTML = '<option value="">All accounts</option>' + dashExpState.accounts.map(function (a) {
+            return '<option value="' + a.id + '"' + (a.id === prev ? " selected" : "") + '>' + esc(a.name) + '</option>';
+          }).join("");
+          acctSel.onchange = renderExpBvaChart;
+        }
+        var acctFilter = acctSel ? acctSel.value : "";
+        // Populate year dropdown
+        var years = {};
+        records.forEach(function (r) { if (r.txn_date) years[r.txn_date.slice(0, 4)] = true; });
+        var yearList = Object.keys(years).sort();
+        var currentYr = yearSel && yearSel.value ? yearSel.value : String(new Date().getFullYear());
+        if (yearList.indexOf(currentYr) < 0) currentYr = yearList[yearList.length - 1];
+        if (yearSel) {
+          yearSel.innerHTML = yearList.map(function (y) {
+            return '<option value="' + y + '"' + (y === currentYr ? " selected" : "") + '>' + y + '</option>';
+          }).join("");
+          yearSel.onchange = renderExpBvaChart;
+        }
+        var budget = new Array(12).fill(0);
+        var actual = new Array(12).fill(0);
+        records.forEach(function (r) {
+          if (!r.txn_date || r.txn_date.slice(0, 4) !== currentYr) return;
+          if (acctFilter && r.account_id !== acctFilter) return;
+          var mo = Number(r.txn_date.slice(5, 7)) - 1;
+          if (mo < 0 || mo > 11) return;
+          var amt = Number(r.amount) || 0;
+          if (r.type === "budget") budget[mo] += amt;
+          else if (r.type === "expense") actual[mo] += amt;
+        });
+        var acctName = acctFilter ? ((findById(dashExpState.accounts, acctFilter) || {}).name || "") : "All accounts";
+        if (status) status.textContent = acctName + " · " + currentYr;
+        var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        var data = {
+          labels: labels,
+          datasets: [
+            { label: "Budget",       data: budget, backgroundColor: "#E07A2A" },
+            { label: "Actual Spend", data: actual, backgroundColor: "#2C7A4F" }
+          ]
+        };
+        var opts = {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" }, tooltip: { callbacks: {
+            label: function (ctx) { return ctx.dataset.label + ": " + fmtMoney(ctx.parsed.y); }
+          } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return fmtMoney(v); } } } }
+        };
+        if (expBvaChart) { expBvaChart.destroy(); }
+        expBvaChart = new Chart(canvas.getContext("2d"), { type: "bar", data: data, options: opts });
       }
 
       function findById(list, id) { return list.find(function (x) { return x.id === id; }); }
@@ -1710,7 +1794,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=monthlychart"></script>
+  <script src="supabase-client.js?v=bvachart"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1726,7 +1810,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=monthlychart"></script>
+  <script src="script.js?v=bvachart"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
