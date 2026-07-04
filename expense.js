@@ -546,6 +546,8 @@
     var status = el("exp-import-status");
     var report = el("exp-import-report");
     if (report) report.innerHTML = "";
+    var wrap = el("exp-import-progress-wrap");
+    if (wrap) wrap.hidden = true;
     if (!file) return;
     if (!state.loaded) { status.textContent = "Please wait — expense data is still loading."; return; }
     status.textContent = "Reading " + file.name + "…";
@@ -610,22 +612,41 @@
         if (report && errors.length) report.innerHTML = '<p class="muted small" style="color:#dc2626;">' + errors.map(esc).join("<br>") + '</p>';
         return;
       }
-      status.textContent = "Importing " + toInsert.length + " records…";
-      var results = [], done = 0;
+      var total = toInsert.length;
+      status.textContent = "Importing " + total + " records…";
+      var progWrap = el("exp-import-progress-wrap");
+      var progBar = el("exp-import-progress-bar");
+      var progLabel = el("exp-import-progress-label");
+      if (progWrap) progWrap.hidden = false;
+      if (progBar) progBar.style.width = "0%";
+      if (progLabel) progLabel.textContent = "0 / " + total + " (0%)";
+      var results = [], done = 0, okRunning = 0, failRunning = 0;
+      function updateProgress() {
+        var pct = total ? Math.round((done / total) * 100) : 0;
+        if (progBar) progBar.style.width = pct + "%";
+        if (progLabel) progLabel.textContent = done + " / " + total + " (" + pct + "%) — " + okRunning + " ok" + (failRunning ? ", " + failRunning + " failed" : "");
+      }
       function next(i) {
-        if (i >= toInsert.length) {
+        if (i >= total) {
           var okCount = results.filter(function (x) { return x.ok; }).length;
           var failCount = results.length - okCount;
           status.textContent = "Imported " + okCount + " record(s)" + (failCount ? " — " + failCount + " failed" : "") + ".";
+          if (progBar) progBar.style.width = "100%";
+          if (progLabel) progLabel.textContent = total + " / " + total + " (100%) — " + okCount + " ok" + (failCount ? ", " + failCount + " failed" : "");
           var extra = results.filter(function (x) { return !x.ok; }).map(function (x) { return "Row " + x.line + ": " + x.err; });
           var all = errors.concat(extra);
           if (report) report.innerHTML = all.length ? '<p class="muted small" style="color:#dc2626;">' + all.map(esc).join("<br>") + '</p>' : "";
           return;
         }
         WfDb.insert("expense_records", toInsert[i])
-          .then(function () { results.push({ ok: true }); })
-          .catch(function (e) { results.push({ ok: false, line: i + 2, err: (e && e.message) || String(e) }); })
-          .then(function () { done++; status.textContent = "Importing " + done + "/" + toInsert.length + "…"; next(i + 1); });
+          .then(function () { results.push({ ok: true }); okRunning++; })
+          .catch(function (e) { results.push({ ok: false, line: i + 2, err: (e && e.message) || String(e) }); failRunning++; })
+          .then(function () {
+            done++;
+            status.textContent = "Importing " + done + " / " + total + "…";
+            updateProgress();
+            next(i + 1);
+          });
       }
       next(0);
       } catch (err) {

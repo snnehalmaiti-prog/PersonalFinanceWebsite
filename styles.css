@@ -2014,6 +2014,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 /* ===== Expense — BudgetBakers-style row list ===== */
 .exp-list { margin-top: 6px; }
+.exp-import-progress {
+  width: 100%; height: 10px; background: var(--border, #e5e7eb);
+  border-radius: 999px; overflow: hidden;
+}
+.exp-import-progress-bar {
+  height: 100%; width: 0%; background: linear-gradient(90deg, #10B981, #059669);
+  transition: width 0.15s ease;
+}
 .exp-group-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 4px; }
 .exp-row {
   display: flex; align-items: center; gap: 14px;
