@@ -836,7 +836,7 @@
 
       function fmtMoney(n) {
         var v = Number(n) || 0;
-        return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return "₹" + Math.round(v).toLocaleString("en-IN");
       }
       function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
