@@ -520,7 +520,15 @@
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
     if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, "-");
     var m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-    if (m) return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
+    if (m) {
+      var p1 = Number(m[1]), p2 = Number(m[2]), yr = m[3];
+      var mm, dd;
+      if (p1 > 12) { dd = p1; mm = p2; }        // DD/MM/YYYY
+      else if (p2 > 12) { mm = p1; dd = p2; }   // M/D/YYYY (US)
+      else { mm = p1; dd = p2; }                // ambiguous → assume M/D/YYYY
+      if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+      return yr + "-" + String(mm).padStart(2, "0") + "-" + String(dd).padStart(2, "0");
+    }
     var d = new Date(s);
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
     return null;
