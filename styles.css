@@ -2402,39 +2402,40 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .rec-period-btn:hover { background: var(--surface-alt); }
 .pp-popover {
-  position: absolute; top: calc(100% + 8px); left: 0; z-index: 1200;
-  width: 380px; max-width: calc(100vw - 24px);
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 1200;
+  width: 300px; max-width: calc(100vw - 24px);
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.18);
-  padding: 12px;
+  border-radius: 12px; box-shadow: 0 10px 32px rgba(0,0,0,0.15);
+  padding: 10px;
+  font-size: 0.85rem;
 }
 .pp-tabs {
-  display: flex; gap: 4px;
-  background: var(--surface-alt); padding: 4px; border-radius: 999px;
-  margin-bottom: 12px;
+  display: flex; gap: 2px;
+  background: var(--surface-alt); padding: 3px; border-radius: 999px;
+  margin-bottom: 10px;
 }
 .pp-tabs button {
-  flex: 1; padding: 7px 10px; border: none; background: transparent;
+  flex: 1; padding: 5px 8px; border: none; background: transparent;
   border-radius: 999px; cursor: pointer;
-  font: inherit; font-size: 0.82rem; font-weight: 600;
+  font: inherit; font-size: 0.75rem; font-weight: 600;
   color: var(--muted);
 }
 .pp-tabs button.active { background: #10B981; color: #fff; }
 .pp-body-header {
   display: flex; align-items: center; justify-content: center;
-  gap: 12px; margin-bottom: 12px; font-weight: 700; font-size: 1rem;
+  gap: 8px; margin-bottom: 8px; font-weight: 700; font-size: 0.9rem;
 }
 .pp-body-header button {
   border: none; background: transparent; cursor: pointer;
-  width: 28px; height: 28px; border-radius: 50%;
-  font-size: 1.2rem; color: var(--muted);
+  width: 22px; height: 22px; border-radius: 50%;
+  font-size: 1rem; color: var(--muted);
 }
 .pp-body-header button:hover { background: var(--surface-alt); color: var(--text); }
-.pp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .pp-grid button {
-  padding: 16px 0; border: none; background: transparent;
-  border-radius: 999px; cursor: pointer;
-  font: inherit; font-size: 1rem; color: var(--text);
+  padding: 8px 0; border: none; background: transparent;
+  border-radius: 8px; cursor: pointer;
+  font: inherit; font-size: 0.82rem; color: var(--text);
 }
 .pp-grid button:hover { background: var(--surface-alt); }
 .pp-grid button.selected { background: #10B981; color: #fff; font-weight: 700; }
@@ -2457,11 +2458,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
   text-align: center;
 }
-.pp-dows { font-size: 0.75rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.pp-dows { font-size: 0.7rem; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
 .pp-day-grid button {
-  padding: 8px 0; border: none; background: transparent;
-  cursor: pointer; font: inherit; font-size: 0.85rem;
+  padding: 0; border: none; background: transparent;
+  cursor: pointer; font: inherit; font-size: 0.78rem;
   color: var(--text); aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  min-height: 28px;
 }
 .pp-day-grid button:hover { background: rgba(16, 185, 129, 0.12); }
 .pp-day-grid button.other { color: var(--muted); opacity: 0.4; }
@@ -2472,14 +2474,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   border-radius: 6px;
 }
 .pp-presets {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
-  margin-top: 12px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  margin-top: 8px;
 }
 .pp-presets button {
-  padding: 6px 8px; border: 1px solid var(--border);
+  padding: 5px 4px; border: 1px solid var(--border);
   border-radius: 999px; background: var(--surface);
-  cursor: pointer; font: inherit; font-size: 0.72rem; font-weight: 600;
-  color: var(--text);
+  cursor: pointer; font: inherit; font-size: 0.68rem; font-weight: 600;
+  color: var(--text); white-space: nowrap;
 }
 .pp-presets button:hover { background: var(--surface-alt); border-color: var(--text); }
 @media (max-width: 480px) { .pp-presets { grid-template-columns: repeat(3, 1fr); } }
