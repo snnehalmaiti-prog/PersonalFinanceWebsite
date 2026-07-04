@@ -1081,7 +1081,7 @@
           var prvC = prvAgg.cats[cat.id] || { expense: 0, subs: {} };
           var subs = dashExpState.categories.filter(function (s) { return s.parent_id === cat.id; });
           var hasSubs = subs.length > 0;
-          var collapsed = anaCollapsed[cat.id];
+          var collapsed = anaCollapsed[cat.id] !== false; // default: collapsed
           var toggle = hasSubs
             ? '<button type="button" class="ana-fold-btn" data-ana-fold="' + esc(cat.id) + '" aria-label="Toggle">' + (collapsed ? "▸" : "▾") + '</button>'
             : '<span class="ana-fold-btn ana-fold-spacer"></span>';
@@ -1116,7 +1116,9 @@
           var btn = e.target.closest("[data-ana-fold]");
           if (!btn) return;
           var id = btn.getAttribute("data-ana-fold");
-          anaCollapsed[id] = !anaCollapsed[id];
+          // Default state is collapsed; toggle between collapsed (undefined/true) and expanded (false)
+          if (anaCollapsed[id] === false) anaCollapsed[id] = true;
+          else anaCollapsed[id] = false;
           renderAnalyticsTable();
         });
       })();
