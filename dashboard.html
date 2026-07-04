@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recmodal2" />
+<link rel="stylesheet" href="styles.css?v=rectypes" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -634,8 +634,8 @@
 
               <div class="rec-type-toggle" id="rec-type-toggle" role="tablist">
                 <button type="button" data-rec-type="expense" class="active">Expense</button>
+                <button type="button" data-rec-type="budget">Budget</button>
                 <button type="button" data-rec-type="income">Income</button>
-                <button type="button" data-rec-type="transfer">Transfer</button>
               </div>
 
               <label class="rec-field">
@@ -784,8 +784,9 @@
         list.innerHTML = dashExpState.records.map(function (r) {
           var acct = findById(dashExpState.accounts, r.account_id) || {};
           var cat = findById(dashExpState.categories, r.category_id) || {};
-          var sign = r.type === "expense" ? "-" : "+";
-          var color = r.type === "expense" ? "#EF4444" : "#10B981";
+          var isOutflow = r.type === "expense";
+          var sign = isOutflow ? "-" : "+";
+          var color = isOutflow ? "#EF4444" : "#10B981";
           return '<div class="exp-row" style="cursor:default;">' +
             '<span class="exp-row-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
             '<span class="exp-row-name">' + esc(cat.name || "(uncategorized)") +
@@ -812,9 +813,8 @@
         document.querySelectorAll("[data-rec-type]").forEach(function (b) {
           b.classList.toggle("active", b.getAttribute("data-rec-type") === t);
         });
-        document.getElementById("rec-account-to-field").style.display = (t === "transfer") ? "" : "none";
-        var catField = document.getElementById("rec-category-field");
-        catField.style.display = (t === "transfer") ? "none" : "";
+        document.getElementById("rec-account-to-field").style.display = "none";
+        document.getElementById("rec-category-field").style.display = "";
         fillRecCategories();
       }
       function fillRecDropdowns() {
@@ -831,15 +831,23 @@
       }
       function fillRecCategories() {
         var t = dashExpState.recType;
-        var wantTypes = t === "expense" ? ["expense"] : (t === "income" ? ["income", "budget"] : []);
         var cats = dashExpState.categories.filter(function (c) {
-          return wantTypes.indexOf(c.type) !== -1 && !c.parent_id;
+          return c.type === t && !c.parent_id;
         });
         var opts = '<option value="">— choose —</option>' + cats.map(function (c) {
           return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
         }).join("");
         var sel = document.getElementById("rec-category");
-        if (sel) sel.innerHTML = opts;
+        if (sel) {
+          sel.innerHTML = opts;
+          sel.onchange = function () {
+            if (t !== "budget") return;
+            var cat = findById(dashExpState.categories, sel.value);
+            if (cat && cat.account_id) {
+              document.getElementById("rec-account").value = cat.account_id;
+            }
+          };
+        }
       }
       function saveRec() {
         var t = dashExpState.recType;
@@ -853,7 +861,7 @@
         var row = {
           txn_date: document.getElementById("rec-date").value || new Date().toISOString().slice(0, 10),
           amount: amt,
-          type: t === "transfer" ? "expense" : t,
+          type: t,
           account_id: acctId,
           category_id: catId || null,
           payment_method_id: pmId,
@@ -884,7 +892,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recmodal2"></script>
+  <script src="supabase-client.js?v=rectypes"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -900,7 +908,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recmodal2"></script>
+  <script src="script.js?v=rectypes"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
