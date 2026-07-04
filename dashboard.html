@@ -853,6 +853,13 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 </button>
                 <button type="button" id="ana-period-next" class="rec-period-nav" aria-label="Next">›</button>
+                <div class="pp-popover" id="ana-period-popover" hidden>
+                  <div class="pp-tabs">
+                    <button type="button" data-ana-tab="months" class="active">Months</button>
+                    <button type="button" data-ana-tab="years">Years</button>
+                  </div>
+                  <div class="pp-body" id="ana-period-body"></div>
+                </div>
               </div>
             </div>
             <div class="equity-card" style="padding:0;">
@@ -1106,17 +1113,86 @@
         anaPeriod.year = y; anaPeriod.month = m;
         renderAnalyticsTable();
       }
+      var anaPopTab = "months";
+      var anaPopViewYear = anaPeriod.year;
+      function anaRenderPopover() {
+        var body = document.getElementById("ana-period-body");
+        if (!body) return;
+        document.querySelectorAll("[data-ana-tab]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-ana-tab") === anaPopTab);
+        });
+        var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        if (anaPopTab === "months") {
+          var monthsHtml = MONTHS.map(function (name, i) {
+            var sel = (anaPeriod.year === anaPopViewYear && anaPeriod.month === i) ? " selected" : "";
+            return '<button type="button" data-ana-m="' + i + '" class="' + sel.trim() + '">' + name + '</button>';
+          }).join("");
+          body.innerHTML =
+            '<div class="pp-body-header"><button type="button" data-ana-yr="-1">‹</button><span>' + anaPopViewYear + '</span><button type="button" data-ana-yr="1">›</button></div>' +
+            '<div class="pp-grid">' + monthsHtml + '</div>';
+        } else {
+          var startYr = Math.floor(anaPopViewYear / 10) * 10;
+          var yearsHtml = "";
+          for (var y = startYr; y < startYr + 12; y++) {
+            var selY = (anaPeriod.year === y) ? " selected" : "";
+            yearsHtml += '<button type="button" data-ana-y="' + y + '" class="' + selY.trim() + '">' + y + '</button>';
+          }
+          body.innerHTML =
+            '<div class="pp-body-header"><button type="button" data-ana-dc="-10">‹</button><span>' + startYr + ' – ' + (startYr + 9) + '</span><button type="button" data-ana-dc="10">›</button></div>' +
+            '<div class="pp-grid">' + yearsHtml + '</div>';
+        }
+      }
+      function anaOpenPop() {
+        anaPopViewYear = anaPeriod.year;
+        document.getElementById("ana-period-popover").hidden = false;
+        anaRenderPopover();
+      }
+      function anaClosePop() {
+        var p = document.getElementById("ana-period-popover");
+        if (p) p.hidden = true;
+      }
       (function wireAnaPeriod() {
         var prev = document.getElementById("ana-period-prev");
         var next = document.getElementById("ana-period-next");
         if (prev) prev.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); anaNudge(-1); });
         if (next) next.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); anaNudge(1); });
+        var btn = document.getElementById("ana-period-btn");
+        if (btn) btn.addEventListener("click", function (e) {
+          e.preventDefault(); e.stopPropagation();
+          var p = document.getElementById("ana-period-popover");
+          if (p && p.hidden) anaOpenPop(); else anaClosePop();
+        });
+        document.addEventListener("click", function (e) {
+          var p = document.getElementById("ana-period-popover");
+          if (!p || p.hidden) return;
+          if (e.target.closest("#ana-period-popover") || e.target.closest("#ana-period-btn")) return;
+          anaClosePop();
+        });
+        var pop = document.getElementById("ana-period-popover");
+        if (pop) pop.addEventListener("click", function (e) {
+          var tab = e.target.closest("[data-ana-tab]");
+          if (tab) { anaPopTab = tab.getAttribute("data-ana-tab"); anaRenderPopover(); return; }
+          var yrBtn = e.target.closest("[data-ana-yr]");
+          if (yrBtn) { anaPopViewYear += Number(yrBtn.getAttribute("data-ana-yr")); anaRenderPopover(); return; }
+          var dcBtn = e.target.closest("[data-ana-dc]");
+          if (dcBtn) { anaPopViewYear += Number(dcBtn.getAttribute("data-ana-dc")); anaRenderPopover(); return; }
+          var mBtn = e.target.closest("[data-ana-m]");
+          if (mBtn) {
+            anaPeriod.year = anaPopViewYear;
+            anaPeriod.month = Number(mBtn.getAttribute("data-ana-m"));
+            renderAnalyticsTable(); anaClosePop(); return;
+          }
+          var yBtn = e.target.closest("[data-ana-y]");
+          if (yBtn) {
+            anaPeriod.year = Number(yBtn.getAttribute("data-ana-y"));
+            renderAnalyticsTable(); anaClosePop(); return;
+          }
+        });
         var table = document.getElementById("ana-table");
         if (table) table.addEventListener("click", function (e) {
-          var btn = e.target.closest("[data-ana-fold]");
-          if (!btn) return;
-          var id = btn.getAttribute("data-ana-fold");
-          // Default state is collapsed; toggle between collapsed (undefined/true) and expanded (false)
+          var fb = e.target.closest("[data-ana-fold]");
+          if (!fb) return;
+          var id = fb.getAttribute("data-ana-fold");
           if (anaCollapsed[id] === false) anaCollapsed[id] = true;
           else anaCollapsed[id] = false;
           renderAnalyticsTable();
