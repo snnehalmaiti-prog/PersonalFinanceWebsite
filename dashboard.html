@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=accttiles" />
+<link rel="stylesheet" href="styles.css?v=accttiles2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -662,20 +662,24 @@
         box.innerHTML = tiles;
       }
 
-      (function loadDashAccounts() {
-        if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) return;
+      function loadDashAccounts() {
+        if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
+          setTimeout(loadDashAccounts, 200);
+          return;
+        }
         WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc").then(function (rows) {
           renderDashAccountTiles(rows || []);
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
           if (status) status.textContent = "Could not load accounts: " + err.message;
         });
-      })();
+      }
+      loadDashAccounts();
     </script>
 
   </main>
 
-  <script src="supabase-client.js?v=accttiles"></script>
+  <script src="supabase-client.js?v=accttiles2"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -691,7 +695,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=accttiles"></script>
+  <script src="script.js?v=accttiles2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
