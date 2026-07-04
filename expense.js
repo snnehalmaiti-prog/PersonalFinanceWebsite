@@ -493,6 +493,138 @@
   }
 
   // ── Wiring (once) ───────────────────────────────────────────────────────────
+  // ── Bulk CSV import ─────────────────────────────────────────────────────────
+  function parseCsv(text) {
+    var rows = [], row = [], cur = "", inQ = false, i, ch;
+    text = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    for (i = 0; i < text.length; i++) {
+      ch = text[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { cur += '"'; i++; } else { inQ = false; }
+        } else { cur += ch; }
+      } else {
+        if (ch === '"') inQ = true;
+        else if (ch === ",") { row.push(cur); cur = ""; }
+        else if (ch === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+        else cur += ch;
+      }
+    }
+    if (cur.length || row.length) { row.push(cur); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (v) { return String(v).trim().length; }); });
+  }
+
+  function normDate(s) {
+    s = String(s || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (m) return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return null;
+  }
+
+  function findByName(list, name) {
+    if (!name) return null;
+    var n = String(name).trim().toLowerCase();
+    return list.find(function (x) { return String(x.name || "").trim().toLowerCase() === n; }) || null;
+  }
+
+  function downloadImportTemplate() {
+    var csv = "Date,Type,Amount,Account,Category,Payment Method,Labels,Note\n" +
+      '"2026-07-04","expense","900","Common","Entertainment","UPI","",""\n' +
+      '"2026-07-04","budget","10000","Common","Common Budget","","",""\n' +
+      '"2026-07-01","income","10000","","Income","","",""\n';
+    var blob = new Blob([csv], { type: "text/csv" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "records-template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importRecordsFromCsv(file) {
+    var status = el("exp-import-status");
+    var report = el("exp-import-report");
+    if (report) report.innerHTML = "";
+    if (!file) return;
+    status.textContent = "Reading " + file.name + "…";
+    var reader = new FileReader();
+    reader.onload = function () {
+      var rows = parseCsv(String(reader.result || ""));
+      if (rows.length < 2) { status.textContent = "CSV is empty."; return; }
+      var header = rows[0].map(function (h) { return String(h).trim().toLowerCase(); });
+      function idx(name) { return header.indexOf(name); }
+      var iDate = idx("date"), iType = idx("type"), iAmt = idx("amount"),
+          iAcct = idx("account"), iCat = idx("category"), iPm = idx("payment method"),
+          iLbl = idx("labels"), iNote = idx("note");
+      if (iDate < 0 || iType < 0 || iAmt < 0) {
+        status.textContent = "CSV header must include Date, Type, Amount.";
+        return;
+      }
+      var toInsert = [], errors = [];
+      for (var r = 1; r < rows.length; r++) {
+        var row = rows[r];
+        var lineNo = r + 1;
+        var date = normDate(row[iDate]);
+        var type = String(row[iType] || "").trim().toLowerCase();
+        var amt = Number(String(row[iAmt] || "").replace(/[₹,\s]/g, ""));
+        if (!date) { errors.push("Line " + lineNo + ": bad date"); continue; }
+        if (["expense", "budget", "income"].indexOf(type) < 0) { errors.push("Line " + lineNo + ": type must be expense/budget/income"); continue; }
+        if (!amt || amt <= 0) { errors.push("Line " + lineNo + ": bad amount"); continue; }
+        var acctName = iAcct >= 0 ? row[iAcct] : "";
+        var acct = findByName(state.accounts, acctName);
+        if (type !== "income" && !acct) { errors.push("Line " + lineNo + ": account \"" + acctName + "\" not found"); continue; }
+        var catName = iCat >= 0 ? row[iCat] : "";
+        var cat = findByName(state.categories.filter(function (c) { return c.type === type && !c.parent_id; }), catName);
+        if (type !== "income" && catName && !cat) { errors.push("Line " + lineNo + ": category \"" + catName + "\" not found"); continue; }
+        var pmName = iPm >= 0 ? row[iPm] : "";
+        var pm = findByName(state.paymentMethods, pmName);
+        if (type === "expense" && pmName && !pm) { errors.push("Line " + lineNo + ": payment method \"" + pmName + "\" not found"); continue; }
+        var labels = [];
+        if (iLbl >= 0 && String(row[iLbl] || "").trim()) {
+          labels = String(row[iLbl]).split(/[|;,]/).map(function (s) { return s.trim(); }).filter(Boolean);
+        }
+        toInsert.push({
+          txn_date: date,
+          txn_at: new Date(date + "T00:00").toISOString(),
+          amount: amt,
+          type: type,
+          account_id: type === "income" ? null : acct.id,
+          category_id: cat ? cat.id : null,
+          subcategory_id: null,
+          payment_method_id: pm ? pm.id : null,
+          note: iNote >= 0 ? String(row[iNote] || "") : "",
+          labels: labels
+        });
+      }
+      if (!toInsert.length) {
+        status.textContent = "No valid rows to import.";
+        if (report && errors.length) report.innerHTML = '<p class="muted small" style="color:#dc2626;">' + errors.map(esc).join("<br>") + '</p>';
+        return;
+      }
+      status.textContent = "Importing " + toInsert.length + " records…";
+      var results = [], done = 0;
+      function next(i) {
+        if (i >= toInsert.length) {
+          var okCount = results.filter(function (x) { return x.ok; }).length;
+          var failCount = results.length - okCount;
+          status.textContent = "Imported " + okCount + " record(s)" + (failCount ? " — " + failCount + " failed" : "") + ".";
+          var extra = results.filter(function (x) { return !x.ok; }).map(function (x) { return "Row " + x.line + ": " + x.err; });
+          var all = errors.concat(extra);
+          if (report) report.innerHTML = all.length ? '<p class="muted small" style="color:#dc2626;">' + all.map(esc).join("<br>") + '</p>' : "";
+          return;
+        }
+        WfDb.insert("expense_records", toInsert[i])
+          .then(function () { results.push({ ok: true }); })
+          .catch(function (e) { results.push({ ok: false, line: i + 2, err: (e && e.message) || String(e) }); })
+          .then(function () { done++; status.textContent = "Importing " + done + "/" + toInsert.length + "…"; next(i + 1); });
+      }
+      next(0);
+    };
+    reader.onerror = function () { status.textContent = "Failed to read file."; };
+    reader.readAsText(file);
+  }
+
   function wireOnce() {
     if (wired) return;
     wired = true;
@@ -522,6 +654,15 @@
     if (addAcct) addAcct.addEventListener("click", function () { openAccountModal(null); });
     var addPm = el("exp-add-payment-method-btn");
     if (addPm) addPm.addEventListener("click", function () { openPaymentMethodModal(null); });
+    var tplBtn = el("exp-import-template-btn");
+    if (tplBtn) tplBtn.addEventListener("click", downloadImportTemplate);
+    var impFile = el("exp-import-file");
+    if (impFile) impFile.addEventListener("change", function (e) {
+      var f = e.target.files && e.target.files[0];
+      importRecordsFromCsv(f);
+      e.target.value = "";
+    });
+
     var addCat = el("exp-add-category-btn");
     if (addCat) addCat.addEventListener("click", function () {
       if (catNav.parentId) openCategoryModal(null, findCat(catNav.parentId)); // add subcategory

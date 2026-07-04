@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=budgetacct" />
-<script src="supabase-client.js?v=budgetacct"></script>
+<link rel="stylesheet" href="styles.css?v=csvimport" />
+<script src="supabase-client.js?v=csvimport"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -296,6 +296,27 @@
           <p class="muted small" id="exp-categories-status">Loading…</p>
           <div id="exp-categories-body"></div>
         </div>
+
+        <div class="equity-card">
+          <div class="equity-card-header">
+            <h3>Bulk import records</h3>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-ghost btn-sm" id="exp-import-template-btn">Download template</button>
+              <label class="btn btn-primary btn-sm" style="margin:0;">
+                <input type="file" id="exp-import-file" accept=".csv,text/csv" style="display:none;" />
+                + Upload CSV
+              </label>
+            </div>
+          </div>
+          <p class="muted small equity-desc">
+            CSV columns: <code>Date,Type,Amount,Account,Category,Payment Method,Labels,Note</code>.
+            Type = <code>expense</code>, <code>budget</code>, or <code>income</code>.
+            Names must match existing Accounts, Categories, and Payment methods (case-insensitive).
+            Income rows may leave Account blank.
+          </p>
+          <p class="muted small" id="exp-import-status"></p>
+          <div id="exp-import-report" style="margin-top:8px;"></div>
+        </div>
       </div>
     </section>
 
@@ -316,8 +337,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=budgetacct"></script>
-  <script src="expense.js?v=budgetacct"></script>
+  <script src="script.js?v=csvimport"></script>
+  <script src="expense.js?v=csvimport"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
