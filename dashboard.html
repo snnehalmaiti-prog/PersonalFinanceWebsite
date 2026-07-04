@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recrow" />
+<link rel="stylesheet" href="styles.css?v=tiletrim" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1460,26 +1460,20 @@
           var items = dayRows.map(function (r) {
             var acct = findById(dashExpState.accounts, r.account_id) || {};
             var cat = findById(dashExpState.categories, r.category_id) || {};
-            var sub = findById(dashExpState.categories, r.subcategory_id) || {};
-            var pm = findById(dashExpState.paymentMethods, r.payment_method_id) || {};
             var isOutflow = r.type === "expense";
             var sign = isOutflow ? "-" : "+";
             var color = isOutflow ? "#EF4444" : "#10B981";
+            var lblHtml = "";
             var checked = recSelected[r.id] ? "checked" : "";
             var selClass = recSelected[r.id] ? " selected" : "";
-            var titleParts = [cat.name || "(uncategorized)"];
-            if (acct.name) titleParts.push(acct.name);
-            var subParts = [];
-            if (sub.name) subParts.push(sub.name);
-            if (pm.name) subParts.push(pm.name);
-            if (r.note) subParts.push(r.note);
             return '<div class="rec-item' + selClass + '">' +
               '<span class="rec-item-check"><input type="checkbox" data-rec-id="' + esc(r.id) + '" ' + checked + '></span>' +
               '<span class="rec-item-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
               '<div class="rec-item-body">' +
-                '<div class="rec-item-title">' + titleParts.map(esc).join(" · ") + '</div>' +
-                '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
+                '<div class="rec-item-title">' + esc(cat.name || "(uncategorized)") + (r.note ? " · " + esc(r.note) : "") + '</div>' +
+                '<div class="rec-item-sub">' + esc(acct.name || "—") + ' ' + lblHtml + '</div>' +
               '</div>' +
+              '<span class="rec-item-chip" style="background:' + esc(acct.color || "#6B7280") + ';">' + esc(acct.name || "—") + '</span>' +
               '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) +
                 (r.txn_at ? '<span class="time">' + new Date(r.txn_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</span>' : "") +
               '</div>' +
@@ -1859,7 +1853,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recrow"></script>
+  <script src="supabase-client.js?v=tiletrim"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1875,7 +1869,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recrow"></script>
+  <script src="script.js?v=tiletrim"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
