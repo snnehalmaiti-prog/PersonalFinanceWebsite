@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=contribacct" />
+<link rel="stylesheet" href="styles.css?v=dtpicker2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1092,8 +1092,8 @@
       function openRecModal(record) {
         editingRecId = record ? record.id : null;
         document.getElementById("rec-modal-error").textContent = "";
-        document.getElementById("rec-modal-title").textContent = record ? "Edit record" : "Add record";
-        document.getElementById("rec-modal-save").textContent = record ? "Save changes" : "Add record";
+        document.getElementById("rec-modal-title").textContent = record ? "Edit Record" : "Add Record";
+        document.getElementById("rec-modal-save").textContent = record ? "Save Changes" : "Add Record";
         fillRecDropdowns();
         function nowLocalDT() {
           var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -1266,7 +1266,7 @@
           note: document.getElementById("rec-note").value || ""
         };
         var btn = document.getElementById("rec-modal-save");
-        var origLabel = editingRecId ? "Save changes" : "Add record";
+        var origLabel = editingRecId ? "Save Changes" : "Add Record";
         btn.disabled = true; btn.textContent = "Saving…";
         var op = editingRecId ? WfDb.update("expense_records", editingRecId, row) : WfDb.insert("expense_records", row);
         op.then(function () {
@@ -1293,7 +1293,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=contribacct"></script>
+  <script src="supabase-client.js?v=dtpicker2"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1309,7 +1309,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=contribacct"></script>
+  <script src="script.js?v=dtpicker2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
