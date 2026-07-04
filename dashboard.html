@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recreq" />
+<link rel="stylesheet" href="styles.css?v=incomehide" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1213,7 +1213,11 @@
         var pmField = document.getElementById("rec-payment-field");
         if (pmField) pmField.style.display = (t === "expense") ? "" : "none";
         var otherCol = document.getElementById("rec-other-col");
-        if (otherCol) otherCol.style.display = (t === "budget") ? "none" : "";
+        if (otherCol) otherCol.style.display = (t === "budget" || t === "income") ? "none" : "";
+        var acctSel = document.getElementById("rec-account");
+        if (acctSel && acctSel.closest(".rec-field")) {
+          acctSel.closest(".rec-field").style.display = (t === "income") ? "none" : "";
+        }
         fillRecCategories();
       }
       function fillRecDropdowns() {
@@ -1253,7 +1257,8 @@
         var amt = Number(document.getElementById("rec-amount").value);
         if (!amt || amt <= 0) { document.getElementById("rec-modal-error").textContent = "Enter an amount."; return; }
         var acctId = document.getElementById("rec-account").value;
-        if (!acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
+        if (t !== "income" && !acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
+        if (t === "income") acctId = null;
         var catId = document.getElementById("rec-category").value;
         if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
         var pmId = document.getElementById("rec-payment-method").value || null;
@@ -1299,7 +1304,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recreq"></script>
+  <script src="supabase-client.js?v=incomehide"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1315,7 +1320,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recreq"></script>
+  <script src="script.js?v=incomehide"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
