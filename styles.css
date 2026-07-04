@@ -2211,7 +2211,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 @media (max-width: 900px) {
   .rec-page { grid-template-columns: 1fr; }
 }
-.rec-sidebar { padding: 20px; align-self: start; }
+.rec-sidebar {
+  padding: 20px; align-self: start;
+  position: sticky; top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
 .rec-sidebar .rec-field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
 .rec-sidebar .rec-field > span { font-size: 0.85rem; font-weight: 600; }
 .rec-sidebar input, .rec-sidebar select {
