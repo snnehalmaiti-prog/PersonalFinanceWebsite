@@ -1056,12 +1056,9 @@
         var curLbl = anaMonthLabel(cur.year, cur.month);
         var prvLbl = anaMonthLabel(prev.year, prev.month);
         var html = "";
-        // ── Income section ─────────────────────────────────────────────
+        // ── Budget section ─────────────────────────────────────────────
         html += '<tr class="ana-period-row"><td></td><td>' + curLbl + '</td><td>' + prvLbl + '</td></tr>';
-        html += '<tr class="ana-total-row"><td>Total Income</td>' +
-                '<td>' + fmtMoney(curAgg.totals.income) + '</td>' +
-                '<td>' + fmtMoney(prvAgg.totals.income) + '</td></tr>';
-        html += '<tr class="ana-cat-row"><td><span class="ana-icon" style="background:#10B981;">💰</span>Budget</td>' +
+        html += '<tr class="ana-total-row"><td><span class="ana-icon" style="background:#10B981;">💰</span>Budget</td>' +
                 '<td>' + fmtMoney(curAgg.totals.budget) + '</td>' +
                 '<td>' + fmtMoney(prvAgg.totals.budget) + '</td></tr>';
 
