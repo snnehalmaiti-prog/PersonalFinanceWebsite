@@ -531,10 +531,10 @@
   }
 
   function downloadImportTemplate() {
-    var csv = "Date,Type,Amount,Account,Category,Payment Method,Labels,Note\n" +
-      '"2026-07-04","expense","900","Common","Entertainment","UPI","",""\n' +
-      '"2026-07-04","budget","10000","Common","Common Budget","","",""\n' +
-      '"2026-07-01","income","10000","","Income","","",""\n';
+    var csv = "Date,Type,Amount,Account,Category,Subcategory,Payment Method,Labels,Note\n" +
+      '"2026-07-04","expense","900","Common","Entertainment","Movies","UPI","",""\n' +
+      '"2026-07-04","budget","10000","Common","Common Budget","","","",""\n' +
+      '"2026-07-01","income","10000","","Income","","","",""\n';
     var blob = new Blob([csv], { type: "text/csv" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -555,8 +555,8 @@
       var header = rows[0].map(function (h) { return String(h).trim().toLowerCase(); });
       function idx(name) { return header.indexOf(name); }
       var iDate = idx("date"), iType = idx("type"), iAmt = idx("amount"),
-          iAcct = idx("account"), iCat = idx("category"), iPm = idx("payment method"),
-          iLbl = idx("labels"), iNote = idx("note");
+          iAcct = idx("account"), iCat = idx("category"), iSub = idx("subcategory"),
+          iPm = idx("payment method"), iLbl = idx("labels"), iNote = idx("note");
       if (iDate < 0 || iType < 0 || iAmt < 0) {
         status.textContent = "CSV header must include Date, Type, Amount.";
         return;
@@ -577,6 +577,12 @@
         var catName = iCat >= 0 ? row[iCat] : "";
         var cat = findByName(state.categories.filter(function (c) { return c.type === type && !c.parent_id; }), catName);
         if (type !== "income" && catName && !cat) { errors.push("Line " + lineNo + ": category \"" + catName + "\" not found"); continue; }
+        var subName = iSub >= 0 ? row[iSub] : "";
+        var sub = null;
+        if (subName && cat) {
+          sub = findByName(state.categories.filter(function (c) { return c.parent_id === cat.id; }), subName);
+          if (!sub) { errors.push("Line " + lineNo + ": subcategory \"" + subName + "\" not found under " + cat.name); continue; }
+        }
         var pmName = iPm >= 0 ? row[iPm] : "";
         var pm = findByName(state.paymentMethods, pmName);
         if (type === "expense" && pmName && !pm) { errors.push("Line " + lineNo + ": payment method \"" + pmName + "\" not found"); continue; }
@@ -591,7 +597,7 @@
           type: type,
           account_id: type === "income" ? null : acct.id,
           category_id: cat ? cat.id : null,
-          subcategory_id: null,
+          subcategory_id: sub ? sub.id : null,
           payment_method_id: pm ? pm.id : null,
           note: iNote >= 0 ? String(row[iNote] || "") : "",
           labels: labels
