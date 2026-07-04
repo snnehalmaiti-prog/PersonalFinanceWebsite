@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=subcatreq" />
+<link rel="stylesheet" href="styles.css?v=pmfilter" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -639,6 +639,9 @@
                 <option value="income">Income</option>
               </select>
             </label>
+            <label class="rec-field"><span>Payment type</span>
+              <select id="rec-filter-payment"><option value="">All</option></select>
+            </label>
             <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
           </aside>
 
@@ -666,7 +669,6 @@
               <label class="rec-select-all"><input type="checkbox" id="rec-select-all" /> Select all</label>
               <div class="rec-bulk-actions">
                 <button type="button" class="btn btn-ghost btn-sm" id="rec-export-btn">Export</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="rec-dup-btn">Solve Duplicities</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="rec-delete-btn" disabled>Delete</button>
               </div>
               <div><strong id="rec-count">0 records</strong></div>
@@ -879,11 +881,14 @@
       function fillRecFilterDropdowns() {
         var acctSel = document.getElementById("rec-filter-account");
         var catSel = document.getElementById("rec-filter-category");
+        var pmSel = document.getElementById("rec-filter-payment");
         if (acctSel) acctSel.innerHTML = '<option value="">All accounts</option>' +
           dashExpState.accounts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join("");
         if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
           dashExpState.categories.filter(function (c) { return !c.parent_id; })
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
+        if (pmSel) pmSel.innerHTML = '<option value="">All</option>' +
+          dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
       }
 
       var recSelected = {}; // id → true
@@ -1054,6 +1059,7 @@
           account: document.getElementById("rec-filter-account").value,
           category: document.getElementById("rec-filter-category").value,
           type: document.getElementById("rec-filter-type").value,
+          payment: document.getElementById("rec-filter-payment").value,
           label: "",
           range: range
         };
@@ -1081,6 +1087,7 @@
           }
           if (f.account && r.account_id !== f.account) return false;
           if (f.type && r.type !== f.type) return false;
+          if (f.payment && r.payment_method_id !== f.payment) return false;
           if (f.category) {
             var cat = findById(dashExpState.categories, r.category_id);
             if (!cat) return false;
@@ -1159,7 +1166,7 @@
         if (del) del.disabled = n === 0;
       }
 
-      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type"].forEach(function (id) {
+      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type", "rec-filter-payment"].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener("input", renderDashRecords);
         if (el) el.addEventListener("change", renderDashRecords);
@@ -1170,6 +1177,7 @@
         document.getElementById("rec-filter-account").value = "";
         document.getElementById("rec-filter-category").value = "";
         document.getElementById("rec-filter-type").value = "";
+        document.getElementById("rec-filter-payment").value = "";
         renderDashRecords();
       });
       document.getElementById("rec-period-prev").addEventListener("click", function () { nudgePeriod(-1); });
@@ -1228,25 +1236,6 @@
         var a = document.createElement("a");
         a.href = url; a.download = "records-" + new Date().toISOString().slice(0, 10) + ".csv";
         a.click(); URL.revokeObjectURL(url);
-      });
-
-      document.getElementById("rec-dup-btn").addEventListener("click", function () {
-        var groups = {};
-        dashExpState.records.forEach(function (r) {
-          var k = r.txn_date + "|" + r.amount + "|" + r.account_id + "|" + r.type;
-          (groups[k] = groups[k] || []).push(r);
-        });
-        var dupIds = [];
-        Object.keys(groups).forEach(function (k) {
-          if (groups[k].length > 1) {
-            // keep the first (oldest created), delete the rest
-            groups[k].slice(1).forEach(function (r) { dupIds.push(r.id); });
-          }
-        });
-        if (!dupIds.length) { alert("No duplicates found (matching date + amount + account + type)."); return; }
-        if (!confirm("Found " + dupIds.length + " likely duplicate record(s). Delete extras and keep the first of each group?")) return;
-        Promise.all(dupIds.map(function (id) { return WfDb.remove("expense_records", id); }))
-          .then(function () { recSelected = {}; loadDashAccounts(); });
       });
 
       // ── Record modal ──────────────────────────────────────────────────────
@@ -1520,7 +1509,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=subcatreq"></script>
+  <script src="supabase-client.js?v=pmfilter"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1536,7 +1525,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=subcatreq"></script>
+  <script src="script.js?v=pmfilter"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
