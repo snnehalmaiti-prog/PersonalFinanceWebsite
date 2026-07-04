@@ -2452,3 +2452,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .pp-presets button:hover { background: var(--surface-alt); border-color: var(--text); }
 @media (max-width: 480px) { .pp-presets { grid-template-columns: repeat(3, 1fr); } }
+
+.rec-list-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 4px; margin-top: 8px;
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+  color: var(--muted); letter-spacing: 0.06em;
+}
+.rec-list-col-date { display: flex; align-items: center; }
