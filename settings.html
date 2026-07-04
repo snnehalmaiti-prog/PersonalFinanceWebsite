@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=csvauto" />
-<script src="supabase-client.js?v=csvauto"></script>
+<link rel="stylesheet" href="styles.css?v=csvvalidate" />
+<script src="supabase-client.js?v=csvvalidate"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -322,6 +322,14 @@
             Auto-create missing Categories and Subcategories
           </label>
           <p class="muted small" id="exp-import-status"></p>
+          <div id="exp-import-validation" hidden style="margin-top:10px; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:8px; background:rgba(0,0,0,0.02);">
+            <h4 style="margin:0 0 6px; font-size:14px;">Pre-import validation</h4>
+            <div id="exp-import-validation-body" class="muted small"></div>
+            <div style="display:flex; gap:8px; margin-top:10px;">
+              <button type="button" class="btn btn-primary btn-sm" id="exp-import-confirm-btn">Proceed with import</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="exp-import-cancel-btn">Cancel</button>
+            </div>
+          </div>
           <div id="exp-import-progress-wrap" hidden style="margin-top:8px;">
             <div class="exp-import-progress"><div class="exp-import-progress-bar" id="exp-import-progress-bar"></div></div>
             <p class="muted small" id="exp-import-progress-label" style="margin:4px 0 0;"></p>
@@ -348,8 +356,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=csvauto"></script>
-  <script src="expense.js?v=csvauto"></script>
+  <script src="script.js?v=csvvalidate"></script>
+  <script src="expense.js?v=csvvalidate"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

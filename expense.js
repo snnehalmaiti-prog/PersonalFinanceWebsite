@@ -615,6 +615,87 @@
         status.textContent = "CSV header must include Date, Type, Amount.";
         return;
       }
+      // ── Pre-import validation summary ────────────────────────────────────
+      var vBody = el("exp-import-validation-body");
+      var vPanel = el("exp-import-validation");
+      var vConfirm = el("exp-import-confirm-btn");
+      var vCancel = el("exp-import-cancel-btn");
+      var scan = { total: 0, byType: { expense: 0, budget: 0, income: 0 }, badDate: 0, badType: 0, badAmount: 0,
+        missingAccts: {}, missingCats: {}, missingSubs: {}, missingPms: {} };
+      for (var vr = 1; vr < rows.length; vr++) {
+        var vrow = rows[vr];
+        scan.total++;
+        var vDate = normDate(vrow[iDate]);
+        var vType = String(vrow[iType] || "").trim().toLowerCase();
+        var vAmt = Number(String(vrow[iAmt] || "").replace(/[₹,\s]/g, ""));
+        if (!vDate) { scan.badDate++; continue; }
+        if (["expense", "budget", "income"].indexOf(vType) < 0) { scan.badType++; continue; }
+        if (!vAmt || vAmt <= 0) { scan.badAmount++; continue; }
+        scan.byType[vType]++;
+        var vAcctName = iAcct >= 0 ? String(vrow[iAcct] || "").trim() : "";
+        if (vType !== "income" && vAcctName && !findByName(state.accounts, vAcctName)) {
+          scan.missingAccts[vAcctName] = (scan.missingAccts[vAcctName] || 0) + 1;
+        }
+        var vCatName = iCat >= 0 ? String(vrow[iCat] || "").trim() : "";
+        var vCat = vCatName ? findByName(state.categories.filter(function (c) { return c.type === vType && !c.parent_id; }), vCatName) : null;
+        if (vType !== "income" && vCatName && !vCat) {
+          var key = vType + " → " + vCatName;
+          scan.missingCats[key] = (scan.missingCats[key] || 0) + 1;
+        }
+        var vSubName = iSub >= 0 ? String(vrow[iSub] || "").trim() : "";
+        if (vSubName && vCat && !findByName(state.categories.filter(function (c) { return c.parent_id === vCat.id; }), vSubName)) {
+          var sKey = vCatName + " → " + vSubName;
+          scan.missingSubs[sKey] = (scan.missingSubs[sKey] || 0) + 1;
+        }
+        var vPmName = iPm >= 0 ? String(vrow[iPm] || "").trim() : "";
+        if (vType === "expense" && vPmName && !findByName(state.paymentMethods, vPmName)) {
+          scan.missingPms[vPmName] = (scan.missingPms[vPmName] || 0) + 1;
+        }
+      }
+      function listBullets(obj, label) {
+        var keys = Object.keys(obj);
+        if (!keys.length) return "";
+        var items = keys.map(function (k) { return "<li>" + esc(k) + " <span class=\"muted\">(" + obj[k] + " row" + (obj[k] > 1 ? "s" : "") + ")</span></li>"; }).join("");
+        return "<div><strong>" + esc(label) + "</strong><ul style=\"margin:4px 0 8px 18px;\">" + items + "</ul></div>";
+      }
+      var missingAcctCount = Object.keys(scan.missingAccts).length;
+      var missingCatCount = Object.keys(scan.missingCats).length;
+      var missingSubCount = Object.keys(scan.missingSubs).length;
+      var missingPmCount = Object.keys(scan.missingPms).length;
+      var willAutoCreate = autoCreate && (missingCatCount || missingSubCount);
+      var willBlock = missingAcctCount + missingPmCount + (autoCreate ? 0 : (missingCatCount + missingSubCount));
+      var summary = "";
+      summary += "<div><strong>" + scan.total + "</strong> data rows — "
+        + scan.byType.expense + " expense, "
+        + scan.byType.budget + " budget, "
+        + scan.byType.income + " income."
+        + (scan.badDate ? " <span style=\"color:#dc2626;\">" + scan.badDate + " bad date</span>." : "")
+        + (scan.badType ? " <span style=\"color:#dc2626;\">" + scan.badType + " bad type</span>." : "")
+        + (scan.badAmount ? " <span style=\"color:#dc2626;\">" + scan.badAmount + " bad amount</span>." : "")
+        + "</div>";
+      summary += listBullets(scan.missingAccts, "Missing Accounts (blocks import)");
+      summary += listBullets(scan.missingCats, "Missing Categories" + (autoCreate ? " (will be auto-created)" : " (blocks import)"));
+      summary += listBullets(scan.missingSubs, "Missing Subcategories" + (autoCreate ? " (will be auto-created)" : " (blocks import)"));
+      summary += listBullets(scan.missingPms, "Missing Payment methods (blocks import)");
+      if (!missingAcctCount && !missingCatCount && !missingSubCount && !missingPmCount && !scan.badDate && !scan.badType && !scan.badAmount) {
+        summary += "<div style=\"color:#059669;\"><strong>All rows look valid ✓</strong></div>";
+      }
+      if (vBody) vBody.innerHTML = summary;
+      if (vPanel) vPanel.hidden = false;
+      status.textContent = "Validation complete. Review below and click Proceed to import.";
+      var proceed = function () {
+        if (vPanel) vPanel.hidden = true;
+        status.textContent = "Starting import…";
+        if (autoCreate) startAutoCreateThenImport(); else processRows();
+      };
+      var cancelFn = function () {
+        if (vPanel) vPanel.hidden = true;
+        status.textContent = "Import cancelled.";
+      };
+      if (vConfirm) vConfirm.onclick = proceed;
+      if (vCancel) vCancel.onclick = cancelFn;
+      return;
+
       // Auto-create missing categories / subcategories when requested
       function processRows() {
       var toInsert = [], errors = [];
@@ -718,9 +799,7 @@
       next(0);
       }
 
-      if (!autoCreate) {
-        processRows();
-      } else {
+      function startAutoCreateThenImport() {
         status.textContent = "Preparing categories…";
         var wantCats = {}, wantSubs = {};
         for (var rr = 1; rr < rows.length; rr++) {
