@@ -601,6 +601,7 @@
     if (!state.loaded) { status.textContent = "Please wait — expense data is still loading."; return; }
     status.textContent = "Reading " + file.name + "…";
     var reader = new FileReader();
+    var autoCreate = !!(el("exp-import-autocreate") && el("exp-import-autocreate").checked);
     reader.onload = function () {
       try {
       var rows = parseCsv(String(reader.result || ""));
@@ -614,6 +615,8 @@
         status.textContent = "CSV header must include Date, Type, Amount.";
         return;
       }
+      // Auto-create missing categories / subcategories when requested
+      function processRows() {
       var toInsert = [], errors = [];
       for (var r = 1; r < rows.length; r++) {
         var row = rows[r];
@@ -713,6 +716,71 @@
           });
       }
       next(0);
+      }
+
+      if (!autoCreate) {
+        processRows();
+      } else {
+        status.textContent = "Preparing categories…";
+        var wantCats = {}, wantSubs = {};
+        for (var rr = 1; rr < rows.length; rr++) {
+          var rw = rows[rr];
+          var tt = String(rw[iType] || "").trim().toLowerCase();
+          if (["expense", "budget", "income"].indexOf(tt) < 0) continue;
+          if (tt === "income") continue;
+          var cn = iCat >= 0 ? String(rw[iCat] || "").trim() : "";
+          if (!cn) continue;
+          var existing = findByName(state.categories.filter(function (c) { return c.type === tt && !c.parent_id; }), cn);
+          var key = tt + "::" + normName(cn);
+          if (!existing) wantCats[key] = { type: tt, name: cn };
+          var sn = iSub >= 0 ? String(rw[iSub] || "").trim() : "";
+          if (sn) {
+            var subKey = key + "::" + normName(sn);
+            wantSubs[subKey] = { type: tt, parentName: cn, name: sn };
+          }
+        }
+        var catList = Object.keys(wantCats).map(function (k) { return wantCats[k]; });
+        var chain = Promise.resolve();
+        catList.forEach(function (c) {
+          chain = chain.then(function () {
+            return WfDb.insert(CATS, {
+              type: c.type, name: c.name,
+              icon: c.type === "budget" ? "🎯" : "🏷️",
+              color: COLORS[state.categories.length % COLORS.length],
+              parent_id: null,
+              sort_order: state.categories.filter(function (x) { return x.type === c.type && !x.parent_id; }).length
+            }).then(function (rows) {
+              if (rows && rows[0]) state.categories.push(rows[0]);
+            });
+          });
+        });
+        chain = chain.then(function () {
+          var subList = Object.keys(wantSubs).map(function (k) { return wantSubs[k]; });
+          var sc = Promise.resolve();
+          subList.forEach(function (s) {
+            sc = sc.then(function () {
+              var parent = findByName(state.categories.filter(function (c) { return c.type === s.type && !c.parent_id; }), s.parentName);
+              if (!parent) return;
+              var already = findByName(state.categories.filter(function (c) { return c.parent_id === parent.id; }), s.name);
+              if (already) return;
+              return WfDb.insert(CATS, {
+                type: s.type, name: s.name,
+                icon: "•", color: parent.color || "#6B7280",
+                parent_id: parent.id,
+                sort_order: state.categories.filter(function (c) { return c.parent_id === parent.id; }).length
+              }).then(function (rows) {
+                if (rows && rows[0]) state.categories.push(rows[0]);
+              });
+            });
+          });
+          return sc;
+        }).then(function () {
+          renderCategories();
+          processRows();
+        }).catch(function (e) {
+          status.textContent = "Auto-create failed: " + ((e && e.message) || String(e));
+        });
+      }
       } catch (err) {
         status.textContent = "Import failed: " + ((err && err.message) || String(err));
         if (window.console) console.error("[csv import]", err);
