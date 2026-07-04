@@ -1073,15 +1073,13 @@
         expCats.forEach(function (cat) {
           var curC = curAgg.cats[cat.id] || { expense: 0, subs: {} };
           var prvC = prvAgg.cats[cat.id] || { expense: 0, subs: {} };
-          if (!curC.expense && !prvC.expense && !Object.keys(curC.subs).length && !Object.keys(prvC.subs).length) return;
           html += '<tr class="ana-cat-row"><td><span class="ana-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' + esc(cat.name) + '</td>' +
-                  '<td class="ana-neg">' + anaFmtSigned(curC.expense, true) + '</td>' +
-                  '<td class="ana-neg">' + anaFmtSigned(prvC.expense, true) + '</td></tr>';
+                  '<td class="' + (curC.expense ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(curC.expense, true) + '</td>' +
+                  '<td class="' + (prvC.expense ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(prvC.expense, true) + '</td></tr>';
           var subs = dashExpState.categories.filter(function (s) { return s.parent_id === cat.id; });
           subs.forEach(function (sub) {
             var curS = curC.subs[sub.id] || 0;
             var prvS = prvC.subs[sub.id] || 0;
-            if (!curS && !prvS) return;
             html += '<tr class="ana-sub-row"><td><span class="ana-icon ana-icon-sm" style="background:' + esc(sub.color || cat.color || "#9CA3AF") + ';">' + esc(sub.icon || cat.icon || "•") + '</span>' + esc(sub.name) + '</td>' +
                     '<td class="' + (curS ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(curS, true) + '</td>' +
                     '<td class="' + (prvS ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(prvS, true) + '</td></tr>';
