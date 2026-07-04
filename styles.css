@@ -2118,14 +2118,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Dashboard Expense account tiles */
 .exp-account-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
+  gap: 12px;
 }
 .exp-account-tile {
-  display: flex; align-items: center; gap: 14px;
-  padding: 18px 18px; border-radius: 12px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 12px;
   color: #fff; text-decoration: none;
-  min-height: 84px;
+  min-height: 72px;
 }
 .exp-account-tile-icon {
   width: 42px; height: 42px; border-radius: 10px;
