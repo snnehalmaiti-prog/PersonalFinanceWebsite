@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recedit2" />
+<link rel="stylesheet" href="styles.css?v=txnat1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -920,7 +920,8 @@
         rows.sort(function (a, b) {
           if (f.sort === "amount-desc") return Number(b.amount) - Number(a.amount);
           if (f.sort === "amount-asc") return Number(a.amount) - Number(b.amount);
-          var d = (b.txn_date || "").localeCompare(a.txn_date || "");
+          var ka = a.txn_at || a.txn_date, kb = b.txn_at || b.txn_date;
+          var d = String(kb || "").localeCompare(String(ka || ""));
           return f.sort === "date-asc" ? -d : d;
         });
 
@@ -961,7 +962,9 @@
                 '<div class="rec-item-sub">' + esc(acct.name || "—") + ' ' + lblHtml + '</div>' +
               '</div>' +
               '<span class="rec-item-chip" style="background:' + esc(acct.color || "#6B7280") + ';">' + esc(acct.name || "—") + '</span>' +
-              '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) + '</div>' +
+              '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) +
+                (r.txn_at ? '<span class="time">' + new Date(r.txn_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</span>' : "") +
+              '</div>' +
             '</div>';
           }).join("");
           return dayHdr + items;
@@ -1084,7 +1087,14 @@
           setRecType(record.type || "expense");
           document.getElementById("rec-amount").value = record.amount || "";
           document.getElementById("rec-note").value = record.note || "";
-          document.getElementById("rec-date").value = (record.txn_date ? record.txn_date + "T00:00" : nowLocalDT());
+          document.getElementById("rec-date").value = (function () {
+            if (record.txn_at) {
+              var d = new Date(record.txn_at);
+              d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+              return d.toISOString().slice(0, 16);
+            }
+            return record.txn_date ? record.txn_date + "T00:00" : nowLocalDT();
+          })();
           document.getElementById("rec-account").value = record.account_id || "";
           document.getElementById("rec-category").value = record.category_id || "";
           document.getElementById("rec-payment-method").value = record.payment_method_id || "";
@@ -1150,8 +1160,10 @@
         var pmId = document.getElementById("rec-payment-method").value || null;
         var dt = document.getElementById("rec-date").value || "";
         var datePart = dt.slice(0, 10) || new Date().toISOString().slice(0, 10);
+        var txnAt = dt ? new Date(dt).toISOString() : new Date().toISOString();
         var row = {
           txn_date: datePart,
+          txn_at: txnAt,
           amount: amt,
           type: t,
           account_id: acctId,
@@ -1187,7 +1199,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recedit2"></script>
+  <script src="supabase-client.js?v=txnat1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1203,7 +1215,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recedit2"></script>
+  <script src="script.js?v=txnat1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
