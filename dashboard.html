@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=nesting2" />
+<link rel="stylesheet" href="styles.css?v=budgetacct" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1462,8 +1462,18 @@
         var acctOpts = dashExpState.accounts.map(function (a) {
           return '<option value="' + a.id + '">' + esc(a.name) + '</option>';
         }).join("");
-        document.getElementById("rec-account").innerHTML = acctOpts;
+        var acctSel = document.getElementById("rec-account");
+        acctSel.innerHTML = acctOpts;
         document.getElementById("rec-account-to").innerHTML = acctOpts;
+        // When Budget mode: choosing an account auto-picks its Budget category.
+        acctSel.onchange = function () {
+          if (dashExpState.recType !== "budget") return;
+          var match = dashExpState.categories.find(function (c) {
+            return c.type === "budget" && !c.parent_id && c.account_id === acctSel.value;
+          });
+          var catSel = document.getElementById("rec-category");
+          if (catSel && match) catSel.value = match.id;
+        };
         var pmOpts = '<option value="">— none —</option>' + dashExpState.paymentMethods.map(function (p) {
           return '<option value="' + p.id + '">' + esc(p.name) + '</option>';
         }).join("");
@@ -1586,7 +1596,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=nesting2"></script>
+  <script src="supabase-client.js?v=budgetacct"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1602,7 +1612,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=nesting2"></script>
+  <script src="script.js?v=budgetacct"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
