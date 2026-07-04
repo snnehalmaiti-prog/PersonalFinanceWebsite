@@ -2279,6 +2279,15 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .ana-icon-sm { width: 20px; height: 20px; font-size: 0.7rem; opacity: 0.75; }
 .ana-neg { color: #EF4444; }
 .ana-zero { color: var(--muted); font-weight: 500; }
+.ana-fold-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-right: 6px;
+  border: none; background: transparent; color: var(--muted);
+  font-size: 0.9rem; cursor: pointer; border-radius: 4px;
+  vertical-align: middle;
+}
+.ana-fold-btn:hover { background: rgba(0,0,0,0.05); color: var(--text); }
+.ana-fold-spacer { cursor: default; pointer-events: none; }
 .rec-item-sub { font-size: 0.8rem; color: var(--muted); }
 .rec-item-chip {
   padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;

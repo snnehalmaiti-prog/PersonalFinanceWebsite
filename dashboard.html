@@ -1016,6 +1016,7 @@
         var d = new Date();
         return { year: d.getFullYear(), month: d.getMonth() };
       })();
+      var anaCollapsed = {};
       function anaMonthLabel(y, m) {
         var names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
         return names[m] + " " + y;
@@ -1078,10 +1079,16 @@
         expCats.forEach(function (cat) {
           var curC = curAgg.cats[cat.id] || { expense: 0, subs: {} };
           var prvC = prvAgg.cats[cat.id] || { expense: 0, subs: {} };
-          html += '<tr class="ana-cat-row"><td><span class="ana-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' + esc(cat.name) + '</td>' +
+          var subs = dashExpState.categories.filter(function (s) { return s.parent_id === cat.id; });
+          var hasSubs = subs.length > 0;
+          var collapsed = anaCollapsed[cat.id];
+          var toggle = hasSubs
+            ? '<button type="button" class="ana-fold-btn" data-ana-fold="' + esc(cat.id) + '" aria-label="Toggle">' + (collapsed ? "▸" : "▾") + '</button>'
+            : '<span class="ana-fold-btn ana-fold-spacer"></span>';
+          html += '<tr class="ana-cat-row"><td>' + toggle + '<span class="ana-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' + esc(cat.name) + '</td>' +
                   '<td class="' + (curC.expense ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(curC.expense, true) + '</td>' +
                   '<td class="' + (prvC.expense ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(prvC.expense, true) + '</td></tr>';
-          var subs = dashExpState.categories.filter(function (s) { return s.parent_id === cat.id; });
+          if (collapsed) return;
           subs.forEach(function (sub) {
             var curS = curC.subs[sub.id] || 0;
             var prvS = prvC.subs[sub.id] || 0;
@@ -1104,6 +1111,14 @@
         var next = document.getElementById("ana-period-next");
         if (prev) prev.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); anaNudge(-1); });
         if (next) next.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); anaNudge(1); });
+        var table = document.getElementById("ana-table");
+        if (table) table.addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-ana-fold]");
+          if (!btn) return;
+          var id = btn.getAttribute("data-ana-fold");
+          anaCollapsed[id] = !anaCollapsed[id];
+          renderAnalyticsTable();
+        });
       })();
 
       // ── Budget Variance Waterfall (Chart.js stacked-bar trick + running line) ──
