@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recedit" />
+<link rel="stylesheet" href="styles.css?v=recedit2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -639,9 +639,6 @@
                 <option value="income">Income</option>
               </select>
             </label>
-            <label class="rec-field"><span>Label</span>
-              <input type="text" id="rec-filter-label" placeholder="e.g. tax, work" />
-            </label>
             <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
           </aside>
 
@@ -718,12 +715,8 @@
               </label>
 
               <label class="rec-field">
-                <span>Labels</span>
-                <input type="text" id="rec-labels" placeholder="comma-separated e.g. tax, work" />
-              </label>
-              <label class="rec-field">
                 <span>Date &amp; Time</span>
-                <input type="date" id="rec-date" />
+                <input type="datetime-local" id="rec-date" />
               </label>
             </div>
 
@@ -740,13 +733,6 @@
               <label class="rec-field">
                 <span>Payment type</span>
                 <select id="rec-payment-method"></select>
-              </label>
-              <label class="rec-field">
-                <span>Payment status</span>
-                <select id="rec-payment-status">
-                  <option value="cleared">Cleared</option>
-                  <option value="uncleared">Uncleared</option>
-                </select>
               </label>
             </div>
           </div>
@@ -888,7 +874,7 @@
           account: document.getElementById("rec-filter-account").value,
           category: document.getElementById("rec-filter-category").value,
           type: document.getElementById("rec-filter-type").value,
-          label: (document.getElementById("rec-filter-label").value || "").toLowerCase(),
+          label: "",
           range: range
         };
       }
@@ -964,8 +950,7 @@
             var isOutflow = r.type === "expense";
             var sign = isOutflow ? "-" : "+";
             var color = isOutflow ? "#EF4444" : "#10B981";
-            var lbls = recLabels(r);
-            var lblHtml = lbls.map(function (l) { return '<span class="rec-label-chip">' + esc(l) + '</span>'; }).join("");
+            var lblHtml = "";
             var checked = recSelected[r.id] ? "checked" : "";
             var selClass = recSelected[r.id] ? " selected" : "";
             return '<div class="rec-item' + selClass + '">' +
@@ -991,7 +976,7 @@
         if (del) del.disabled = n === 0;
       }
 
-      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type", "rec-filter-label", "rec-period"].forEach(function (id) {
+      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type", "rec-period"].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener("input", renderDashRecords);
         if (el) el.addEventListener("change", function () { recPeriodOffset = 0; renderDashRecords(); });
@@ -1002,7 +987,6 @@
         document.getElementById("rec-filter-account").value = "";
         document.getElementById("rec-filter-category").value = "";
         document.getElementById("rec-filter-type").value = "";
-        document.getElementById("rec-filter-label").value = "";
         recPeriodOffset = 0;
         renderDashRecords();
       });
@@ -1092,21 +1076,23 @@
         document.getElementById("rec-modal-title").textContent = record ? "Edit record" : "Add record";
         document.getElementById("rec-modal-save").textContent = record ? "Save changes" : "Add record";
         fillRecDropdowns();
+        function nowLocalDT() {
+          var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+          return d.toISOString().slice(0, 16);
+        }
         if (record) {
           setRecType(record.type || "expense");
           document.getElementById("rec-amount").value = record.amount || "";
           document.getElementById("rec-note").value = record.note || "";
-          document.getElementById("rec-labels").value = recLabels(record).join(", ");
-          document.getElementById("rec-date").value = record.txn_date || new Date().toISOString().slice(0, 10);
+          document.getElementById("rec-date").value = (record.txn_date ? record.txn_date + "T00:00" : nowLocalDT());
           document.getElementById("rec-account").value = record.account_id || "";
           document.getElementById("rec-category").value = record.category_id || "";
           document.getElementById("rec-payment-method").value = record.payment_method_id || "";
         } else {
           document.getElementById("rec-amount").value = "";
           document.getElementById("rec-note").value = "";
-          document.getElementById("rec-labels").value = "";
           document.getElementById("rec-payer").value = "";
-          document.getElementById("rec-date").value = new Date().toISOString().slice(0, 10);
+          document.getElementById("rec-date").value = nowLocalDT();
           setRecType("expense");
         }
         document.getElementById("rec-modal-overlay").hidden = false;
@@ -1162,17 +1148,16 @@
         var catId = document.getElementById("rec-category").value;
         if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
         var pmId = document.getElementById("rec-payment-method").value || null;
-        var labelStr = (document.getElementById("rec-labels").value || "").trim();
-        var labels = labelStr ? labelStr.split(",").map(function (l) { return l.trim(); }).filter(Boolean) : [];
+        var dt = document.getElementById("rec-date").value || "";
+        var datePart = dt.slice(0, 10) || new Date().toISOString().slice(0, 10);
         var row = {
-          txn_date: document.getElementById("rec-date").value || new Date().toISOString().slice(0, 10),
+          txn_date: datePart,
           amount: amt,
           type: t,
           account_id: acctId,
           category_id: catId || null,
           payment_method_id: pmId,
-          note: document.getElementById("rec-note").value || "",
-          labels: labels
+          note: document.getElementById("rec-note").value || ""
         };
         var btn = document.getElementById("rec-modal-save");
         var origLabel = editingRecId ? "Save changes" : "Add record";
@@ -1202,7 +1187,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recedit"></script>
+  <script src="supabase-client.js?v=recedit2"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1218,7 +1203,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recedit"></script>
+  <script src="script.js?v=recedit2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

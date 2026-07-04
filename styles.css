@@ -2280,3 +2280,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-item:hover { background: var(--surface-alt); }
 .rec-item-check, .rec-item-check * { cursor: default; }
 
+
+/* Compact record modal */
+.rec-modal { max-width: 720px; }
+.rec-modal-body { padding: 16px; gap: 16px; }
+.rec-col { gap: 10px; }
+.rec-field > span { font-size: 0.8rem; }
+.rec-field input, .rec-field select, .rec-field textarea { padding: 7px 10px; font-size: 13px; }
+.rec-type-toggle button { padding: 7px 10px; font-size: 0.82rem; }
+.rec-modal-header { padding: 12px 16px; }
+.rec-modal-footer { padding: 10px 16px; }
