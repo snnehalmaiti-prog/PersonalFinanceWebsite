@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=cattypes" />
+<link rel="stylesheet" href="styles.css?v=accttiles" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -602,9 +602,8 @@
       </div>
 
       <div id="dash-exp-subpanel-accounts" class="exp-subpanel">
-        <div class="equity-card" style="margin-top:20px;">
-          <h3>Accounts overview</h3>
-          <p class="muted small equity-desc">Balances per account will appear here. Coming soon.</p>
+        <div id="dash-exp-accounts-tiles" class="exp-account-tiles" style="margin-top:20px;">
+          <p class="muted small" id="dash-exp-accounts-status">Loading…</p>
         </div>
       </div>
 
@@ -638,11 +637,45 @@
           });
         });
       });
+
+      function fmtMoney(n) {
+        var v = Number(n) || 0;
+        return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+      function renderDashAccountTiles(accounts) {
+        var box = document.getElementById("dash-exp-accounts-tiles");
+        var status = document.getElementById("dash-exp-accounts-status");
+        if (!box) return;
+        if (status) status.remove();
+        var tiles = accounts.map(function (a) {
+          return '<div class="exp-account-tile" style="background:' + esc(a.color || "#10B981") + ';">' +
+            '<div class="exp-account-tile-icon">' + esc(a.icon || "💳") + '</div>' +
+            '<div class="exp-account-tile-body">' +
+              '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
+              '<div class="exp-account-tile-balance">' + fmtMoney(a.initial_balance) + '</div>' +
+            '</div></div>';
+        }).join("");
+        tiles += '<a href="settings.html#exp-add-account-btn" class="exp-account-tile exp-account-tile-add">+ Add Account</a>';
+        box.innerHTML = tiles;
+      }
+
+      (function loadDashAccounts() {
+        if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) return;
+        WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc").then(function (rows) {
+          renderDashAccountTiles(rows || []);
+        }).catch(function (err) {
+          var status = document.getElementById("dash-exp-accounts-status");
+          if (status) status.textContent = "Could not load accounts: " + err.message;
+        });
+      })();
     </script>
 
   </main>
 
-  <script src="supabase-client.js?v=cattypes"></script>
+  <script src="supabase-client.js?v=accttiles"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -658,7 +691,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=cattypes"></script>
+  <script src="script.js?v=accttiles"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
