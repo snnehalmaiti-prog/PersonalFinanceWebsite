@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=periodhint" />
+<link rel="stylesheet" href="styles.css?v=periodfirst" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -612,6 +612,26 @@
         <div class="rec-page" style="margin-top:20px;">
           <aside class="rec-sidebar equity-card">
             <h3 style="margin:0 0 16px;">Filter Options</h3>
+
+            <label class="rec-field"><span>Period</span>
+              <div class="rec-period-picker">
+                <button type="button" id="rec-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
+                <button type="button" id="rec-period-btn" class="rec-period-main">
+                  <span id="rec-period-label">This month</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <button type="button" id="rec-period-next" class="rec-period-nav" aria-label="Next">›</button>
+                <div class="pp-popover" id="rec-period-popover" hidden>
+                  <div class="pp-tabs">
+                    <button type="button" data-pp-tab="custom">Custom range</button>
+                    <button type="button" data-pp-tab="months" class="active">Months</button>
+                    <button type="button" data-pp-tab="years">Years</button>
+                  </div>
+                  <div class="pp-body" id="rec-period-body"></div>
+                </div>
+              </div>
+            </label>
+
             <label class="rec-field"><span>Search</span>
               <input type="search" id="rec-filter-search" placeholder="Search notes, categories…" />
             </label>
@@ -639,25 +659,6 @@
             </label>
             <label class="rec-field"><span>Payment type</span>
               <select id="rec-filter-payment"><option value="">All</option></select>
-            </label>
-
-            <label class="rec-field"><span>Period</span>
-              <div class="rec-period-bar" style="position:relative; justify-content:flex-start;">
-                <button type="button" id="rec-period-prev" aria-label="Previous">‹</button>
-                <button type="button" id="rec-period-btn" class="rec-period-btn">
-                  <span id="rec-period-label">This month</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                </button>
-                <button type="button" id="rec-period-next" aria-label="Next">›</button>
-                <div class="pp-popover" id="rec-period-popover" hidden>
-                  <div class="pp-tabs">
-                    <button type="button" data-pp-tab="custom">Custom range</button>
-                    <button type="button" data-pp-tab="months" class="active">Months</button>
-                    <button type="button" data-pp-tab="years">Years</button>
-                  </div>
-                  <div class="pp-body" id="rec-period-body"></div>
-                </div>
-              </div>
             </label>
 
             <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
@@ -1622,7 +1623,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=periodhint"></script>
+  <script src="supabase-client.js?v=periodfirst"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1638,7 +1639,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=periodhint"></script>
+  <script src="script.js?v=periodfirst"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
