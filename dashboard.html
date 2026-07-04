@@ -1480,7 +1480,6 @@
                 '<div class="rec-item-title">' + titleParts.map(esc).join(" · ") + '</div>' +
                 '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
               '</div>' +
-              '<span class="rec-item-chip" style="background:' + esc(acct.color || "#6B7280") + ';">' + esc(acct.name || "—") + '</span>' +
               '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) +
                 (r.txn_at ? '<span class="time">' + new Date(r.txn_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</span>' : "") +
               '</div>' +
