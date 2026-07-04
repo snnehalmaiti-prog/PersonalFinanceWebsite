@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=periodslim" />
+<link rel="stylesheet" href="styles.css?v=periodtabs" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -623,7 +623,7 @@
                 <button type="button" id="rec-period-next" class="rec-period-nav" aria-label="Next">›</button>
                 <div class="pp-popover" id="rec-period-popover" hidden>
                   <div class="pp-tabs">
-                    <button type="button" data-pp-tab="custom">Custom range</button>
+                    <button type="button" data-pp-tab="custom">Custom</button>
                     <button type="button" data-pp-tab="months" class="active">Months</button>
                     <button type="button" data-pp-tab="years">Years</button>
                   </div>
@@ -1623,7 +1623,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=periodslim"></script>
+  <script src="supabase-client.js?v=periodtabs"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1639,7 +1639,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=periodslim"></script>
+  <script src="script.js?v=periodtabs"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
