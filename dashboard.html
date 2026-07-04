@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=periodnav" />
+<link rel="stylesheet" href="styles.css?v=noincome" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1199,7 +1199,10 @@
         });
 
         if (countEl) countEl.textContent = "Found " + rows.length + " record" + (rows.length === 1 ? "" : "s");
-        var net = rows.reduce(function (s, r) { return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount); }, 0);
+        var net = rows.reduce(function (s, r) {
+          if (r.type === "income") return s;
+          return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount);
+        }, 0);
         if (totalEl) { totalEl.textContent = fmtMoney(net); totalEl.style.color = net < 0 ? "#EF4444" : "#10B981"; }
 
         if (!rows.length) {
@@ -1236,7 +1239,10 @@
 
         list.innerHTML = dates.map(function (date) {
           var dayRows = groups[date];
-          var dayNet = dayRows.reduce(function (s, r) { return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount); }, 0);
+          var dayNet = dayRows.reduce(function (s, r) {
+            if (r.type === "income") return s;
+            return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount);
+          }, 0);
           var dayHdr = '<div class="rec-day-header"><span>' + esc(new Date(date).toDateString()) + '</span>' +
             '<span class="rec-day-total" style="color:' + (dayNet < 0 ? "#EF4444" : "#10B981") + ';">' + fmtMoney(dayNet) + '</span></div>';
           var items = dayRows.map(function (r) {
@@ -1635,7 +1641,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=periodnav"></script>
+  <script src="supabase-client.js?v=noincome"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1651,7 +1657,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=periodnav"></script>
+  <script src="script.js?v=noincome"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
