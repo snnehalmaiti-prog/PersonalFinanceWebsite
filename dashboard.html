@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=periodpick" />
+<link rel="stylesheet" href="styles.css?v=subcatreq" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -722,7 +722,7 @@
               </label>
 
               <label class="rec-field" id="rec-subcategory-field" style="display:none;">
-                <span>Subcategory</span>
+                <span>Subcategory <span style="color:#EF4444;">*</span></span>
                 <select id="rec-subcategory"></select>
               </label>
 
@@ -1449,7 +1449,7 @@
           return;
         }
         field.style.display = "";
-        sel.innerHTML = '<option value="">— none —</option>' + subs.map(function (s) {
+        sel.innerHTML = '<option value="">— choose —</option>' + subs.map(function (s) {
           return '<option value="' + s.id + '">' + esc(s.name) + '</option>';
         }).join("");
       }
@@ -1462,6 +1462,13 @@
         if (t === "income") acctId = null;
         var catId = document.getElementById("rec-category").value;
         if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
+        if (t === "expense") {
+          var subField = document.getElementById("rec-subcategory-field");
+          var subVal = document.getElementById("rec-subcategory").value;
+          if (subField && subField.style.display !== "none" && !subVal) {
+            document.getElementById("rec-modal-error").textContent = "Choose a subcategory."; return;
+          }
+        }
         var pmId = document.getElementById("rec-payment-method").value || null;
         if (t === "expense" && !pmId) { document.getElementById("rec-modal-error").textContent = "Choose a payment type."; return; }
         var datePart, txnAt;
@@ -1513,7 +1520,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=periodpick"></script>
+  <script src="supabase-client.js?v=subcatreq"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1529,7 +1536,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=periodpick"></script>
+  <script src="script.js?v=subcatreq"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
