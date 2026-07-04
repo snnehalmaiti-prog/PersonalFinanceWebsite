@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recmobile" />
+<link rel="stylesheet" href="styles.css?v=subcat" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -714,6 +714,11 @@
                 <select id="rec-category" required></select>
               </label>
 
+              <label class="rec-field" id="rec-subcategory-field" style="display:none;">
+                <span>Subcategory</span>
+                <select id="rec-subcategory"></select>
+              </label>
+
               <label class="rec-field" id="rec-payment-field" style="display:none;">
                 <span>Payment type <span id="rec-payment-req" style="color:#EF4444;">*</span></span>
                 <select id="rec-payment-method"></select>
@@ -1128,6 +1133,8 @@
           })();
           document.getElementById("rec-account").value = record.account_id || "";
           document.getElementById("rec-category").value = record.category_id || "";
+          fillRecSubcategories(record.category_id || "");
+          document.getElementById("rec-subcategory").value = record.subcategory_id || "";
           document.getElementById("rec-payment-method").value = record.payment_method_id || "";
         } else {
           document.getElementById("rec-amount").value = "";
@@ -1271,13 +1278,36 @@
             }
           }
           sel.onchange = function () {
+            fillRecSubcategories(sel.value);
             if (t !== "budget") return;
             var cat = findById(dashExpState.categories, sel.value);
             if (cat && cat.account_id) {
               document.getElementById("rec-account").value = cat.account_id;
             }
           };
+          fillRecSubcategories(sel.value);
         }
+      }
+
+      function fillRecSubcategories(parentId) {
+        var field = document.getElementById("rec-subcategory-field");
+        var sel = document.getElementById("rec-subcategory");
+        if (!field || !sel) return;
+        if (dashExpState.recType !== "expense" || !parentId) {
+          field.style.display = "none";
+          sel.innerHTML = "";
+          return;
+        }
+        var subs = dashExpState.categories.filter(function (c) { return c.parent_id === parentId; });
+        if (!subs.length) {
+          field.style.display = "none";
+          sel.innerHTML = "";
+          return;
+        }
+        field.style.display = "";
+        sel.innerHTML = '<option value="">— none —</option>' + subs.map(function (s) {
+          return '<option value="' + s.id + '">' + esc(s.name) + '</option>';
+        }).join("");
       }
       function saveRec() {
         var t = dashExpState.recType;
@@ -1307,6 +1337,7 @@
           type: t,
           account_id: acctId,
           category_id: catId || null,
+          subcategory_id: (document.getElementById("rec-subcategory").value || null),
           payment_method_id: pmId,
           note: document.getElementById("rec-note").value || ""
         };
@@ -1338,7 +1369,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recmobile"></script>
+  <script src="supabase-client.js?v=subcat"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1354,7 +1385,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recmobile"></script>
+  <script src="script.js?v=subcat"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
