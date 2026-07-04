@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=csvusdate" />
-<script src="supabase-client.js?v=csvusdate"></script>
+<link rel="stylesheet" href="styles.css?v=catdl" />
+<script src="supabase-client.js?v=catdl"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -290,7 +290,10 @@
         <div class="equity-card">
           <div class="equity-card-header">
             <h3 id="exp-categories-heading">Categories</h3>
-            <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-ghost btn-sm" id="exp-download-categories-btn">Download CSV</button>
+              <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
+            </div>
           </div>
           <p class="muted small equity-desc">Expense and income categories with subcategories. When adding a record, choosing a category filters its subcategories.</p>
           <p class="muted small" id="exp-categories-status">Loading…</p>
@@ -341,8 +344,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=csvusdate"></script>
-  <script src="expense.js?v=csvusdate"></script>
+  <script src="script.js?v=catdl"></script>
+  <script src="expense.js?v=catdl"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

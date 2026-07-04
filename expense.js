@@ -540,6 +540,37 @@
     return list.find(function (x) { return String(x.name || "").trim().toLowerCase() === n; }) || null;
   }
 
+  function csvEscape(v) {
+    var s = String(v == null ? "" : v);
+    if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadCategoriesCsv() {
+    var rows = [["Type", "Category", "Subcategory", "Icon", "Color", "Account"]];
+    var parents = state.categories.filter(function (c) { return !c.parent_id; })
+      .slice().sort(function (a, b) {
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        return String(a.name).localeCompare(String(b.name));
+      });
+    parents.forEach(function (p) {
+      var acctName = p.account_id ? ((findAcct(p.account_id) || {}).name || "") : "";
+      rows.push([p.type, p.name, "", p.icon || "", p.color || "", acctName]);
+      var subs = state.categories.filter(function (c) { return c.parent_id === p.id; })
+        .slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      subs.forEach(function (s) {
+        rows.push([p.type, p.name, s.name, s.icon || "", s.color || "", acctName]);
+      });
+    });
+    var csv = rows.map(function (r) { return r.map(csvEscape).join(","); }).join("\n") + "\n";
+    var blob = new Blob([csv], { type: "text/csv" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var stamp = new Date().toISOString().slice(0, 10);
+    a.href = url; a.download = "categories-" + stamp + ".csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function downloadImportTemplate() {
     var csv = "Date,Type,Amount,Account,Category,Subcategory,Payment Method,Labels,Note\n" +
       '"2026-07-04","expense","900","Common","Entertainment","Movies","UPI","",""\n' +
@@ -707,6 +738,8 @@
     if (addAcct) addAcct.addEventListener("click", function () { openAccountModal(null); });
     var addPm = el("exp-add-payment-method-btn");
     if (addPm) addPm.addEventListener("click", function () { openPaymentMethodModal(null); });
+    var dlCats = el("exp-download-categories-btn");
+    if (dlCats) dlCats.addEventListener("click", downloadCategoriesCsv);
     var tplBtn = el("exp-import-template-btn");
     if (tplBtn) tplBtn.addEventListener("click", downloadImportTemplate);
     var impFile = el("exp-import-file");
