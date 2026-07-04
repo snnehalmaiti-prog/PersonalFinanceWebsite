@@ -226,8 +226,8 @@
 
   function paymentMethodMenu(id) {
     return [
-      { label: "Edit", onClick: function () { var p = findPm(id); if (p) openPaymentMethodModal(p); } },
-      { label: "Delete", danger: true, onClick: function () { deletePaymentMethod(id); } }
+      { label: "Edit", fn: function () { var p = findPm(id); if (p) openPaymentMethodModal(p); } },
+      { label: "Delete", danger: true, fn: function () { deletePaymentMethod(id); } }
     ];
   }
 
