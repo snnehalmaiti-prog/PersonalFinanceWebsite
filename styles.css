@@ -2360,3 +2360,63 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .dt-picker { width: 240px; padding: 8px; }
   .dt-picker-grid button { font-size: 0.7rem; padding: 3px 0; }
 }
+
+/* Records period picker popover */
+.rec-period-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface); cursor: pointer;
+  font: inherit; font-weight: 600; font-size: 0.9rem;
+  color: var(--text);
+}
+.rec-period-btn:hover { background: var(--surface-alt); }
+.pp-popover {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 1200;
+  width: 380px; max-width: calc(100vw - 24px);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  padding: 12px;
+}
+.pp-tabs {
+  display: flex; gap: 4px;
+  background: var(--surface-alt); padding: 4px; border-radius: 999px;
+  margin-bottom: 12px;
+}
+.pp-tabs button {
+  flex: 1; padding: 7px 10px; border: none; background: transparent;
+  border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 0.82rem; font-weight: 600;
+  color: var(--muted);
+}
+.pp-tabs button.active { background: #10B981; color: #fff; }
+.pp-body-header {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin-bottom: 12px; font-weight: 700; font-size: 1rem;
+}
+.pp-body-header button {
+  border: none; background: transparent; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 1.2rem; color: var(--muted);
+}
+.pp-body-header button:hover { background: var(--surface-alt); color: var(--text); }
+.pp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pp-grid button {
+  padding: 16px 0; border: none; background: transparent;
+  border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 1rem; color: var(--text);
+}
+.pp-grid button:hover { background: var(--surface-alt); }
+.pp-grid button.selected { background: #10B981; color: #fff; font-weight: 700; }
+.pp-custom { display: flex; flex-direction: column; gap: 10px; }
+.pp-custom label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; }
+.pp-custom input {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; background: var(--surface); color: var(--text);
+}
+.pp-weeks { display: flex; flex-direction: column; gap: 6px; }
+.pp-weeks button {
+  text-align: left; padding: 10px 12px; border: none; background: transparent;
+  border-radius: 8px; cursor: pointer; font: inherit;
+}
+.pp-weeks button:hover { background: var(--surface-alt); }
+.pp-weeks button.selected { background: #10B981; color: #fff; font-weight: 700; }

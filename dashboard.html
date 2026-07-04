@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=subcat" />
+<link rel="stylesheet" href="styles.css?v=periodpick" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -643,16 +643,23 @@
           </aside>
 
           <div class="rec-main">
-            <div class="rec-period-bar">
+            <div class="rec-period-bar" style="position:relative;">
               <button type="button" id="rec-period-prev" aria-label="Previous">‹</button>
-              <select id="rec-period">
-                <option value="week">This week</option>
-                <option value="month" selected>This month</option>
-                <option value="year">This year</option>
-                <option value="all">All time</option>
-              </select>
+              <button type="button" id="rec-period-btn" class="rec-period-btn">
+                <span id="rec-period-label">This month</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
               <button type="button" id="rec-period-next" aria-label="Next">›</button>
-              <span class="rec-period-label" id="rec-period-label"></span>
+
+              <div class="pp-popover" id="rec-period-popover" hidden>
+                <div class="pp-tabs">
+                  <button type="button" data-pp-tab="custom">Custom range</button>
+                  <button type="button" data-pp-tab="weeks">Weeks</button>
+                  <button type="button" data-pp-tab="months" class="active">Months</button>
+                  <button type="button" data-pp-tab="years">Years</button>
+                </div>
+                <div class="pp-body" id="rec-period-body"></div>
+              </div>
             </div>
 
             <div class="rec-actions-bar">
@@ -879,27 +886,165 @@
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
       }
 
-      var recPeriodOffset = 0; // 0 = current, -1 = prev, +1 = next
       var recSelected = {}; // id → true
 
+      // Records period picker state
+      var now0 = new Date();
+      var recPeriod = {
+        kind: "month", // custom | weeks | months | years
+        year: now0.getFullYear(),
+        month: now0.getMonth(),
+        weekStart: null, // Date
+        customStart: null, // ISO
+        customEnd: null
+      };
+      var recPeriodView = { year: now0.getFullYear() }; // year view for months/weeks/custom
+      var recPeriodTab = "months"; // current picker tab
+
+      var MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      var MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
       function periodRange() {
-        var period = document.getElementById("rec-period").value;
-        var now = new Date();
-        if (period === "all") return { start: null, end: null, label: "All time" };
-        if (period === "week") {
-          var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + recPeriodOffset * 7);
-          var end = new Date(d); end.setDate(d.getDate() + 6);
-          return { start: d, end: end, label: d.toLocaleDateString() + " – " + end.toLocaleDateString() };
+        if (recPeriod.kind === "custom") {
+          if (!recPeriod.customStart || !recPeriod.customEnd) return { start: null, end: null, label: "Custom range" };
+          var cs = new Date(recPeriod.customStart), ce = new Date(recPeriod.customEnd);
+          return { start: cs, end: ce, label: cs.toLocaleDateString() + " – " + ce.toLocaleDateString() };
         }
-        if (period === "year") {
-          var y = now.getFullYear() + recPeriodOffset;
+        if (recPeriod.kind === "years") {
+          var y = recPeriod.year;
           return { start: new Date(y, 0, 1), end: new Date(y, 11, 31), label: String(y) };
         }
-        // month (default)
-        var m = new Date(now.getFullYear(), now.getMonth() + recPeriodOffset, 1);
-        var mEnd = new Date(m.getFullYear(), m.getMonth() + 1, 0);
-        return { start: m, end: mEnd, label: m.toLocaleString(undefined, { month: "long", year: "numeric" }) };
+        if (recPeriod.kind === "weeks") {
+          var ws = recPeriod.weekStart ? new Date(recPeriod.weekStart) : (function () {
+            var d = new Date(); d.setDate(d.getDate() - d.getDay()); return d;
+          })();
+          var we = new Date(ws); we.setDate(ws.getDate() + 6);
+          return { start: ws, end: we, label: ws.toLocaleDateString() + " – " + we.toLocaleDateString() };
+        }
+        // months (default)
+        var m = new Date(recPeriod.year, recPeriod.month, 1);
+        var mEnd = new Date(recPeriod.year, recPeriod.month + 1, 0);
+        return { start: m, end: mEnd, label: MONTH_FULL[recPeriod.month] + " " + recPeriod.year };
       }
+
+      function updatePeriodLabel() {
+        var lbl = document.getElementById("rec-period-label");
+        if (lbl) lbl.textContent = periodRange().label;
+      }
+
+      function nudgePeriod(dir) {
+        if (recPeriod.kind === "years") { recPeriod.year += dir; }
+        else if (recPeriod.kind === "months") {
+          var m = recPeriod.month + dir;
+          var yr = recPeriod.year + Math.floor(m / 12);
+          m = ((m % 12) + 12) % 12;
+          recPeriod.year = yr; recPeriod.month = m;
+        } else if (recPeriod.kind === "weeks") {
+          var d = recPeriod.weekStart ? new Date(recPeriod.weekStart) : (function () { var x = new Date(); x.setDate(x.getDate() - x.getDay()); return x; })();
+          d.setDate(d.getDate() + dir * 7);
+          recPeriod.weekStart = d.toISOString();
+        }
+        renderDashRecords();
+      }
+
+      // Popover rendering
+      function renderPeriodPopover() {
+        var body = document.getElementById("rec-period-body");
+        if (!body) return;
+        document.querySelectorAll("[data-pp-tab]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-pp-tab") === recPeriodTab);
+        });
+        var yv = recPeriodView.year;
+        if (recPeriodTab === "months") {
+          body.innerHTML =
+            '<div class="pp-body-header"><button type="button" data-pp-yr="-1">‹</button><span>' + yv + '</span><button type="button" data-pp-yr="1">›</button></div>' +
+            '<div class="pp-grid">' + MONTH_NAMES.map(function (mn, i) {
+              var sel = (recPeriod.kind === "months" && recPeriod.year === yv && recPeriod.month === i) ? " selected" : "";
+              return '<button type="button" class="' + sel + '" data-pp-m="' + i + '">' + mn + '</button>';
+            }).join("") + '</div>';
+        } else if (recPeriodTab === "years") {
+          var decadeStart = Math.floor(yv / 10) * 10;
+          body.innerHTML =
+            '<div class="pp-body-header"><button type="button" data-pp-dc="-10">‹</button><span>' + decadeStart + " – " + (decadeStart + 9) + '</span><button type="button" data-pp-dc="10">›</button></div>' +
+            '<div class="pp-grid">' + Array.from({ length: 10 }).map(function (_, i) {
+              var y = decadeStart + i;
+              var sel = (recPeriod.kind === "years" && recPeriod.year === y) ? " selected" : "";
+              return '<button type="button" class="' + sel + '" data-pp-y="' + y + '">' + y + '</button>';
+            }).join("") + '</div>';
+        } else if (recPeriodTab === "weeks") {
+          // Show weeks starting each Sunday in the current year
+          var weeks = [];
+          var d = new Date(yv, 0, 1);
+          d.setDate(d.getDate() - d.getDay());
+          while (d.getFullYear() <= yv) {
+            var end = new Date(d); end.setDate(d.getDate() + 6);
+            weeks.push({ start: new Date(d), end: end });
+            d.setDate(d.getDate() + 7);
+            if (weeks.length > 60) break;
+          }
+          body.innerHTML =
+            '<div class="pp-body-header"><button type="button" data-pp-yr="-1">‹</button><span>' + yv + '</span><button type="button" data-pp-yr="1">›</button></div>' +
+            '<div class="pp-weeks">' + weeks.map(function (w) {
+              var sel = (recPeriod.kind === "weeks" && recPeriod.weekStart && new Date(recPeriod.weekStart).toDateString() === w.start.toDateString()) ? " selected" : "";
+              return '<button type="button" class="' + sel + '" data-pp-w="' + w.start.toISOString() + '">' +
+                w.start.toLocaleDateString() + " – " + w.end.toLocaleDateString() + '</button>';
+            }).join("") + '</div>';
+        } else {
+          body.innerHTML =
+            '<div class="pp-custom">' +
+              '<label><span>From</span><input type="date" id="pp-custom-from" value="' + (recPeriod.customStart || "") + '"></label>' +
+              '<label><span>To</span><input type="date" id="pp-custom-to" value="' + (recPeriod.customEnd || "") + '"></label>' +
+              '<button type="button" class="btn btn-primary" id="pp-custom-apply">Apply</button>' +
+            '</div>';
+        }
+      }
+
+      function openPeriodPopover() { document.getElementById("rec-period-popover").hidden = false; renderPeriodPopover(); }
+      function closePeriodPopover() { document.getElementById("rec-period-popover").hidden = true; }
+      document.getElementById("rec-period-btn").addEventListener("click", function (e) {
+        e.stopPropagation();
+        var pop = document.getElementById("rec-period-popover");
+        pop.hidden ? openPeriodPopover() : closePeriodPopover();
+      });
+      document.addEventListener("click", function (e) {
+        var pop = document.getElementById("rec-period-popover");
+        if (!pop || pop.hidden) return;
+        if (e.target.closest("#rec-period-popover") || e.target.closest("#rec-period-btn")) return;
+        closePeriodPopover();
+      });
+      document.getElementById("rec-period-popover").addEventListener("click", function (e) {
+        var tab = e.target.closest("[data-pp-tab]");
+        if (tab) { recPeriodTab = tab.getAttribute("data-pp-tab"); renderPeriodPopover(); return; }
+        var yrBtn = e.target.closest("[data-pp-yr]");
+        if (yrBtn) { recPeriodView.year += Number(yrBtn.getAttribute("data-pp-yr")); renderPeriodPopover(); return; }
+        var dcBtn = e.target.closest("[data-pp-dc]");
+        if (dcBtn) { recPeriodView.year += Number(dcBtn.getAttribute("data-pp-dc")); renderPeriodPopover(); return; }
+        var mBtn = e.target.closest("[data-pp-m]");
+        if (mBtn) {
+          recPeriod.kind = "months";
+          recPeriod.year = recPeriodView.year;
+          recPeriod.month = Number(mBtn.getAttribute("data-pp-m"));
+          renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
+        }
+        var yBtn = e.target.closest("[data-pp-y]");
+        if (yBtn) {
+          recPeriod.kind = "years";
+          recPeriod.year = Number(yBtn.getAttribute("data-pp-y"));
+          renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
+        }
+        var wBtn = e.target.closest("[data-pp-w]");
+        if (wBtn) {
+          recPeriod.kind = "weeks";
+          recPeriod.weekStart = wBtn.getAttribute("data-pp-w");
+          renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
+        }
+        if (e.target.id === "pp-custom-apply") {
+          recPeriod.kind = "custom";
+          recPeriod.customStart = document.getElementById("pp-custom-from").value;
+          recPeriod.customEnd = document.getElementById("pp-custom-to").value;
+          renderDashRecords(); closePeriodPopover(); return;
+        }
+      });
 
       function currentFilters() {
         var range = periodRange();
@@ -1014,10 +1159,10 @@
         if (del) del.disabled = n === 0;
       }
 
-      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type", "rec-period"].forEach(function (id) {
+      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type"].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener("input", renderDashRecords);
-        if (el) el.addEventListener("change", function () { recPeriodOffset = 0; renderDashRecords(); });
+        if (el) el.addEventListener("change", renderDashRecords);
       });
       document.getElementById("rec-filter-reset").addEventListener("click", function () {
         document.getElementById("rec-filter-search").value = "";
@@ -1025,11 +1170,10 @@
         document.getElementById("rec-filter-account").value = "";
         document.getElementById("rec-filter-category").value = "";
         document.getElementById("rec-filter-type").value = "";
-        recPeriodOffset = 0;
         renderDashRecords();
       });
-      document.getElementById("rec-period-prev").addEventListener("click", function () { recPeriodOffset--; renderDashRecords(); });
-      document.getElementById("rec-period-next").addEventListener("click", function () { recPeriodOffset++; renderDashRecords(); });
+      document.getElementById("rec-period-prev").addEventListener("click", function () { nudgePeriod(-1); });
+      document.getElementById("rec-period-next").addEventListener("click", function () { nudgePeriod(1); });
 
       // Row checkbox delegation
       document.getElementById("rec-list").addEventListener("change", function (e) {
@@ -1369,7 +1513,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=subcat"></script>
+  <script src="supabase-client.js?v=periodpick"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1385,7 +1529,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=subcat"></script>
+  <script src="script.js?v=periodpick"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
