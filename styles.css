@@ -2238,3 +2238,40 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .rec-item-amount { text-align: right; font-weight: 700; font-size: 0.98rem; }
 .rec-item-amount .time { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+/* Period picker + actions bar */
+.rec-period-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; width: fit-content;
+}
+.rec-period-bar button {
+  border: none; background: transparent; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; color: var(--muted);
+}
+.rec-period-bar button:hover { background: var(--surface-alt); color: var(--text); }
+.rec-period-bar select {
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 14px; font: inherit; background: var(--surface); color: var(--text);
+}
+.rec-period-label { font-weight: 600; font-size: 0.9rem; color: var(--muted); margin-left: 4px; }
+.rec-actions-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.rec-select-all { display: flex; gap: 6px; align-items: center; font-size: 0.88rem; font-weight: 600; }
+.rec-bulk-actions { display: flex; gap: 6px; }
+.rec-bulk-actions button[disabled] { opacity: 0.4; cursor: not-allowed; }
+.rec-actions-bar > *:nth-last-child(-n+2) { margin-left: auto; }
+.rec-actions-bar > *:last-child { margin-left: 0; }
+.rec-item-check { display: flex; align-items: center; }
+.rec-item.selected { background: color-mix(in srgb, var(--accent, #10B981) 8%, var(--surface)); }
+.rec-label-chip {
+  display: inline-block; margin-right: 4px;
+  padding: 2px 8px; border-radius: 999px; font-size: 0.7rem;
+  background: var(--surface-alt); color: var(--muted); font-weight: 600;
+}
+.rec-item { grid-template-columns: 24px 40px 1fr auto auto; }

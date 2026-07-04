@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recpage1" />
+<link rel="stylesheet" href="styles.css?v=recpage2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -639,11 +639,32 @@
                 <option value="income">Income</option>
               </select>
             </label>
+            <label class="rec-field"><span>Label</span>
+              <input type="text" id="rec-filter-label" placeholder="e.g. tax, work" />
+            </label>
             <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
           </aside>
 
           <div class="rec-main">
-            <div class="rec-summary">
+            <div class="rec-period-bar">
+              <button type="button" id="rec-period-prev" aria-label="Previous">‹</button>
+              <select id="rec-period">
+                <option value="week">This week</option>
+                <option value="month" selected>This month</option>
+                <option value="year">This year</option>
+                <option value="all">All time</option>
+              </select>
+              <button type="button" id="rec-period-next" aria-label="Next">›</button>
+              <span class="rec-period-label" id="rec-period-label"></span>
+            </div>
+
+            <div class="rec-actions-bar">
+              <label class="rec-select-all"><input type="checkbox" id="rec-select-all" /> Select all</label>
+              <div class="rec-bulk-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="rec-export-btn">Export</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="rec-dup-btn">Solve Duplicities</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="rec-delete-btn" disabled>Delete</button>
+              </div>
               <div><strong id="rec-count">0 records</strong></div>
               <div class="rec-total" id="rec-total">₹0.00</div>
             </div>
@@ -696,6 +717,10 @@
                 <select id="rec-category" required></select>
               </label>
 
+              <label class="rec-field">
+                <span>Labels</span>
+                <input type="text" id="rec-labels" placeholder="comma-separated e.g. tax, work" />
+              </label>
               <label class="rec-field">
                 <span>Date &amp; Time</span>
                 <input type="date" id="rec-date" />
@@ -833,14 +858,45 @@
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
       }
 
+      var recPeriodOffset = 0; // 0 = current, -1 = prev, +1 = next
+      var recSelected = {}; // id → true
+
+      function periodRange() {
+        var period = document.getElementById("rec-period").value;
+        var now = new Date();
+        if (period === "all") return { start: null, end: null, label: "All time" };
+        if (period === "week") {
+          var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + recPeriodOffset * 7);
+          var end = new Date(d); end.setDate(d.getDate() + 6);
+          return { start: d, end: end, label: d.toLocaleDateString() + " – " + end.toLocaleDateString() };
+        }
+        if (period === "year") {
+          var y = now.getFullYear() + recPeriodOffset;
+          return { start: new Date(y, 0, 1), end: new Date(y, 11, 31), label: String(y) };
+        }
+        // month (default)
+        var m = new Date(now.getFullYear(), now.getMonth() + recPeriodOffset, 1);
+        var mEnd = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+        return { start: m, end: mEnd, label: m.toLocaleString(undefined, { month: "long", year: "numeric" }) };
+      }
+
       function currentFilters() {
+        var range = periodRange();
         return {
           q: (document.getElementById("rec-filter-search").value || "").toLowerCase(),
           sort: document.getElementById("rec-filter-sort").value,
           account: document.getElementById("rec-filter-account").value,
           category: document.getElementById("rec-filter-category").value,
-          type: document.getElementById("rec-filter-type").value
+          type: document.getElementById("rec-filter-type").value,
+          label: (document.getElementById("rec-filter-label").value || "").toLowerCase(),
+          range: range
         };
+      }
+
+      function recLabels(r) {
+        if (Array.isArray(r.labels)) return r.labels;
+        if (typeof r.labels === "string" && r.labels) { try { return JSON.parse(r.labels); } catch (e) { return []; } }
+        return [];
       }
 
       function renderDashRecords() {
@@ -850,7 +906,13 @@
         var totalEl = document.getElementById("rec-total");
         if (!list) return;
         var f = currentFilters();
+        var periodLabelEl = document.getElementById("rec-period-label");
+        if (periodLabelEl) periodLabelEl.textContent = f.range.label;
         var rows = dashExpState.records.filter(function (r) {
+          if (f.range.start) {
+            var d = new Date(r.txn_date);
+            if (d < f.range.start || d > new Date(f.range.end.getTime() + 86399999)) return false;
+          }
           if (f.account && r.account_id !== f.account) return false;
           if (f.type && r.type !== f.type) return false;
           if (f.category) {
@@ -862,6 +924,10 @@
             var cat2 = findById(dashExpState.categories, r.category_id) || {};
             var hay = ((r.note || "") + " " + (cat2.name || "")).toLowerCase();
             if (hay.indexOf(f.q) === -1) return false;
+          }
+          if (f.label) {
+            var lbls = recLabels(r).map(function (l) { return String(l).toLowerCase(); });
+            if (!lbls.some(function (l) { return l.indexOf(f.label) !== -1; })) return false;
           }
           return true;
         });
@@ -898,11 +964,16 @@
             var isOutflow = r.type === "expense";
             var sign = isOutflow ? "-" : "+";
             var color = isOutflow ? "#EF4444" : "#10B981";
-            return '<div class="rec-item">' +
+            var lbls = recLabels(r);
+            var lblHtml = lbls.map(function (l) { return '<span class="rec-label-chip">' + esc(l) + '</span>'; }).join("");
+            var checked = recSelected[r.id] ? "checked" : "";
+            var selClass = recSelected[r.id] ? " selected" : "";
+            return '<div class="rec-item' + selClass + '">' +
+              '<span class="rec-item-check"><input type="checkbox" data-rec-id="' + esc(r.id) + '" ' + checked + '></span>' +
               '<span class="rec-item-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
               '<div class="rec-item-body">' +
                 '<div class="rec-item-title">' + esc(cat.name || "(uncategorized)") + (r.note ? " · " + esc(r.note) : "") + '</div>' +
-                '<div class="rec-item-sub">' + esc(acct.name || "—") + '</div>' +
+                '<div class="rec-item-sub">' + esc(acct.name || "—") + ' ' + lblHtml + '</div>' +
               '</div>' +
               '<span class="rec-item-chip" style="background:' + esc(acct.color || "#6B7280") + ';">' + esc(acct.name || "—") + '</span>' +
               '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) + '</div>' +
@@ -910,12 +981,20 @@
           }).join("");
           return dayHdr + items;
         }).join("");
+
+        updateBulkButtons();
       }
 
-      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type"].forEach(function (id) {
+      function updateBulkButtons() {
+        var n = Object.keys(recSelected).filter(function (k) { return recSelected[k]; }).length;
+        var del = document.getElementById("rec-delete-btn");
+        if (del) del.disabled = n === 0;
+      }
+
+      ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type", "rec-filter-label", "rec-period"].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener("input", renderDashRecords);
-        if (el) el.addEventListener("change", renderDashRecords);
+        if (el) el.addEventListener("change", function () { recPeriodOffset = 0; renderDashRecords(); });
       });
       document.getElementById("rec-filter-reset").addEventListener("click", function () {
         document.getElementById("rec-filter-search").value = "";
@@ -923,7 +1002,76 @@
         document.getElementById("rec-filter-account").value = "";
         document.getElementById("rec-filter-category").value = "";
         document.getElementById("rec-filter-type").value = "";
+        document.getElementById("rec-filter-label").value = "";
+        recPeriodOffset = 0;
         renderDashRecords();
+      });
+      document.getElementById("rec-period-prev").addEventListener("click", function () { recPeriodOffset--; renderDashRecords(); });
+      document.getElementById("rec-period-next").addEventListener("click", function () { recPeriodOffset++; renderDashRecords(); });
+
+      // Row checkbox delegation
+      document.getElementById("rec-list").addEventListener("change", function (e) {
+        var cb = e.target.closest("[data-rec-id]"); if (!cb) return;
+        recSelected[cb.getAttribute("data-rec-id")] = cb.checked;
+        cb.closest(".rec-item").classList.toggle("selected", cb.checked);
+        updateBulkButtons();
+      });
+
+      document.getElementById("rec-select-all").addEventListener("change", function (e) {
+        var on = e.target.checked;
+        document.querySelectorAll("[data-rec-id]").forEach(function (cb) {
+          cb.checked = on;
+          recSelected[cb.getAttribute("data-rec-id")] = on;
+          cb.closest(".rec-item").classList.toggle("selected", on);
+        });
+        updateBulkButtons();
+      });
+
+      document.getElementById("rec-delete-btn").addEventListener("click", function () {
+        var ids = Object.keys(recSelected).filter(function (k) { return recSelected[k]; });
+        if (!ids.length) return;
+        if (!confirm("Delete " + ids.length + " selected record(s)?")) return;
+        Promise.all(ids.map(function (id) { return WfDb.remove("expense_records", id); }))
+          .then(function () { recSelected = {}; loadDashAccounts(); });
+      });
+
+      document.getElementById("rec-export-btn").addEventListener("click", function () {
+        var ids = Object.keys(recSelected).filter(function (k) { return recSelected[k]; });
+        var rows = ids.length ? dashExpState.records.filter(function (r) { return recSelected[r.id]; }) : dashExpState.records;
+        var header = ["Date", "Type", "Amount", "Account", "Category", "Payment Method", "Labels", "Note"];
+        var lines = [header.join(",")];
+        rows.forEach(function (r) {
+          var acct = findById(dashExpState.accounts, r.account_id) || {};
+          var cat = findById(dashExpState.categories, r.category_id) || {};
+          var pm = findById(dashExpState.paymentMethods, r.payment_method_id) || {};
+          var lbls = recLabels(r).join("|");
+          var csv = [r.txn_date || "", r.type, r.amount, acct.name || "", cat.name || "", pm.name || "", lbls, (r.note || "").replace(/[,\n]/g, " ")];
+          lines.push(csv.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(","));
+        });
+        var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url; a.download = "records-" + new Date().toISOString().slice(0, 10) + ".csv";
+        a.click(); URL.revokeObjectURL(url);
+      });
+
+      document.getElementById("rec-dup-btn").addEventListener("click", function () {
+        var groups = {};
+        dashExpState.records.forEach(function (r) {
+          var k = r.txn_date + "|" + r.amount + "|" + r.account_id + "|" + r.type;
+          (groups[k] = groups[k] || []).push(r);
+        });
+        var dupIds = [];
+        Object.keys(groups).forEach(function (k) {
+          if (groups[k].length > 1) {
+            // keep the first (oldest created), delete the rest
+            groups[k].slice(1).forEach(function (r) { dupIds.push(r.id); });
+          }
+        });
+        if (!dupIds.length) { alert("No duplicates found (matching date + amount + account + type)."); return; }
+        if (!confirm("Found " + dupIds.length + " likely duplicate record(s). Delete extras and keep the first of each group?")) return;
+        Promise.all(dupIds.map(function (id) { return WfDb.remove("expense_records", id); }))
+          .then(function () { recSelected = {}; loadDashAccounts(); });
       });
 
       // ── Record modal ──────────────────────────────────────────────────────
@@ -931,6 +1079,7 @@
         document.getElementById("rec-modal-error").textContent = "";
         document.getElementById("rec-amount").value = "";
         document.getElementById("rec-note").value = "";
+        document.getElementById("rec-labels").value = "";
         document.getElementById("rec-payer").value = "";
         document.getElementById("rec-date").value = new Date().toISOString().slice(0, 10);
         setRecType("expense");
@@ -988,6 +1137,8 @@
         var catId = document.getElementById("rec-category").value;
         if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
         var pmId = document.getElementById("rec-payment-method").value || null;
+        var labelStr = (document.getElementById("rec-labels").value || "").trim();
+        var labels = labelStr ? labelStr.split(",").map(function (l) { return l.trim(); }).filter(Boolean) : [];
         var row = {
           txn_date: document.getElementById("rec-date").value || new Date().toISOString().slice(0, 10),
           amount: amt,
@@ -995,7 +1146,8 @@
           account_id: acctId,
           category_id: catId || null,
           payment_method_id: pmId,
-          note: document.getElementById("rec-note").value || ""
+          note: document.getElementById("rec-note").value || "",
+          labels: labels
         };
         var btn = document.getElementById("rec-modal-save");
         btn.disabled = true; btn.textContent = "Saving…";
@@ -1022,7 +1174,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recpage1"></script>
+  <script src="supabase-client.js?v=recpage2"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1038,7 +1190,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recpage1"></script>
+  <script src="script.js?v=recpage2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
