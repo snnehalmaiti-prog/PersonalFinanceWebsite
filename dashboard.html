@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=periodtabs" />
+<link rel="stylesheet" href="styles.css?v=periodnav" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -942,16 +942,24 @@
 
       function nudgePeriod(dir) {
         if (recPeriod.kind === "years") { recPeriod.year += dir; }
-        else if (recPeriod.kind === "months") {
+        else if (recPeriod.kind === "weeks") {
+          var d = recPeriod.weekStart ? new Date(recPeriod.weekStart) : (function () { var x = new Date(); x.setDate(x.getDate() - x.getDay()); return x; })();
+          d.setDate(d.getDate() + dir * 7);
+          recPeriod.weekStart = d.toISOString();
+        } else {
+          // Default (including "custom" and "months") behaves as months
+          if (recPeriod.kind !== "months") {
+            recPeriod.kind = "months";
+            var nowD = new Date();
+            recPeriod.year = nowD.getFullYear();
+            recPeriod.month = nowD.getMonth();
+          }
           var m = recPeriod.month + dir;
           var yr = recPeriod.year + Math.floor(m / 12);
           m = ((m % 12) + 12) % 12;
           recPeriod.year = yr; recPeriod.month = m;
-        } else if (recPeriod.kind === "weeks") {
-          var d = recPeriod.weekStart ? new Date(recPeriod.weekStart) : (function () { var x = new Date(); x.setDate(x.getDate() - x.getDay()); return x; })();
-          d.setDate(d.getDate() + dir * 7);
-          recPeriod.weekStart = d.toISOString();
         }
+        updatePeriodLabel();
         renderDashRecords();
       }
 
@@ -1279,8 +1287,12 @@
         document.getElementById("rec-filter-payment").value = "";
         renderDashRecords();
       });
-      document.getElementById("rec-period-prev").addEventListener("click", function () { nudgePeriod(-1); });
-      document.getElementById("rec-period-next").addEventListener("click", function () { nudgePeriod(1); });
+      document.getElementById("rec-period-prev").addEventListener("click", function (e) {
+        e.preventDefault(); e.stopPropagation(); nudgePeriod(-1);
+      });
+      document.getElementById("rec-period-next").addEventListener("click", function (e) {
+        e.preventDefault(); e.stopPropagation(); nudgePeriod(1);
+      });
 
       // Row checkbox delegation
       document.getElementById("rec-list").addEventListener("change", function (e) {
@@ -1623,7 +1635,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=periodtabs"></script>
+  <script src="supabase-client.js?v=periodnav"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1639,7 +1651,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=periodtabs"></script>
+  <script src="script.js?v=periodnav"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
