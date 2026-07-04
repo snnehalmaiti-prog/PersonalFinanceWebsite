@@ -2275,3 +2275,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   background: var(--surface-alt); color: var(--muted); font-weight: 600;
 }
 .rec-item { grid-template-columns: 24px 40px 1fr auto auto; }
+
+.rec-item { cursor: pointer; transition: background 0.15s; }
+.rec-item:hover { background: var(--surface-alt); }
+.rec-item-check, .rec-item-check * { cursor: default; }
+

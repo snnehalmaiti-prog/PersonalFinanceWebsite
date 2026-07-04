@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recpage2" />
+<link rel="stylesheet" href="styles.css?v=recedit" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1017,6 +1017,15 @@
         updateBulkButtons();
       });
 
+      // Click record row → edit modal (skip if click was on checkbox)
+      document.getElementById("rec-list").addEventListener("click", function (e) {
+        if (e.target.closest("[data-rec-id]") || e.target.closest(".rec-item-check")) return;
+        var item = e.target.closest(".rec-item"); if (!item) return;
+        var cb = item.querySelector("[data-rec-id]"); if (!cb) return;
+        var rec = findById(dashExpState.records, cb.getAttribute("data-rec-id"));
+        if (rec) openRecModal(rec);
+      });
+
       document.getElementById("rec-select-all").addEventListener("change", function (e) {
         var on = e.target.checked;
         document.querySelectorAll("[data-rec-id]").forEach(function (cb) {
@@ -1075,15 +1084,31 @@
       });
 
       // ── Record modal ──────────────────────────────────────────────────────
-      function openRecModal() {
+      var editingRecId = null;
+
+      function openRecModal(record) {
+        editingRecId = record ? record.id : null;
         document.getElementById("rec-modal-error").textContent = "";
-        document.getElementById("rec-amount").value = "";
-        document.getElementById("rec-note").value = "";
-        document.getElementById("rec-labels").value = "";
-        document.getElementById("rec-payer").value = "";
-        document.getElementById("rec-date").value = new Date().toISOString().slice(0, 10);
-        setRecType("expense");
+        document.getElementById("rec-modal-title").textContent = record ? "Edit record" : "Add record";
+        document.getElementById("rec-modal-save").textContent = record ? "Save changes" : "Add record";
         fillRecDropdowns();
+        if (record) {
+          setRecType(record.type || "expense");
+          document.getElementById("rec-amount").value = record.amount || "";
+          document.getElementById("rec-note").value = record.note || "";
+          document.getElementById("rec-labels").value = recLabels(record).join(", ");
+          document.getElementById("rec-date").value = record.txn_date || new Date().toISOString().slice(0, 10);
+          document.getElementById("rec-account").value = record.account_id || "";
+          document.getElementById("rec-category").value = record.category_id || "";
+          document.getElementById("rec-payment-method").value = record.payment_method_id || "";
+        } else {
+          document.getElementById("rec-amount").value = "";
+          document.getElementById("rec-note").value = "";
+          document.getElementById("rec-labels").value = "";
+          document.getElementById("rec-payer").value = "";
+          document.getElementById("rec-date").value = new Date().toISOString().slice(0, 10);
+          setRecType("expense");
+        }
         document.getElementById("rec-modal-overlay").hidden = false;
       }
       function closeRecModal() { document.getElementById("rec-modal-overlay").hidden = true; }
@@ -1150,13 +1175,16 @@
           labels: labels
         };
         var btn = document.getElementById("rec-modal-save");
+        var origLabel = editingRecId ? "Save changes" : "Add record";
         btn.disabled = true; btn.textContent = "Saving…";
-        WfDb.insert("expense_records", row).then(function () {
-          btn.disabled = false; btn.textContent = "Add record";
+        var op = editingRecId ? WfDb.update("expense_records", editingRecId, row) : WfDb.insert("expense_records", row);
+        op.then(function () {
+          btn.disabled = false; btn.textContent = origLabel;
+          editingRecId = null;
           closeRecModal();
           loadDashAccounts();
         }).catch(function (err) {
-          btn.disabled = false; btn.textContent = "Add record";
+          btn.disabled = false; btn.textContent = origLabel;
           document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
         });
       }
@@ -1174,7 +1202,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=recpage2"></script>
+  <script src="supabase-client.js?v=recedit"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1190,7 +1218,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recpage2"></script>
+  <script src="script.js?v=recedit"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
