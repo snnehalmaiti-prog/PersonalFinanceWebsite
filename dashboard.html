@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=rectypes" />
+<link rel="stylesheet" href="styles.css?v=balance1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -731,17 +731,29 @@
       function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
+      function computeAccountBalance(accountId) {
+        var initial = 0;
+        var acct = findById(dashExpState.accounts, accountId);
+        if (acct) initial = Number(acct.initial_balance) || 0;
+        return dashExpState.records.reduce(function (bal, r) {
+          if (r.account_id !== accountId) return bal;
+          var amt = Number(r.amount) || 0;
+          return r.type === "expense" ? bal - amt : bal + amt;
+        }, initial);
+      }
+
       function renderDashAccountTiles(accounts) {
         var box = document.getElementById("dash-exp-accounts-tiles");
         var status = document.getElementById("dash-exp-accounts-status");
         if (!box) return;
         if (status) status.remove();
         var tiles = accounts.map(function (a) {
+          var bal = computeAccountBalance(a.id);
           return '<div class="exp-account-tile" style="background:' + esc(a.color || "#10B981") + ';">' +
             '<div class="exp-account-tile-icon">' + esc(a.icon || "💳") + '</div>' +
             '<div class="exp-account-tile-body">' +
               '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
-              '<div class="exp-account-tile-balance">' + fmtMoney(a.initial_balance) + '</div>' +
+              '<div class="exp-account-tile-balance">' + fmtMoney(bal) + '</div>' +
             '</div></div>';
         }).join("");
         box.innerHTML = tiles;
@@ -892,7 +904,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=rectypes"></script>
+  <script src="supabase-client.js?v=balance1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -908,7 +920,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=rectypes"></script>
+  <script src="script.js?v=balance1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
