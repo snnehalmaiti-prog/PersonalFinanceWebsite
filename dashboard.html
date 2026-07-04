@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=tilebudget" />
+<link rel="stylesheet" href="styles.css?v=defexpense" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1319,7 +1319,7 @@
           document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
         });
       }
-      document.getElementById("rec-open-btn").addEventListener("click", openRecModal);
+      document.getElementById("rec-open-btn").addEventListener("click", function () { openRecModal(null); });
       document.getElementById("rec-modal-close").addEventListener("click", closeRecModal);
       document.getElementById("rec-modal-cancel").addEventListener("click", closeRecModal);
       document.getElementById("rec-modal-save").addEventListener("click", saveRec);
@@ -1333,7 +1333,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=tilebudget"></script>
+  <script src="supabase-client.js?v=defexpense"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1349,7 +1349,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=tilebudget"></script>
+  <script src="script.js?v=defexpense"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
