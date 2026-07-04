@@ -2164,6 +2164,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
   padding: 20px; overflow-y: auto;
 }
+.rec-modal-body.rec-modal-body-single { grid-template-columns: 1fr; }
+.rec-modal.rec-modal-narrow { max-width: 460px; }
 @media (max-width: 720px) {
   .rec-modal-body { grid-template-columns: 1fr; }
 }

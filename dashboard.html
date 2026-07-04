@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=budgetacct" />
+<link rel="stylesheet" href="styles.css?v=modalnarrow" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1446,7 +1446,12 @@
         var pmField = document.getElementById("rec-payment-field");
         if (pmField) pmField.style.display = (t === "expense") ? "" : "none";
         var otherCol = document.getElementById("rec-other-col");
-        if (otherCol) otherCol.style.display = (t === "budget" || t === "income") ? "none" : "";
+        var singleCol = (t === "budget" || t === "income");
+        if (otherCol) otherCol.style.display = singleCol ? "none" : "";
+        var modalBody = document.querySelector(".rec-modal-body");
+        if (modalBody) modalBody.classList.toggle("rec-modal-body-single", singleCol);
+        var modal = document.querySelector(".rec-modal");
+        if (modal) modal.classList.toggle("rec-modal-narrow", singleCol);
         var acctSel = document.getElementById("rec-account");
         if (acctSel && acctSel.closest(".rec-field")) {
           acctSel.closest(".rec-field").style.display = (t === "income") ? "none" : "";
@@ -1596,7 +1601,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=budgetacct"></script>
+  <script src="supabase-client.js?v=modalnarrow"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1612,7 +1617,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=budgetacct"></script>
+  <script src="script.js?v=modalnarrow"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
