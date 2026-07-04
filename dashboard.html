@@ -1460,18 +1460,25 @@
           var items = dayRows.map(function (r) {
             var acct = findById(dashExpState.accounts, r.account_id) || {};
             var cat = findById(dashExpState.categories, r.category_id) || {};
+            var sub = findById(dashExpState.categories, r.subcategory_id) || {};
+            var pm = findById(dashExpState.paymentMethods, r.payment_method_id) || {};
             var isOutflow = r.type === "expense";
             var sign = isOutflow ? "-" : "+";
             var color = isOutflow ? "#EF4444" : "#10B981";
-            var lblHtml = "";
             var checked = recSelected[r.id] ? "checked" : "";
             var selClass = recSelected[r.id] ? " selected" : "";
+            var titleParts = [cat.name || "(uncategorized)"];
+            if (acct.name) titleParts.push(acct.name);
+            var subParts = [];
+            if (sub.name) subParts.push(sub.name);
+            if (pm.name) subParts.push(pm.name);
+            if (r.note) subParts.push(r.note);
             return '<div class="rec-item' + selClass + '">' +
               '<span class="rec-item-check"><input type="checkbox" data-rec-id="' + esc(r.id) + '" ' + checked + '></span>' +
               '<span class="rec-item-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
               '<div class="rec-item-body">' +
-                '<div class="rec-item-title">' + esc(cat.name || "(uncategorized)") + (r.note ? " · " + esc(r.note) : "") + '</div>' +
-                '<div class="rec-item-sub">' + esc(acct.name || "—") + ' ' + lblHtml + '</div>' +
+                '<div class="rec-item-title">' + titleParts.map(esc).join(" · ") + '</div>' +
+                '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
               '</div>' +
               '<span class="rec-item-chip" style="background:' + esc(acct.color || "#6B7280") + ';">' + esc(acct.name || "—") + '</span>' +
               '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) +
