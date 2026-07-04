@@ -1068,8 +1068,15 @@
                 '<td class="ana-neg">' + anaFmtSigned(curAgg.totals.expense, true) + '</td>' +
                 '<td class="ana-neg">' + anaFmtSigned(prvAgg.totals.expense, true) + '</td></tr>';
 
-        // Which expense categories to show? Union of any that appear in either period.
-        var expCats = dashExpState.categories.filter(function (c) { return c.type === "expense" && !c.parent_id; });
+        // Which expense categories to show? Any top-level category that either has
+        // type "expense" (or missing type) OR was referenced by an expense record.
+        var referenced = {};
+        Object.keys(curAgg.cats).concat(Object.keys(prvAgg.cats)).forEach(function (id) { referenced[id] = true; });
+        var expCats = dashExpState.categories.filter(function (c) {
+          if (c.parent_id) return false;
+          if (!c.type || c.type === "expense") return true;
+          return referenced[c.id];
+        });
         expCats.forEach(function (cat) {
           var curC = curAgg.cats[cat.id] || { expense: 0, subs: {} };
           var prvC = prvAgg.cats[cat.id] || { expense: 0, subs: {} };
