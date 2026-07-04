@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=monthreset" />
+<link rel="stylesheet" href="styles.css?v=tilebudget" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -799,18 +799,20 @@
       function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
-      function computeAccountBalance(accountId) {
-        // Monthly reset: balance = inflows − outflows within the current calendar month.
+      function computeAccountMonthly(accountId) {
         var now = new Date();
         var monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         var nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        return dashExpState.records.reduce(function (bal, r) {
-          if (r.account_id !== accountId) return bal;
+        var budget = 0, spent = 0;
+        dashExpState.records.forEach(function (r) {
+          if (r.account_id !== accountId) return;
           var d = new Date(r.txn_date);
-          if (d < monthStart || d >= nextMonth) return bal;
+          if (d < monthStart || d >= nextMonth) return;
           var amt = Number(r.amount) || 0;
-          return r.type === "expense" ? bal - amt : bal + amt;
-        }, 0);
+          if (r.type === "expense") spent += amt;
+          else budget += amt;
+        });
+        return { budget: budget, spent: spent, balance: budget - spent };
       }
 
       function renderDashAccountTiles(accounts) {
@@ -819,12 +821,16 @@
         if (!box) return;
         if (status) status.remove();
         var tiles = accounts.map(function (a) {
-          var bal = computeAccountBalance(a.id);
+          var m = computeAccountMonthly(a.id);
           return '<div class="exp-account-tile" style="background:' + esc(a.color || "#10B981") + ';">' +
             '<div class="exp-account-tile-icon">' + esc(a.icon || "💳") + '</div>' +
             '<div class="exp-account-tile-body">' +
               '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
-              '<div class="exp-account-tile-balance">' + fmtMoney(bal) + '</div>' +
+              '<div class="exp-account-tile-monthly">' +
+                '<span>Budget: ' + fmtMoney(m.budget) + '</span>' +
+                '<span>Spent: ' + fmtMoney(m.spent) + '</span>' +
+              '</div>' +
+              '<div class="exp-account-tile-balance">' + fmtMoney(m.balance) + '</div>' +
             '</div></div>';
         }).join("");
         box.innerHTML = tiles;
@@ -1327,7 +1333,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=monthreset"></script>
+  <script src="supabase-client.js?v=tilebudget"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1343,7 +1349,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=monthreset"></script>
+  <script src="script.js?v=tilebudget"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

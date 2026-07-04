@@ -2337,3 +2337,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   cursor: pointer; font-size: 1rem;
 }
 .dt-picker-footer button:hover { background: var(--surface-alt); }
+
+.exp-account-tile-monthly {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 0.75rem; opacity: 0.9; margin: 3px 0;
+}
+.exp-account-tile-balance { font-size: 1.05rem; }
