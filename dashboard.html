@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=bvachart" />
+<link rel="stylesheet" href="styles.css?v=waterfall" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -620,6 +620,22 @@
 
         <div class="equity-card" style="margin-top:24px;">
           <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0;">Budget Variance Waterfall</h3>
+            <div style="display:flex; gap:8px;">
+              <select id="dash-exp-wf-account" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);">
+                <option value="">All accounts</option>
+              </select>
+              <select id="dash-exp-wf-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
+            </div>
+          </div>
+          <p class="muted small" id="dash-exp-wf-status" style="margin:6px 0 10px;"></p>
+          <div style="position:relative; height:340px;">
+            <canvas id="dash-exp-wf-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="equity-card" style="margin-top:24px;">
+          <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
             <h3 style="margin:0;">Budget vs Actual Spend</h3>
             <div style="display:flex; gap:8px;">
               <select id="dash-exp-bva-account" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);">
@@ -899,6 +915,7 @@
           renderDashRecords();
           renderExpMonthlyChart();
           renderExpBvaChart();
+          renderExpWaterfallChart();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
           if (status) status.textContent = "Could not load accounts: " + err.message;
@@ -1028,6 +1045,131 @@
         };
         if (expBvaChart) { expBvaChart.destroy(); }
         expBvaChart = new Chart(canvas.getContext("2d"), { type: "bar", data: data, options: opts });
+      }
+
+      // ── Budget Variance Waterfall (Chart.js stacked-bar trick + running line) ──
+      var expWfChart = null;
+      function renderExpWaterfallChart() {
+        var canvas = document.getElementById("dash-exp-wf-chart");
+        var status = document.getElementById("dash-exp-wf-status");
+        var yearSel = document.getElementById("dash-exp-wf-year");
+        var acctSel = document.getElementById("dash-exp-wf-account");
+        if (!canvas || !window.Chart) return;
+        var records = dashExpState.records || [];
+        if (!records.length) {
+          if (status) status.textContent = "No records yet.";
+          if (expWfChart) { expWfChart.destroy(); expWfChart = null; }
+          return;
+        }
+        if (acctSel) {
+          var prevAcct = acctSel.value || "";
+          acctSel.innerHTML = '<option value="">All accounts</option>' + dashExpState.accounts.map(function (a) {
+            return '<option value="' + a.id + '"' + (a.id === prevAcct ? " selected" : "") + '>' + esc(a.name) + '</option>';
+          }).join("");
+          acctSel.onchange = renderExpWaterfallChart;
+        }
+        var acctFilter = acctSel ? acctSel.value : "";
+        var years = {};
+        records.forEach(function (r) { if (r.txn_date) years[r.txn_date.slice(0, 4)] = true; });
+        var yearList = Object.keys(years).sort();
+        var currentYr = yearSel && yearSel.value ? yearSel.value : String(new Date().getFullYear());
+        if (yearList.indexOf(currentYr) < 0) currentYr = yearList[yearList.length - 1];
+        if (yearSel) {
+          yearSel.innerHTML = yearList.map(function (y) {
+            return '<option value="' + y + '"' + (y === currentYr ? " selected" : "") + '>' + y + '</option>';
+          }).join("");
+          yearSel.onchange = renderExpWaterfallChart;
+        }
+        var monthBudget = new Array(12).fill(0);
+        var monthActual = new Array(12).fill(0);
+        records.forEach(function (r) {
+          if (!r.txn_date || r.txn_date.slice(0, 4) !== currentYr) return;
+          if (acctFilter && r.account_id !== acctFilter) return;
+          var mo = Number(r.txn_date.slice(5, 7)) - 1;
+          if (mo < 0 || mo > 11) return;
+          var amt = Number(r.amount) || 0;
+          if (r.type === "budget") monthBudget[mo] += amt;
+          else if (r.type === "expense") monthActual[mo] += amt;
+        });
+        // Variance = Actual − Budget (positive = overspent)
+        var variance = monthActual.map(function (a, i) { return a - monthBudget[i]; });
+        // Waterfall via stacked bars: floor (transparent) + delta (colored)
+        // For each month: prev = running total BEFORE this month; new = prev + variance
+        // Bar spans from min(prev,new) up by |variance|.
+        var running = 0;
+        var floors = [], deltas = [], colors = [];
+        for (var i = 0; i < 12; i++) {
+          var prev = running;
+          var nxt = prev + variance[i];
+          floors.push(Math.min(prev, nxt));
+          deltas.push(Math.abs(variance[i]));
+          colors.push(variance[i] >= 0 ? "#C0392B" : "#2C6E63");
+          running = nxt;
+        }
+        var ytdTotal = running;
+        // YTD column as 13th bar: floor 0, delta = |ytdTotal|
+        floors.push(Math.min(0, ytdTotal));
+        deltas.push(Math.abs(ytdTotal));
+        colors.push("#1F2937");
+        var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","YTD"];
+        // Running total per-month (for line overlay)
+        var lineData = [];
+        var rt = 0;
+        for (var j = 0; j < 12; j++) { rt += variance[j]; lineData.push(rt); }
+        lineData.push(null); // no line at YTD column
+
+        var acctName = acctFilter ? ((findById(dashExpState.accounts, acctFilter) || {}).name || "") : "All accounts";
+        if (status) status.textContent = acctName + " · " + currentYr + " · YTD variance " + (ytdTotal >= 0 ? "+" : "") + fmtMoney(ytdTotal);
+
+        var data = {
+          labels: labels,
+          datasets: [
+            {
+              label: "_floor", data: floors,
+              backgroundColor: "rgba(0,0,0,0)", borderWidth: 0,
+              stack: "wf", order: 3
+            },
+            {
+              label: "Variance", data: deltas,
+              backgroundColor: colors, borderRadius: 2,
+              stack: "wf", order: 2
+            },
+            {
+              type: "line", label: "Running total",
+              data: lineData, borderColor: "#6B7280",
+              backgroundColor: "#6B7280",
+              borderDash: [4, 4], borderWidth: 1.5,
+              pointRadius: 3, pointBackgroundColor: "#6B7280",
+              tension: 0, order: 1, stack: undefined
+            }
+          ]
+        };
+        var opts = {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { filter: function (item) { return item.text !== "_floor"; } }
+            },
+            tooltip: {
+              filter: function (ctx) { return ctx.dataset.label !== "_floor"; },
+              callbacks: {
+                label: function (ctx) {
+                  if (ctx.dataset.label === "Running total") return "Running total: " + fmtMoney(ctx.parsed.y);
+                  if (ctx.label === "YTD") return "YTD variance: " + (ytdTotal >= 0 ? "+" : "") + fmtMoney(ytdTotal);
+                  var v = variance[ctx.dataIndex];
+                  return (v >= 0 ? "Overspent " : "Under-budget ") + fmtMoney(Math.abs(v));
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, ticks: { callback: function (v) { return fmtMoney(v); } } }
+          }
+        };
+        if (expWfChart) { expWfChart.destroy(); }
+        expWfChart = new Chart(canvas.getContext("2d"), { data: data, options: opts, type: "bar" });
       }
 
       function findById(list, id) { return list.find(function (x) { return x.id === id; }); }
@@ -1794,7 +1936,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=bvachart"></script>
+  <script src="supabase-client.js?v=waterfall"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1810,7 +1952,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=bvachart"></script>
+  <script src="script.js?v=waterfall"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
