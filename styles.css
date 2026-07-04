@@ -2460,3 +2460,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   color: var(--muted); letter-spacing: 0.06em;
 }
 .rec-list-col-date { display: flex; align-items: center; }
+
+/* Belt-and-suspenders: when the outer Investment/Expense panel is hidden,
+   force all descendant panels/subpanels to hide too. */
+.invest-panel[hidden], .invest-panel[hidden] * { display: none !important; }
