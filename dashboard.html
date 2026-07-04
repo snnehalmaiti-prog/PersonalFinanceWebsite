@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=accttiles3" />
+<link rel="stylesheet" href="styles.css?v=recmodal1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -608,9 +608,95 @@
       </div>
 
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
-        <div class="equity-card" style="margin-top:20px;">
+        <div style="margin-top:20px; display:flex; justify-content:flex-end;">
+          <button type="button" class="btn btn-primary" id="rec-open-btn">+ Add record</button>
+        </div>
+        <div class="equity-card" style="margin-top:14px;">
           <h3>Records</h3>
-          <p class="muted small equity-desc">Log income and expense transactions here. Coming soon.</p>
+          <p class="muted small equity-desc" id="rec-list-empty">No records yet — click <strong>+ Add record</strong> to log your first transaction.</p>
+          <div id="rec-list"></div>
+        </div>
+      </div>
+
+      <!-- Add record modal -->
+      <div id="rec-modal-overlay" class="rec-modal-overlay" hidden>
+        <div class="rec-modal" role="dialog" aria-modal="true" aria-labelledby="rec-modal-title">
+          <div class="rec-modal-header">
+            <h3 id="rec-modal-title">Add record</h3>
+            <button type="button" class="rec-modal-close" id="rec-modal-close" aria-label="Close">&times;</button>
+          </div>
+          <div class="rec-modal-body">
+            <div class="rec-col">
+              <label class="rec-field">
+                <span>Select template</span>
+                <select id="rec-template"><option value="">— none —</option></select>
+              </label>
+
+              <div class="rec-type-toggle" id="rec-type-toggle" role="tablist">
+                <button type="button" data-rec-type="expense" class="active">Expense</button>
+                <button type="button" data-rec-type="income">Income</button>
+                <button type="button" data-rec-type="transfer">Transfer</button>
+              </div>
+
+              <label class="rec-field">
+                <span>Amount <span style="color:#EF4444;">*</span></span>
+                <div style="display:flex; gap:8px;">
+                  <input type="number" id="rec-amount" step="0.01" min="0" required style="flex:1;" />
+                  <input type="text" value="INR" readonly style="width:80px; background:#f3f4f6;" />
+                </div>
+              </label>
+
+              <label class="rec-field">
+                <span>Account</span>
+                <select id="rec-account"></select>
+              </label>
+
+              <label class="rec-field" id="rec-account-to-field" style="display:none;">
+                <span>To account</span>
+                <select id="rec-account-to"></select>
+              </label>
+
+              <label class="rec-field" id="rec-category-field">
+                <span>Category <span style="color:#EF4444;">*</span></span>
+                <select id="rec-category" required></select>
+              </label>
+
+              <label class="rec-field">
+                <span>Date &amp; Time</span>
+                <input type="date" id="rec-date" />
+              </label>
+            </div>
+
+            <div class="rec-col">
+              <h4 style="margin:0 0 8px;">Other details</h4>
+              <label class="rec-field">
+                <span>Note</span>
+                <textarea id="rec-note" rows="3" placeholder="Describe your record"></textarea>
+              </label>
+              <label class="rec-field">
+                <span>Payer</span>
+                <input type="text" id="rec-payer" />
+              </label>
+              <label class="rec-field">
+                <span>Payment type</span>
+                <select id="rec-payment-method"></select>
+              </label>
+              <label class="rec-field">
+                <span>Payment status</span>
+                <select id="rec-payment-status">
+                  <option value="cleared">Cleared</option>
+                  <option value="uncleared">Uncleared</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="rec-modal-footer">
+            <p id="rec-modal-error" style="color:#dc2626; margin:0; font-size:13px;"></p>
+            <div>
+              <button type="button" class="btn btn-ghost" id="rec-modal-cancel">Cancel</button>
+              <button type="button" class="btn btn-primary" id="rec-modal-save">Add record</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -661,24 +747,144 @@
         box.innerHTML = tiles;
       }
 
+      var dashExpState = { accounts: [], categories: [], paymentMethods: [], records: [], recType: "expense" };
+
       function loadDashAccounts() {
         if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
           setTimeout(loadDashAccounts, 200);
           return;
         }
-        WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc").then(function (rows) {
-          renderDashAccountTiles(rows || []);
+        Promise.all([
+          WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc"),
+          WfDb.select("expense_categories", "select=*&order=sort_order.asc,created_at.asc"),
+          WfDb.select("expense_payment_methods", "select=*&order=sort_order.asc,created_at.asc"),
+          WfDb.select("expense_records", "select=*&order=txn_date.desc,created_at.desc")
+        ]).then(function (res) {
+          dashExpState.accounts = res[0] || [];
+          dashExpState.categories = res[1] || [];
+          dashExpState.paymentMethods = res[2] || [];
+          dashExpState.records = res[3] || [];
+          renderDashAccountTiles(dashExpState.accounts);
+          renderDashRecords();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
           if (status) status.textContent = "Could not load accounts: " + err.message;
         });
       }
       loadDashAccounts();
+
+      function findById(list, id) { return list.find(function (x) { return x.id === id; }); }
+
+      function renderDashRecords() {
+        var list = document.getElementById("rec-list");
+        var empty = document.getElementById("rec-list-empty");
+        if (!list) return;
+        if (!dashExpState.records.length) { if (empty) empty.hidden = false; list.innerHTML = ""; return; }
+        if (empty) empty.hidden = true;
+        list.innerHTML = dashExpState.records.map(function (r) {
+          var acct = findById(dashExpState.accounts, r.account_id) || {};
+          var cat = findById(dashExpState.categories, r.category_id) || {};
+          var sign = r.type === "expense" ? "-" : "+";
+          var color = r.type === "expense" ? "#EF4444" : "#10B981";
+          return '<div class="exp-row" style="cursor:default;">' +
+            '<span class="exp-row-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
+            '<span class="exp-row-name">' + esc(cat.name || "(uncategorized)") +
+              '<span class="exp-row-sub">' + esc(acct.name || "") + ' · ' + esc(r.txn_date || "") + '</span></span>' +
+            '<span class="exp-row-meta" style="color:' + color + '; font-weight:700;">' + sign + fmtMoney(r.amount).replace("₹", "₹") + '</span>' +
+            '</div>';
+        }).join("");
+      }
+
+      // ── Record modal ──────────────────────────────────────────────────────
+      function openRecModal() {
+        document.getElementById("rec-modal-error").textContent = "";
+        document.getElementById("rec-amount").value = "";
+        document.getElementById("rec-note").value = "";
+        document.getElementById("rec-payer").value = "";
+        document.getElementById("rec-date").value = new Date().toISOString().slice(0, 10);
+        setRecType("expense");
+        fillRecDropdowns();
+        document.getElementById("rec-modal-overlay").hidden = false;
+      }
+      function closeRecModal() { document.getElementById("rec-modal-overlay").hidden = true; }
+      function setRecType(t) {
+        dashExpState.recType = t;
+        document.querySelectorAll("[data-rec-type]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-rec-type") === t);
+        });
+        document.getElementById("rec-account-to-field").style.display = (t === "transfer") ? "" : "none";
+        var catField = document.getElementById("rec-category-field");
+        catField.style.display = (t === "transfer") ? "none" : "";
+        fillRecCategories();
+      }
+      function fillRecDropdowns() {
+        var acctOpts = dashExpState.accounts.map(function (a) {
+          return '<option value="' + a.id + '">' + esc(a.name) + '</option>';
+        }).join("");
+        document.getElementById("rec-account").innerHTML = acctOpts;
+        document.getElementById("rec-account-to").innerHTML = acctOpts;
+        var pmOpts = '<option value="">— none —</option>' + dashExpState.paymentMethods.map(function (p) {
+          return '<option value="' + p.id + '">' + esc(p.name) + '</option>';
+        }).join("");
+        document.getElementById("rec-payment-method").innerHTML = pmOpts;
+        fillRecCategories();
+      }
+      function fillRecCategories() {
+        var t = dashExpState.recType;
+        var wantTypes = t === "expense" ? ["expense"] : (t === "income" ? ["income", "budget"] : []);
+        var cats = dashExpState.categories.filter(function (c) {
+          return wantTypes.indexOf(c.type) !== -1 && !c.parent_id;
+        });
+        var opts = '<option value="">— choose —</option>' + cats.map(function (c) {
+          return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+        }).join("");
+        var sel = document.getElementById("rec-category");
+        if (sel) sel.innerHTML = opts;
+      }
+      function saveRec() {
+        var t = dashExpState.recType;
+        var amt = Number(document.getElementById("rec-amount").value);
+        if (!amt || amt <= 0) { document.getElementById("rec-modal-error").textContent = "Enter an amount."; return; }
+        var acctId = document.getElementById("rec-account").value;
+        if (!acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
+        var catId = document.getElementById("rec-category").value;
+        if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
+        var pmId = document.getElementById("rec-payment-method").value || null;
+        var row = {
+          txn_date: document.getElementById("rec-date").value || new Date().toISOString().slice(0, 10),
+          amount: amt,
+          type: t === "transfer" ? "expense" : t,
+          account_id: acctId,
+          category_id: catId || null,
+          payment_method_id: pmId,
+          note: document.getElementById("rec-note").value || ""
+        };
+        var btn = document.getElementById("rec-modal-save");
+        btn.disabled = true; btn.textContent = "Saving…";
+        WfDb.insert("expense_records", row).then(function () {
+          btn.disabled = false; btn.textContent = "Add record";
+          closeRecModal();
+          loadDashAccounts();
+        }).catch(function (err) {
+          btn.disabled = false; btn.textContent = "Add record";
+          document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
+        });
+      }
+      document.getElementById("rec-open-btn").addEventListener("click", openRecModal);
+      document.getElementById("rec-modal-close").addEventListener("click", closeRecModal);
+      document.getElementById("rec-modal-cancel").addEventListener("click", closeRecModal);
+      document.getElementById("rec-modal-save").addEventListener("click", saveRec);
+      document.getElementById("rec-type-toggle").addEventListener("click", function (e) {
+        var b = e.target.closest("[data-rec-type]"); if (b) setRecType(b.getAttribute("data-rec-type"));
+      });
+      document.getElementById("rec-modal-overlay").addEventListener("click", function (e) {
+        if (e.target === e.currentTarget) closeRecModal();
+      });
     </script>
 
   </main>
 
-  <script src="supabase-client.js?v=accttiles3"></script>
+  <script src="supabase-client.js?v=recmodal1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -694,7 +900,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=accttiles3"></script>
+  <script src="script.js?v=recmodal1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

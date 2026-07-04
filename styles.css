@@ -2136,3 +2136,59 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   font-weight: 600;
 }
 .exp-account-tile-add:hover { color: var(--text) !important; border-color: var(--text); }
+
+/* Add-record modal */
+.rec-modal-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(15,23,42,0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.rec-modal {
+  background: var(--surface); color: var(--text);
+  width: 100%; max-width: 900px; max-height: 90vh;
+  border-radius: 14px; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+.rec-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.rec-modal-header h3 { margin: 0; }
+.rec-modal-close {
+  background: transparent; border: none; font-size: 1.5rem; cursor: pointer;
+  color: var(--muted); line-height: 1;
+}
+.rec-modal-body {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  padding: 20px; overflow-y: auto;
+}
+@media (max-width: 720px) {
+  .rec-modal-body { grid-template-columns: 1fr; }
+}
+.rec-col { display: flex; flex-direction: column; gap: 14px; }
+.rec-field { display: flex; flex-direction: column; gap: 4px; }
+.rec-field > span { font-size: 0.85rem; font-weight: 600; }
+.rec-field input, .rec-field select, .rec-field textarea {
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; font: inherit; background: var(--surface); color: var(--text);
+}
+.rec-field textarea { resize: vertical; }
+.rec-type-toggle {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  background: var(--surface-alt); padding: 4px; border-radius: 999px;
+}
+.rec-type-toggle button {
+  border: none; background: transparent; padding: 9px 12px; border-radius: 999px;
+  font-weight: 600; font-size: 0.88rem; color: var(--muted); cursor: pointer;
+}
+.rec-type-toggle button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.rec-type-toggle button[data-rec-type="expense"].active { color: #EF4444; }
+.rec-type-toggle button[data-rec-type="income"].active { color: #10B981; }
+.rec-type-toggle button[data-rec-type="transfer"].active { color: #3B82F6; }
+.rec-modal-footer {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px 20px; border-top: 1px solid var(--border);
+}
+.rec-modal-footer > div { display: flex; gap: 10px; }
