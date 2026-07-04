@@ -2420,3 +2420,35 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .pp-weeks button:hover { background: var(--surface-alt); }
 .pp-weeks button.selected { background: #10B981; color: #fff; font-weight: 700; }
+
+/* Custom range calendar */
+.pp-dows, .pp-day-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  text-align: center;
+}
+.pp-dows { font-size: 0.75rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.pp-day-grid button {
+  padding: 8px 0; border: none; background: transparent;
+  cursor: pointer; font: inherit; font-size: 0.85rem;
+  color: var(--text); aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+}
+.pp-day-grid button:hover { background: rgba(16, 185, 129, 0.12); }
+.pp-day-grid button.other { color: var(--muted); opacity: 0.4; }
+.pp-day-grid button.weekend:not(.range-start):not(.range-end):not(.range-mid) { color: #EC4899; }
+.pp-day-grid button.range-mid { background: rgba(16, 185, 129, 0.28); color: #065F46; font-weight: 700; }
+.pp-day-grid button.range-start, .pp-day-grid button.range-end {
+  background: #10B981; color: #fff; font-weight: 700;
+  border-radius: 6px;
+}
+.pp-presets {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  margin-top: 12px;
+}
+.pp-presets button {
+  padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface);
+  cursor: pointer; font: inherit; font-size: 0.72rem; font-weight: 600;
+  color: var(--text);
+}
+.pp-presets button:hover { background: var(--surface-alt); border-color: var(--text); }
+@media (max-width: 480px) { .pp-presets { grid-template-columns: repeat(3, 1fr); } }

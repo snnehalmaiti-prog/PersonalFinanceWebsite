@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=pmfilter" />
+<link rel="stylesheet" href="styles.css?v=customrange" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -903,8 +903,10 @@
         customStart: null, // ISO
         customEnd: null
       };
-      var recPeriodView = { year: now0.getFullYear() }; // year view for months/weeks/custom
+      var recPeriodView = { year: now0.getFullYear() }; // year view for months/weeks
       var recPeriodTab = "months"; // current picker tab
+      var recCustomView = null; // Date object — first-of-month currently shown in custom tab
+      var recCustomSel = { start: null, end: null }; // ISO strings, first click sets start, second sets end
 
       var MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
       var MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -995,11 +997,47 @@
                 w.start.toLocaleDateString() + " – " + w.end.toLocaleDateString() + '</button>';
             }).join("") + '</div>';
         } else {
+          // Custom range — calendar grid + quick presets
+          var view = recCustomView || new Date(yv, now0.getMonth(), 1);
+          recCustomView = view;
+          var year = view.getFullYear(), month = view.getMonth();
+          var monthLabel = view.toLocaleString(undefined, { month: "long", year: "numeric" });
+          var first = new Date(year, month, 1);
+          var startOffset = (first.getDay() + 6) % 7; // Mon-first
+          var start = new Date(year, month, 1 - startOffset);
+          var cells = [];
+          for (var i = 0; i < 42; i++) { var d = new Date(start); d.setDate(start.getDate() + i); cells.push(d); }
+          var cs = recCustomSel.start, ce = recCustomSel.end;
+          var gridHtml = cells.map(function (d) {
+            var iso = d.toISOString().slice(0, 10);
+            var isOther = d.getMonth() !== month;
+            var dow = d.getDay();
+            var isWknd = (dow === 0 || dow === 6);
+            var isStart = cs && iso === cs;
+            var isEnd = ce && iso === ce;
+            var inRange = cs && ce && iso >= cs && iso <= ce;
+            var cls = ["pp-day"];
+            if (isOther) cls.push("other");
+            if (isWknd) cls.push("weekend");
+            if (isStart) cls.push("range-start");
+            if (isEnd) cls.push("range-end");
+            if (inRange && !isStart && !isEnd) cls.push("range-mid");
+            return '<button type="button" class="' + cls.join(" ") + '" data-pp-day="' + iso + '">' + d.getDate() + '</button>';
+          }).join("");
           body.innerHTML =
-            '<div class="pp-custom">' +
-              '<label><span>From</span><input type="date" id="pp-custom-from" value="' + (recPeriod.customStart || "") + '"></label>' +
-              '<label><span>To</span><input type="date" id="pp-custom-to" value="' + (recPeriod.customEnd || "") + '"></label>' +
-              '<button type="button" class="btn btn-primary" id="pp-custom-apply">Apply</button>' +
+            '<div class="pp-body-header"><button type="button" data-pp-cm="-1">‹</button><span>' + monthLabel + '</span><button type="button" data-pp-cm="1">›</button></div>' +
+            '<div class="pp-dows"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>' +
+            '<div class="pp-day-grid">' + gridHtml + '</div>' +
+            '<div class="pp-presets">' +
+              '<button type="button" data-pp-preset="week">This week</button>' +
+              '<button type="button" data-pp-preset="month">This month</button>' +
+              '<button type="button" data-pp-preset="year">This year</button>' +
+              '<button type="button" data-pp-preset="today">Today</button>' +
+              '<button type="button" data-pp-preset="7">7 days</button>' +
+              '<button type="button" data-pp-preset="30">30 days</button>' +
+              '<button type="button" data-pp-preset="90">90 days</button>' +
+              '<button type="button" data-pp-preset="12m">12 months</button>' +
+              '<button type="button" data-pp-preset="all">All</button>' +
             '</div>';
         }
       }
@@ -1043,11 +1081,50 @@
           recPeriod.weekStart = wBtn.getAttribute("data-pp-w");
           renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
         }
-        if (e.target.id === "pp-custom-apply") {
+        var cmBtn = e.target.closest("[data-pp-cm]");
+        if (cmBtn) {
+          recCustomView.setMonth(recCustomView.getMonth() + Number(cmBtn.getAttribute("data-pp-cm")));
+          renderPeriodPopover(); return;
+        }
+        var dayBtn = e.target.closest("[data-pp-day]");
+        if (dayBtn) {
+          var iso = dayBtn.getAttribute("data-pp-day");
+          if (!recCustomSel.start || (recCustomSel.start && recCustomSel.end)) {
+            recCustomSel = { start: iso, end: null };
+          } else {
+            if (iso < recCustomSel.start) recCustomSel = { start: iso, end: recCustomSel.start };
+            else recCustomSel.end = iso;
+            recPeriod.kind = "custom";
+            recPeriod.customStart = recCustomSel.start;
+            recPeriod.customEnd = recCustomSel.end;
+            renderDashRecords();
+          }
+          renderPeriodPopover();
+          return;
+        }
+        var pre = e.target.closest("[data-pp-preset]");
+        if (pre) {
+          var p = pre.getAttribute("data-pp-preset");
+          var t = new Date(); var pad = function(n){return String(n).padStart(2,"0");};
+          var iso = function(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());};
+          var sd = new Date(t), ed = new Date(t);
+          if (p === "today") { }
+          else if (p === "week") { sd.setDate(t.getDate() - t.getDay()); ed = new Date(sd); ed.setDate(sd.getDate() + 6); }
+          else if (p === "month") { sd = new Date(t.getFullYear(), t.getMonth(), 1); ed = new Date(t.getFullYear(), t.getMonth() + 1, 0); }
+          else if (p === "year") { sd = new Date(t.getFullYear(), 0, 1); ed = new Date(t.getFullYear(), 11, 31); }
+          else if (p === "7") { sd = new Date(t); sd.setDate(t.getDate() - 6); }
+          else if (p === "30") { sd = new Date(t); sd.setDate(t.getDate() - 29); }
+          else if (p === "90") { sd = new Date(t); sd.setDate(t.getDate() - 89); }
+          else if (p === "12m") { sd = new Date(t); sd.setMonth(t.getMonth() - 11); }
+          else if (p === "all") { recPeriod.kind = "custom"; recPeriod.customStart = null; recPeriod.customEnd = null; renderDashRecords(); closePeriodPopover(); return; }
+          recCustomSel = { start: iso(sd), end: iso(ed) };
           recPeriod.kind = "custom";
-          recPeriod.customStart = document.getElementById("pp-custom-from").value;
-          recPeriod.customEnd = document.getElementById("pp-custom-to").value;
-          renderDashRecords(); closePeriodPopover(); return;
+          recPeriod.customStart = recCustomSel.start;
+          recPeriod.customEnd = recCustomSel.end;
+          recCustomView = new Date(sd.getFullYear(), sd.getMonth(), 1);
+          renderPeriodPopover();
+          renderDashRecords();
+          return;
         }
       });
 
@@ -1509,7 +1586,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=pmfilter"></script>
+  <script src="supabase-client.js?v=customrange"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -1525,7 +1602,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=pmfilter"></script>
+  <script src="script.js?v=customrange"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
