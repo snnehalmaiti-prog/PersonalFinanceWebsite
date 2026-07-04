@@ -367,6 +367,10 @@
         var activeKey = activeSubTab ? activeSubTab.key : "equity";
         showInvestmentSubTab(activeKey);
       }
+      if (tab === "expense" && typeof window.loadDashAccounts === "function") {
+        // Re-fetch accounts/categories/payment methods so any Settings renames appear.
+        window.loadDashAccounts();
+      }
     }
 
     dashTabs.forEach(function (entry) {
