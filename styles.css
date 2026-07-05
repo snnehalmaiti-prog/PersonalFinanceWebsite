@@ -2243,7 +2243,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .exp-account-tile {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 12px; border-radius: 10px;
-  color: #fff; text-decoration: none;
+  background: var(--emerald); color: #fff; text-decoration: none;
   min-height: 0;
 }
 .exp-account-tile-icon {
