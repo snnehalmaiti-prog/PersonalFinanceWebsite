@@ -1129,8 +1129,13 @@
           grand += amt;
         });
 
-        // Filter to only rows/cols with data
-        var usedPmIds = pms.map(function (p) { return p.id; }).filter(function (id) { return pmTotals[id]; });
+        // Filter to only rows/cols with data; sort non-CC first, then CC
+        var usedPmIds = pms.map(function (p) { return p.id; }).filter(function (id) { return pmTotals[id]; })
+          .sort(function (a, b) {
+            var pa = pms.find(function(p) { return p.id === a; });
+            var pb = pms.find(function(p) { return p.id === b; });
+            return (pa && pa.is_credit_card ? 1 : 0) - (pb && pb.is_credit_card ? 1 : 0);
+          });
         var usedAcIds = accounts.map(function (a) { return a.id; }).filter(function (id) { return acctTotals[id]; });
 
         if (!records.length) {
