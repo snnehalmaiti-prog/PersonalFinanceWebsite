@@ -95,7 +95,30 @@
       state.categories = res[1] || [];
       state.paymentMethods = res[2] || [];
       state.loaded = true;
+
+      // One-time migration: clear stored icon/color from all existing records
       var uid = WfAuth.getUserId();
+      var migratedKey = "wf-exp-icons-cleared-" + uid;
+      if (!localStorage.getItem(migratedKey)) {
+        var clears = [];
+        state.accounts.forEach(function (a) {
+          if (a.icon || a.color) clears.push(WfDb.update(ACCT, a.id, { icon: null, color: null }));
+        });
+        state.paymentMethods.forEach(function (p) {
+          if (p.icon || p.color) clears.push(WfDb.update(PMS, p.id, { icon: null, color: null }));
+        });
+        state.categories.forEach(function (c) {
+          if (c.icon || c.color) clears.push(WfDb.update(CATS, c.id, { icon: null, color: null }));
+        });
+        if (clears.length) {
+          return Promise.all(clears).then(function () {
+            try { localStorage.setItem(migratedKey, "1"); } catch (e) {}
+            return loadData();
+          });
+        }
+        try { localStorage.setItem(migratedKey, "1"); } catch (e) {}
+      }
+
       var seededKey = "wf-exp-seeded-" + uid;
       if (!state.categories.length && !localStorage.getItem(seededKey)) {
         return seedDefaults().then(function () {
@@ -217,7 +240,7 @@
   function savePaymentMethod() {
     var d = modalCtx.draft;
     if (!d.name.trim()) return;
-    var payload = { name: d.name.trim(), icon: d.icon, color: d.color, is_credit_card: !!d.is_credit_card };
+    var payload = { name: d.name.trim(), is_credit_card: !!d.is_credit_card };
     var p = modalCtx.id ? WfDb.update(PMS, modalCtx.id, payload)
       : WfDb.insert(PMS, Object.assign({ sort_order: state.paymentMethods.length }, payload));
     return p.then(function () { closeModal(); return loadData(); });
@@ -362,8 +385,6 @@
       type: el("exp-f-type").value,
       initial_balance: Number(el("exp-f-bal").value) || 0,
       contributing_account: el("exp-f-contrib").checked,
-      icon: modalCtx.icon,
-      color: modalCtx.color
     };
     var op = modalCtx.mode === "edit"
       ? WfDb.update(ACCT, modalCtx.record.id, row)
@@ -414,7 +435,7 @@
   function saveCategory() {
     var name = el("exp-f-name").value.trim();
     if (!name) { el("exp-f-name").focus(); return; }
-    var row = { name: name, type: modalCtx.type, icon: modalCtx.icon, color: modalCtx.color };
+    var row = { name: name, type: modalCtx.type };
     if (modalCtx.type === "budget") {
       var acctEl = el("exp-f-acct");
       row.account_id = acctEl ? (acctEl.value || null) : null;
