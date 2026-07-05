@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=jointcalc2" />
+<link rel="stylesheet" href="styles.css?v=jointcalc3" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -608,6 +608,8 @@
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:24px;">
+
+          <!-- Monthly IBE chart -->
           <div class="equity-card" style="margin:0;">
             <div class="equity-card-header" style="align-items:center;">
               <h3 style="margin:0;">Monthly Income / Budget / Expense</h3>
@@ -619,6 +621,7 @@
             </div>
           </div>
 
+          <!-- Waterfall chart -->
           <div class="equity-card" style="margin:0;">
             <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
               <h3 style="margin:0;">Budget Variance Waterfall</h3>
@@ -634,13 +637,9 @@
               <canvas id="dash-exp-wf-chart"></canvas>
             </div>
           </div>
-        </div>
 
-        <!-- Bottom row: pivot + joint payment calculator -->
-        <div style="display:flex; gap:16px; margin-top:24px; flex-wrap:wrap; align-items:flex-start;">
-
-          <!-- Account × Payment Method spend pivot -->
-          <div class="equity-card" style="margin:0; flex:0 0 auto;">
+          <!-- Account × Payment Method spend pivot (aligns under IBE chart) -->
+          <div class="equity-card" style="margin:0;">
             <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
               <h3 style="margin:0; flex:1;">Spend by Account &amp; Payment Method</h3>
               <span class="muted small" id="dash-exp-matrix-period"></span>
@@ -649,8 +648,8 @@
             <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
           </div>
 
-          <!-- Payment to Joint Account calculator -->
-          <div class="equity-card" style="margin:0; flex:0 0 auto; min-width:320px;">
+          <!-- Payment to Joint Account (aligns under Waterfall chart) -->
+          <div class="equity-card" style="margin:0;">
             <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
               <h3 style="margin:0;">Payment to Joint Account</h3>
               <span class="muted small" id="dash-exp-joint-period"></span>
