@@ -1136,10 +1136,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* Investment sub-tabs */
 .invest-sub-tabs {
   display: inline-flex;
-  gap: 4px;
-  background: var(--surface-alt);
-  border-radius: 999px;
-  padding: 4px;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
   margin-top: 8px;
   margin-bottom: 16px;
   overflow-x: auto;
@@ -1149,17 +1150,18 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .invest-sub-tab {
   border: none;
   background: transparent;
-  padding: 8px 18px;
-  border-radius: 999px;
-  font-size: 0.88rem;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 0.78rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.15s, color 0.15s;
 }
 .invest-sub-tab:hover { color: var(--text); }
-.invest-sub-tab.active { background: var(--emerald); color: #fff; box-shadow: var(--shadow-sm); }
+.invest-sub-tab.active { background: var(--emerald); color: #fff; box-shadow: 0 1px 3px rgba(26,158,110,0.25); }
 
 /* Investment panel wrapper — no card background, sub-panels provide their own cards */
 .invest-panel:not([hidden]) { width: 100%; display: flex; flex-direction: column; gap: 0; }
@@ -1967,6 +1969,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   color: #fff;
   box-shadow: 0 1px 3px rgba(59,130,246,0.25);
 }
+.rec-add-btn {
+  background: var(--emerald);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(26,158,110,0.25);
+}
+.rec-add-btn:hover { background: var(--emerald-dark, #15846b); color: #fff; }
 .benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex-shrink: 1; }
 .benchmark-col-label {
   font-size: 0.68rem;
