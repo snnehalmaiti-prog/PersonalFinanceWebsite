@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=spendmatrix" />
+<link rel="stylesheet" href="styles.css?v=matrixv2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1096,14 +1096,18 @@
         html += "<thead><tr><th>Payment Method</th>";
         usedAcIds.forEach(function (acId) {
           var ac = accounts.find(function (a) { return a.id === acId; });
-          html += "<th>" + (ac ? esc(ac.icon + " " + ac.name) : acId) + "</th>";
+          var label = ac ? esc(ac.icon) + " " + esc(ac.name) : acId;
+          html += "<th>" + label + "</th>";
         });
         html += "<th>Total</th></tr></thead><tbody>";
 
         usedPmIds.forEach(function (pmId) {
           var pm = pms.find(function (p) { return p.id === pmId; });
           var rowTotal = pmTotals[pmId] || 0;
-          html += "<tr><td class='exp-matrix-label'>" + (pm ? esc(pm.icon + " " + pm.name) : pmId) + "</td>";
+          var pmLabel = pm
+            ? "<span style='font-size:1.1em;'>" + esc(pm.icon) + "</span> " + esc(pm.name)
+            : pmId;
+          html += "<tr><td class='exp-matrix-label'>" + pmLabel + "</td>";
           usedAcIds.forEach(function (acId) {
             var val = (pivot[pmId] && pivot[pmId][acId]) || 0;
             html += "<td class='num" + (val ? "" : " exp-matrix-zero") + "'>" + (val ? fmtMoney(val) : "—") + "</td>";
