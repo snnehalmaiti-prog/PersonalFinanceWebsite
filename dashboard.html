@@ -999,20 +999,32 @@
         });
         if (status) status.textContent = "Year " + currentYr;
         var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        // Trim trailing months with no activity to reduce empty space at the right
+        var lastMonthWithData = -1;
+        for (var mi = 11; mi >= 0; mi--) {
+          if (income[mi] || budget[mi] || expense[mi]) { lastMonthWithData = mi; break; }
+        }
+        var showN = Math.min(12, Math.max(6, lastMonthWithData + 2));
+        var trimmedLabels = labels.slice(0, showN);
         var data = {
-          labels: labels,
+          labels: trimmedLabels,
           datasets: [
-            { label: "Income",  data: income,  backgroundColor: "#1F6FB2" },
-            { label: "Budget",  data: budget,  backgroundColor: "#E07A2A" },
-            { label: "Expense", data: expense, backgroundColor: "#2C7A4F" }
+            { label: "Income",  data: income.slice(0, showN),  backgroundColor: "#10B981", borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.92 },
+            { label: "Budget",  data: budget.slice(0, showN),  backgroundColor: "#3B82F6", borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.92 },
+            { label: "Expense", data: expense.slice(0, showN), backgroundColor: "#EF4444", borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.92 }
           ]
         };
         var opts = {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: "bottom" }, tooltip: { callbacks: {
-            label: function (ctx) { return ctx.dataset.label + ": " + fmtMoney(ctx.parsed.y); }
-          } } },
-          scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return fmtMoney(v); } } } }
+          layout: { padding: { top: 4, right: 6, bottom: 0, left: 0 } },
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 10, font: { size: 11 } } },
+            tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + fmtMoney(ctx.parsed.y); } } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 11 }, callback: function (v) { return fmtMoney(v); } } }
+          }
         };
         if (expMonthlyChart) { expMonthlyChart.destroy(); }
         expMonthlyChart = new Chart(canvas.getContext("2d"), { type: "bar", data: data, options: opts });
