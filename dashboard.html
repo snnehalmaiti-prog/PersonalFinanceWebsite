@@ -966,6 +966,14 @@
         box.querySelectorAll(".exp-account-tile[data-acct-id]").forEach(function (tile) {
           tile.addEventListener("click", function () {
             var acctId = tile.dataset.acctId;
+            // Switch to Records sub-tab
+            document.querySelectorAll("[data-dash-exp-subtab]").forEach(function (b) {
+              var k = b.getAttribute("data-dash-exp-subtab");
+              b.classList.toggle("active", k === "records");
+              b.setAttribute("aria-selected", k === "records" ? "true" : "false");
+              var p = document.getElementById("dash-exp-subpanel-" + k);
+              if (p) p.hidden = k !== "records";
+            });
             // Set account filter
             var acctSel = document.getElementById("rec-filter-account");
             if (acctSel) acctSel.value = acctId;
@@ -975,9 +983,9 @@
             recPeriod.year = now.getFullYear();
             recPeriod.month = now.getMonth();
             renderDashRecords();
-            // Scroll to records section
-            var recSection = document.getElementById("rec-list");
-            if (recSection) recSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            // Scroll to top of records panel
+            var recPanel = document.getElementById("dash-exp-subpanel-records");
+            if (recPanel) recPanel.scrollIntoView({ behavior: "smooth", block: "start" });
           });
         });
       }
