@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=ovwbar1" />
+<link rel="stylesheet" href="styles.css?v=ovwbar2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -101,9 +101,22 @@
 
     <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
       <div class="overview-header-bar">
-        <div class="overview-header-left">
-          <h2 style="margin:0; font-size:1.1rem; font-weight:700;">Overview</h2>
-          <span class="muted small" style="font-size:0.72rem;">Savings/Investment Holding excluded from XIRR</span>
+        <div class="overview-top-row">
+          <div class="overview-header-left">
+            <h2 style="margin:0; font-size:1rem; font-weight:700;">Overview</h2>
+            <span class="muted small" style="font-size:0.68rem;">Savings/Investment Holding excluded from XIRR</span>
+          </div>
+          <div class="portfolio-dropdown exclusions-dropdown">
+            <button type="button" id="exclusions-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
+              <span id="exclusions-label">No Exclusion</span>
+              <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <ul id="exclusions-menu" class="portfolio-menu" role="listbox" aria-label="Select exclusion" hidden>
+              <li role="option" id="exclusions-reset" aria-selected="true" data-value="none" class="portfolio-option selected">No Exclusion</li>
+              <li role="option" id="exclude-fixedincome-toggle" aria-selected="false" data-value="fixedincome" class="portfolio-option">Exclude Fixed Income</li>
+              <li role="option" id="exclude-savings-investment-toggle" aria-selected="false" data-value="savings-investment" class="portfolio-option">Exclude Savings/Investment</li>
+            </ul>
+          </div>
         </div>
         <div class="overview-stats-inline">
           <div class="overview-stat-inline">
@@ -140,17 +153,6 @@
             <span class="overview-stat-label">XIRR</span>
             <span class="overview-stat-value" id="overview-xirr">—</span>
           </div>
-        </div>
-        <div class="portfolio-dropdown exclusions-dropdown">
-          <button type="button" id="exclusions-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
-            <span id="exclusions-label">No Exclusion</span>
-            <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <ul id="exclusions-menu" class="portfolio-menu" role="listbox" aria-label="Select exclusion" hidden>
-            <li role="option" id="exclusions-reset" aria-selected="true" data-value="none" class="portfolio-option selected">No Exclusion</li>
-            <li role="option" id="exclude-fixedincome-toggle" aria-selected="false" data-value="fixedincome" class="portfolio-option">Exclude Fixed Income</li>
-            <li role="option" id="exclude-savings-investment-toggle" aria-selected="false" data-value="savings-investment" class="portfolio-option">Exclude Savings/Investment</li>
-          </ul>
         </div>
       </div>
 
