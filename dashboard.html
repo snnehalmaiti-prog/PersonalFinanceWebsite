@@ -1263,11 +1263,33 @@
         var budgetContrib2 = Math.round(jointBudget * splitPct2 / 100);
 
         // Overrun = selected month's expense vs selected month's budget
+        // Use selected month's own split % (independent from next month's split)
         var prevBudgetRecs = monthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
         var prevBudget = sumRecs(prevBudgetRecs);
-        var overrun       = Math.max(0, jointExpense - prevBudget);
-        var overrunShare1 = Math.round(overrun * splitPct1 / 100);
-        var overrunShare2 = Math.round(overrun * splitPct2 / 100);
+        var overrun = Math.max(0, jointExpense - prevBudget);
+
+        // Extract selected month's split independently
+        var prevSplitPct1 = 50, prevSplitPct2 = 50;
+        if (prevBudgetRecs.length) {
+          var prevTotalAmt = 0, prevWeighted1 = 0;
+          prevBudgetRecs.forEach(function(r) {
+            var amt = Math.round(Number(r.amount) || 0);
+            try {
+              var parsed = typeof r.labels === "string" ? JSON.parse(r.labels) : r.labels;
+              var sp = parsed && parsed.budget_split;
+              if (sp && sp[acct1Id] !== undefined) {
+                prevWeighted1 += sp[acct1Id] * amt;
+                prevTotalAmt += amt;
+              }
+            } catch(e) {}
+          });
+          if (prevTotalAmt > 0) {
+            prevSplitPct1 = Math.round(prevWeighted1 / prevTotalAmt);
+            prevSplitPct2 = 100 - prevSplitPct1;
+          }
+        }
+        var overrunShare1 = Math.round(overrun * prevSplitPct1 / 100);
+        var overrunShare2 = Math.round(overrun * prevSplitPct2 / 100);
 
         // Credit card spend per individual account
         var cc1 = sumRecs(monthRecs.filter(function(r) {
