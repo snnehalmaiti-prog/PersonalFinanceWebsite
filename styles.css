@@ -2856,7 +2856,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 8px 14px 10px;
+  padding: 6px 14px 8px;
   cursor: pointer;
   transition: box-shadow 0.15s;
   display: flex; flex-direction: column; gap: 0;
@@ -2864,7 +2864,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .acc-card:hover { box-shadow: var(--shadow-md); }
 .acc-card-top {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .acc-card-avatar {
   width: 24px; height: 24px; border-radius: 6px;
@@ -2885,7 +2885,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   margin-bottom: 1px;
 }
 .acc-card-remaining-value {
-  font-size: 1.1rem; font-weight: 800; line-height: 1.1; margin-bottom: 5px;
+  font-size: 1.05rem; font-weight: 800; line-height: 1.1; margin-bottom: 4px;
   font-variant-numeric: tabular-nums;
 }
 .acc-card-bar-wrap {
@@ -2895,11 +2895,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .acc-card-bar { height: 100%; border-radius: 999px; transition: width 0.3s; }
 .acc-card-bar-meta {
   display: flex; justify-content: space-between;
-  font-size: 0.62rem; color: var(--muted); margin-bottom: 7px;
+  font-size: 0.62rem; color: var(--muted); margin-bottom: 5px;
 }
 .acc-card-footer {
   display: flex; gap: 16px;
-  border-top: 1px solid var(--border); padding-top: 6px;
+  border-top: 1px solid var(--border); padding-top: 5px;
 }
 .acc-card-footer-label {
   font-size: 0.58rem; font-weight: 700; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 1px;
