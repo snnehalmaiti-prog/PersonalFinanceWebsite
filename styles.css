@@ -2726,3 +2726,45 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   border-top: 2px solid color-mix(in srgb, #EF4444 25%, transparent);
 }
 .exp-joint-highlight td:first-child { border-top: 2px solid color-mix(in srgb, #EF4444 25%, transparent); }
+
+/* ── Expense settings two-panel layout ───────────────────────────────────── */
+.exp-two-panel {
+  display: flex; gap: 0; min-height: 520px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface); overflow: hidden;
+  margin-top: 20px;
+}
+.exp-left-nav {
+  width: 220px; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 20px 0; background: var(--bg);
+}
+.exp-nav-section-label {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--muted); padding: 0 18px 10px; text-transform: uppercase;
+}
+.exp-nav-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer;
+  padding: 10px 18px; font-size: 0.9rem; font-weight: 500;
+  color: var(--text); border-radius: 0; transition: background 0.12s, color 0.12s;
+}
+.exp-nav-item:hover { background: var(--border); }
+.exp-nav-item.active {
+  background: var(--surface); color: var(--text);
+  font-weight: 600; border-right: 3px solid #3B82F6;
+}
+.exp-right-panel { flex: 1; min-width: 0; padding: 24px 28px; overflow-y: auto; }
+.exp-detail-panel {}
+.exp-detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 6px;
+}
+.exp-detail-header h3 { margin: 0; font-size: 1.05rem; }
+@media (max-width: 640px) {
+  .exp-two-panel { flex-direction: column; }
+  .exp-left-nav { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: 12px 0; display: flex; flex-wrap: wrap; gap: 4px; }
+  .exp-nav-item { width: auto; padding: 7px 14px; border-radius: 8px; }
+  .exp-nav-item.active { border-right: none; background: var(--text); color: var(--bg); }
+  .exp-nav-section-label { display: none; }
+}

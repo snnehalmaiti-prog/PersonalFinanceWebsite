@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=settingstabs2" />
+<link rel="stylesheet" href="styles.css?v=exptwopanel1" />
 <script src="supabase-client.js?v=csvvalidate"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
@@ -242,8 +242,6 @@
 
 
     <section id="panel-expense" class="settings-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
-      <h2>Expense</h2>
-      <p class="muted">Set up the accounts and categories used to track your spending on the dashboard.</p>
 
       <div id="exp-signin-gate" hidden>
         <div class="equity-card" style="margin-top:20px; max-width:420px;">
@@ -264,10 +262,22 @@
         </div>
       </div>
 
-      <div id="exp-content" style="max-width:1160px;">
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-top:20px; align-items:start;">
-          <div class="equity-card" style="margin:0;">
-            <div class="equity-card-header">
+      <div id="exp-content" class="exp-two-panel">
+        <!-- Left nav -->
+        <nav class="exp-left-nav" aria-label="Expense settings sections">
+          <div class="exp-nav-section-label">EXPENSE</div>
+          <button type="button" class="exp-nav-item active" data-exp-panel="accounts">Accounts</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="payment-methods">Payment methods</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="categories">Categories</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
+        </nav>
+
+        <!-- Right detail panels -->
+        <div class="exp-right-panel">
+
+          <!-- Accounts -->
+          <div class="exp-detail-panel" id="exp-detail-accounts">
+            <div class="exp-detail-header">
               <h3>Accounts</h3>
               <button type="button" class="btn btn-primary btn-sm" id="exp-add-account-btn">+ Add account</button>
             </div>
@@ -276,8 +286,9 @@
             <div id="exp-accounts-list" class="exp-list"></div>
           </div>
 
-          <div class="equity-card" style="margin:0;">
-            <div class="equity-card-header">
+          <!-- Payment methods -->
+          <div class="exp-detail-panel" id="exp-detail-payment-methods" hidden>
+            <div class="exp-detail-header">
               <h3>Payment methods</h3>
               <button type="button" class="btn btn-primary btn-sm" id="exp-add-payment-method-btn">+ Add method</button>
             </div>
@@ -285,58 +296,61 @@
             <p class="muted small" id="exp-payment-methods-status">Loading…</p>
             <div id="exp-payment-methods-list" class="exp-list"></div>
           </div>
-        </div>
 
-        <div class="equity-card">
-          <div class="equity-card-header">
-            <h3 id="exp-categories-heading">Categories</h3>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="btn btn-ghost btn-sm" id="exp-download-categories-btn">Download CSV</button>
-              <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
+          <!-- Categories -->
+          <div class="exp-detail-panel" id="exp-detail-categories" hidden>
+            <div class="exp-detail-header">
+              <h3 id="exp-categories-heading">Categories</h3>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-ghost btn-sm" id="exp-download-categories-btn">Download CSV</button>
+                <button type="button" class="btn btn-primary btn-sm" id="exp-add-category-btn">+ Add category</button>
+              </div>
             </div>
+            <p class="muted small equity-desc">Expense and income categories with subcategories.</p>
+            <p class="muted small" id="exp-categories-status">Loading…</p>
+            <div id="exp-categories-body"></div>
           </div>
-          <p class="muted small equity-desc">Expense and income categories with subcategories. When adding a record, choosing a category filters its subcategories.</p>
-          <p class="muted small" id="exp-categories-status">Loading…</p>
-          <div id="exp-categories-body"></div>
-        </div>
 
-        <div class="equity-card">
-          <div class="equity-card-header">
-            <h3>Bulk import records</h3>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="btn btn-ghost btn-sm" id="exp-import-template-btn">Download template</button>
-              <label class="btn btn-primary btn-sm" style="margin:0;">
-                <input type="file" id="exp-import-file" accept=".csv,text/csv" style="display:none;" />
-                + Upload CSV
-              </label>
+          <!-- Bulk import -->
+          <div class="exp-detail-panel" id="exp-detail-import" hidden>
+            <div class="exp-detail-header">
+              <h3>Bulk import records</h3>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-ghost btn-sm" id="exp-import-template-btn">Download template</button>
+                <label class="btn btn-primary btn-sm" style="margin:0;">
+                  <input type="file" id="exp-import-file" accept=".csv,text/csv" style="display:none;" />
+                  + Upload CSV
+                </label>
+              </div>
             </div>
-          </div>
-          <p class="muted small equity-desc">
-            CSV columns: <code>Date,Type,Amount,Account,Category,Subcategory,Payment Method,Labels,Note</code>.
-            Type = <code>expense</code>, <code>budget</code>, or <code>income</code>.
-            Names must match existing Accounts, Categories, and Payment methods (case-insensitive).
-            Income rows may leave Account blank.
-          </p>
-          <label class="muted small" style="display:flex; align-items:center; gap:6px; margin-top:6px;">
-            <input type="checkbox" id="exp-import-autocreate" style="width:auto;" />
-            Auto-create missing Categories and Subcategories
-          </label>
-          <p class="muted small" id="exp-import-status"></p>
-          <div id="exp-import-validation" hidden style="margin-top:10px; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:8px; background:rgba(0,0,0,0.02);">
-            <h4 style="margin:0 0 6px; font-size:14px;">Pre-import validation</h4>
-            <div id="exp-import-validation-body" class="muted small"></div>
-            <div style="display:flex; gap:8px; margin-top:10px;">
-              <button type="button" class="btn btn-primary btn-sm" id="exp-import-confirm-btn">Proceed with import</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="exp-import-cancel-btn">Cancel</button>
+            <p class="muted small equity-desc">
+              CSV columns: <code>Date,Type,Amount,Account,Category,Subcategory,Payment Method,Labels,Note</code>.
+              Type = <code>expense</code>, <code>budget</code>, or <code>income</code>.
+              Names must match existing Accounts, Categories, and Payment methods (case-insensitive).
+              Income rows may leave Account blank.
+            </p>
+            <label class="muted small" style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+              <input type="checkbox" id="exp-import-autocreate" style="width:auto;" />
+              Auto-create missing Categories and Subcategories
+            </label>
+            <p class="muted small" id="exp-import-status"></p>
+            <div id="exp-import-validation" hidden style="margin-top:10px; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:8px; background:rgba(0,0,0,0.02);">
+              <h4 style="margin:0 0 6px; font-size:14px;">Pre-import validation</h4>
+              <div id="exp-import-validation-body" class="muted small"></div>
+              <div style="display:flex; gap:8px; margin-top:10px;">
+                <button type="button" class="btn btn-primary btn-sm" id="exp-import-confirm-btn">Proceed with import</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="exp-import-cancel-btn">Cancel</button>
+              </div>
             </div>
+            <div id="exp-import-progress-wrap" hidden style="margin-top:8px;">
+              <div class="exp-import-progress"><div class="exp-import-progress-bar" id="exp-import-progress-bar"></div></div>
+              <p class="muted small" id="exp-import-progress-label" style="margin:4px 0 0;"></p>
+            </div>
+            <div id="exp-import-report" style="margin-top:8px;"></div>
           </div>
-          <div id="exp-import-progress-wrap" hidden style="margin-top:8px;">
-            <div class="exp-import-progress"><div class="exp-import-progress-bar" id="exp-import-progress-bar"></div></div>
-            <p class="muted small" id="exp-import-progress-label" style="margin:4px 0 0;"></p>
-          </div>
-          <div id="exp-import-report" style="margin-top:8px;"></div>
-        </div>
-      </div>
+
+        </div><!-- /.exp-right-panel -->
+      </div><!-- /#exp-content -->
     </section>
 
     <!-- Expense add/edit modal (shared by accounts & categories) -->
@@ -358,6 +372,21 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="script.js?v=csvvalidate"></script>
   <script src="expense.js?v=noicons3"></script>
+  <script>
+    // Expense left-nav panel switching
+    (function () {
+      var navItems = document.querySelectorAll(".exp-nav-item[data-exp-panel]");
+      navItems.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var panel = btn.getAttribute("data-exp-panel");
+          navItems.forEach(function (b) { b.classList.toggle("active", b === btn); });
+          document.querySelectorAll(".exp-detail-panel").forEach(function (p) {
+            p.hidden = p.id !== "exp-detail-" + panel;
+          });
+        });
+      });
+    })();
+  </script>
   <script>
     (function () {
       if (!window.WfAuth) return;
