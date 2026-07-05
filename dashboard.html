@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign3" />
+<link rel="stylesheet" href="styles.css?v=recdesign4" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -626,16 +626,7 @@
           <button type="button" class="exp-subtab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
         </div>
-        <div class="exp-top-bar-center">
-          <div class="rec-period-picker" id="rec-period-picker-top" style="height:36px; display:none;">
-            <button type="button" id="rec-period-prev-top" class="rec-period-nav" aria-label="Previous">‹</button>
-            <button type="button" id="rec-period-btn-top" class="rec-period-main" style="font-size:0.85rem;">
-              <span id="rec-period-label-top">This month</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <button type="button" id="rec-period-next-top" class="rec-period-nav" aria-label="Next">›</button>
-          </div>
-        </div>
+        <div class="exp-top-bar-center"></div>
         <button type="button" class="bench-mode-btn rec-add-btn" id="rec-open-btn">+ Add record</button>
       </div>
 
@@ -967,29 +958,6 @@
     </section><!-- /panel-expense -->
 
     <script>
-      function syncTopPeriodLabel() {
-        var lbl = document.getElementById("rec-period-label");
-        var topLbl = document.getElementById("rec-period-label-top");
-        if (topLbl && lbl) topLbl.textContent = lbl.textContent;
-      }
-      var topPicker = document.getElementById("rec-period-picker-top");
-      document.getElementById("rec-period-prev-top") && document.getElementById("rec-period-prev-top").addEventListener("click", function () {
-        document.getElementById("rec-period-prev") && document.getElementById("rec-period-prev").click();
-        syncTopPeriodLabel();
-      });
-      document.getElementById("rec-period-next-top") && document.getElementById("rec-period-next-top").addEventListener("click", function () {
-        document.getElementById("rec-period-next") && document.getElementById("rec-period-next").click();
-        syncTopPeriodLabel();
-      });
-      document.getElementById("rec-period-btn-top") && document.getElementById("rec-period-btn-top").addEventListener("click", function () {
-        document.getElementById("rec-period-btn") && document.getElementById("rec-period-btn").click();
-      });
-      // Observe label changes on the main picker to keep top in sync
-      var recLblEl = document.getElementById("rec-period-label");
-      if (recLblEl && window.MutationObserver) {
-        new MutationObserver(syncTopPeriodLabel).observe(recLblEl, { childList: true, characterData: true, subtree: true });
-      }
-
       document.querySelectorAll("[data-dash-exp-subtab]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var key = btn.getAttribute("data-dash-exp-subtab");
@@ -1002,8 +970,6 @@
             var p = document.getElementById("dash-exp-subpanel-" + k);
             if (p) p.hidden = (k !== key);
           });
-          if (topPicker) topPicker.style.display = (key === "records") ? "" : "none";
-          if (key === "records") syncTopPeriodLabel();
         });
       });
 
