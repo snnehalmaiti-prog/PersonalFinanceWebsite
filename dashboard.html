@@ -647,54 +647,56 @@
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:24px;">
 
           <!-- Monthly IBE chart -->
-          <div class="equity-card" style="margin:0;">
-            <div class="equity-card-header" style="align-items:center;">
-              <h3 style="margin:0;">Monthly Income / Budget / Expense</h3>
-              <select id="dash-exp-monthly-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
+          <div class="acc-section-card" style="margin:0;">
+            <div class="acc-section-top">
+              <span class="acc-section-label">CASH FLOW · MONTHLY</span>
+              <select id="dash-exp-monthly-year" class="acc-pill-select"></select>
             </div>
-            <p class="muted small" id="dash-exp-monthly-status" style="margin:6px 0 10px;"></p>
+            <div class="acc-section-title">Income, budget &amp; expense</div>
+            <p class="muted small" id="dash-exp-monthly-status" style="margin:4px 0 10px;"></p>
             <div style="position:relative; height:240px;">
               <canvas id="dash-exp-monthly-chart"></canvas>
             </div>
           </div>
 
-          <!-- Waterfall chart -->
-          <div class="equity-card" style="margin:0;">
-            <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
-              <h3 style="margin:0;">Budget Variance Waterfall</h3>
-              <div style="display:flex; gap:8px;">
-                <select id="dash-exp-wf-account" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);">
-                  <option value="">All accounts</option>
-                </select>
-                <select id="dash-exp-wf-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
-              </div>
+          <!-- Waterfall / Variance chart -->
+          <div class="acc-section-card" style="margin:0;">
+            <div class="acc-section-top">
+              <span class="acc-section-label">VARIANCE · RUNNING</span>
+              <select id="dash-exp-wf-account" class="acc-pill-select">
+                <option value="">All accounts</option>
+              </select>
+              <select id="dash-exp-wf-year" class="acc-pill-select"></select>
             </div>
-            <p class="muted small" id="dash-exp-wf-status" style="margin:6px 0 10px;"></p>
+            <div class="acc-section-title">Budget variance</div>
+            <p class="muted small" id="dash-exp-wf-status" style="margin:4px 0 10px;"></p>
             <div style="position:relative; height:240px;">
               <canvas id="dash-exp-wf-chart"></canvas>
             </div>
           </div>
 
-          <!-- Account × Payment Method spend pivot (aligns under IBE chart) -->
-          <div class="equity-card" style="margin:0;">
-            <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
-              <h3 style="margin:0; flex:1;">Spend by Account &amp; Payment Method</h3>
+          <!-- Account × Payment Method spend pivot -->
+          <div class="acc-section-card" style="margin:0;">
+            <div class="acc-section-top">
+              <span class="acc-section-label">BREAKDOWN</span>
               <div style="display:flex; gap:6px;">
-                <select id="dash-exp-matrix-month" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
-                <select id="dash-exp-matrix-year" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
+                <select id="dash-exp-matrix-month" class="acc-pill-select"></select>
+                <select id="dash-exp-matrix-year" class="acc-pill-select"></select>
               </div>
             </div>
-            <p class="muted small" id="dash-exp-matrix-status" style="margin:6px 0 0;"></p>
+            <div class="acc-section-title">Spend by account &amp; payment method</div>
+            <p class="muted small" id="dash-exp-matrix-status" style="margin:4px 0 0;"></p>
             <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
           </div>
 
-          <!-- Payment to Joint Account (aligns under Waterfall chart) -->
-          <div class="equity-card" style="margin:0;">
-            <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
-              <h3 style="margin:0;" id="dash-exp-joint-heading">Payment to Joint Account</h3>
+          <!-- Payment to Joint Account -->
+          <div class="acc-section-card" style="margin:0;">
+            <div class="acc-section-top">
+              <span class="acc-section-label" id="dash-exp-joint-period-label">SETTLEMENT</span>
             </div>
-            <p class="muted small" id="dash-exp-joint-status" style="margin:8px 0 0;"></p>
-            <div id="dash-exp-joint-wrap" style="margin-top:10px;"></div>
+            <div class="acc-section-title" id="dash-exp-joint-heading">Payment to Joint Account</div>
+            <p class="muted small" id="dash-exp-joint-status" style="margin:4px 0 0;"></p>
+            <div id="dash-exp-joint-wrap" style="margin-top:14px;"></div>
           </div>
 
         </div>

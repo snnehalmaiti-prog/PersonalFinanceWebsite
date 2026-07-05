@@ -2849,3 +2849,30 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   font-size: 0.65rem; font-weight: 700; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 2px;
 }
 .acc-card-footer-val { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+
+/* ── Accounts section cards (charts / breakdown / settlement) ────────────── */
+.acc-section-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-sm);
+}
+.acc-section-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 4px;
+}
+.acc-section-label {
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--muted); text-transform: uppercase;
+}
+.acc-section-title {
+  font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 2px;
+}
+.acc-pill-select {
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 10px; font: inherit; font-size: 0.78rem; font-weight: 600;
+  background: var(--surface); color: var(--text); cursor: pointer;
+  appearance: auto;
+}
+.acc-pill-select:focus { outline: 2px solid #3B82F6; outline-offset: 1px; }
