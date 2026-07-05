@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=matrixv5" />
+<link rel="stylesheet" href="styles.css?v=jointcalc" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -636,14 +636,44 @@
           </div>
         </div>
 
-        <!-- Account × Payment Method spend pivot -->
-        <div class="equity-card" style="margin-top:24px; display:inline-block; min-width:0;">
-          <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
-            <h3 style="margin:0; flex:1;">Spend by Account &amp; Payment Method</h3>
-            <span class="muted small" id="dash-exp-matrix-period"></span>
+        <!-- Bottom row: pivot + joint payment calculator -->
+        <div style="display:flex; gap:16px; margin-top:24px; flex-wrap:wrap; align-items:flex-start;">
+
+          <!-- Account × Payment Method spend pivot -->
+          <div class="equity-card" style="margin:0; flex:0 0 auto;">
+            <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
+              <h3 style="margin:0; flex:1;">Spend by Account &amp; Payment Method</h3>
+              <span class="muted small" id="dash-exp-matrix-period"></span>
+            </div>
+            <p class="muted small" id="dash-exp-matrix-status" style="margin:6px 0 0;"></p>
+            <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
           </div>
-          <p class="muted small" id="dash-exp-matrix-status" style="margin:6px 0 0;"></p>
-          <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
+
+          <!-- Payment to Joint Account calculator -->
+          <div class="equity-card" style="margin:0; flex:0 0 auto; min-width:320px;">
+            <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
+              <h3 style="margin:0;">Payment to Joint Account</h3>
+              <span class="muted small" id="dash-exp-joint-period"></span>
+            </div>
+            <!-- Account selectors -->
+            <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+              <label style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:var(--muted); font-weight:600;">
+                JOINT ACCOUNT
+                <select id="dash-exp-joint-acct" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
+              </label>
+              <label style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:var(--muted); font-weight:600;">
+                ACCOUNT-1
+                <select id="dash-exp-joint-acct1" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
+              </label>
+              <label style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:var(--muted); font-weight:600;">
+                ACCOUNT-2
+                <select id="dash-exp-joint-acct2" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
+              </label>
+            </div>
+            <p class="muted small" id="dash-exp-joint-status" style="margin:8px 0 0;"></p>
+            <div id="dash-exp-joint-wrap" style="margin-top:10px;"></div>
+          </div>
+
         </div>
 
       </div>
@@ -965,6 +995,8 @@
           renderExpMonthlyChart();
           renderExpWaterfallChart();
           renderExpSpendMatrix();
+          initJointSelectors();
+          renderPaymentToJoint();
           renderAnalyticsTable();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
@@ -1123,6 +1155,107 @@
         html += "<td class='num'>" + fmtMoney(grand) + "</td></tr>";
         html += "</tbody></table>";
 
+        wrap.innerHTML = html;
+      }
+
+      // ── Payment to Joint Account calculator ───────────────────────────────
+      var jointSelInited = false;
+      function initJointSelectors() {
+        var accounts = dashExpState.accounts || [];
+        var sel = function(id) { return document.getElementById(id); };
+        ["dash-exp-joint-acct","dash-exp-joint-acct1","dash-exp-joint-acct2"].forEach(function(id) {
+          var el = sel(id); if (!el) return;
+          var prev = el.value;
+          el.innerHTML = accounts.map(function(a) {
+            return '<option value="' + a.id + '">' + esc(a.icon + " " + a.name) + '</option>';
+          }).join("");
+          if (prev) el.value = prev;
+        });
+        if (!jointSelInited && accounts.length >= 3) {
+          // Auto-pick: joint = first acct, acct1 = second, acct2 = third
+          sel("dash-exp-joint-acct").value = accounts[0].id;
+          sel("dash-exp-joint-acct1").value = accounts[1].id;
+          sel("dash-exp-joint-acct2").value = accounts[2].id;
+          jointSelInited = true;
+        }
+        ["dash-exp-joint-acct","dash-exp-joint-acct1","dash-exp-joint-acct2"].forEach(function(id) {
+          var el = sel(id); if (el) el.onchange = renderPaymentToJoint;
+        });
+      }
+
+      function renderPaymentToJoint() {
+        var wrap = document.getElementById("dash-exp-joint-wrap");
+        var statusEl = document.getElementById("dash-exp-joint-status");
+        var periodEl = document.getElementById("dash-exp-joint-period");
+        if (!wrap) return;
+
+        var jointId = (document.getElementById("dash-exp-joint-acct") || {}).value;
+        var acct1Id = (document.getElementById("dash-exp-joint-acct1") || {}).value;
+        var acct2Id = (document.getElementById("dash-exp-joint-acct2") || {}).value;
+        if (!jointId || !acct1Id || !acct2Id) { wrap.innerHTML = ""; return; }
+
+        var now = new Date();
+        var yr = now.getFullYear(), mo = now.getMonth();
+        if (periodEl) periodEl.textContent = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+
+        var pms = dashExpState.paymentMethods || [];
+        var ccIds = pms.filter(function(p) { return p.is_credit_card; }).map(function(p) { return p.id; });
+
+        var monthRecs = (dashExpState.records || []).filter(function(r) {
+          var d = new Date(r.txn_date || r.txn_at);
+          return d.getFullYear() === yr && d.getMonth() === mo;
+        });
+
+        function sumRecs(recs) { return recs.reduce(function(s, r) { return s + Math.round(Number(r.amount) || 0); }, 0); }
+
+        // Joint account expense total
+        var jointExpense = sumRecs(monthRecs.filter(function(r) { return r.type === "expense" && r.account_id === jointId; }));
+        // Joint account budget total
+        var jointBudget  = sumRecs(monthRecs.filter(function(r) { return r.type === "budget"  && r.account_id === jointId; }));
+
+        var budgetContrib  = Math.round(jointBudget / 2);
+        var overrun        = Math.max(0, jointExpense - jointBudget);
+        var overrunShare   = Math.round(overrun / 2);
+
+        // Credit card spend per individual account
+        var cc1 = sumRecs(monthRecs.filter(function(r) {
+          return r.type === "expense" && r.account_id === acct1Id && ccIds.indexOf(r.payment_method_id) >= 0;
+        }));
+        var cc2 = sumRecs(monthRecs.filter(function(r) {
+          return r.type === "expense" && r.account_id === acct2Id && ccIds.indexOf(r.payment_method_id) >= 0;
+        }));
+
+        var transfer1 = budgetContrib + cc1 + overrunShare;
+        var transfer2 = budgetContrib + cc2 + overrunShare;
+
+        var accounts = dashExpState.accounts || [];
+        function acctName(id) {
+          var a = accounts.find(function(x) { return x.id === id; });
+          return a ? a.name : id;
+        }
+        var n1 = acctName(acct1Id), n2 = acctName(acct2Id);
+
+        if (statusEl) statusEl.textContent = "";
+
+        var rows = [
+          { label: n1 + "'s Budget Contribution", val: budgetContrib, bold: false, highlight: false },
+          { label: n1 + "'s Credit Card Spend",   val: cc1,           bold: false, highlight: false },
+          { label: n2 + "'s Budget Contribution",  val: budgetContrib, bold: false, highlight: false },
+          { label: n2 + "'s Card Spend",           val: cc2,           bold: false, highlight: false },
+          { label: n1 + "'s Budget Overrun Share", val: overrunShare,  bold: false, highlight: false },
+          { label: n2 + "'s Budget Overrun Share", val: overrunShare,  bold: false, highlight: false },
+          { label: n1 + "'s Transfer Amount",      val: transfer1,     bold: true,  highlight: true  },
+          { label: n2 + "'s Transfer Amount",      val: transfer2,     bold: true,  highlight: true  },
+        ];
+
+        var html = '<table class="exp-joint-table">';
+        rows.forEach(function(r) {
+          var cls = r.highlight ? " class='exp-joint-highlight'" : "";
+          var bold = r.bold ? " style='font-weight:700;'" : "";
+          html += "<tr" + cls + "><td" + bold + ">" + esc(r.label) + "</td>";
+          html += "<td class='num'" + bold + ">" + (r.val ? fmtMoney(r.val) : "—") + "</td></tr>";
+        });
+        html += "</table>";
         wrap.innerHTML = html;
       }
 
