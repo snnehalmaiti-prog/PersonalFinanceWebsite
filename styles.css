@@ -2237,24 +2237,24 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Dashboard Expense account tiles */
 .exp-account-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
 }
 .exp-account-tile {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 14px; border-radius: 12px;
+  padding: 8px 12px; border-radius: 10px;
   color: #fff; text-decoration: none;
-  min-height: 72px;
+  min-height: 0;
 }
 .exp-account-tile-icon {
-  width: 42px; height: 42px; border-radius: 10px;
+  width: 32px; height: 32px; border-radius: 8px;
   background: rgba(255,255,255,0.2);
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 1.3rem;
+  font-size: 1rem; flex-shrink: 0;
 }
 .exp-account-tile-body { flex: 1; min-width: 0; }
-.exp-account-tile-name { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.exp-account-tile-balance { font-weight: 700; font-size: 1rem; margin-top: 2px; }
+.exp-account-tile-name { font-weight: 700; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-account-tile-balance { font-weight: 700; font-size: 0.92rem; margin-top: 1px; }
 .exp-account-tile-add {
   background: transparent !important;
   color: var(--muted) !important;
@@ -2536,9 +2536,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 .exp-account-tile-monthly {
   display: flex; justify-content: space-between; gap: 8px;
-  font-size: 0.75rem; opacity: 0.9; margin: 3px 0;
+  font-size: 0.7rem; opacity: 0.9; margin: 2px 0;
 }
-.exp-account-tile-balance { font-size: 1.05rem; }
+.exp-account-tile-balance { font-size: 0.92rem; }
 
 /* Compact record modal on mobile */
 @media (max-width: 600px) {
