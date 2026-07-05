@@ -208,8 +208,7 @@
         '<input type="checkbox" id="exp-pm-cc"' + (d.is_credit_card ? " checked" : "") + ' style="width:auto; margin:0;" />' +
         '<span style="margin:0;">Credit card</span>' +
       '</label>' +
-      '<label class="exp-field"><span>Icon</span>' + pickerGrid(ACC_EMOJIS.concat(CAT_EMOJIS), d.icon, "icon") + '</label>' +
-      '<label class="exp-field"><span>Color</span>' + pickerGrid(COLORS, d.color, "color") + '</label>';
+      '';
     openModal(record ? "Edit payment method" : "Add payment method", body, modalCtx);
     wirePickers();
     el("exp-pm-name").addEventListener("input", function (e) { d.name = e.target.value; });
@@ -352,8 +351,7 @@
         '<input type="checkbox" id="exp-f-contrib"' + (r.contributing_account ? " checked" : "") + ' style="width:auto;" />' +
         '<span style="margin:0;">Contributing account</span>' +
       '</label>' +
-      '<div class="exp-field"><span>Icon</span>' + pickerGrid(ACC_EMOJIS, r.icon, "icon") + '</div>' +
-      '<div class="exp-field"><span>Color</span>' + pickerGrid(COLORS, r.color, "color") + '</div>';
+      '';
     openModal(record ? "Edit account" : "Add account", html, ctx);
   }
 
@@ -398,8 +396,7 @@
       var pName = parent ? parent.name : (findCat(record.parent_id) || {}).name;
       html += '<div class="exp-field"><span>Under category</span><div class="exp-readonly">' + esc(pName || "") + '</div></div>';
     }
-    html += '<div class="exp-field"><span>Icon</span>' + pickerGrid(CAT_EMOJIS, r.icon, "icon") + '</div>' +
-      '<div class="exp-field"><span>Color</span>' + pickerGrid(COLORS, r.color, "color") + '</div>';
+    html += '';
     ctx.type = typeVal;
     ctx.isSub = isSub;
     openModal(record ? "Edit category" : (isSub ? "Add subcategory" : "Add category"), html, ctx);
