@@ -1106,30 +1106,23 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .settings-main h1 { margin-bottom: 32px; }
 
 .settings-tabs {
-  position: relative;
-  z-index: 20;
-  display: inline-flex;
+  display: flex;
   gap: 4px;
-  background: color-mix(in srgb, var(--surface-alt) 85%, transparent);
-  backdrop-filter: blur(10px) saturate(160%);
-  border-radius: 999px;
-  padding: 4px;
-  margin-bottom: 4px;
-  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
 }
 .settings-tab {
   border: none;
-  background: transparent;
-  padding: 10px 22px;
+  background: none;
+  padding: 7px 16px;
   border-radius: 999px;
-  font-weight: 600;
-  font-size: 0.92rem;
+  font-weight: 500;
+  font-size: 0.875rem;
   color: var(--muted);
   cursor: pointer;
-  transition: background 0.25s var(--ease), color 0.25s var(--ease), transform 0.25s var(--ease);
+  transition: color 0.15s, background 0.15s;
 }
 .settings-tab:hover { color: var(--text); }
-.settings-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.settings-tab.active { background: var(--text); color: var(--bg); font-weight: 600; }
 
 /* header-tab active state is handled by .header-tab.active (dark pill) */
 
