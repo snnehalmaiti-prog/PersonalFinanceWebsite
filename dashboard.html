@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=tiletrim" />
+<link rel="stylesheet" href="styles.css?v=spendmatrix" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -636,6 +636,16 @@
           </div>
         </div>
 
+        <!-- Account × Payment Method spend pivot -->
+        <div class="equity-card" style="margin-top:24px;">
+          <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0; flex:1;">Spend by Account &amp; Payment Method</h3>
+            <span class="muted small" id="dash-exp-matrix-period"></span>
+          </div>
+          <p class="muted small" id="dash-exp-matrix-status" style="margin:6px 0 0;"></p>
+          <div id="dash-exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
+        </div>
+
       </div>
 
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
@@ -954,6 +964,7 @@
           renderDashRecords();
           renderExpMonthlyChart();
           renderExpWaterfallChart();
+          renderExpSpendMatrix();
           renderAnalyticsTable();
         }).catch(function (err) {
           var status = document.getElementById("dash-exp-accounts-status");
@@ -1030,6 +1041,85 @@
         };
         if (expMonthlyChart) { expMonthlyChart.destroy(); }
         expMonthlyChart = new Chart(canvas.getContext("2d"), { type: "bar", data: data, options: opts });
+      }
+
+      // ── Account × Payment Method spend pivot ──────────────────────────────
+      function renderExpSpendMatrix() {
+        var wrap = document.getElementById("dash-exp-matrix-wrap");
+        var statusEl = document.getElementById("dash-exp-matrix-status");
+        var periodEl = document.getElementById("dash-exp-matrix-period");
+        if (!wrap) return;
+
+        var now = new Date();
+        var yr = now.getFullYear(), mo = now.getMonth(); // 0-based
+        var monthName = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+        if (periodEl) periodEl.textContent = monthName;
+
+        var records = (dashExpState.records || []).filter(function (r) {
+          if (r.type !== "expense") return false;
+          var d = new Date(r.txn_date || r.txn_at);
+          return d.getFullYear() === yr && d.getMonth() === mo;
+        });
+
+        var accounts = dashExpState.accounts || [];
+        var pms = dashExpState.paymentMethods || [];
+
+        // Build pivot: pmId → acctId → sum
+        var pivot = {};
+        var acctTotals = {};
+        var pmTotals = {};
+        var grand = 0;
+        records.forEach(function (r) {
+          var pmId = r.payment_method_id || "__none__";
+          var acId = r.account_id || "__none__";
+          var amt = Math.round(Number(r.amount) || 0);
+          if (!pivot[pmId]) pivot[pmId] = {};
+          pivot[pmId][acId] = (pivot[pmId][acId] || 0) + amt;
+          acctTotals[acId] = (acctTotals[acId] || 0) + amt;
+          pmTotals[pmId] = (pmTotals[pmId] || 0) + amt;
+          grand += amt;
+        });
+
+        // Filter to only rows/cols with data
+        var usedPmIds = pms.map(function (p) { return p.id; }).filter(function (id) { return pmTotals[id]; });
+        var usedAcIds = accounts.map(function (a) { return a.id; }).filter(function (id) { return acctTotals[id]; });
+
+        if (!records.length) {
+          if (statusEl) statusEl.textContent = "No expense records this month.";
+          wrap.innerHTML = "";
+          return;
+        }
+        if (statusEl) statusEl.textContent = "";
+
+        var html = '<table class="exp-matrix-table">';
+        // Header
+        html += "<thead><tr><th>Payment Method</th>";
+        usedAcIds.forEach(function (acId) {
+          var ac = accounts.find(function (a) { return a.id === acId; });
+          html += "<th>" + (ac ? esc(ac.icon + " " + ac.name) : acId) + "</th>";
+        });
+        html += "<th>Total</th></tr></thead><tbody>";
+
+        usedPmIds.forEach(function (pmId) {
+          var pm = pms.find(function (p) { return p.id === pmId; });
+          var rowTotal = pmTotals[pmId] || 0;
+          html += "<tr><td class='exp-matrix-label'>" + (pm ? esc(pm.icon + " " + pm.name) : pmId) + "</td>";
+          usedAcIds.forEach(function (acId) {
+            var val = (pivot[pmId] && pivot[pmId][acId]) || 0;
+            html += "<td class='num" + (val ? "" : " exp-matrix-zero") + "'>" + (val ? fmtMoney(val) : "—") + "</td>";
+          });
+          html += "<td class='num exp-matrix-total'>" + fmtMoney(rowTotal) + "</td></tr>";
+        });
+
+        // Column totals row
+        html += "<tr class='exp-matrix-footer'><td>Total</td>";
+        usedAcIds.forEach(function (acId) {
+          html += "<td class='num'>" + fmtMoney(acctTotals[acId] || 0) + "</td>";
+        });
+        html += "<td class='num'>" + fmtMoney(grand) + "</td></tr>";
+        html += "</tbody></table>";
+
+        wrap.innerHTML = html;
       }
 
       // ── Analytics table: category × (this period, previous period) ──────

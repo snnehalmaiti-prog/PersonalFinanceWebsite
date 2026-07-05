@@ -2544,3 +2544,22 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Belt-and-suspenders: when the outer Investment/Expense panel is hidden,
    force all descendant panels/subpanels to hide too. */
 .invest-panel[hidden], .invest-panel[hidden] * { display: none !important; }
+
+/* Account × Payment Method spend pivot table */
+.exp-matrix-table {
+  width: 100%; border-collapse: collapse; font-size: 0.88rem;
+}
+.exp-matrix-table th {
+  padding: 10px 14px; text-align: right; font-weight: 700;
+  background: var(--surface-alt); border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.exp-matrix-table th:first-child { text-align: left; }
+.exp-matrix-table td {
+  padding: 10px 14px; border-top: 1px solid var(--border); vertical-align: middle;
+}
+.exp-matrix-label { font-weight: 600; }
+.exp-matrix-zero { color: var(--muted); }
+.exp-matrix-total { font-weight: 700; border-left: 2px solid var(--border); }
+.exp-matrix-footer td { font-weight: 700; background: var(--surface-alt); border-top: 2px solid var(--border); }
+.exp-matrix-footer td:first-child { text-align: left; }
