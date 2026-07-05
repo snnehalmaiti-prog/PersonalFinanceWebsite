@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=acccardcompact7" />
+<link rel="stylesheet" href="styles.css?v=acccardcompact8" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1456,7 +1456,7 @@
             html += '<div class="settlement-row"><span class="settlement-row-label">Budget Contribution</span><span class="settlement-row-val">' + fmtMoney(budgetContrib) + '</span></div>';
           }
           if (hasOverrun && overrunShare > 0) {
-            html += '<div class="settlement-row"><span class="settlement-row-label">Budget Overrun Share <span style="font-weight:400;opacity:0.65;">(' + pct + '% of overrun)</span></span><span class="settlement-row-val">' + fmtMoney(overrunShare) + '</span></div>';
+            html += '<div class="settlement-row"><span class="settlement-row-label" style="display:flex;flex-direction:column;gap:1px;">Budget Overrun Share<span style="font-size:0.62rem;font-weight:400;color:var(--muted);">' + pct + '% of overrun</span></span><span class="settlement-row-val">' + fmtMoney(overrunShare) + '</span></div>';
           }
           html += '<div class="settlement-row"><span class="settlement-row-label">Card Spend</span><span class="settlement-row-val">' + (ccSpend ? fmtMoney(ccSpend) : '—') + '</span></div>';
           html += '</div>';
