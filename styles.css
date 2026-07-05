@@ -2876,3 +2876,18 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   appearance: auto;
 }
 .acc-pill-select:focus { outline: 2px solid #3B82F6; outline-offset: 1px; }
+
+/* ── Expense sub-tabs (Accounts / Records / Analytics) ───────────────────── */
+.exp-subtabs {
+  display: flex; align-items: center; gap: 2px;
+  height: 36px;
+}
+.exp-subtab {
+  border: none; background: none; cursor: pointer;
+  padding: 6px 16px; border-radius: 999px;
+  font-size: 0.875rem; font-weight: 500; color: var(--muted);
+  white-space: nowrap; transition: color 0.15s, background 0.15s;
+  height: 36px; box-sizing: border-box;
+}
+.exp-subtab:hover { color: var(--text); }
+.exp-subtab.active { background: var(--text); color: var(--bg); font-weight: 600; }
