@@ -2181,6 +2181,19 @@
           fillRecSubcategories(record.category_id || "");
           document.getElementById("rec-subcategory").value = record.subcategory_id || "";
           document.getElementById("rec-payment-method").value = record.payment_method_id || "";
+          // Load existing budget split into the split rows
+          if (record.type === "budget" && record.labels) {
+            try {
+              var parsed = typeof record.labels === "string" ? JSON.parse(record.labels) : record.labels;
+              var sp = parsed && parsed.budget_split;
+              if (sp) {
+                // Clear inited flag so rows rebuild with saved values
+                var splitRows = document.getElementById("rec-budget-split-rows");
+                if (splitRows) splitRows.innerHTML = "";
+                updateBudgetSplitVisibility(sp);
+              }
+            } catch(e) {}
+          }
         } else {
           document.getElementById("rec-amount").value = "";
           document.getElementById("rec-note").value = "";
@@ -2300,7 +2313,7 @@
         updateBudgetSplitVisibility();
       }
 
-      function updateBudgetSplitVisibility() {
+      function updateBudgetSplitVisibility(existingSplit) {
         var splitDiv = document.getElementById("rec-budget-split");
         var splitRows = document.getElementById("rec-budget-split-rows");
         if (!splitDiv || !splitRows) return;
@@ -2312,17 +2325,20 @@
         if (!isJointBudget) return;
 
         var contribs = dashExpState.accounts.filter(function(a) { return a.contributing_account; });
-        // Build rows only once per set of contributing accounts
+        // Build rows only once per set of contributing accounts (unless forced by existingSplit)
         var existing = splitRows.querySelectorAll("[data-split-id]");
         var existingIds = Array.from(existing).map(function(i) { return i.dataset.splitId; }).join(",");
         var newIds = contribs.map(function(a) { return a.id; }).join(",");
-        if (existingIds === newIds) return; // already built
+        if (existingIds === newIds && !existingSplit) return; // already built with defaults
 
         // Only first account gets an editable input; rest are read-only auto-calculated
+        var defaultPct = contribs.length ? Math.floor(100 / contribs.length) : 0;
         splitRows.innerHTML = contribs.map(function(a, i) {
           var isEditable = (i === 0);
-          var defaultPct = contribs.length ? Math.floor(100 / contribs.length) : 0;
-          var initVal = isEditable ? defaultPct : (100 - defaultPct * (contribs.length > 1 ? 1 : 0));
+          // Use saved value if editing, otherwise default equal split
+          var initVal = existingSplit && existingSplit[a.id] !== undefined
+            ? existingSplit[a.id]
+            : (isEditable ? defaultPct : (100 - defaultPct * (contribs.length > 1 ? 1 : 0)));
           if (isEditable) {
             return '<div style="display:flex; align-items:center; gap:8px;">' +
               '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
