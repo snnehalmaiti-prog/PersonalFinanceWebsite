@@ -2271,30 +2271,61 @@
 
         var contribs = dashExpState.accounts.filter(function(a) { return a.contributing_account; });
         // Build rows only once per set of contributing accounts
-        var existing = splitRows.querySelectorAll("input[data-split-id]");
+        var existing = splitRows.querySelectorAll("[data-split-id]");
         var existingIds = Array.from(existing).map(function(i) { return i.dataset.splitId; }).join(",");
         var newIds = contribs.map(function(a) { return a.id; }).join(",");
         if (existingIds === newIds) return; // already built
-        var defaultPct = contribs.length ? Math.floor(100 / contribs.length) : 0;
+
+        // Only first account gets an editable input; rest are read-only auto-calculated
         splitRows.innerHTML = contribs.map(function(a, i) {
-          var pct = (i === contribs.length - 1)
-            ? 100 - defaultPct * (contribs.length - 1)  // last gets remainder
-            : defaultPct;
-          return '<div style="display:flex; align-items:center; gap:8px;">' +
-            '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
-            '<input type="number" data-split-id="' + a.id + '" min="0" max="100" value="' + pct + '" ' +
-              'style="width:70px; padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.875rem; text-align:right;" />' +
-            '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
-          '</div>';
+          var isEditable = (i === 0);
+          var defaultPct = contribs.length ? Math.floor(100 / contribs.length) : 0;
+          var initVal = isEditable ? defaultPct : (100 - defaultPct * (contribs.length > 1 ? 1 : 0));
+          if (isEditable) {
+            return '<div style="display:flex; align-items:center; gap:8px;">' +
+              '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
+              '<input type="number" data-split-id="' + a.id + '" min="0" max="100" value="' + initVal + '" ' +
+                'style="width:70px; padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.875rem; text-align:right;" />' +
+              '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
+            '</div>';
+          } else {
+            return '<div style="display:flex; align-items:center; gap:8px;">' +
+              '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
+              '<span data-split-id="' + a.id + '" data-split-auto="1" ' +
+                'style="width:70px; padding:5px 8px; font-size:0.875rem; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums;">' + initVal + '</span>' +
+              '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
+            '</div>';
+          }
         }).join("");
+
+        // Wire first input to auto-update the rest
+        var firstInput = splitRows.querySelector("input[data-split-id]");
+        if (firstInput) {
+          firstInput.addEventListener("input", function() {
+            var v = Math.min(100, Math.max(0, Number(firstInput.value) || 0));
+            var autoSpans = splitRows.querySelectorAll("[data-split-auto]");
+            var remaining = 100 - v;
+            var perOther = autoSpans.length ? Math.round(remaining / autoSpans.length) : 0;
+            autoSpans.forEach(function(sp, i) {
+              sp.textContent = (i === autoSpans.length - 1)
+                ? remaining - perOther * (autoSpans.length - 1)
+                : perOther;
+            });
+          });
+        }
       }
 
       function getBudgetSplit() {
-        var inputs = document.querySelectorAll("#rec-budget-split-rows input[data-split-id]");
-        if (!inputs.length) return null;
         var split = {}, total = 0;
-        inputs.forEach(function(inp) { var v = Number(inp.value) || 0; split[inp.dataset.splitId] = v; total += v; });
-        return { split: split, total: total };
+        // Editable inputs
+        document.querySelectorAll("#rec-budget-split-rows input[data-split-id]").forEach(function(inp) {
+          var v = Number(inp.value) || 0; split[inp.dataset.splitId] = v; total += v;
+        });
+        // Auto-calculated read-only spans
+        document.querySelectorAll("#rec-budget-split-rows [data-split-auto]").forEach(function(sp) {
+          var v = Number(sp.textContent) || 0; split[sp.dataset.splitId] = v; total += v;
+        });
+        return Object.keys(split).length ? { split: split, total: total } : null;
       }
 
       function fillRecDropdowns() {
