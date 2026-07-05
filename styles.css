@@ -2778,14 +2778,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Expense top bar: tabs | period picker (aligned to rec-main) | add btn */
 .exp-top-bar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 320px 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 0;
   margin-bottom: 0;
 }
 .exp-top-bar-center {
-  display: flex; align-items: center;
+  display: flex; align-items: center; padding-left: 0;
 }
 @media (max-width: 900px) {
-  .exp-top-bar { grid-template-columns: auto 1fr auto; }
+  .exp-top-bar { grid-template-columns: auto 1fr auto; gap: 8px; }
 }
