@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=tiles6" />
+<link rel="stylesheet" href="styles.css?v=tiles7" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -978,7 +978,9 @@
         if (status) status.remove();
         var tiles = accounts.map(function (a) {
           var m = computeAccountMonthly(a.id);
-          return '<div class="exp-account-tile" data-acct-id="' + esc(a.id) + '" style="cursor:pointer;">' +
+          var pct = m.budget > 0 ? (m.spent / m.budget) : (m.spent > 0 ? 1 : 0);
+          var tileColor = pct < 0.5 ? "#1A9E6E" : pct < 0.95 ? "#F97316" : "#EF4444";
+          return '<div class="exp-account-tile" data-acct-id="' + esc(a.id) + '" style="cursor:pointer; background:' + tileColor + ';">' +
             '<div class="exp-account-tile-body">' +
               '<div class="exp-account-tile-top-row">' +
                 '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
