@@ -1161,7 +1161,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   transition: background 0.15s, color 0.15s;
 }
 .invest-sub-tab:hover { color: var(--text); }
-.invest-sub-tab.active { background: var(--emerald); color: #fff; box-shadow: 0 1px 3px rgba(26,158,110,0.25); }
+.invest-sub-tab.active { background: #3B82F6; color: #fff; box-shadow: 0 1px 3px rgba(59,130,246,0.25); }
 
 /* Investment panel wrapper — no card background, sub-panels provide their own cards */
 .invest-panel:not([hidden]) { width: 100%; display: flex; flex-direction: column; gap: 0; }
