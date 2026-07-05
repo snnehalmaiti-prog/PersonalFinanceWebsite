@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=acccardcompact11" />
+<link rel="stylesheet" href="styles.css?v=acccardcompact12" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1444,6 +1444,15 @@
 
         var transfer1 = budgetContrib1 + cc1 + overrunShare1;
         var transfer2 = budgetContrib2 + cc2 + overrunShare2;
+
+        // DEBUG — remove after diagnosis
+        console.group("Settlement debug");
+        console.log("commonBudgetCat", commonBudgetCat);
+        console.log("acct1Id", acct1Id, "acct2Id", acct2Id);
+        console.log("budgetRecs (next month):", budgetRecs.map(function(r){return {id:r.id,cat:r.category_id,labels:r.labels,amt:r.amount};}));
+        console.log("prevBudgetRecs (this month):", prevBudgetRecs.map(function(r){return {id:r.id,cat:r.category_id,labels:r.labels,amt:r.amount};}));
+        console.log("splitPct1/2:", splitPct1, splitPct2, "prevSplitPct1/2:", prevSplitPct1, prevSplitPct2);
+        console.groupEnd();
 
         var accounts = dashExpState.accounts || [];
         function acctName(id) {
