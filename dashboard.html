@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=settingstabs2" />
+<link rel="stylesheet" href="styles.css?v=exptwopanel1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1039,6 +1039,7 @@
           dashExpState.records = res[3] || [];
           renderDashAccountTiles(dashExpState.accounts);
           fillRecFilterDropdowns();
+          fillAnaFilterDropdowns();
           renderDashRecords();
           renderExpMonthlyChart();
           renderExpWaterfallChart();
@@ -1725,6 +1726,19 @@
         var acctSel = document.getElementById("rec-filter-account");
         var catSel = document.getElementById("rec-filter-category");
         var pmSel = document.getElementById("rec-filter-payment");
+        if (acctSel) acctSel.innerHTML = '<option value="">All accounts</option>' +
+          dashExpState.accounts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join("");
+        if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
+          dashExpState.categories.filter(function (c) { return !c.parent_id; })
+            .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
+        if (pmSel) pmSel.innerHTML = '<option value="">All</option>' +
+          dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
+      }
+
+      function fillAnaFilterDropdowns() {
+        var acctSel = document.getElementById("ana-filter-account");
+        var catSel = document.getElementById("ana-filter-category");
+        var pmSel = document.getElementById("ana-filter-payment");
         if (acctSel) acctSel.innerHTML = '<option value="">All accounts</option>' +
           dashExpState.accounts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join("");
         if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
