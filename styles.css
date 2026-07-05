@@ -2837,6 +2837,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   align-items: center;
   gap: 0;
   margin-bottom: 0;
+  margin-top: 10px;
 }
 .exp-top-bar-center {
   display: flex; align-items: center; padding-left: 0;
