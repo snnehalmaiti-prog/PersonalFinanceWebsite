@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=exptwopanel1" />
+<link rel="stylesheet" href="styles.css?v=settlementcards1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1265,23 +1265,27 @@
         }
         if (statusEl) statusEl.textContent = "";
 
+        // Generate consistent hue-based colors for payment methods
+        var PM_COLORS = ["#1A9E6E","#C0392B","#B5840A","#6C3FBC","#C0392B","#2563EB","#D97706","#059669"];
+        var pmColorMap = {};
+        usedPmIds.forEach(function(id, i) { pmColorMap[id] = PM_COLORS[i % PM_COLORS.length]; });
+
         var html = '<table class="exp-matrix-table">';
         // Header
-        html += "<thead><tr><th>Payment Method</th>";
+        html += "<thead><tr><th class='exp-matrix-hdr'>PAYMENT METHOD</th>";
         usedAcIds.forEach(function (acId) {
           var ac = accounts.find(function (a) { return a.id === acId; });
-          var label = ac ? esc(ac.name) : acId;
-          html += "<th>" + label + "</th>";
+          var label = ac ? esc(ac.name.toUpperCase()) : acId;
+          html += "<th class='exp-matrix-hdr'>" + label + "</th>";
         });
-        html += "<th>Total</th></tr></thead><tbody>";
+        html += "<th class='exp-matrix-hdr'>TOTAL</th></tr></thead><tbody>";
 
         usedPmIds.forEach(function (pmId) {
           var pm = pms.find(function (p) { return p.id === pmId; });
           var rowTotal = pmTotals[pmId] || 0;
-          var pmLabel = pm
-            ? esc(pm.name)
-            : pmId;
-          html += "<tr><td class='exp-matrix-label'>" + pmLabel + "</td>";
+          var pmLabel = pm ? esc(pm.name) : pmId;
+          var dot = '<span class="exp-matrix-dot" style="background:' + pmColorMap[pmId] + ';"></span>';
+          html += "<tr><td class='exp-matrix-label'>" + dot + pmLabel + "</td>";
           usedAcIds.forEach(function (acId) {
             var val = (pivot[pmId] && pivot[pmId][acId]) || 0;
             html += "<td class='num" + (val ? "" : " exp-matrix-zero") + "'>" + (val ? fmtMoney(val) : "—") + "</td>";
@@ -1290,11 +1294,12 @@
         });
 
         // Column totals row
-        html += "<tr class='exp-matrix-footer'><td>Total</td>";
+        html += "<tr class='exp-matrix-footer'><td>TOTAL</td>";
         usedAcIds.forEach(function (acId) {
-          html += "<td class='num'>" + fmtMoney(acctTotals[acId] || 0) + "</td>";
+          var v = acctTotals[acId] || 0;
+          html += "<td class='num" + (v === grand ? " exp-matrix-grand" : "") + "'>" + fmtMoney(v) + "</td>";
         });
-        html += "<td class='num'>" + fmtMoney(grand) + "</td></tr>";
+        html += "<td class='num exp-matrix-grand'>" + fmtMoney(grand) + "</td></tr>";
         html += "</tbody></table>";
 
         wrap.innerHTML = html;
@@ -1435,30 +1440,36 @@
 
         if (statusEl) statusEl.textContent = "";
 
-        var rows = [];
-        if (hasBudgetSplit) {
-          rows.push({ label: n1 + "'s Budget Contribution (" + splitPct1 + "%)", val: budgetContrib1, bold: false, highlight: false });
-        }
-        rows.push({ label: n1 + "'s Credit Card Spend", val: cc1, bold: false, highlight: false });
-        if (hasBudgetSplit) {
-          rows.push({ label: n2 + "'s Budget Contribution (" + splitPct2 + "%)", val: budgetContrib2, bold: false, highlight: false });
-        }
-        rows.push({ label: n2 + "'s Card Spend", val: cc2, bold: false, highlight: false });
-        if (hasOverrunSplit && overrun > 0) {
-          rows.push({ label: n1 + "'s Budget Overrun Share", val: overrunShare1, bold: false, highlight: false });
-          rows.push({ label: n2 + "'s Budget Overrun Share", val: overrunShare2, bold: false, highlight: false });
-        }
-        rows.push({ label: n1 + "'s Transfer Amount", val: transfer1, bold: true, highlight: true });
-        rows.push({ label: n2 + "'s Transfer Amount", val: transfer2, bold: true, highlight: true });
+        var COLORS = ["#1A9E6E", "#6C3FBC"];
 
-        var html = '<table class="exp-joint-table">';
-        rows.forEach(function(r) {
-          var cls = r.highlight ? " class='exp-joint-highlight'" : "";
-          var bold = r.bold ? " style='font-weight:700;'" : "";
-          html += "<tr" + cls + "><td" + bold + ">" + esc(r.label) + "</td>";
-          html += "<td class='num'" + bold + ">" + (r.val ? fmtMoney(r.val) : "—") + "</td></tr>";
-        });
-        html += "</table>";
+        function personCard(name, pct, budgetContrib, hasSplit, ccSpend, overrunShare, hasOverrun, transfer) {
+          var letter = (name || "?")[0].toUpperCase();
+          var colorIdx = name === n1 ? 0 : 1;
+          var color = COLORS[colorIdx];
+          var pctBadge = hasSplit ? '<span class="settlement-person-pct">' + pct + '%</span>' : '';
+          var html = '<div class="settlement-person-card">';
+          html += '<div class="settlement-person-header">';
+          html += '<div class="settlement-person-avatar" style="background:' + color + ';">' + esc(letter) + '</div>';
+          html += '<span class="settlement-person-name">' + esc(name) + '</span>' + pctBadge;
+          html += '</div>';
+          html += '<div class="settlement-rows">';
+          if (hasSplit) {
+            html += '<div class="settlement-row"><span class="settlement-row-label">Budget Contribution</span><span class="settlement-row-val">' + fmtMoney(budgetContrib) + '</span></div>';
+          }
+          if (hasOverrun && overrunShare > 0) {
+            html += '<div class="settlement-row"><span class="settlement-row-label">Overrun Share</span><span class="settlement-row-val">' + fmtMoney(overrunShare) + '</span></div>';
+          }
+          html += '<div class="settlement-row"><span class="settlement-row-label">Card Spend</span><span class="settlement-row-val">' + (ccSpend ? fmtMoney(ccSpend) : '—') + '</span></div>';
+          html += '</div>';
+          html += '<div class="settlement-transfer"><span class="settlement-transfer-label">Transfer Amount</span><span class="settlement-transfer-val">' + fmtMoney(transfer) + '</span></div>';
+          html += '</div>';
+          return html;
+        }
+
+        var html = '<div class="settlement-cards">';
+        html += personCard(n1, splitPct1, budgetContrib1, hasBudgetSplit, cc1, overrunShare1, hasOverrunSplit, transfer1);
+        html += personCard(n2, splitPct2, budgetContrib2, hasBudgetSplit, cc2, overrunShare2, hasOverrunSplit, transfer2);
+        html += '</div>';
         wrap.innerHTML = html;
       }
 
