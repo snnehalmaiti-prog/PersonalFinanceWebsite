@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=acccardcompact14" />
+<link rel="stylesheet" href="styles.css?v=acccardcompact15" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1466,11 +1466,15 @@
 
         var COLORS = ["#1A9E6E", "#6C3FBC"];
 
-        function personCard(name, pct, budgetContrib, hasSplit, ccSpend, overrunShare, hasOverrun, transfer) {
+        // DEBUG — next month records for budget contribution
+        console.log("nextMonthRecs Common Budget:", nextMonthRecs.filter(function(r){return r.type==="budget"&&r.account_id===jointId;}).map(function(r){return {id:r.id,txn_date:r.txn_date,cat:r.category_id,labels:r.labels};}));
+        console.log("yr/mo (selected):", yr, mo, "nextMo:", mo+1);
+
+        function personCard(name, contribPct, overrunPct, budgetContrib, hasSplit, ccSpend, overrunShare, hasOverrun, transfer) {
           var letter = (name || "?")[0].toUpperCase();
           var colorIdx = name === n1 ? 0 : 1;
           var color = COLORS[colorIdx];
-          var pctBadge = hasSplit ? '<span class="settlement-person-pct">' + pct + '%</span>' : '';
+          var pctBadge = hasSplit ? '<span class="settlement-person-pct">' + contribPct + '%</span>' : '';
           var html = '<div class="settlement-person-card">';
           html += '<div class="settlement-person-header">';
           html += '<div class="settlement-person-avatar" style="background:' + color + ';">' + esc(letter) + '</div>';
@@ -1481,7 +1485,7 @@
             html += '<div class="settlement-row"><span class="settlement-row-label">Budget Contribution</span><span class="settlement-row-val">' + fmtMoney(budgetContrib) + '</span></div>';
           }
           if (hasOverrun && overrunShare > 0) {
-            html += '<div class="settlement-row"><span class="settlement-row-label" style="display:flex;flex-direction:column;gap:1px;">Budget Overrun Share<span style="font-size:0.62rem;font-weight:400;color:var(--muted);">' + pct + '% of overrun</span></span><span class="settlement-row-val">' + fmtMoney(overrunShare) + '</span></div>';
+            html += '<div class="settlement-row"><span class="settlement-row-label" style="display:flex;flex-direction:column;gap:1px;">Budget Overrun Share<span style="font-size:0.62rem;font-weight:400;color:var(--muted);">' + overrunPct + '% of overrun</span></span><span class="settlement-row-val">' + fmtMoney(overrunShare) + '</span></div>';
           }
           html += '<div class="settlement-row"><span class="settlement-row-label">Card Spend</span><span class="settlement-row-val">' + (ccSpend ? fmtMoney(ccSpend) : '—') + '</span></div>';
           html += '</div>';
@@ -1491,8 +1495,8 @@
         }
 
         var html = '<div class="settlement-cards">';
-        html += personCard(n1, splitPct1, budgetContrib1, hasBudgetSplit, cc1, overrunShare1, hasOverrunSplit, transfer1);
-        html += personCard(n2, splitPct2, budgetContrib2, hasBudgetSplit, cc2, overrunShare2, hasOverrunSplit, transfer2);
+        html += personCard(n1, splitPct1, prevSplitPct1, budgetContrib1, hasBudgetSplit, cc1, overrunShare1, hasOverrunSplit, transfer1);
+        html += personCard(n2, splitPct2, prevSplitPct2, budgetContrib2, hasBudgetSplit, cc2, overrunShare2, hasOverrunSplit, transfer2);
         html += '</div>';
         wrap.innerHTML = html;
       }
