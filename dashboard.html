@@ -607,30 +607,32 @@
           <p class="muted small" id="dash-exp-accounts-status">Loading…</p>
         </div>
 
-        <div class="equity-card" style="margin-top:24px; max-width:50%; margin-right:auto;">
-          <div class="equity-card-header" style="align-items:center;">
-            <h3 style="margin:0;">Monthly Income / Budget / Expense</h3>
-            <select id="dash-exp-monthly-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
-          </div>
-          <p class="muted small" id="dash-exp-monthly-status" style="margin:6px 0 10px;"></p>
-          <div style="position:relative; height:220px;">
-            <canvas id="dash-exp-monthly-chart"></canvas>
-          </div>
-        </div>
-
-        <div class="equity-card" style="margin-top:24px;">
-          <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
-            <h3 style="margin:0;">Budget Variance Waterfall</h3>
-            <div style="display:flex; gap:8px;">
-              <select id="dash-exp-wf-account" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);">
-                <option value="">All accounts</option>
-              </select>
-              <select id="dash-exp-wf-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:24px;">
+          <div class="equity-card" style="margin:0;">
+            <div class="equity-card-header" style="align-items:center;">
+              <h3 style="margin:0;">Monthly Income / Budget / Expense</h3>
+              <select id="dash-exp-monthly-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
+            </div>
+            <p class="muted small" id="dash-exp-monthly-status" style="margin:6px 0 10px;"></p>
+            <div style="position:relative; height:240px;">
+              <canvas id="dash-exp-monthly-chart"></canvas>
             </div>
           </div>
-          <p class="muted small" id="dash-exp-wf-status" style="margin:6px 0 10px;"></p>
-          <div style="position:relative; height:340px;">
-            <canvas id="dash-exp-wf-chart"></canvas>
+
+          <div class="equity-card" style="margin:0;">
+            <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
+              <h3 style="margin:0;">Budget Variance Waterfall</h3>
+              <div style="display:flex; gap:8px;">
+                <select id="dash-exp-wf-account" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);">
+                  <option value="">All accounts</option>
+                </select>
+                <select id="dash-exp-wf-year" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);"></select>
+              </div>
+            </div>
+            <p class="muted small" id="dash-exp-wf-status" style="margin:6px 0 10px;"></p>
+            <div style="position:relative; height:240px;">
+              <canvas id="dash-exp-wf-chart"></canvas>
+            </div>
           </div>
         </div>
 
@@ -1271,15 +1273,25 @@
           running = nxt;
         }
         var ytdTotal = running;
-        // YTD column as 13th bar: floor 0, delta = |ytdTotal|
+        // Trim trailing months with no budget AND no expense — reduces empty whitespace
+        var lastActiveMonth = -1;
+        for (var k = 11; k >= 0; k--) {
+          if (monthBudget[k] || monthActual[k]) { lastActiveMonth = k; break; }
+        }
+        var showMonths = Math.min(12, Math.max(6, lastActiveMonth + 2));
+        var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        var labels = monthNames.slice(0, showMonths).concat(["YTD"]);
+        floors = floors.slice(0, showMonths);
+        deltas = deltas.slice(0, showMonths);
+        colors = colors.slice(0, showMonths);
+        // Append YTD column
         floors.push(Math.min(0, ytdTotal));
         deltas.push(Math.abs(ytdTotal));
         colors.push("#1F2937");
-        var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","YTD"];
-        // Running total per-month (for line overlay)
+        // Running total per shown month
         var lineData = [];
         var rt = 0;
-        for (var j = 0; j < 12; j++) { rt += variance[j]; lineData.push(rt); }
+        for (var j = 0; j < showMonths; j++) { rt += variance[j]; lineData.push(rt); }
         lineData.push(null); // no line at YTD column
 
         var acctName = acctFilter ? ((findById(dashExpState.accounts, acctFilter) || {}).name || "") : "All accounts";
@@ -1291,29 +1303,35 @@
             {
               label: "_floor", data: floors,
               backgroundColor: "rgba(0,0,0,0)", borderWidth: 0,
-              stack: "wf", order: 3
+              stack: "wf", order: 3,
+              categoryPercentage: 0.75, barPercentage: 0.9
             },
             {
               label: "Variance", data: deltas,
-              backgroundColor: colors, borderRadius: 2,
-              stack: "wf", order: 2
+              backgroundColor: colors, borderRadius: 3,
+              stack: "wf", order: 2,
+              categoryPercentage: 0.75, barPercentage: 0.9
             },
             {
               type: "line", label: "Running total",
               data: lineData, borderColor: "#6B7280",
               backgroundColor: "#6B7280",
-              borderDash: [4, 4], borderWidth: 1.5,
-              pointRadius: 3, pointBackgroundColor: "#6B7280",
+              borderDash: [3, 3], borderWidth: 1.5,
+              pointRadius: 2.5, pointBackgroundColor: "#6B7280",
               tension: 0, order: 1, stack: undefined
             }
           ]
         };
         var opts = {
           responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 4, right: 6, bottom: 0, left: 0 } },
           plugins: {
             legend: {
               position: "bottom",
-              labels: { filter: function (item) { return item.text !== "_floor"; } }
+              labels: {
+                boxWidth: 10, boxHeight: 10, padding: 10, font: { size: 11 },
+                filter: function (item) { return item.text !== "_floor"; }
+              }
             },
             tooltip: {
               filter: function (ctx) { return ctx.dataset.label !== "_floor"; },
@@ -1328,8 +1346,8 @@
             }
           },
           scales: {
-            x: { stacked: true, grid: { display: false } },
-            y: { stacked: true, ticks: { callback: function (v) { return fmtMoney(v); } } }
+            x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { stacked: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 11 }, callback: function (v) { return fmtMoney(v); } } }
           }
         };
         if (expWfChart) { expWfChart.destroy(); }
