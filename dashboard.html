@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=jointcalc" />
+<link rel="stylesheet" href="styles.css?v=jointcalc2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -655,21 +655,6 @@
               <h3 style="margin:0;">Payment to Joint Account</h3>
               <span class="muted small" id="dash-exp-joint-period"></span>
             </div>
-            <!-- Account selectors -->
-            <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-              <label style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:var(--muted); font-weight:600;">
-                JOINT ACCOUNT
-                <select id="dash-exp-joint-acct" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
-              </label>
-              <label style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:var(--muted); font-weight:600;">
-                ACCOUNT-1
-                <select id="dash-exp-joint-acct1" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
-              </label>
-              <label style="display:flex; flex-direction:column; gap:3px; font-size:0.75rem; color:var(--muted); font-weight:600;">
-                ACCOUNT-2
-                <select id="dash-exp-joint-acct2" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
-              </label>
-            </div>
             <p class="muted small" id="dash-exp-joint-status" style="margin:8px 0 0;"></p>
             <div id="dash-exp-joint-wrap" style="margin-top:10px;"></div>
           </div>
@@ -995,7 +980,6 @@
           renderExpMonthlyChart();
           renderExpWaterfallChart();
           renderExpSpendMatrix();
-          initJointSelectors();
           renderPaymentToJoint();
           renderAnalyticsTable();
         }).catch(function (err) {
@@ -1159,39 +1143,25 @@
       }
 
       // ── Payment to Joint Account calculator ───────────────────────────────
-      var jointSelInited = false;
-      function initJointSelectors() {
-        var accounts = dashExpState.accounts || [];
-        var sel = function(id) { return document.getElementById(id); };
-        ["dash-exp-joint-acct","dash-exp-joint-acct1","dash-exp-joint-acct2"].forEach(function(id) {
-          var el = sel(id); if (!el) return;
-          var prev = el.value;
-          el.innerHTML = accounts.map(function(a) {
-            return '<option value="' + a.id + '">' + esc(a.icon + " " + a.name) + '</option>';
-          }).join("");
-          if (prev) el.value = prev;
-        });
-        if (!jointSelInited && accounts.length >= 3) {
-          // Auto-pick: joint = first acct, acct1 = second, acct2 = third
-          sel("dash-exp-joint-acct").value = accounts[0].id;
-          sel("dash-exp-joint-acct1").value = accounts[1].id;
-          sel("dash-exp-joint-acct2").value = accounts[2].id;
-          jointSelInited = true;
-        }
-        ["dash-exp-joint-acct","dash-exp-joint-acct1","dash-exp-joint-acct2"].forEach(function(id) {
-          var el = sel(id); if (el) el.onchange = renderPaymentToJoint;
-        });
-      }
-
       function renderPaymentToJoint() {
         var wrap = document.getElementById("dash-exp-joint-wrap");
         var statusEl = document.getElementById("dash-exp-joint-status");
         var periodEl = document.getElementById("dash-exp-joint-period");
         if (!wrap) return;
 
-        var jointId = (document.getElementById("dash-exp-joint-acct") || {}).value;
-        var acct1Id = (document.getElementById("dash-exp-joint-acct1") || {}).value;
-        var acct2Id = (document.getElementById("dash-exp-joint-acct2") || {}).value;
+        var accounts = dashExpState.accounts || [];
+        var indivAccts = accounts.filter(function(a) { return a.contributing_account; });
+        var jointAccts = accounts.filter(function(a) { return !a.contributing_account; });
+
+        if (indivAccts.length < 2 || jointAccts.length < 1) {
+          if (statusEl) statusEl.textContent = "Mark accounts as 'Contributing account' in Settings → Expense to use this calculator.";
+          wrap.innerHTML = "";
+          return;
+        }
+
+        var jointId = jointAccts[0].id;
+        var acct1Id = indivAccts[0].id;
+        var acct2Id = indivAccts[1].id;
         if (!jointId || !acct1Id || !acct2Id) { wrap.innerHTML = ""; return; }
 
         var now = new Date();
