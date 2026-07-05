@@ -1145,6 +1145,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   overflow-x: auto;
   width: fit-content;
   max-width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  align-items: center;
 }
 .invest-sub-tab {
   border: none;
@@ -2450,14 +2453,16 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   border-radius: 8px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   font-size: 0.95rem; color: var(--muted); padding: 0;
+  height: 36px; width: 28px; box-sizing: border-box;
 }
 .rec-period-nav:hover { background: var(--surface-alt); color: var(--text); }
 .rec-period-main {
   border: 1px solid var(--border); background: var(--surface);
-  border-radius: 8px; padding: 4px 12px; cursor: pointer;
+  border-radius: 8px; cursor: pointer;
   font: inherit; font-weight: 600; font-size: 0.85rem;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  height: 36px; box-sizing: border-box; padding: 0 12px;
 }
 .rec-period-main:hover { background: var(--surface-alt); }
 .rec-actions-bar {
