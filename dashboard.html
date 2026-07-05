@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=acccardcompact9" />
+<link rel="stylesheet" href="styles.css?v=acccardcompact10" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1359,9 +1359,16 @@
         function sumRecs(recs) { return recs.reduce(function(s, r) { return s + Math.round(Number(r.amount) || 0); }, 0); }
 
         // Joint account expense total — from selected month
+        function hasCommonBudgetSplit(r) {
+          try {
+            var parsed = typeof r.labels === "string" ? JSON.parse(r.labels) : r.labels;
+            return !!(parsed && parsed.budget_split);
+          } catch(e) { return false; }
+        }
+
         var jointExpense = sumRecs(monthRecs.filter(function(r) { return r.type === "expense" && r.account_id === jointId; }));
-        // Joint account budget records — from NEXT month (the payment month)
-        var budgetRecs = nextMonthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
+        // Joint account budget records — from NEXT month, only Common Budget (have budget_split)
+        var budgetRecs = nextMonthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId && hasCommonBudgetSplit(r); });
         var jointBudget = sumRecs(budgetRecs);
 
         // Aggregate split percentages from next month's budget records (only if split data exists)
@@ -1391,7 +1398,7 @@
 
         // Overrun = selected month's expense vs selected month's budget
         // Use selected month's own split % (independent from next month's split)
-        var prevBudgetRecs = monthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
+        var prevBudgetRecs = monthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId && hasCommonBudgetSplit(r); });
         var prevBudget = sumRecs(prevBudgetRecs);
         var overrun = Math.max(0, jointExpense - prevBudget);
 
