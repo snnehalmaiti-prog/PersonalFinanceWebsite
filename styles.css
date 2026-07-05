@@ -1067,7 +1067,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .modal-note { text-align: center; margin: 18px 0 0; }
 
 /* ===== Settings page ===== */
-.settings-main { padding: 60px 24px 100px; max-width: min(1800px, 96vw); width: 100%; margin: 0 auto; }
+.settings-main { padding: 20px 24px 60px; max-width: min(1800px, 96vw); width: 100%; margin: 0 auto; }
 .settings-main h1 { margin-bottom: 32px; }
 
 .settings-tabs {
@@ -1079,7 +1079,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   backdrop-filter: blur(10px) saturate(160%);
   border-radius: 999px;
   padding: 4px;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow-sm);
 }
 .settings-tab {
