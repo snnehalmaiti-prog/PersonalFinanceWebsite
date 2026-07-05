@@ -1975,6 +1975,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   background: var(--emerald);
   color: #fff;
   box-shadow: 0 1px 3px rgba(26,158,110,0.25);
+  height: 36px; box-sizing: border-box; padding: 0 16px;
 }
 .rec-add-btn:hover { background: var(--emerald-dark, #15846b); color: #fff; }
 .benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex-shrink: 1; }
