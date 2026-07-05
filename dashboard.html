@@ -1199,8 +1199,6 @@
         // Payment is due the following month
         var payDate = new Date(yr, mo + 1, 1);
         var payLabel = payDate.toLocaleString("en-IN", { month: "short", year: "numeric" });
-        if (periodEl) periodEl.textContent = payLabel;
-
         // Update card heading to include the payment month
         var heading = document.getElementById("dash-exp-joint-heading");
         if (heading) heading.textContent = "Payment to Joint Account — " + payLabel;
