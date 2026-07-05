@@ -2359,15 +2359,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .rec-day-total { font-weight: 700; }
 .rec-item {
-  display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center;
+  display: grid; grid-template-columns: 24px 1fr auto; gap: 14px; align-items: center;
   padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; margin-bottom: 8px;
 }
-.rec-item-icon {
-  width: 40px; height: 40px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 1.15rem;
-}
+.rec-item-icon { display: none; }
 .rec-item-body { min-width: 0; }
 .rec-item-title { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-item-title-acct { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
@@ -2470,7 +2466,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   padding: 2px 8px; border-radius: 999px; font-size: 0.7rem;
   background: var(--surface-alt); color: var(--muted); font-weight: 600;
 }
-.rec-item { grid-template-columns: 24px 40px 1fr auto auto; }
+.rec-item { grid-template-columns: 24px 1fr auto; }
 
 .rec-item { cursor: pointer; transition: background 0.15s; }
 .rec-item:hover { background: var(--surface-alt); }
