@@ -951,7 +951,7 @@
         if (status) status.remove();
         var tiles = accounts.map(function (a) {
           var m = computeAccountMonthly(a.id);
-          return '<div class="exp-account-tile" style="background:' + esc(a.color || "#10B981") + ';">' +
+          return '<div class="exp-account-tile" data-acct-id="' + esc(a.id) + '" style="background:' + esc(a.color || "#10B981") + '; cursor:pointer;">' +
             '<div class="exp-account-tile-icon">' + esc(a.icon || "💳") + '</div>' +
             '<div class="exp-account-tile-body">' +
               '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
@@ -963,6 +963,23 @@
             '</div></div>';
         }).join("");
         box.innerHTML = tiles;
+        box.querySelectorAll(".exp-account-tile[data-acct-id]").forEach(function (tile) {
+          tile.addEventListener("click", function () {
+            var acctId = tile.dataset.acctId;
+            // Set account filter
+            var acctSel = document.getElementById("rec-filter-account");
+            if (acctSel) acctSel.value = acctId;
+            // Set period to current month
+            var now = new Date();
+            recPeriod.kind = "month";
+            recPeriod.year = now.getFullYear();
+            recPeriod.month = now.getMonth();
+            renderDashRecords();
+            // Scroll to records section
+            var recSection = document.getElementById("rec-list");
+            if (recSection) recSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        });
       }
 
       var dashExpState = { accounts: [], categories: [], paymentMethods: [], records: [], recType: "expense" };
