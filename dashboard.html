@@ -620,21 +620,23 @@
     </section><!-- /panel-investment -->
 
     <section id="panel-expense" class="invest-panel" role="tabpanel" aria-labelledby="tab-expense" hidden>
-      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div class="exp-top-bar">
         <div class="invest-sub-tabs" role="tablist" aria-label="Expense sections" style="margin-bottom:0; height:36px; box-sizing:border-box;">
           <button type="button" class="invest-sub-tab active" data-dash-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
           <button type="button" class="invest-sub-tab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
           <button type="button" class="invest-sub-tab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
         </div>
-        <div class="rec-period-picker rec-period-picker-inline" id="rec-period-picker-top" style="flex:1; min-width:0; height:36px; display:none;">
-          <button type="button" id="rec-period-prev-top" class="rec-period-nav" aria-label="Previous">‹</button>
-          <button type="button" id="rec-period-btn-top" class="rec-period-main" style="font-size:0.85rem;">
-            <span id="rec-period-label-top">This month</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <button type="button" id="rec-period-next-top" class="rec-period-nav" aria-label="Next">›</button>
+        <div class="exp-top-bar-center">
+          <div class="rec-period-picker" id="rec-period-picker-top" style="height:36px; display:none; width:100%;">
+            <button type="button" id="rec-period-prev-top" class="rec-period-nav" aria-label="Previous">‹</button>
+            <button type="button" id="rec-period-btn-top" class="rec-period-main" style="font-size:0.85rem;">
+              <span id="rec-period-label-top">This month</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button type="button" id="rec-period-next-top" class="rec-period-nav" aria-label="Next">›</button>
+          </div>
         </div>
-        <button type="button" class="bench-mode-btn rec-add-btn" id="rec-open-btn" style="margin-left:auto;">+ Add record</button>
+        <button type="button" class="bench-mode-btn rec-add-btn" id="rec-open-btn">+ Add record</button>
       </div>
 
       <div id="dash-exp-subpanel-accounts" class="exp-subpanel">

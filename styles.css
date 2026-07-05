@@ -2774,3 +2774,18 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .exp-nav-item.active { border-right: none; background: var(--text); color: var(--bg); }
   .exp-nav-section-label { display: none; }
 }
+
+/* Expense top bar: tabs | period picker (aligned to rec-main) | add btn */
+.exp-top-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
+}
+.exp-top-bar-center {
+  display: flex; align-items: center;
+}
+@media (max-width: 900px) {
+  .exp-top-bar { grid-template-columns: auto 1fr auto; }
+}
