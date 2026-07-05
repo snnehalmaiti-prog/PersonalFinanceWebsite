@@ -279,7 +279,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   padding: 6px;
   list-style: none;
   margin: 0;
-  z-index: 50;
+  z-index: 200;
   opacity: 0;
   transform: translateY(-6px) scale(0.97);
   visibility: hidden;
@@ -1156,13 +1156,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow-sm);
-  overflow: hidden;
+  position: relative;
 }
 .overview-top-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
+  gap: 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
 }
 .overview-header-left {
