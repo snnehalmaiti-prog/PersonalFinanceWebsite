@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=jointcalc3" />
+<link rel="stylesheet" href="styles.css?v=matrixmon" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -642,7 +642,10 @@
           <div class="equity-card" style="margin:0;">
             <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
               <h3 style="margin:0; flex:1;">Spend by Account &amp; Payment Method</h3>
-              <span class="muted small" id="dash-exp-matrix-period"></span>
+              <div style="display:flex; gap:6px;">
+                <select id="dash-exp-matrix-month" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
+                <select id="dash-exp-matrix-year" style="padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.82rem;"></select>
+              </div>
             </div>
             <p class="muted small" id="dash-exp-matrix-status" style="margin:6px 0 0;"></p>
             <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
@@ -1059,18 +1062,42 @@
       }
 
       // ── Account × Payment Method spend pivot ──────────────────────────────
+      var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
       function renderExpSpendMatrix() {
         var wrap = document.getElementById("dash-exp-matrix-wrap");
         var statusEl = document.getElementById("dash-exp-matrix-status");
-        var periodEl = document.getElementById("dash-exp-matrix-period");
+        var monthSel = document.getElementById("dash-exp-matrix-month");
+        var yearSel = document.getElementById("dash-exp-matrix-year");
         if (!wrap) return;
 
         var now = new Date();
-        var yr = now.getFullYear(), mo = now.getMonth(); // 0-based
-        var monthName = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
-        if (periodEl) periodEl.textContent = monthName;
+        var allRecords = dashExpState.records || [];
 
-        var records = (dashExpState.records || []).filter(function (r) {
+        // Populate year dropdown from available record years
+        var years = {};
+        allRecords.forEach(function(r) { years[new Date(r.txn_date || r.txn_at).getFullYear()] = 1; });
+        var yearList = Object.keys(years).map(Number).sort();
+        if (!yearList.length) yearList = [now.getFullYear()];
+        if (yearSel && !yearSel.dataset.inited) {
+          yearSel.innerHTML = yearList.map(function(y) {
+            return '<option value="' + y + '"' + (y === now.getFullYear() ? " selected" : "") + '>' + y + '</option>';
+          }).join("");
+          yearSel.dataset.inited = "1";
+          yearSel.onchange = renderExpSpendMatrix;
+        }
+        // Populate month dropdown
+        if (monthSel && !monthSel.dataset.inited) {
+          monthSel.innerHTML = MONTH_NAMES.map(function(n, i) {
+            return '<option value="' + i + '"' + (i === now.getMonth() ? " selected" : "") + '>' + n + '</option>';
+          }).join("");
+          monthSel.dataset.inited = "1";
+          monthSel.onchange = renderExpSpendMatrix;
+        }
+
+        var yr = yearSel ? Number(yearSel.value) : now.getFullYear();
+        var mo = monthSel ? Number(monthSel.value) : now.getMonth();
+
+        var records = allRecords.filter(function (r) {
           if (r.type !== "expense") return false;
           var d = new Date(r.txn_date || r.txn_at);
           return d.getFullYear() === yr && d.getMonth() === mo;
@@ -1100,7 +1127,7 @@
         var usedAcIds = accounts.map(function (a) { return a.id; }).filter(function (id) { return acctTotals[id]; });
 
         if (!records.length) {
-          if (statusEl) statusEl.textContent = "No expense records this month.";
+          if (statusEl) statusEl.textContent = "No expense records for " + MONTH_NAMES[mo] + " " + yr + ".";
           wrap.innerHTML = "";
           return;
         }
