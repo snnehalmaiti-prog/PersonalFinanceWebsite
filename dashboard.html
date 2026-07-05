@@ -1213,17 +1213,26 @@
         var pms = dashExpState.paymentMethods || [];
         var ccIds = pms.filter(function(p) { return p.is_credit_card; }).map(function(p) { return p.id; });
 
+        // Selected month records (for CC spend)
         var monthRecs = (dashExpState.records || []).filter(function(r) {
           var d = new Date(r.txn_date || r.txn_at);
           return d.getFullYear() === yr && d.getMonth() === mo;
         });
 
+        // Next month records (for budget contribution)
+        var nextMo = mo + 1 > 11 ? 0 : mo + 1;
+        var nextYr = mo + 1 > 11 ? yr + 1 : yr;
+        var nextMonthRecs = (dashExpState.records || []).filter(function(r) {
+          var d = new Date(r.txn_date || r.txn_at);
+          return d.getFullYear() === nextYr && d.getMonth() === nextMo;
+        });
+
         function sumRecs(recs) { return recs.reduce(function(s, r) { return s + Math.round(Number(r.amount) || 0); }, 0); }
 
-        // Joint account expense total
+        // Joint account expense total — from selected month
         var jointExpense = sumRecs(monthRecs.filter(function(r) { return r.type === "expense" && r.account_id === jointId; }));
-        // Joint account budget records — read split percentages from labels
-        var budgetRecs = monthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
+        // Joint account budget records — from NEXT month (the payment month)
+        var budgetRecs = nextMonthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
         var jointBudget = sumRecs(budgetRecs);
 
         // Aggregate split percentages across all budget records (weighted by amount)
@@ -1252,9 +1261,13 @@
 
         var budgetContrib1 = Math.round(jointBudget * splitPct1 / 100);
         var budgetContrib2 = Math.round(jointBudget * splitPct2 / 100);
-        var overrun        = Math.max(0, jointExpense - jointBudget);
-        var overrunShare1  = Math.round(overrun * splitPct1 / 100);
-        var overrunShare2  = Math.round(overrun * splitPct2 / 100);
+
+        // Overrun = selected month's expense vs selected month's budget
+        var prevBudgetRecs = monthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
+        var prevBudget = sumRecs(prevBudgetRecs);
+        var overrun       = Math.max(0, jointExpense - prevBudget);
+        var overrunShare1 = Math.round(overrun * splitPct1 / 100);
+        var overrunShare2 = Math.round(overrun * splitPct2 / 100);
 
         // Credit card spend per individual account
         var cc1 = sumRecs(monthRecs.filter(function(r) {
