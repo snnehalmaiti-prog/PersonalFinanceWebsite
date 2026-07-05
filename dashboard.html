@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=catcards1" />
+<link rel="stylesheet" href="styles.css?v=catcards2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -155,113 +155,6 @@
         </div>
       </div>
 
-      <!-- Per-category overview cards -->
-      <div class="cat-cards-row">
-        <!-- Mutual Funds -->
-        <div class="cat-overview-card">
-          <div class="cat-card-header">
-            <span class="cat-card-label">Mutual Funds</span>
-          </div>
-          <div class="cat-stats-row">
-            <div class="cat-stat">
-              <span class="cat-stat-label">Invested</span>
-              <span class="cat-stat-value" id="cat-mf-invested">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Current</span>
-              <span class="cat-stat-value" id="cat-mf-current">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Unrealized P&amp;L</span>
-              <span class="cat-stat-value" id="cat-mf-unrealized">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Realized P&amp;L</span>
-              <span class="cat-stat-value" id="cat-mf-realized">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Return %</span>
-              <span class="cat-stat-value" id="cat-mf-return">—</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Stocks / ETF -->
-        <div class="cat-overview-card">
-          <div class="cat-card-header">
-            <span class="cat-card-label">Stocks / ETF</span>
-          </div>
-          <div class="cat-stats-row">
-            <div class="cat-stat">
-              <span class="cat-stat-label">Invested</span>
-              <span class="cat-stat-value" id="cat-se-invested">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Current</span>
-              <span class="cat-stat-value" id="cat-se-current">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Day Change</span>
-              <span class="cat-stat-value" id="cat-se-daychange">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Unrealized P&amp;L</span>
-              <span class="cat-stat-value" id="cat-se-unrealized">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Realized P&amp;L</span>
-              <span class="cat-stat-value" id="cat-se-realized">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Return %</span>
-              <span class="cat-stat-value" id="cat-se-return">—</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Fixed Income / Commodity -->
-        <div class="cat-overview-card">
-          <div class="cat-card-header">
-            <span class="cat-card-label">Fixed Income / Commodity</span>
-          </div>
-          <div class="cat-stats-row">
-            <div class="cat-stat">
-              <span class="cat-stat-label">Invested</span>
-              <span class="cat-stat-value" id="cat-fi-invested">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Current</span>
-              <span class="cat-stat-value" id="cat-fi-current">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Unrealized P&amp;L</span>
-              <span class="cat-stat-value" id="cat-fi-unrealized">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Realized P&amp;L</span>
-              <span class="cat-stat-value" id="cat-fi-realized">—</span>
-            </div>
-            <div class="cat-stat-divider"></div>
-            <div class="cat-stat">
-              <span class="cat-stat-label">Return %</span>
-              <span class="cat-stat-value" id="cat-fi-return">—</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Benchmark XIRR comparison -->
       <div class="benchmark-card" id="benchmark-card">
         <div class="benchmark-header">
@@ -399,34 +292,42 @@
         <span id="equity-nav-asof-text">—</span>
       </p>
 
-      <div class="overview-stats">
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Invested</span>
-          <span class="overview-stat-value" id="equity-total-investment">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Current</span>
-          <span class="overview-stat-value" id="equity-total-current-value">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Day Change</span>
-          <span class="overview-stat-value" id="equity-day-change">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Unrealized Profit</span>
-          <span class="overview-stat-value" id="equity-unrealized-return">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Return %</span>
-          <span class="overview-stat-value" id="equity-return-pct">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Realized Profit</span>
-          <span class="overview-stat-value" id="equity-realized-return">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">XIRR</span>
-          <span class="overview-stat-value" id="equity-xirr">—</span>
+      <div class="cat-overview-card" style="margin-bottom:16px;">
+        <div class="cat-stats-row">
+          <div class="cat-stat">
+            <span class="cat-stat-label">Invested</span>
+            <span class="cat-stat-value" id="equity-total-investment">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Current</span>
+            <span class="cat-stat-value" id="equity-total-current-value">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Day Change</span>
+            <span class="cat-stat-value" id="equity-day-change">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Unrealized P&amp;L</span>
+            <span class="cat-stat-value" id="equity-unrealized-return">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Return %</span>
+            <span class="cat-stat-value" id="equity-return-pct">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Realized P&amp;L</span>
+            <span class="cat-stat-value" id="equity-realized-return">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">XIRR</span>
+            <span class="cat-stat-value" id="equity-xirr">—</span>
+          </div>
         </div>
       </div>
 
@@ -503,34 +404,42 @@
       </div>
       <p id="stocksetf-prices-updated" class="muted small" style="margin-bottom:8px;"></p>
 
-      <div class="overview-stats">
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Invested</span>
-          <span class="overview-stat-value" id="stocksetf-total-investment">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Current</span>
-          <span class="overview-stat-value" id="stocksetf-current-value">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Day Change</span>
-          <span class="overview-stat-value" id="stocksetf-day-change">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Unrealized Profit</span>
-          <span class="overview-stat-value" id="stocksetf-unrealized">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Return %</span>
-          <span class="overview-stat-value" id="stocksetf-return-pct">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Realized Profit</span>
-          <span class="overview-stat-value" id="stocksetf-realized-return">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">XIRR</span>
-          <span class="overview-stat-value" id="stocksetf-xirr">—</span>
+      <div class="cat-overview-card" style="margin-bottom:16px;">
+        <div class="cat-stats-row">
+          <div class="cat-stat">
+            <span class="cat-stat-label">Invested</span>
+            <span class="cat-stat-value" id="stocksetf-total-investment">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Current</span>
+            <span class="cat-stat-value" id="stocksetf-current-value">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Day Change</span>
+            <span class="cat-stat-value" id="stocksetf-day-change">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Unrealized P&amp;L</span>
+            <span class="cat-stat-value" id="stocksetf-unrealized">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Return %</span>
+            <span class="cat-stat-value" id="stocksetf-return-pct">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Realized P&amp;L</span>
+            <span class="cat-stat-value" id="stocksetf-realized-return">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">XIRR</span>
+            <span class="cat-stat-value" id="stocksetf-xirr">—</span>
+          </div>
         </div>
       </div>
 
@@ -621,30 +530,37 @@
       </div>
       <p class="muted">A breakdown of your fixed income holdings.</p>
 
-      <div class="overview-stats">
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Invested</span>
-          <span class="overview-stat-value" id="fixedincome-total-investment">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Current</span>
-          <span class="overview-stat-value" id="fixedincome-current-value">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Unrealized Profit</span>
-          <span class="overview-stat-value" id="fixedincome-unrealized-profit">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Return %</span>
-          <span class="overview-stat-value" id="fixedincome-return-pct">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">Realized Profit</span>
-          <span class="overview-stat-value" id="fixedincome-realized-profit">—</span>
-        </div>
-        <div class="overview-stat-card">
-          <span class="overview-stat-label">XIRR</span>
-          <span class="overview-stat-value" id="fixedincome-xirr">—</span>
+      <div class="cat-overview-card" style="margin-bottom:16px;">
+        <div class="cat-stats-row">
+          <div class="cat-stat">
+            <span class="cat-stat-label">Invested</span>
+            <span class="cat-stat-value" id="fixedincome-total-investment">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Current</span>
+            <span class="cat-stat-value" id="fixedincome-current-value">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Unrealized P&amp;L</span>
+            <span class="cat-stat-value" id="fixedincome-unrealized-profit">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Return %</span>
+            <span class="cat-stat-value" id="fixedincome-return-pct">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">Realized P&amp;L</span>
+            <span class="cat-stat-value" id="fixedincome-realized-profit">—</span>
+          </div>
+          <div class="cat-stat-divider"></div>
+          <div class="cat-stat">
+            <span class="cat-stat-label">XIRR</span>
+            <span class="cat-stat-value" id="fixedincome-xirr">—</span>
+          </div>
         </div>
       </div>
 
@@ -2691,7 +2607,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=catcards1"></script>
+  <script src="script.js?v=catcards2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
