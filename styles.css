@@ -2254,7 +2254,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .exp-account-tile-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .exp-account-tile-top-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.exp-account-tile-bottom-row { display: flex; align-items: center; }
+.exp-account-tile-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .exp-account-tile-name { font-weight: 700; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .exp-account-tile-remaining { font-weight: 700; font-size: 0.85rem; white-space: nowrap; flex-shrink: 0; }
 .exp-account-tile-spent { font-size: 0.75rem; opacity: 0.85; }
