@@ -654,8 +654,7 @@
           <!-- Payment to Joint Account (aligns under Waterfall chart) -->
           <div class="equity-card" style="margin:0;">
             <div class="equity-card-header" style="align-items:center; gap:8px; flex-wrap:wrap;">
-              <h3 style="margin:0;">Payment to Joint Account</h3>
-              <span class="muted small" id="dash-exp-joint-period"></span>
+              <h3 style="margin:0;" id="dash-exp-joint-heading">Payment to Joint Account</h3>
             </div>
             <p class="muted small" id="dash-exp-joint-status" style="margin:8px 0 0;"></p>
             <div id="dash-exp-joint-wrap" style="margin-top:10px;"></div>
@@ -1084,7 +1083,7 @@
             return '<option value="' + y + '"' + (String(y) === prevYr ? " selected" : "") + '>' + y + '</option>';
           }).join("");
           if (!yearSel.value) yearSel.value = String(now.getFullYear());
-          yearSel.onchange = renderExpSpendMatrix;
+          yearSel.onchange = function() { renderExpSpendMatrix(); renderPaymentToJoint(); };
         }
         // Populate month dropdown once, default to current month
         if (monthSel && !monthSel.dataset.inited) {
@@ -1092,7 +1091,7 @@
             return '<option value="' + i + '"' + (i === now.getMonth() ? " selected" : "") + '>' + n + '</option>';
           }).join("");
           monthSel.dataset.inited = "1";
-          monthSel.onchange = renderExpSpendMatrix;
+          monthSel.onchange = function() { renderExpSpendMatrix(); renderPaymentToJoint(); };
         }
 
         var yr = yearSel ? Number(yearSel.value) : now.getFullYear();
@@ -1173,7 +1172,6 @@
       function renderPaymentToJoint() {
         var wrap = document.getElementById("dash-exp-joint-wrap");
         var statusEl = document.getElementById("dash-exp-joint-status");
-        var periodEl = document.getElementById("dash-exp-joint-period");
         if (!wrap) return;
 
         var accounts = dashExpState.accounts || [];
@@ -1191,9 +1189,21 @@
         var acct2Id = indivAccts[1].id;
         if (!jointId || !acct1Id || !acct2Id) { wrap.innerHTML = ""; return; }
 
+        // Read selected month/year from the spend matrix dropdowns
         var now = new Date();
-        var yr = now.getFullYear(), mo = now.getMonth();
-        if (periodEl) periodEl.textContent = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+        var monthSel = document.getElementById("dash-exp-matrix-month");
+        var yearSel  = document.getElementById("dash-exp-matrix-year");
+        var yr = yearSel  ? Number(yearSel.value)  : now.getFullYear();
+        var mo = monthSel ? Number(monthSel.value) : now.getMonth();
+
+        // Payment is due the following month
+        var payDate = new Date(yr, mo + 1, 1);
+        var payLabel = payDate.toLocaleString("en-IN", { month: "short", year: "numeric" });
+        if (periodEl) periodEl.textContent = payLabel;
+
+        // Update card heading to include the payment month
+        var heading = document.getElementById("dash-exp-joint-heading");
+        if (heading) heading.textContent = "Payment to Joint Account — " + payLabel;
 
         var pms = dashExpState.paymentMethods || [];
         var ccIds = pms.filter(function(p) { return p.is_credit_card; }).map(function(p) { return p.id; });
