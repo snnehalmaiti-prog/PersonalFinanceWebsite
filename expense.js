@@ -198,22 +198,28 @@
       draft: {
         name: record ? record.name : "",
         icon: record ? record.icon : "💳",
-        color: record ? record.color : "#6366F1"
+        color: record ? record.color : "#6366F1",
+        is_credit_card: record ? !!record.is_credit_card : false
       } };
     var d = modalCtx.draft;
     var body =
       '<label class="exp-field"><span>Name</span><input id="exp-pm-name" type="text" value="' + esc(d.name) + '" placeholder="e.g. UPI, Cash"/></label>' +
+      '<label class="exp-field" style="flex-direction:row; align-items:center; gap:8px;">' +
+        '<input type="checkbox" id="exp-pm-cc"' + (d.is_credit_card ? " checked" : "") + ' style="width:auto; margin:0;" />' +
+        '<span style="margin:0;">Credit card</span>' +
+      '</label>' +
       '<label class="exp-field"><span>Icon</span>' + pickerGrid(ACC_EMOJIS.concat(CAT_EMOJIS), d.icon, "icon") + '</label>' +
       '<label class="exp-field"><span>Color</span>' + pickerGrid(COLORS, d.color, "color") + '</label>';
     openModal(record ? "Edit payment method" : "Add payment method", body, modalCtx);
     wirePickers();
     el("exp-pm-name").addEventListener("input", function (e) { d.name = e.target.value; });
+    el("exp-pm-cc").addEventListener("change", function (e) { d.is_credit_card = e.target.checked; });
   }
 
   function savePaymentMethod() {
     var d = modalCtx.draft;
     if (!d.name.trim()) return;
-    var payload = { name: d.name.trim(), icon: d.icon, color: d.color };
+    var payload = { name: d.name.trim(), icon: d.icon, color: d.color, is_credit_card: !!d.is_credit_card };
     var p = modalCtx.id ? WfDb.update(PMS, modalCtx.id, payload)
       : WfDb.insert(PMS, Object.assign({ sort_order: state.paymentMethods.length }, payload));
     return p.then(function () { closeModal(); return loadData(); });
