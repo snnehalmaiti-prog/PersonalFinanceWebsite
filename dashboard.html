@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=portfoliopill" />
+<link rel="stylesheet" href="styles.css?v=headertabs1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -53,21 +53,25 @@
           </span>
           <span class="logo-text">PF Dashboard</span>
         </a>
-      </div>
-      <div class="header-actions">
-        <div class="portfolio-dropdown">
+        <div class="portfolio-dropdown" style="margin-left:8px;">
           <button type="button" id="portfolio-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
-            <svg class="portfolio-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h3.5l1.5 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
             <span id="portfolio-label">All Portfolios</span>
-            <svg class="portfolio-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            <svg class="portfolio-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <ul id="portfolio-menu" class="portfolio-menu" role="listbox" aria-label="Select portfolio" hidden>
             <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
           </ul>
         </div>
+      </div>
+      <nav class="header-tabs" role="tablist" aria-label="Dashboard sections">
+        <button type="button" class="header-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Overview</button>
+        <button type="button" class="header-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investments</button>
+        <button type="button" class="header-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
+      </nav>
+      <div class="header-actions">
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
-          <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-          <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
         <div class="user-menu hide-mobile" id="user-menu">
           <button type="button" class="user-menu-trigger" id="user-menu-trigger" aria-haspopup="true" aria-expanded="false">
@@ -93,11 +97,7 @@
   </header>
 
   <main class="container settings-main">
-    <div class="settings-tabs" role="tablist" aria-label="Dashboard sections">
-      <button type="button" class="settings-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Dashboard</button>
-      <button type="button" class="settings-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investment</button>
-      <button type="button" class="settings-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
-    </div>
+    <div class="settings-tabs" role="tablist" aria-label="Dashboard sections" hidden></div>
 
     <section id="panel-overview" class="settings-panel" role="tabpanel" aria-labelledby="tab-overview">
       <div class="overview-header-bar">
