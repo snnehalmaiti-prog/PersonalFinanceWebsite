@@ -1235,32 +1235,30 @@
         var budgetRecs = nextMonthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
         var jointBudget = sumRecs(budgetRecs);
 
-        // Aggregate split percentages across all budget records (weighted by amount)
-        var splitPct1 = 50, splitPct2 = 50;
+        // Aggregate split percentages from next month's budget records (only if split data exists)
+        var hasBudgetSplit = false, splitPct1 = 0, splitPct2 = 0;
         if (budgetRecs.length) {
           var totalSplitAmt = 0, weighted1 = 0;
           budgetRecs.forEach(function(r) {
             var amt = Math.round(Number(r.amount) || 0);
-            var lbl = r.labels;
-            if (lbl) {
-              try {
-                var parsed = typeof lbl === "string" ? JSON.parse(lbl) : lbl;
-                var sp = parsed && parsed.budget_split;
-                if (sp && sp[acct1Id] !== undefined) {
-                  weighted1 += sp[acct1Id] * amt;
-                  totalSplitAmt += amt;
-                }
-              } catch(e) {}
-            }
+            try {
+              var parsed = typeof r.labels === "string" ? JSON.parse(r.labels) : r.labels;
+              var sp = parsed && parsed.budget_split;
+              if (sp && sp[acct1Id] !== undefined) {
+                weighted1 += sp[acct1Id] * amt;
+                totalSplitAmt += amt;
+              }
+            } catch(e) {}
           });
           if (totalSplitAmt > 0) {
+            hasBudgetSplit = true;
             splitPct1 = Math.round(weighted1 / totalSplitAmt);
             splitPct2 = 100 - splitPct1;
           }
         }
 
-        var budgetContrib1 = Math.round(jointBudget * splitPct1 / 100);
-        var budgetContrib2 = Math.round(jointBudget * splitPct2 / 100);
+        var budgetContrib1 = hasBudgetSplit ? Math.round(jointBudget * splitPct1 / 100) : 0;
+        var budgetContrib2 = hasBudgetSplit ? Math.round(jointBudget * splitPct2 / 100) : 0;
 
         // Overrun = selected month's expense vs selected month's budget
         // Use selected month's own split % (independent from next month's split)
@@ -1268,8 +1266,8 @@
         var prevBudget = sumRecs(prevBudgetRecs);
         var overrun = Math.max(0, jointExpense - prevBudget);
 
-        // Extract selected month's split independently
-        var prevSplitPct1 = 50, prevSplitPct2 = 50;
+        // Extract selected month's split independently (only if split data exists)
+        var hasOverrunSplit = false, prevSplitPct1 = 0, prevSplitPct2 = 0;
         if (prevBudgetRecs.length) {
           var prevTotalAmt = 0, prevWeighted1 = 0;
           prevBudgetRecs.forEach(function(r) {
@@ -1284,12 +1282,13 @@
             } catch(e) {}
           });
           if (prevTotalAmt > 0) {
+            hasOverrunSplit = true;
             prevSplitPct1 = Math.round(prevWeighted1 / prevTotalAmt);
             prevSplitPct2 = 100 - prevSplitPct1;
           }
         }
-        var overrunShare1 = Math.round(overrun * prevSplitPct1 / 100);
-        var overrunShare2 = Math.round(overrun * prevSplitPct2 / 100);
+        var overrunShare1 = (hasOverrunSplit && overrun > 0) ? Math.round(overrun * prevSplitPct1 / 100) : 0;
+        var overrunShare2 = (hasOverrunSplit && overrun > 0) ? Math.round(overrun * prevSplitPct2 / 100) : 0;
 
         // Credit card spend per individual account
         var cc1 = sumRecs(monthRecs.filter(function(r) {
@@ -1308,21 +1307,24 @@
           return a ? a.name : id;
         }
         var n1 = acctName(acct1Id), n2 = acctName(acct2Id);
-        var pct1Label = splitPct1 !== 50 ? " (" + splitPct1 + "%)" : "";
-        var pct2Label = splitPct2 !== 50 ? " (" + splitPct2 + "%)" : "";
 
         if (statusEl) statusEl.textContent = "";
 
-        var rows = [
-          { label: n1 + "'s Budget Contribution" + pct1Label, val: budgetContrib1, bold: false, highlight: false },
-          { label: n1 + "'s Credit Card Spend",               val: cc1,            bold: false, highlight: false },
-          { label: n2 + "'s Budget Contribution" + pct2Label, val: budgetContrib2, bold: false, highlight: false },
-          { label: n2 + "'s Card Spend",                      val: cc2,            bold: false, highlight: false },
-          { label: n1 + "'s Budget Overrun Share",            val: overrunShare1,  bold: false, highlight: false },
-          { label: n2 + "'s Budget Overrun Share",            val: overrunShare2,  bold: false, highlight: false },
-          { label: n1 + "'s Transfer Amount",                 val: transfer1,      bold: true,  highlight: true  },
-          { label: n2 + "'s Transfer Amount",                 val: transfer2,      bold: true,  highlight: true  },
-        ];
+        var rows = [];
+        if (hasBudgetSplit) {
+          rows.push({ label: n1 + "'s Budget Contribution (" + splitPct1 + "%)", val: budgetContrib1, bold: false, highlight: false });
+        }
+        rows.push({ label: n1 + "'s Credit Card Spend", val: cc1, bold: false, highlight: false });
+        if (hasBudgetSplit) {
+          rows.push({ label: n2 + "'s Budget Contribution (" + splitPct2 + "%)", val: budgetContrib2, bold: false, highlight: false });
+        }
+        rows.push({ label: n2 + "'s Card Spend", val: cc2, bold: false, highlight: false });
+        if (hasOverrunSplit && overrun > 0) {
+          rows.push({ label: n1 + "'s Budget Overrun Share", val: overrunShare1, bold: false, highlight: false });
+          rows.push({ label: n2 + "'s Budget Overrun Share", val: overrunShare2, bold: false, highlight: false });
+        }
+        rows.push({ label: n1 + "'s Transfer Amount", val: transfer1, bold: true, highlight: true });
+        rows.push({ label: n2 + "'s Transfer Amount", val: transfer2, bold: true, highlight: true });
 
         var html = '<table class="exp-joint-table">';
         rows.forEach(function(r) {
