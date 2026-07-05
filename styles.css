@@ -2840,7 +2840,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   margin-top: 10px;
 }
 .exp-top-bar-center {
-  display: flex; align-items: center; padding-left: 0;
+  display: flex; align-items: center; justify-content: center; padding-left: 0;
+}
+.exp-top-bar-center .rec-period-picker {
+  width: 280px; max-width: 100%;
 }
 @media (max-width: 900px) {
   .exp-top-bar { grid-template-columns: auto 1fr auto; gap: 8px; }
