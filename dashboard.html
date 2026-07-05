@@ -1430,6 +1430,37 @@
         var sign = isExpense ? "-" : "";
         return sign + fmtMoney(Math.abs(v));
       }
+      function getAnaFilters() {
+        return {
+          search: (document.getElementById("ana-filter-search") || {}).value || "",
+          sort: (document.getElementById("ana-filter-sort") || {}).value || "date-desc",
+          account: (document.getElementById("ana-filter-account") || {}).value || "",
+          category: (document.getElementById("ana-filter-category") || {}).value || "",
+          type: (document.getElementById("ana-filter-type") || {}).value || "",
+          payment: (document.getElementById("ana-filter-payment") || {}).value || ""
+        };
+      }
+      function applyAnaFilters(records) {
+        var f = getAnaFilters();
+        var q = f.search.trim().toLowerCase();
+        return records.filter(function (r) {
+          if (f.account && r.account_id !== f.account) return false;
+          if (f.payment && r.payment_method_id !== f.payment) return false;
+          if (f.type && r.type !== f.type) return false;
+          if (f.category) {
+            var cat = dashExpState.categories.find(function (c) { return c.id === r.category_id; });
+            var parentId = cat ? (cat.parent_id || cat.id) : r.category_id;
+            if (parentId !== f.category) return false;
+          }
+          if (q) {
+            var note = (r.note || "").toLowerCase();
+            var cat2 = dashExpState.categories.find(function (c) { return c.id === r.category_id; });
+            var catName = cat2 ? cat2.name.toLowerCase() : "";
+            if (!note.includes(q) && !catName.includes(q)) return false;
+          }
+          return true;
+        });
+      }
       function renderAnalyticsTable() {
         var table = document.getElementById("ana-table");
         var lbl = document.getElementById("ana-period-label");
@@ -1437,7 +1468,7 @@
         var cur = { year: anaPeriod.year, month: anaPeriod.month };
         var prev = anaPrev(cur.year, cur.month);
         if (lbl) lbl.textContent = anaMonthLabel(cur.year, cur.month);
-        var records = dashExpState.records || [];
+        var records = applyAnaFilters(dashExpState.records || []);
         var curAgg = anaSumByCat(records, cur.year, cur.month);
         var prvAgg = anaSumByCat(records, prev.year, prev.month);
 
@@ -1575,6 +1606,23 @@
           var id = fb.getAttribute("data-ana-fold");
           if (anaCollapsed[id] === false) anaCollapsed[id] = true;
           else anaCollapsed[id] = false;
+          renderAnalyticsTable();
+        });
+
+        // Wire filter inputs
+        ["ana-filter-search","ana-filter-sort","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.addEventListener("change", renderAnalyticsTable);
+          if (el && el.type === "search") el.addEventListener("input", renderAnalyticsTable);
+        });
+        var resetBtn = document.getElementById("ana-filter-reset");
+        if (resetBtn) resetBtn.addEventListener("click", function () {
+          ["ana-filter-search","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.value = "";
+          });
+          var sortEl = document.getElementById("ana-filter-sort");
+          if (sortEl) sortEl.value = "date-desc";
           renderAnalyticsTable();
         });
       })();
