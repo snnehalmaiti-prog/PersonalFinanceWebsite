@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=tiles4" />
+<link rel="stylesheet" href="styles.css?v=tiles5" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1441,7 +1441,7 @@
         var html = "";
         // ── Budget section ─────────────────────────────────────────────
         html += '<tr class="ana-period-row"><td></td><td>' + curLbl + '</td><td>' + prvLbl + '</td></tr>';
-        html += '<tr class="ana-total-row"><td><span class="ana-icon" style="background:#10B981;">💰</span>Budget</td>' +
+        html += '<tr class="ana-total-row"><td>Budget</td>' +
                 '<td>' + fmtMoney(curAgg.totals.budget) + '</td>' +
                 '<td>' + fmtMoney(prvAgg.totals.budget) + '</td></tr>';
 
@@ -1467,14 +1467,14 @@
           var toggle = hasSubs
             ? '<button type="button" class="ana-fold-btn" data-ana-fold="' + esc(cat.id) + '" aria-label="Toggle">' + (collapsed ? "▸" : "▾") + '</button>'
             : '<span class="ana-fold-btn ana-fold-spacer"></span>';
-          html += '<tr class="ana-cat-row"><td>' + toggle + '<span class="ana-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' + esc(cat.name) + '</td>' +
+          html += '<tr class="ana-cat-row"><td>' + toggle + esc(cat.name) + '</td>' +
                   '<td class="' + (curC.expense ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(curC.expense, true) + '</td>' +
                   '<td class="' + (prvC.expense ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(prvC.expense, true) + '</td></tr>';
           if (collapsed) return;
           subs.forEach(function (sub) {
             var curS = curC.subs[sub.id] || 0;
             var prvS = prvC.subs[sub.id] || 0;
-            html += '<tr class="ana-sub-row"><td><span class="ana-icon ana-icon-sm" style="background:' + esc(sub.color || cat.color || "#9CA3AF") + ';">' + esc(sub.icon || cat.icon || "•") + '</span>' + esc(sub.name) + '</td>' +
+            html += '<tr class="ana-sub-row"><td>' + esc(sub.name) + '</td>' +
                     '<td class="' + (curS ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(curS, true) + '</td>' +
                     '<td class="' + (prvS ? "ana-neg" : "ana-zero") + '">' + anaFmtSigned(prvS, true) + '</td></tr>';
           });
