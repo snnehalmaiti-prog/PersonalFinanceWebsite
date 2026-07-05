@@ -814,6 +814,13 @@
                 <span>Month</span>
                 <input type="month" id="rec-month" />
               </label>
+
+              <!-- Budget split: shown when Budget + joint account selected -->
+              <div id="rec-budget-split" style="display:none;">
+                <span class="rec-field-label" style="font-size:0.8rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:6px; display:block;">Contributing Account Split</span>
+                <div id="rec-budget-split-rows" style="display:flex; flex-direction:column; gap:8px;"></div>
+                <p id="rec-budget-split-error" style="color:#EF4444; font-size:0.78rem; margin:6px 0 0; display:none;">Percentages must add up to 100%</p>
+              </div>
             </div>
 
             <div class="rec-col" id="rec-other-col">
@@ -1215,12 +1222,39 @@
 
         // Joint account expense total
         var jointExpense = sumRecs(monthRecs.filter(function(r) { return r.type === "expense" && r.account_id === jointId; }));
-        // Joint account budget total
-        var jointBudget  = sumRecs(monthRecs.filter(function(r) { return r.type === "budget"  && r.account_id === jointId; }));
+        // Joint account budget records — read split percentages from labels
+        var budgetRecs = monthRecs.filter(function(r) { return r.type === "budget" && r.account_id === jointId; });
+        var jointBudget = sumRecs(budgetRecs);
 
-        var budgetContrib  = Math.round(jointBudget / 2);
+        // Aggregate split percentages across all budget records (weighted by amount)
+        var splitPct1 = 50, splitPct2 = 50;
+        if (budgetRecs.length) {
+          var totalSplitAmt = 0, weighted1 = 0;
+          budgetRecs.forEach(function(r) {
+            var amt = Math.round(Number(r.amount) || 0);
+            var lbl = r.labels;
+            if (lbl) {
+              try {
+                var parsed = typeof lbl === "string" ? JSON.parse(lbl) : lbl;
+                var sp = parsed && parsed.budget_split;
+                if (sp && sp[acct1Id] !== undefined) {
+                  weighted1 += sp[acct1Id] * amt;
+                  totalSplitAmt += amt;
+                }
+              } catch(e) {}
+            }
+          });
+          if (totalSplitAmt > 0) {
+            splitPct1 = Math.round(weighted1 / totalSplitAmt);
+            splitPct2 = 100 - splitPct1;
+          }
+        }
+
+        var budgetContrib1 = Math.round(jointBudget * splitPct1 / 100);
+        var budgetContrib2 = Math.round(jointBudget * splitPct2 / 100);
         var overrun        = Math.max(0, jointExpense - jointBudget);
-        var overrunShare   = Math.round(overrun / 2);
+        var overrunShare1  = Math.round(overrun * splitPct1 / 100);
+        var overrunShare2  = Math.round(overrun * splitPct2 / 100);
 
         // Credit card spend per individual account
         var cc1 = sumRecs(monthRecs.filter(function(r) {
@@ -1230,8 +1264,8 @@
           return r.type === "expense" && r.account_id === acct2Id && ccIds.indexOf(r.payment_method_id) >= 0;
         }));
 
-        var transfer1 = budgetContrib + cc1 + overrunShare;
-        var transfer2 = budgetContrib + cc2 + overrunShare;
+        var transfer1 = budgetContrib1 + cc1 + overrunShare1;
+        var transfer2 = budgetContrib2 + cc2 + overrunShare2;
 
         var accounts = dashExpState.accounts || [];
         function acctName(id) {
@@ -1239,18 +1273,20 @@
           return a ? a.name : id;
         }
         var n1 = acctName(acct1Id), n2 = acctName(acct2Id);
+        var pct1Label = splitPct1 !== 50 ? " (" + splitPct1 + "%)" : "";
+        var pct2Label = splitPct2 !== 50 ? " (" + splitPct2 + "%)" : "";
 
         if (statusEl) statusEl.textContent = "";
 
         var rows = [
-          { label: n1 + "'s Budget Contribution", val: budgetContrib, bold: false, highlight: false },
-          { label: n1 + "'s Credit Card Spend",   val: cc1,           bold: false, highlight: false },
-          { label: n2 + "'s Budget Contribution",  val: budgetContrib, bold: false, highlight: false },
-          { label: n2 + "'s Card Spend",           val: cc2,           bold: false, highlight: false },
-          { label: n1 + "'s Budget Overrun Share", val: overrunShare,  bold: false, highlight: false },
-          { label: n2 + "'s Budget Overrun Share", val: overrunShare,  bold: false, highlight: false },
-          { label: n1 + "'s Transfer Amount",      val: transfer1,     bold: true,  highlight: true  },
-          { label: n2 + "'s Transfer Amount",      val: transfer2,     bold: true,  highlight: true  },
+          { label: n1 + "'s Budget Contribution" + pct1Label, val: budgetContrib1, bold: false, highlight: false },
+          { label: n1 + "'s Credit Card Spend",               val: cc1,            bold: false, highlight: false },
+          { label: n2 + "'s Budget Contribution" + pct2Label, val: budgetContrib2, bold: false, highlight: false },
+          { label: n2 + "'s Card Spend",                      val: cc2,            bold: false, highlight: false },
+          { label: n1 + "'s Budget Overrun Share",            val: overrunShare1,  bold: false, highlight: false },
+          { label: n2 + "'s Budget Overrun Share",            val: overrunShare2,  bold: false, highlight: false },
+          { label: n1 + "'s Transfer Amount",                 val: transfer1,      bold: true,  highlight: true  },
+          { label: n2 + "'s Transfer Amount",                 val: transfer2,      bold: true,  highlight: true  },
         ];
 
         var html = '<table class="exp-joint-table">';
@@ -2219,7 +2255,48 @@
         if (dtField) dtField.style.display = isMonthMode ? "none" : "";
         if (mField) mField.style.display = isMonthMode ? "" : "none";
         fillRecCategories();
+        updateBudgetSplitVisibility();
       }
+
+      function updateBudgetSplitVisibility() {
+        var splitDiv = document.getElementById("rec-budget-split");
+        var splitRows = document.getElementById("rec-budget-split-rows");
+        if (!splitDiv || !splitRows) return;
+        var acctSel = document.getElementById("rec-account");
+        var acctId = acctSel ? acctSel.value : "";
+        var acct = dashExpState.accounts.find(function(a) { return a.id === acctId; });
+        var isJointBudget = dashExpState.recType === "budget" && acct && !acct.contributing_account;
+        splitDiv.style.display = isJointBudget ? "" : "none";
+        if (!isJointBudget) return;
+
+        var contribs = dashExpState.accounts.filter(function(a) { return a.contributing_account; });
+        // Build rows only once per set of contributing accounts
+        var existing = splitRows.querySelectorAll("input[data-split-id]");
+        var existingIds = Array.from(existing).map(function(i) { return i.dataset.splitId; }).join(",");
+        var newIds = contribs.map(function(a) { return a.id; }).join(",");
+        if (existingIds === newIds) return; // already built
+        var defaultPct = contribs.length ? Math.floor(100 / contribs.length) : 0;
+        splitRows.innerHTML = contribs.map(function(a, i) {
+          var pct = (i === contribs.length - 1)
+            ? 100 - defaultPct * (contribs.length - 1)  // last gets remainder
+            : defaultPct;
+          return '<div style="display:flex; align-items:center; gap:8px;">' +
+            '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
+            '<input type="number" data-split-id="' + a.id + '" min="0" max="100" value="' + pct + '" ' +
+              'style="width:70px; padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.875rem; text-align:right;" />' +
+            '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
+          '</div>';
+        }).join("");
+      }
+
+      function getBudgetSplit() {
+        var inputs = document.querySelectorAll("#rec-budget-split-rows input[data-split-id]");
+        if (!inputs.length) return null;
+        var split = {}, total = 0;
+        inputs.forEach(function(inp) { var v = Number(inp.value) || 0; split[inp.dataset.splitId] = v; total += v; });
+        return { split: split, total: total };
+      }
+
       function fillRecDropdowns() {
         var acctOpts = dashExpState.accounts.map(function (a) {
           return '<option value="' + a.id + '">' + esc(a.name) + '</option>';
@@ -2227,14 +2304,16 @@
         var acctSel = document.getElementById("rec-account");
         acctSel.innerHTML = acctOpts;
         document.getElementById("rec-account-to").innerHTML = acctOpts;
-        // When Budget mode: choosing an account auto-picks its Budget category.
+        // When Budget mode: choosing an account auto-picks its Budget category + updates split.
         acctSel.onchange = function () {
-          if (dashExpState.recType !== "budget") return;
-          var match = dashExpState.categories.find(function (c) {
-            return c.type === "budget" && !c.parent_id && c.account_id === acctSel.value;
-          });
-          var catSel = document.getElementById("rec-category");
-          if (catSel && match) catSel.value = match.id;
+          if (dashExpState.recType === "budget") {
+            var match = dashExpState.categories.find(function (c) {
+              return c.type === "budget" && !c.parent_id && c.account_id === acctSel.value;
+            });
+            var catSel = document.getElementById("rec-category");
+            if (catSel && match) catSel.value = match.id;
+          }
+          updateBudgetSplitVisibility();
         };
         var pmOpts = '<option value="">— none —</option>' + dashExpState.paymentMethods.map(function (p) {
           return '<option value="' + p.id + '">' + esc(p.name) + '</option>';
@@ -2319,6 +2398,18 @@
           datePart = dt.slice(0, 10) || new Date().toISOString().slice(0, 10);
           txnAt = dt ? new Date(dt).toISOString() : new Date().toISOString();
         }
+        // Validate budget split if shown
+        var splitData = null;
+        var splitDiv = document.getElementById("rec-budget-split");
+        if (splitDiv && splitDiv.style.display !== "none") {
+          var s = getBudgetSplit();
+          if (s && s.total !== 100) {
+            document.getElementById("rec-modal-error").textContent = "Contributing account percentages must add up to 100%.";
+            return;
+          }
+          if (s) splitData = s.split;
+        }
+
         var row = {
           txn_date: datePart,
           txn_at: txnAt,
@@ -2328,7 +2419,8 @@
           category_id: catId || null,
           subcategory_id: (document.getElementById("rec-subcategory").value || null),
           payment_method_id: pmId,
-          note: document.getElementById("rec-note").value || ""
+          note: document.getElementById("rec-note").value || "",
+          labels: splitData ? JSON.stringify({ budget_split: splitData }) : null
         };
         var btn = document.getElementById("rec-modal-save");
         var origLabel = editingRecId ? "Save Changes" : "Add Record";
