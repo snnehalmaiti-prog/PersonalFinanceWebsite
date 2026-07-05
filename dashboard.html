@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=tiles2" />
+<link rel="stylesheet" href="styles.css?v=tiles3" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1201,7 +1201,7 @@
         html += "<thead><tr><th>Payment Method</th>";
         usedAcIds.forEach(function (acId) {
           var ac = accounts.find(function (a) { return a.id === acId; });
-          var label = ac ? esc(ac.icon) + " " + esc(ac.name) : acId;
+          var label = ac ? esc(ac.name) : acId;
           html += "<th>" + label + "</th>";
         });
         html += "<th>Total</th></tr></thead><tbody>";
@@ -1210,7 +1210,7 @@
           var pm = pms.find(function (p) { return p.id === pmId; });
           var rowTotal = pmTotals[pmId] || 0;
           var pmLabel = pm
-            ? "<span style='font-size:1.1em;'>" + esc(pm.icon) + "</span> " + esc(pm.name)
+            ? esc(pm.name)
             : pmId;
           html += "<tr><td class='exp-matrix-label'>" + pmLabel + "</td>";
           usedAcIds.forEach(function (acId) {
@@ -2103,7 +2103,6 @@
             if (r.note) subParts.push(r.note);
             return '<div class="rec-item' + selClass + '">' +
               '<span class="rec-item-check"><input type="checkbox" data-rec-id="' + esc(r.id) + '" ' + checked + '></span>' +
-              '<span class="rec-item-icon" style="background:' + esc(cat.color || "#6B7280") + ';">' + esc(cat.icon || "🏷️") + '</span>' +
               '<div class="rec-item-body">' +
                 '<div class="rec-item-title">' + titleHtml + '</div>' +
                 '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
@@ -2392,14 +2391,14 @@
             : (isEditable ? defaultPct : (100 - defaultPct * (contribs.length > 1 ? 1 : 0)));
           if (isEditable) {
             return '<div style="display:flex; align-items:center; gap:8px;">' +
-              '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
+              '<span style="flex:1; font-size:0.875rem;">' + esc(a.name) + '</span>' +
               '<input type="number" data-split-id="' + a.id + '" min="0" max="100" value="' + initVal + '" ' +
                 'style="width:70px; padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.875rem; text-align:right;" />' +
               '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
             '</div>';
           } else {
             return '<div style="display:flex; align-items:center; gap:8px;">' +
-              '<span style="flex:1; font-size:0.875rem;">' + esc(a.icon + " " + a.name) + '</span>' +
+              '<span style="flex:1; font-size:0.875rem;">' + esc(a.name) + '</span>' +
               '<span data-split-id="' + a.id + '" data-split-auto="1" ' +
                 'style="width:70px; padding:5px 8px; font-size:0.875rem; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums;">' + initVal + '</span>' +
               '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
