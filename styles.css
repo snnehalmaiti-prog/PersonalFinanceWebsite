@@ -1811,17 +1811,20 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .benchmark-result {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 16px;
+  flex-wrap: nowrap;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  overflow: hidden;
 }
 .benchmark-result[hidden] { display: none; }
 .benchmark-group {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 16px;
+  flex-wrap: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .benchmark-divider {
   align-self: stretch;
@@ -1864,13 +1867,16 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   color: #fff;
   box-shadow: 0 1px 3px rgba(59,130,246,0.25);
 }
-.benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex-shrink: 1; }
 .benchmark-col-label {
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .benchmark-col-value {
   font-family: var(--font-display);
@@ -2112,7 +2118,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 body, html { overflow-x: hidden; }
 main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .benchmark-card, .equity-card, .value-chart-card { max-width: 100%; box-sizing: border-box; }
-.benchmark-header, .benchmark-result, .benchmark-group { flex-wrap: wrap; }
+.benchmark-header { flex-wrap: wrap; }
 @media (max-width: 760px) {
   .benchmark-title-group { width: 100%; }
   .benchmark-card { padding: 14px; }
