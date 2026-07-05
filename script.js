@@ -3640,12 +3640,14 @@
   if (excludeFixedIncomeToggle) {
     excludeFixedIncomeToggle.addEventListener("click", function () {
       applyExclusion(EXCLUDE_FIXED_INCOME_KEY, EXCLUDE_SAVINGS_INVESTMENT_KEY);
+      closeExclusionsMenu();
     });
   }
 
   if (excludeSavingsInvestmentToggle) {
     excludeSavingsInvestmentToggle.addEventListener("click", function () {
       applyExclusion(EXCLUDE_SAVINGS_INVESTMENT_KEY, EXCLUDE_FIXED_INCOME_KEY);
+      closeExclusionsMenu();
     });
   }
 
@@ -3658,6 +3660,7 @@
       renderValueChart();
       renderInvestmentSplitChart();
       document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
+      closeExclusionsMenu();
     });
   }
 
