@@ -148,7 +148,6 @@
   // Generic BudgetBakers-style row: circular icon, name, optional meta, chevron, kebab.
   function rowHtml(opts) {
     return '<div class="exp-row"' + (opts.clickable ? ' data-nav="' + opts.id + '"' : "") + '>' +
-      '<span class="exp-row-icon" style="background:' + esc(opts.color) + '">' + esc(opts.icon) + '</span>' +
       '<span class="exp-row-name">' + esc(opts.name) +
         (opts.sub ? '<span class="exp-row-sub">' + esc(opts.sub) + '</span>' : "") + '</span>' +
       (opts.meta ? '<span class="exp-row-meta">' + esc(opts.meta) + '</span>' : "") +
