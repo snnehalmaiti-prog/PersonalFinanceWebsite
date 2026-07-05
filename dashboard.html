@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=acccardcompact15" />
+<link rel="stylesheet" href="styles.css?v=recdesign1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -705,39 +705,61 @@
 
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
         <div class="rec-page" style="margin-top:20px;">
-          <aside class="rec-sidebar equity-card">
-            <h3 style="margin:0 0 16px;">Filter Options</h3>
+          <aside class="rec-sidebar rec-filter-panel">
+            <div class="rec-filter-header">
+              <span class="rec-filter-title">Filters</span>
+              <button type="button" id="rec-filter-reset" class="rec-filter-clear-btn">Clear</button>
+            </div>
 
-            <label class="rec-field"><span>Search</span>
-              <input type="search" id="rec-filter-search" placeholder="Search notes, categories…" />
-            </label>
-            <label class="rec-field"><span>Sort by</span>
-              <select id="rec-filter-sort">
-                <option value="date-desc">Time (newest first)</option>
-                <option value="date-asc">Time (oldest first)</option>
-                <option value="amount-desc">Amount (high → low)</option>
-                <option value="amount-asc">Amount (low → high)</option>
-              </select>
-            </label>
-            <label class="rec-field"><span>Account</span>
-              <select id="rec-filter-account"><option value="">All accounts</option></select>
-            </label>
-            <label class="rec-field"><span>Category</span>
-              <select id="rec-filter-category"><option value="">All categories</option></select>
-            </label>
-            <label class="rec-field"><span>Type</span>
-              <select id="rec-filter-type">
-                <option value="">All</option>
+            <div class="rec-filter-search-wrap">
+              <svg class="rec-filter-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="search" id="rec-filter-search" class="rec-filter-search-input" placeholder="Search notes, categories..." />
+            </div>
+
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="rec-filter-account">ACCOUNT</label>
+              <select id="rec-filter-account" class="rec-filter-select"><option value="">All accounts</option></select>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="rec-filter-category">CATEGORY</label>
+              <select id="rec-filter-category" class="rec-filter-select"><option value="">All categories</option></select>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="rec-filter-type">TYPE</label>
+              <select id="rec-filter-type" class="rec-filter-select">
+                <option value="">All types</option>
                 <option value="expense">Expense</option>
                 <option value="budget">Budget</option>
                 <option value="income">Income</option>
               </select>
-            </label>
-            <label class="rec-field"><span>Payment type</span>
-              <select id="rec-filter-payment"><option value="">All</option></select>
-            </label>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="rec-filter-payment">PAYMENT TYPE</label>
+              <select id="rec-filter-payment" class="rec-filter-select"><option value="">All payments</option></select>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="rec-filter-person">PERSON</label>
+              <select id="rec-filter-person" class="rec-filter-select"><option value="">Everyone</option></select>
+            </div>
 
-            <button type="button" class="btn btn-outline btn-block" id="rec-filter-reset" style="margin-top:10px;">Reset filter</button>
+            <div id="rec-filter-chips" class="rec-filter-chips"></div>
+
+            <div class="rec-filter-section">
+              <label class="rec-filter-label">AMOUNT RANGE</label>
+              <div class="rec-filter-amount-row">
+                <input type="number" id="rec-filter-min" class="rec-filter-amount-input" placeholder="Min" />
+                <span class="rec-filter-amount-dash">—</span>
+                <input type="number" id="rec-filter-max" class="rec-filter-amount-input" placeholder="Max" />
+              </div>
+            </div>
+
+            <!-- keep sort hidden for JS use -->
+            <select id="rec-filter-sort" style="display:none;">
+              <option value="date-desc">Time (newest first)</option>
+              <option value="date-asc">Time (oldest first)</option>
+              <option value="amount-desc">Amount (high → low)</option>
+              <option value="amount-asc">Amount (low → high)</option>
+            </select>
           </aside>
 
           <div class="rec-main">
@@ -760,17 +782,17 @@
               </div>
             </div>
             <div class="rec-actions-bar">
-              <label class="rec-select-all"><input type="checkbox" id="rec-select-all" /> Select all</label>
-              <div class="rec-bulk-actions">
-                <button type="button" class="btn btn-ghost btn-sm" id="rec-export-btn">Export</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="rec-delete-btn" disabled>Delete</button>
-              </div>
-              <div><strong id="rec-count">0 records</strong></div>
-              <div class="rec-total" id="rec-total">₹0.00</div>
+              <label class="rec-select-all-label"><input type="checkbox" id="rec-select-all" /> Select all</label>
+              <span class="rec-actions-sep">|</span>
+              <button type="button" class="rec-action-btn" id="rec-export-btn">Export</button>
+              <button type="button" class="rec-action-btn" id="rec-categorize-btn">Categorize</button>
+              <button type="button" class="rec-action-btn rec-action-delete" id="rec-delete-btn">Delete</button>
+              <span class="rec-actions-count" id="rec-count">0 records</span>
             </div>
 
             <p class="muted small" id="rec-list-empty">No records yet — click <strong>+ Add record</strong> to log your first transaction.</p>
             <div id="rec-list"></div>
+            <p id="rec-list-footer" class="rec-list-footer"></p>
           </div>
         </div>
       </div>
@@ -1882,8 +1904,14 @@
         if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
           dashExpState.categories.filter(function (c) { return !c.parent_id; })
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
-        if (pmSel) pmSel.innerHTML = '<option value="">All</option>' +
+        if (pmSel) pmSel.innerHTML = '<option value="">All payments</option>' +
           dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
+        var personSel = document.getElementById("rec-filter-person");
+        if (personSel) {
+          personSel.innerHTML = '<option value="">Everyone</option>' +
+            (dashExpState.accounts || []).filter(function(a){ return a.contributing_account; })
+            .map(function(a){ return '<option value="' + esc(a.id) + '">' + esc(a.name) + '</option>'; }).join("");
+        }
       }
 
       function fillAnaFilterDropdowns() {
@@ -2154,6 +2182,9 @@
           type: document.getElementById("rec-filter-type").value,
           payment: document.getElementById("rec-filter-payment").value,
           label: "",
+          person: document.getElementById("rec-filter-person") ? document.getElementById("rec-filter-person").value : "",
+          minAmt: parseFloat(document.getElementById("rec-filter-min") ? document.getElementById("rec-filter-min").value : "") || null,
+          maxAmt: parseFloat(document.getElementById("rec-filter-max") ? document.getElementById("rec-filter-max").value : "") || null,
           range: range
         };
       }
@@ -2195,6 +2226,9 @@
             var lbls = recLabels(r).map(function (l) { return String(l).toLowerCase(); });
             if (!lbls.some(function (l) { return l.indexOf(f.label) !== -1; })) return false;
           }
+          if (f.person && r.account_id !== f.person) return false;
+          if (f.minAmt !== null && Number(r.amount) < f.minAmt) return false;
+          if (f.maxAmt !== null && Number(r.amount) > f.maxAmt) return false;
           return true;
         });
         rows.sort(function (a, b) {
@@ -2205,7 +2239,7 @@
           return f.sort === "date-asc" ? -d : d;
         });
 
-        if (countEl) countEl.textContent = "Found " + rows.length + " record" + (rows.length === 1 ? "" : "s");
+        if (countEl) countEl.textContent = "· " + rows.length + " record" + (rows.length === 1 ? "" : "s");
         var net = rows.reduce(function (s, r) {
           if (r.type === "income") return s;
           return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount);
@@ -2244,14 +2278,32 @@
           return f.sort === "date-asc" ? -d : d;
         });
 
+        var CAT_ICON_COLORS = ["#E8F4F0","#FEF3C7","#EDE9FE","#FCE7F3","#DBEAFE","#D1FAE5","#FFE4E6","#F3F4F6"];
+        var CAT_ICON_TEXT_COLORS = ["#065F46","#92400E","#5B21B6","#9D174D","#1E40AF","#065F46","#9F1239","#374151"];
+        function catIconColor(catId) {
+          if (!catId) return { bg: "#F3F4F6", text: "#9CA3AF" };
+          var h = 0; for (var i = 0; i < catId.length; i++) h = (h * 31 + catId.charCodeAt(i)) & 0xffffffff;
+          var idx = Math.abs(h) % CAT_ICON_COLORS.length;
+          return { bg: CAT_ICON_COLORS[idx], text: CAT_ICON_TEXT_COLORS[idx] };
+        }
+
         list.innerHTML = dates.map(function (date) {
           var dayRows = groups[date];
           var dayNet = dayRows.reduce(function (s, r) {
             if (r.type === "income") return s;
             return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount);
           }, 0);
-          var dayHdr = '<div class="rec-day-header"><span>' + esc(new Date(date).toDateString()) + '</span>' +
-            '<span class="rec-day-total" style="color:' + (dayNet < 0 ? "#EF4444" : "#10B981") + ';">' + fmtMoney(dayNet) + '</span></div>';
+          var d = new Date(date + "T12:00:00");
+          var weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+          var dayLabel = d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+          var dayNetColor = dayNet < 0 ? "#EF4444" : "#10B981";
+          var dayHdr = '<div class="rec-day-header">' +
+            '<div class="rec-day-left"><span class="rec-day-weekday">' + esc(weekday) + '</span>' +
+            '<span class="rec-day-date">' + esc(dayLabel) + '</span>' +
+            '<span class="rec-day-count">' + dayRows.length + ' record' + (dayRows.length !== 1 ? 's' : '') + '</span></div>' +
+            '<div class="rec-day-right"><span class="rec-day-net-label">DAY NET</span>' +
+            '<span class="rec-day-net-val" style="color:' + dayNetColor + ';">' + (dayNet < 0 ? '-' : '') + fmtMoney(Math.abs(dayNet)) + '</span></div>' +
+            '</div>';
           var items = dayRows.map(function (r) {
             var acct = findById(dashExpState.accounts, r.account_id) || {};
             var cat = findById(dashExpState.categories, r.category_id) || {};
@@ -2262,27 +2314,40 @@
             var color = isOutflow ? "#EF4444" : "#10B981";
             var checked = recSelected[r.id] ? "checked" : "";
             var selClass = recSelected[r.id] ? " selected" : "";
-            var titleHtml = esc(cat.name || "(uncategorized)");
-            if (acct.name) {
-              titleHtml += ' <span class="rec-item-title-acct">· ' + esc(acct.name) + '</span>';
-            }
+            var iconColor = catIconColor(r.category_id);
+            var iconLetter = cat.name ? cat.name[0].toUpperCase() : "·";
             var subParts = [];
             if (sub.name) subParts.push(sub.name);
             if (pm.name) subParts.push(pm.name);
-            if (r.note) subParts.push(r.note);
-            return '<div class="rec-item' + selClass + '">' +
-              '<span class="rec-item-check"><input type="checkbox" data-rec-id="' + esc(r.id) + '" ' + checked + '></span>' +
+            if (acct.name) subParts.push(acct.name);
+            var timeStr = r.txn_at ? new Date(r.txn_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+            var labelBadge = "";
+            var lbls = recLabels(r);
+            if (lbls.length) labelBadge = ' <span class="rec-label-badge">' + esc(String(lbls[0])) + '</span>';
+            return '<div class="rec-item' + selClass + '" data-rec-id="' + esc(r.id) + '">' +
+              '<input type="checkbox" class="rec-item-cb" data-rec-id="' + esc(r.id) + '" ' + checked + '>' +
+              '<div class="rec-item-icon" style="background:' + iconColor.bg + ';color:' + iconColor.text + ';">' + iconLetter + '</div>' +
               '<div class="rec-item-body">' +
-                '<div class="rec-item-title">' + titleHtml + '</div>' +
+                '<div class="rec-item-title">' + esc(cat.name || "(uncategorized)") + labelBadge + '</div>' +
                 '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
               '</div>' +
-              '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) +
-                (r.txn_at ? '<span class="time">' + new Date(r.txn_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</span>' : "") +
+              '<div class="rec-item-right">' +
+                '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) + '</div>' +
+                (timeStr ? '<div class="rec-item-time">' + timeStr + '</div>' : '') +
               '</div>' +
+              '<button class="rec-item-more" data-rec-id="' + esc(r.id) + '" title="More">···</button>' +
             '</div>';
           }).join("");
-          return dayHdr + items;
+          var addRow = '<div class="rec-day-add" data-add-date="' + esc(date) + '">+ Add record to ' + d.toLocaleDateString("en-US", { month: "short", day: "2-digit" }) + '</div>';
+          return dayHdr + '<div class="rec-day-group">' + items + addRow + '</div>';
         }).join("");
+
+        // Update footer
+        var footerEl = document.getElementById("rec-list-footer");
+        if (footerEl) {
+          var periodLabel = (document.getElementById("rec-period-label") || {}).textContent || "";
+          footerEl.textContent = "Showing " + rows.length + " of " + dashExpState.records.length + " records · " + periodLabel;
+        }
 
         updateBulkButtons();
       }
@@ -2290,12 +2355,16 @@
       function updateBulkButtons() {
         var n = Object.keys(recSelected).filter(function (k) { return recSelected[k]; }).length;
         var del = document.getElementById("rec-delete-btn");
-        if (del) del.disabled = n === 0;
+        if (del) del.style.opacity = n === 0 ? "0.4" : "1";
       }
 
       ["rec-filter-search", "rec-filter-sort", "rec-filter-account", "rec-filter-category", "rec-filter-type", "rec-filter-payment"].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener("input", renderDashRecords);
+        if (el) el.addEventListener("change", renderDashRecords);
+      });
+      ["rec-filter-person", "rec-filter-min", "rec-filter-max"].forEach(function (id) {
+        var el = document.getElementById(id);
         if (el) el.addEventListener("change", renderDashRecords);
       });
       document.getElementById("rec-filter-reset").addEventListener("click", function () {
@@ -2305,6 +2374,9 @@
         document.getElementById("rec-filter-category").value = "";
         document.getElementById("rec-filter-type").value = "";
         document.getElementById("rec-filter-payment").value = "";
+        var p = document.getElementById("rec-filter-person"); if (p) p.value = "";
+        var mn = document.getElementById("rec-filter-min"); if (mn) mn.value = "";
+        var mx = document.getElementById("rec-filter-max"); if (mx) mx.value = "";
         renderDashRecords();
       });
       document.getElementById("rec-period-prev").addEventListener("click", function (e) {
@@ -2316,24 +2388,38 @@
 
       // Row checkbox delegation
       document.getElementById("rec-list").addEventListener("change", function (e) {
-        var cb = e.target.closest("[data-rec-id]"); if (!cb) return;
+        var cb = e.target.closest(".rec-item-cb"); if (!cb) return;
         recSelected[cb.getAttribute("data-rec-id")] = cb.checked;
         cb.closest(".rec-item").classList.toggle("selected", cb.checked);
         updateBulkButtons();
       });
 
-      // Click record row → edit modal (skip if click was on checkbox)
+      // Click record row → edit modal (skip if click was on checkbox, more button, or add-row)
       document.getElementById("rec-list").addEventListener("click", function (e) {
-        if (e.target.closest("[data-rec-id]") || e.target.closest(".rec-item-check")) return;
+        var t = e.target;
+        // More button
+        if (t.classList.contains("rec-item-more") || t.closest(".rec-item-more")) {
+          var recId = (t.closest("[data-rec-id]") || {}).dataset.recId;
+          if (recId) { var rec = findById(dashExpState.records, recId); if (rec) openRecModal(rec); }
+          return;
+        }
+        // Add row
+        if (t.classList.contains("rec-day-add") || t.closest(".rec-day-add")) {
+          var addDate = (t.closest(".rec-day-add") || t).dataset.addDate;
+          openRecModal(null);
+          if (addDate) setTimeout(function(){ var d = document.getElementById("rec-date"); if(d) d.value = addDate + "T00:00"; }, 50);
+          return;
+        }
+        if (t.closest(".rec-item-cb")) return;
         var item = e.target.closest(".rec-item"); if (!item) return;
-        var cb = item.querySelector("[data-rec-id]"); if (!cb) return;
+        var cb = item.querySelector(".rec-item-cb"); if (!cb) return;
         var rec = findById(dashExpState.records, cb.getAttribute("data-rec-id"));
         if (rec) openRecModal(rec);
       });
 
       document.getElementById("rec-select-all").addEventListener("change", function (e) {
         var on = e.target.checked;
-        document.querySelectorAll("[data-rec-id]").forEach(function (cb) {
+        document.querySelectorAll(".rec-item-cb").forEach(function (cb) {
           cb.checked = on;
           recSelected[cb.getAttribute("data-rec-id")] = on;
           cb.closest(".rec-item").classList.toggle("selected", on);
