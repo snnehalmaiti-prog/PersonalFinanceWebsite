@@ -224,36 +224,36 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .portfolio-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
+  gap: 7px;
+  padding: 7px 14px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.88rem;
-  font-weight: 600;
+  border: none;
+  background: var(--emerald);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  transition: background 0.2s, box-shadow 0.2s;
   max-width: 200px;
 }
-.portfolio-toggle:hover { border-color: var(--emerald); }
+.portfolio-toggle:hover { background: color-mix(in srgb, var(--emerald) 85%, #000); }
 .portfolio-toggle:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
-.portfolio-toggle-icon { color: var(--emerald); flex-shrink: 0; }
+.portfolio-toggle-icon { color: #fff; flex-shrink: 0; }
 #portfolio-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .portfolio-chevron {
-  color: var(--muted);
+  color: #fff;
   flex-shrink: 0;
   transition: transform 0.2s;
 }
 .portfolio-toggle[aria-expanded="true"] .portfolio-chevron { transform: rotate(180deg); }
 .portfolio-toggle[aria-expanded="true"] {
-  border-color: var(--emerald);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--emerald) 18%, transparent);
+  background: color-mix(in srgb, var(--emerald) 85%, #000);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--emerald) 30%, transparent);
 }
 #benchmark-dropdown-wrap .portfolio-toggle {
   background: var(--emerald);
