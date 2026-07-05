@@ -2546,39 +2546,43 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .invest-panel[hidden], .invest-panel[hidden] * { display: none !important; }
 
 /* Account × Payment Method spend pivot table */
+.exp-matrix-wrap { display: flex; }
 .exp-matrix-table {
-  width: 100%; border-collapse: separate; border-spacing: 0;
-  font-size: 0.875rem; border-radius: 10px; overflow: hidden;
+  width: auto; border-collapse: separate; border-spacing: 0;
+  font-size: 0.85rem; border-radius: 10px; overflow: hidden;
   border: 1px solid var(--border);
 }
 .exp-matrix-table thead th {
-  padding: 8px 14px; text-align: right;
+  padding: 7px 16px; text-align: right;
   background: var(--surface-alt);
   border-bottom: 2px solid var(--border);
-  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em;
+  border-right: 1px solid var(--border);
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em;
   text-transform: uppercase; color: var(--muted);
   white-space: nowrap;
 }
-.exp-matrix-table thead th:first-child { text-align: left; min-width: 160px; }
-.exp-matrix-table thead th:last-child { color: var(--text); }
+.exp-matrix-table thead th:first-child { text-align: left; min-width: 150px; border-right: 2px solid var(--border); }
+.exp-matrix-table thead th:last-child { color: var(--text); border-right: none; border-left: 2px solid var(--border); }
 .exp-matrix-table tbody td {
-  padding: 7px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.875rem;
+  padding: 6px 16px; border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: middle; font-size: 0.85rem;
 }
+.exp-matrix-table tbody td:first-child { border-right: 2px solid var(--border); }
+.exp-matrix-table tbody td:last-child { border-right: none; border-left: 2px solid var(--border); }
 .exp-matrix-table tbody tr:last-child td { border-bottom: none; }
-.exp-matrix-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-alt) 45%, transparent); }
-.exp-matrix-label { font-weight: 600; color: var(--text); }
+.exp-matrix-table tbody tr:nth-child(odd) td { background: color-mix(in srgb, var(--surface-alt) 35%, transparent); }
+.exp-matrix-label { font-weight: 600; color: var(--text); white-space: nowrap; }
 .exp-matrix-table tbody td.num {
   text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;
 }
-.exp-matrix-zero { color: var(--muted) !important; font-weight: 400 !important; font-size: 0.8rem; }
-.exp-matrix-total {
-  font-weight: 700 !important; border-left: 2px solid var(--border);
-  background: color-mix(in srgb, var(--surface-alt) 70%, transparent);
-}
+.exp-matrix-zero { color: var(--muted) !important; font-weight: 400 !important; }
+.exp-matrix-total { font-weight: 700 !important; }
 .exp-matrix-footer td {
-  padding: 8px 14px; font-weight: 700; background: var(--surface-alt);
-  border-top: 2px solid var(--border); border-bottom: none; font-size: 0.875rem;
+  padding: 7px 16px; font-weight: 700; background: var(--surface-alt);
+  border-top: 2px solid var(--border); border-bottom: none;
+  border-right: 1px solid var(--border); font-size: 0.85rem;
 }
-.exp-matrix-footer td:first-child { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.exp-matrix-footer td:first-child { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; border-right: 2px solid var(--border); }
 .exp-matrix-footer td.num { text-align: right; font-variant-numeric: tabular-nums; }
-.exp-matrix-footer td:last-child { border-left: 2px solid var(--border); }
+.exp-matrix-footer td:last-child { border-right: none; border-left: 2px solid var(--border); }
