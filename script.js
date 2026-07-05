@@ -1274,6 +1274,75 @@
     if (overviewRealizedEl) setSignedCurrency(overviewRealizedEl, totalRealized);
   }
 
+  function refreshCategoryCards() {
+    var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
+    var fiCurrent  = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
+    var fiUnrealized = isFixedIncomeExcluded() ? 0 : _ov.fiUnrealized;
+    var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
+    var commInvested  = isFixedIncomeExcluded() ? 0 : _ov.commInvested;
+    var commCurrent   = isFixedIncomeExcluded() ? 0 : _ov.commCurrent;
+    var commUnrealized = isFixedIncomeExcluded() ? 0 : _ov.commUnrealized;
+    var commRealized  = isFixedIncomeExcluded() ? 0 : _ov.commRealized;
+
+    var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
+
+    // Mutual Funds
+    var mfInv = _ov.mfInvested, mfCur = _ov.mfCurrent;
+    var elMfInv = document.getElementById("cat-mf-invested");
+    var elMfCur = document.getElementById("cat-mf-current");
+    var elMfUnr = document.getElementById("cat-mf-unrealized");
+    var elMfRlz = document.getElementById("cat-mf-realized");
+    var elMfRet = document.getElementById("cat-mf-return");
+    if (elMfInv) elMfInv.textContent = formatCurrency(mfInv);
+    if (elMfCur) elMfCur.textContent = formatCurrency(mfCur);
+    if (elMfUnr) setSignedCurrency(elMfUnr, _ov.mfUnrealized);
+    if (elMfRlz) setSignedCurrency(elMfRlz, _ov.mfRealized);
+    if (elMfRet) {
+      var mfPct = mfInv > 0 ? ((mfCur - mfInv) / mfInv * 100) : 0;
+      elMfRet.textContent = (mfPct >= 0 ? "+" : "") + mfPct.toFixed(2) + "%";
+      elMfRet.className = "cat-stat-value" + (mfPct > 0 ? " positive" : mfPct < 0 ? " negative" : "");
+    }
+
+    // Stocks / ETF
+    var seInv = _ov.seInvested, seCur = seCurrent;
+    var elSeInv = document.getElementById("cat-se-invested");
+    var elSeCur = document.getElementById("cat-se-current");
+    var elSeDc  = document.getElementById("cat-se-daychange");
+    var elSeUnr = document.getElementById("cat-se-unrealized");
+    var elSeRlz = document.getElementById("cat-se-realized");
+    var elSeRet = document.getElementById("cat-se-return");
+    if (elSeInv) elSeInv.textContent = formatCurrency(seInv);
+    if (elSeCur) elSeCur.textContent = formatCurrency(seCur);
+    if (elSeDc)  setSignedCurrency(elSeDc, _ov.seDayChange);
+    if (elSeUnr) setSignedCurrency(elSeUnr, _ov.seUnrealized);
+    if (elSeRlz) setSignedCurrency(elSeRlz, _ov.seRealized);
+    if (elSeRet) {
+      var sePct = seInv > 0 ? ((seCur - seInv) / seInv * 100) : 0;
+      elSeRet.textContent = (sePct >= 0 ? "+" : "") + sePct.toFixed(2) + "%";
+      elSeRet.className = "cat-stat-value" + (sePct > 0 ? " positive" : sePct < 0 ? " negative" : "");
+    }
+
+    // Fixed Income + Commodity combined
+    var fiTotalInv = fiInvested + commInvested;
+    var fiTotalCur = fiCurrent + commCurrent;
+    var fiTotalUnr = fiUnrealized + commUnrealized;
+    var fiTotalRlz = fiRealized + commRealized;
+    var elFiInv = document.getElementById("cat-fi-invested");
+    var elFiCur = document.getElementById("cat-fi-current");
+    var elFiUnr = document.getElementById("cat-fi-unrealized");
+    var elFiRlz = document.getElementById("cat-fi-realized");
+    var elFiRet = document.getElementById("cat-fi-return");
+    if (elFiInv) elFiInv.textContent = formatCurrency(fiTotalInv);
+    if (elFiCur) elFiCur.textContent = formatCurrency(fiTotalCur);
+    if (elFiUnr) setSignedCurrency(elFiUnr, fiTotalUnr);
+    if (elFiRlz) setSignedCurrency(elFiRlz, fiTotalRlz);
+    if (elFiRet) {
+      var fiPct = fiTotalInv > 0 ? ((fiTotalCur - fiTotalInv) / fiTotalInv * 100) : 0;
+      elFiRet.textContent = (fiPct >= 0 ? "+" : "") + fiPct.toFixed(2) + "%";
+      elFiRet.className = "cat-stat-value" + (fiPct > 0 ? " positive" : fiPct < 0 ? " negative" : "");
+    }
+  }
+
   function updateDashboardStats() {
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
@@ -1307,7 +1376,7 @@
     if (stocksEtfRealizedEl) setSignedCurrency(stocksEtfRealizedEl, seRealized);
     _ov.mfRealized = mfRealized;
     _ov.seRealized = seRealized;
-    refreshOverviewStats();
+    refreshOverviewStats(); refreshCategoryCards();
 
     // Commodity invested amount added to Fixed Income asynchronously
     var fdRowsInv = getSheetRows("fd");
@@ -1327,7 +1396,7 @@
       fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
       if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested + commodityInvested);
       _ov.commInvested = commodityInvested;
-      refreshOverviewStats();
+      refreshOverviewStats(); refreshCategoryCards();
     });
 
     updateEpfStats();
@@ -1382,7 +1451,7 @@
       _ov.commCurrent = commodityCurrent;
       _ov.commUnrealized = commodityCurrent - commodityInvested;
       _ov.commRealized = commodityRealizedProfit;
-      refreshOverviewStats();
+      refreshOverviewStats(); refreshCategoryCards();
 
       if (xirrEl) {
         var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
@@ -3349,7 +3418,7 @@
           : "None of your equity instruments matched a resolved Scheme Code.";
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
         _ov.mfCurrent = 0; _ov.mfUnrealized = 0;
-        refreshOverviewStats();
+        refreshOverviewStats(); refreshCategoryCards();
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
@@ -3385,7 +3454,7 @@
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
           _ov.mfCurrent = total; _ov.mfUnrealized = unrealizedProfit;
-          refreshOverviewStats();
+          refreshOverviewStats(); refreshCategoryCards();
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
           fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
@@ -6620,7 +6689,7 @@
           _ov.seDayChange  = totalDayChangeINR;
           var seInvestedEl = document.getElementById("stocksetf-total-investment");
           if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
-          refreshOverviewStats();
+          refreshOverviewStats(); refreshCategoryCards();
           if (_ov._mfCommDayChange !== null) {
             var overviewDayChgEl = document.getElementById("overview-day-change");
             if (overviewDayChgEl) setDayChange(overviewDayChgEl, _ov._mfCommDayChange + totalDayChangeINR);
