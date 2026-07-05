@@ -783,9 +783,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .settings-tabs { display: none; }
   .settings-tab { flex: 0 0 auto; padding: 9px 14px; white-space: nowrap; font-size: 0.875rem; }
 
-  .overview-stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-  .overview-stat-card { padding: 10px 12px; }
-  .overview-stat-value { font-size: 1rem; }
+  .overview-stat-value { font-size: 0.9rem; }
+  .overview-stat-inline { padding: 4px 10px; }
 
   .panel-title-row { gap: 8px; }
 
@@ -817,7 +816,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 
 @media (max-width: 480px) {
-  .overview-stats { grid-template-columns: repeat(2, 1fr); }
   .value-chart-wrap { height: 190px; }
   .settings-panel { padding: 14px 12px; }
   .portfolio-toggle { max-width: 110px; font-size: 0.8rem; }
@@ -1149,50 +1147,59 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .settings-panel h2 { margin-bottom: 0.3em; }
 
-.overview-stats {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 10px;
-  margin-top: 18px;
-}
-.overview-stat-label { min-height: 2.4em; line-height: 1.2; }
-@media (max-width: 1200px) {
-  .overview-stats { grid-template-columns: repeat(4, 1fr); }
-}
-@media (max-width: 900px) {
-  .overview-stats { grid-template-columns: repeat(3, 1fr); }
-}
-@media (max-width: 640px) {
-  .overview-stats { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 380px) {
-  .overview-stats { grid-template-columns: 1fr; }
-}
-.overview-stat-card {
+/* Overview compact header bar */
+.overview-header-bar {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
 }
-.overview-stat-card:hover {
-  border-color: var(--emerald);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--emerald) 12%, transparent);
-  transform: translateY(-1px);
+.overview-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding-right: 16px;
+  border-right: 1px solid var(--border);
+}
+.overview-stats-inline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.overview-stat-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 16px;
+  white-space: nowrap;
+}
+.overview-stat-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 .overview-stat-label {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
+  min-height: unset;
+  line-height: 1.2;
 }
 .overview-stat-value {
   font-family: "Sora", sans-serif;
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -1755,10 +1762,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 
 @media (max-width: 480px) {
-  /* Phase 5: Tighter stat card typography on very small screens */
-  .overview-stat-label { font-size: 0.7rem; }
-  .overview-stat-value { font-size: 0.9rem; }
-  .overview-stat-card { padding: 8px 10px; }
+  .overview-stat-label { font-size: 0.65rem; }
+  .overview-stat-value { font-size: 0.85rem; }
+  .overview-header-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .overview-header-left { border-right: none; padding-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; width: 100%; }
 }
 
 /* Commodity holdings table — column min-widths so headers render fully */
@@ -1774,8 +1781,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 /* ===== Benchmark card ===== */
 .benchmark-card {
-  margin-top: 22px;
-  padding: 18px 20px;
+  margin-top: 12px;
+  padding: 12px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
