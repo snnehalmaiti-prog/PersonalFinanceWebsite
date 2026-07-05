@@ -2252,8 +2252,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 1rem; flex-shrink: 0;
 }
-.exp-account-tile-body { flex: 1; min-width: 0; }
+.exp-account-tile-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.exp-account-tile-top-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.exp-account-tile-bottom-row { display: flex; align-items: center; }
 .exp-account-tile-name { font-weight: 700; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-account-tile-remaining { font-weight: 700; font-size: 0.85rem; white-space: nowrap; flex-shrink: 0; }
+.exp-account-tile-spent { font-size: 0.75rem; opacity: 0.85; }
 .exp-account-tile-balance { font-weight: 700; font-size: 0.92rem; margin-top: 1px; }
 .exp-account-tile-add {
   background: transparent !important;
@@ -2530,11 +2534,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .dt-picker-footer button:hover { background: var(--surface-alt); }
 
-.exp-account-tile-monthly {
-  display: flex; justify-content: space-between; gap: 8px;
-  font-size: 0.7rem; opacity: 0.9; margin: 2px 0;
-}
-.exp-account-tile-balance { font-size: 0.92rem; }
 
 /* Compact record modal on mobile */
 @media (max-width: 600px) {

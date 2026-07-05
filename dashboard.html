@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=tiles5" />
+<link rel="stylesheet" href="styles.css?v=tiles6" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -980,12 +980,13 @@
           var m = computeAccountMonthly(a.id);
           return '<div class="exp-account-tile" data-acct-id="' + esc(a.id) + '" style="cursor:pointer;">' +
             '<div class="exp-account-tile-body">' +
-              '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
-              '<div class="exp-account-tile-monthly">' +
-                '<span>Budget: ' + fmtMoney(m.budget) + '</span>' +
-                '<span>Spent: ' + fmtMoney(m.spent) + '</span>' +
+              '<div class="exp-account-tile-top-row">' +
+                '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
+                '<div class="exp-account-tile-remaining">Remaining: ' + fmtMoney(m.balance) + '</div>' +
               '</div>' +
-              '<div class="exp-account-tile-balance">' + fmtMoney(m.balance) + '</div>' +
+              '<div class="exp-account-tile-bottom-row">' +
+                '<div class="exp-account-tile-spent">Spent: ' + fmtMoney(m.spent) + '</div>' +
+              '</div>' +
             '</div></div>';
         }).join("");
         box.innerHTML = tiles;
