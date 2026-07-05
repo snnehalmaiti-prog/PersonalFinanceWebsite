@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=matrixmon" />
+<link rel="stylesheet" href="styles.css?v=matrixmon2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1073,19 +1073,20 @@
         var now = new Date();
         var allRecords = dashExpState.records || [];
 
-        // Populate year dropdown from available record years
+        // Populate year dropdown (always refresh list, preserve selection)
         var years = {};
+        years[now.getFullYear()] = 1; // always include current year
         allRecords.forEach(function(r) { years[new Date(r.txn_date || r.txn_at).getFullYear()] = 1; });
         var yearList = Object.keys(years).map(Number).sort();
-        if (!yearList.length) yearList = [now.getFullYear()];
-        if (yearSel && !yearSel.dataset.inited) {
+        if (yearSel) {
+          var prevYr = yearSel.value || String(now.getFullYear());
           yearSel.innerHTML = yearList.map(function(y) {
-            return '<option value="' + y + '"' + (y === now.getFullYear() ? " selected" : "") + '>' + y + '</option>';
+            return '<option value="' + y + '"' + (String(y) === prevYr ? " selected" : "") + '>' + y + '</option>';
           }).join("");
-          yearSel.dataset.inited = "1";
+          if (!yearSel.value) yearSel.value = String(now.getFullYear());
           yearSel.onchange = renderExpSpendMatrix;
         }
-        // Populate month dropdown
+        // Populate month dropdown once, default to current month
         if (monthSel && !monthSel.dataset.inited) {
           monthSel.innerHTML = MONTH_NAMES.map(function(n, i) {
             return '<option value="' + i + '"' + (i === now.getMonth() ? " selected" : "") + '>' + n + '</option>';
