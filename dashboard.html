@@ -640,7 +640,7 @@
       </div>
 
       <div id="dash-exp-subpanel-accounts" class="exp-subpanel">
-        <div id="dash-exp-accounts-tiles" class="exp-account-tiles" style="margin-top:20px;">
+        <div id="dash-exp-accounts-tiles" class="acc-cards-grid" style="margin-top:20px;">
           <p class="muted small" id="dash-exp-accounts-status">Loading…</p>
         </div>
 
@@ -1011,24 +1011,51 @@
         var status = document.getElementById("dash-exp-accounts-status");
         if (!box) return;
         if (status) status.remove();
+        // days left in current month
+        var now = new Date();
+        var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        var daysLeft = lastDay - now.getDate();
+        var ACC_TYPE_LABELS = { checking: "CHECKING ACCOUNT", savings: "SAVINGS ACCOUNT", credit: "CREDIT ACCOUNT", cash: "CASH ACCOUNT", joint: "SHARED ACCOUNT", personal: "PERSONAL ACCOUNT" };
         var tiles = accounts.map(function (a) {
           var m = computeAccountMonthly(a.id);
           var pct = m.budget > 0 ? (m.spent / m.budget) : (m.spent > 0 ? 1 : 0);
-          var tileColor = pct < 0.5 ? "#1A9E6E" : pct < 0.95 ? "#F97316" : "#EF4444";
-          return '<div class="exp-account-tile" data-acct-id="' + esc(a.id) + '" style="cursor:pointer; background:' + tileColor + ';">' +
-            '<div class="exp-account-tile-body">' +
-              '<div class="exp-account-tile-top-row">' +
-                '<div class="exp-account-tile-name">' + esc(a.name) + '</div>' +
-                '<div class="exp-account-tile-remaining">Budgeted: ' + fmtMoney(m.budget) + '</div>' +
+          var over = m.balance < 0 || (m.budget === 0 && m.spent > 0);
+          var borderColor = over ? "#C0392B" : "#1A9E6E";
+          var badgeHtml = over
+            ? '<span class="acc-card-badge over">OVER</span>'
+            : '<span class="acc-card-badge ontrack">ON TRACK</span>';
+          var remainColor = over ? "color:#C0392B;" : "color:var(--text);";
+          var barPct = Math.min(pct * 100, 100);
+          var barColor = over ? "#C0392B" : "#1A9E6E";
+          var typeLabel = ACC_TYPE_LABELS[a.type] || (a.type ? a.type.toUpperCase() + " ACCOUNT" : "ACCOUNT");
+          var letter = (a.name || "?")[0].toUpperCase();
+          var budgetLabel = m.budget > 0 ? (Math.round(pct * 100) + "% of budget") : "No budget set";
+          return '<div class="acc-card" data-acct-id="' + esc(a.id) + '" style="border-left:4px solid ' + borderColor + ';">' +
+            '<div class="acc-card-top">' +
+              '<div style="display:flex; align-items:center; gap:10px;">' +
+                '<div class="acc-card-avatar">' + esc(letter) + '</div>' +
+                '<div>' +
+                  '<div class="acc-card-name">' + esc(a.name) + '</div>' +
+                  '<div class="acc-card-type">' + esc(typeLabel) + '</div>' +
+                '</div>' +
               '</div>' +
-              '<div class="exp-account-tile-bottom-row">' +
-                '<div class="exp-account-tile-remaining" style="font-size:0.8rem;">Remaining: ' + fmtMoney(m.balance) + '</div>' +
-                '<div class="exp-account-tile-spent">Spent: ' + fmtMoney(m.spent) + '</div>' +
-              '</div>' +
-            '</div></div>';
+              badgeHtml +
+            '</div>' +
+            '<div class="acc-card-remaining-label">REMAINING</div>' +
+            '<div class="acc-card-remaining-value" style="' + remainColor + '">' + fmtMoney(m.balance) + '</div>' +
+            '<div class="acc-card-bar-wrap"><div class="acc-card-bar" style="width:' + barPct + '%; background:' + barColor + ';"></div></div>' +
+            '<div class="acc-card-bar-meta">' +
+              '<span>' + esc(budgetLabel) + '</span>' +
+              '<span>' + daysLeft + ' days left</span>' +
+            '</div>' +
+            '<div class="acc-card-footer">' +
+              '<div><div class="acc-card-footer-label">BUDGET</div><div class="acc-card-footer-val">' + fmtMoney(m.budget) + '</div></div>' +
+              '<div><div class="acc-card-footer-label">SPENT</div><div class="acc-card-footer-val">' + fmtMoney(m.spent) + '</div></div>' +
+            '</div>' +
+          '</div>';
         }).join("");
         box.innerHTML = tiles;
-        box.querySelectorAll(".exp-account-tile[data-acct-id]").forEach(function (tile) {
+        box.querySelectorAll(".acc-card[data-acct-id]").forEach(function (tile) {
           tile.addEventListener("click", function () {
             var acctId = tile.dataset.acctId;
             // Switch to Records sub-tab
