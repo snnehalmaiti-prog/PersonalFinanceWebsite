@@ -2743,8 +2743,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   margin-right: 7px; vertical-align: middle; flex-shrink: 0;
 }
 .exp-matrix-grand {
-  background: color-mix(in srgb, #1A9E6E 12%, transparent) !important;
-  color: #1A9E6E !important; font-weight: 700 !important;
+  background: color-mix(in srgb, #C0392B 10%, transparent) !important;
+  color: #C0392B !important; font-weight: 700 !important;
 }
 
 /* Settlement two-person card layout */
