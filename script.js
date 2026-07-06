@@ -5680,7 +5680,10 @@
     var statusEl = document.getElementById("portfolio-split-status");
     if (!canvas || !statusEl || typeof Chart === "undefined") return;
 
-    var prefixes = overviewInvestmentPrefixes();
+    // Same sheet coverage as the Overview's Total Investment: MF, Stocks/ETF,
+    // Fixed Income (EPF) and FD — the latter two dropped when FI is excluded.
+    var fiExcluded = isFixedIncomeExcluded();
+    var prefixes = fiExcluded ? ["equity", "stocksetf"] : ["equity", "stocksetf", "fixedincome", "fd"];
     var names = collectPortfolioNamesFromSheets(prefixes);
     if (!names.length) {
       statusEl.textContent = "No portfolios found yet. Connect your transaction sheets in Settings.";
@@ -5688,33 +5691,67 @@
       return;
     }
 
-    var labels = [];
-    var data = [];
+    var investedByName = {};
+    var namedSum = 0;
     names.forEach(function (name) {
       var invested = computeTotalInvestment(name, prefixes);
       if (invested > UNITS_EPSILON) {
-        labels.push(name);
-        data.push(invested);
+        investedByName[name] = invested;
+        namedSum += invested;
       }
     });
+    // Rows with a blank Portfolio Name still count toward the overview total
+    var unassigned = computeTotalInvestment("all", prefixes) - namedSum;
+    if (unassigned > UNITS_EPSILON) investedByName["Unassigned"] = unassigned;
 
-    if (!labels.length) {
-      statusEl.textContent = "No invested amount found yet across your portfolios.";
-      if (window.__wfSplitChart) { window.__wfSplitChart.destroy(); window.__wfSplitChart = null; }
-      return;
+    function drawSplitPie() {
+      var labels = Object.keys(investedByName);
+      if (!labels.length) {
+        statusEl.textContent = "No invested amount found yet across your portfolios.";
+        if (window.__wfSplitChart) { window.__wfSplitChart.destroy(); window.__wfSplitChart = null; }
+        return;
+      }
+      var data = labels.map(function (n) { return investedByName[n]; });
+      var total = data.reduce(function (sum, v) { return sum + v; }, 0);
+      statusEl.textContent = "Invested value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
+      renderApplePieChart(canvas, {
+        instanceKey: "__wfSplitChart",
+        labels: labels,
+        data: data,
+        total: total,
+        centerLabel: "Invested",
+        formatLabel: formatCurrency
+      });
     }
+    drawSplitPie();
 
-    var total = data.reduce(function (sum, v) { return sum + v; }, 0);
-    statusEl.textContent = "Invested value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
-
-    renderApplePieChart(canvas, {
-      instanceKey: "__wfSplitChart",
-      labels: labels,
-      data: data,
-      total: total,
-      centerLabel: "Invested",
-      formatLabel: formatCurrency
-    });
+    // Commodity (gold) invested amounts join asynchronously, mirroring the overview
+    if (!fiExcluded) {
+      var fdRowsPie = getSheetRows("fd");
+      var uniqueDatesPie = fdRowsPie ? collectCommodityUniqueDates(fdRowsPie, "all") : [];
+      if (fdRowsPie && fdRowsPie.length) {
+        Promise.all([
+          fetchGoldPriceINRPerGram().catch(function () { return null; }),
+          Promise.all(uniqueDatesPie.map(function (d) {
+            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+          }))
+        ]).then(function (results) {
+          var goldPrice = results[0];
+          if (!goldPrice) return;
+          var histPrices = {};
+          results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+          var commHoldings = buildCommodityHoldingsList(fdRowsPie, "all", goldPrice, histPrices) || [];
+          var added = false;
+          commHoldings.forEach(function (h) {
+            if (!(h.invested > UNITS_EPSILON)) return;
+            var name = (h.portfolio || "").trim() || "Unassigned";
+            investedByName[name] = (investedByName[name] || 0) + h.invested;
+            added = true;
+          });
+          if (added) drawSplitPie();
+        });
+      }
+    }
   }
 
   // No initializers: renderMonthlyInvestmentByCategory() runs earlier in this
