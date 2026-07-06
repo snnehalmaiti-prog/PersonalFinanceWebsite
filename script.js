@@ -3792,7 +3792,7 @@
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         if (prefix === "fixedincome") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); }
-        if (prefix === "fd") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
+        if (prefix === "fd") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
         if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
@@ -5812,9 +5812,37 @@
       });
     }());
 
-    var result = { byMonthCat: byMonthCat, yearList: Object.keys(allYears).sort() };
-    console.log("[MIC] final: yearList=", result.yearList, "monthKeys=", Object.keys(byMonthCat));
-    return result;
+    // FD sheet: use invested amount, any row with sub category, no type filter needed (each row = one deposit)
+    (function () {
+      var rows = getSheetRows("fd");
+      if (!rows || rows.length < 2) return;
+      var header = rows[0].map(normalizeText);
+      var dateIdx   = header.indexOf("transaction date");
+      var amtIdx    = header.indexOf("invested amount");
+      if (amtIdx === -1) amtIdx = header.indexOf("amount");
+      var subCatIdx = header.indexOf("instrument sub category");
+      var typeIdx   = header.indexOf("transaction type");
+      if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
+      rows.slice(1).forEach(function (row) {
+        if (typeIdx !== -1) {
+          var type = normalizeText(row[typeIdx] || "");
+          if (type && type.indexOf("deposit") === -1 && type.indexOf("invest") === -1 && type.indexOf("buy") === -1) return;
+        }
+        var d = parseFlexibleDate(row[dateIdx]);
+        if (!d) return;
+        var amount = parseNumber(row[amtIdx]);
+        if (!amount) return;
+        var cat = (row[subCatIdx] || "").trim() || "Fixed Deposit";
+        var yr2 = String(d.getFullYear());
+        var mo = String(d.getMonth() + 1).padStart(2, "0");
+        allYears[yr2] = true;
+        var key = yr2 + "-" + mo;
+        if (!byMonthCat[key]) byMonthCat[key] = {};
+        byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+      });
+    }());
+
+    return { byMonthCat: byMonthCat, yearList: Object.keys(allYears).sort() };
   }
 
   function drawMonthlyInvestCatChart(yr) {
@@ -5848,7 +5876,12 @@
 
     if (!catList.length) { if (statusEl) statusEl.textContent = "No data for " + yr + "."; return; }
     if (statusEl) statusEl.textContent = "";
-    if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
+    // Update existing chart in place to avoid canvas height collapsing on destroy/recreate
+    if (__monthlyInvestCatChart) {
+      __monthlyInvestCatChart.data.datasets = datasets;
+      __monthlyInvestCatChart.update();
+      return;
+    }
     try { __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: MON_LABELS, datasets: datasets },
