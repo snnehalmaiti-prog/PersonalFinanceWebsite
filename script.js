@@ -5721,8 +5721,7 @@
   var __monthlyInvestCatData = null; // { byMonthCat, yearList }
   var __monthlyInvestCatYear = null;
 
-  var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
+  // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
   function buildMonthlyInvestCatData() {
     var instrCatMap = {};
@@ -5819,6 +5818,8 @@
   }
 
   function drawMonthlyInvestCatChart(yr) {
+    var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
     var canvas = document.getElementById("monthly-invest-cat-chart");
     var statusEl = document.getElementById("monthly-invest-cat-status");
     if (!canvas || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
@@ -6203,10 +6204,8 @@
         });
     }).catch(function (err) {
       var msg = "Couldn't load holdings: " + (err && err.message ? err.message : err);
-      if (indiaStatusEl) indiaStatusEl.textContent = msg;
-      if (usStatusEl) usStatusEl.textContent = msg;
-      if (indiaTableWrap) indiaTableWrap.hidden = true;
-      if (usTableWrap) usTableWrap.hidden = true;
+      if (statusEl) statusEl.textContent = msg;
+      if (tableWrap) tableWrap.hidden = true;
     });
   }
 
