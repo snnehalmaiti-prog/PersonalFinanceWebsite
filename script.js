@@ -3790,10 +3790,10 @@
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
-        if (prefix === "equity") { renderValueChart(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
+        if (prefix === "equity") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
         if (prefix === "fixedincome") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); }
         if (prefix === "fd") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
-        if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderStockEtfHoldingsTable(); }
+        if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
       }, canonicalFields);
     });
@@ -5654,6 +5654,7 @@
   }
 
   renderValueChart();
+  renderMonthlyInvestmentByCategory();
 
   function collectPortfolioNamesFromSheets(prefixes) {
     var names = [];
@@ -5713,6 +5714,109 @@
       total: total,
       centerLabel: "Invested",
       formatLabel: formatCurrency
+    });
+  }
+
+  var __monthlyInvestCatChart = null;
+
+  function renderMonthlyInvestmentByCategory() {
+    var canvas = document.getElementById("monthly-invest-cat-chart");
+    var statusEl = document.getElementById("monthly-invest-cat-status");
+    var yearSel = document.getElementById("monthly-invest-cat-year");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    // Collect buy transactions from equity and stocksetf sheets
+    var byMonthCat = {}; // { "YYYY-MM": { cat: amount } }
+    var allYears = {};
+    var PREFIXES = ["equity", "stocksetf"];
+
+    PREFIXES.forEach(function (prefix) {
+      var rows = getSheetRows(prefix);
+      if (!rows || rows.length < 2) return;
+      var header = rows[0].map(normalizeText);
+      var typeIdx = header.indexOf("transaction type");
+      var dateIdx = header.indexOf("transaction date");
+      var unitsIdx = header.indexOf("units");
+      var priceIdx = header.indexOf("price");
+      var subCatIdx = header.indexOf("instrument sub category");
+      var catIdx = header.indexOf("instrument category");
+      if (typeIdx === -1 || dateIdx === -1 || unitsIdx === -1 || priceIdx === -1) return;
+
+      rows.slice(1).forEach(function (row) {
+        var type = normalizeText(row[typeIdx] || "");
+        if (type.indexOf("buy") === -1) return;
+        var d = parseFlexibleDate(row[dateIdx]);
+        if (!d) return;
+        var units = parseNumber(row[unitsIdx]);
+        var price = parseNumber(row[priceIdx]);
+        var amount = units * price;
+        if (!amount) return;
+        var cat = (subCatIdx !== -1 && row[subCatIdx] ? row[subCatIdx] : (catIdx !== -1 && row[catIdx] ? row[catIdx] : "Other")).trim();
+        var yr = d.getFullYear();
+        var mo = String(d.getMonth() + 1).padStart(2, "0");
+        var key = yr + "-" + mo;
+        allYears[String(yr)] = true;
+        if (!byMonthCat[key]) byMonthCat[key] = {};
+        byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+      });
+    });
+
+    var yearList = Object.keys(allYears).sort();
+    if (!yearList.length) {
+      if (statusEl) statusEl.textContent = "No investment data found.";
+      return;
+    }
+
+    // Year selector
+    var currentYr = yearSel && yearSel.value ? yearSel.value : String(new Date().getFullYear());
+    if (yearList.indexOf(currentYr) < 0) currentYr = yearList[yearList.length - 1];
+    if (yearSel) {
+      yearSel.innerHTML = yearList.map(function (y) {
+        return '<option value="' + y + '"' + (y === currentYr ? " selected" : "") + '>' + y + '</option>';
+      }).join("");
+      yearSel.onchange = renderMonthlyInvestmentByCategory;
+    }
+
+    // Build labels and datasets for selected year
+    var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var allCats = {};
+    for (var mi = 0; mi < 12; mi++) {
+      var k = currentYr + "-" + String(mi + 1).padStart(2, "0");
+      if (byMonthCat[k]) Object.keys(byMonthCat[k]).forEach(function (c) { allCats[c] = true; });
+    }
+    var catList = Object.keys(allCats).sort();
+
+    var PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
+    var datasets = catList.map(function (cat, i) {
+      return {
+        label: cat,
+        data: Array.from({length: 12}, function (_, mi) {
+          var k = currentYr + "-" + String(mi + 1).padStart(2, "0");
+          return byMonthCat[k] && byMonthCat[k][cat] ? byMonthCat[k][cat] : 0;
+        }),
+        backgroundColor: PALETTE[i % PALETTE.length],
+        borderRadius: 3,
+        categoryPercentage: 0.7,
+        barPercentage: 0.9
+      };
+    });
+
+    if (statusEl) statusEl.textContent = "";
+    if (__monthlyInvestCatChart) __monthlyInvestCatChart.destroy();
+    __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: { labels: MON, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 8, font: { size: 11 } } },
+          tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + formatCurrency(ctx.parsed.y); } } }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { stacked: true, beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } } }
+        }
+      }
     });
   }
 

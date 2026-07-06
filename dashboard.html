@@ -227,7 +227,8 @@
         <p class="muted small" id="benchmark-status" hidden></p>
       </div>
 
-      <div class="value-chart-card" id="account-value-card">
+      <div class="overview-charts-row">
+      <div class="value-chart-card" id="account-value-card" style="flex:2 1 0; min-width:0;">
         <div class="value-chart-header">
           <div class="value-chart-title-group">
             <h3>Account Value</h3>
@@ -255,6 +256,19 @@
         </div>
         <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
       </div>
+
+      <!-- Monthly investment by category chart -->
+      <div class="value-chart-card" id="monthly-invest-cat-card" style="flex:1 1 0; min-width:0;">
+        <div class="value-chart-header">
+          <h3>Monthly Investment</h3>
+          <select id="monthly-invest-cat-year" class="acc-pill-select" style="margin-left:auto;"></select>
+        </div>
+        <p class="muted small" id="monthly-invest-cat-status"></p>
+        <div style="position:relative; height:260px;">
+          <canvas id="monthly-invest-cat-chart"></canvas>
+        </div>
+      </div>
+      </div><!-- /overview-charts-row -->
 
       <div class="value-chart-card">
         <div class="value-chart-header">

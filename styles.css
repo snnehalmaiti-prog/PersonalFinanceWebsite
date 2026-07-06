@@ -3088,3 +3088,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .cashflow-ytd-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .cashflow-ytd-label { color: var(--muted); }
 .cashflow-ytd-val { font-weight: 600; color: var(--text); }
+
+/* ── Overview charts row ────────────────────────────────────────────────── */
+.overview-charts-row {
+  display: flex; gap: 16px; align-items: flex-start;
+}
