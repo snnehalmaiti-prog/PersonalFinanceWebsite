@@ -5839,6 +5839,7 @@
   }
 
   function drawMonthlyInvestCatChart(yr) {
+    console.log("[MIC v11] draw called for year", yr);
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
     var wrap = document.getElementById("monthly-invest-cat-wrap");
@@ -5867,7 +5868,13 @@
       };
     });
 
-    if (!catList.length) { if (statusEl) statusEl.textContent = "No data for " + yr + "."; return; }
+    console.log("[MIC v11] year", yr, "categories:", catList.join(", ") || "(none)");
+    if (!catList.length) {
+      if (statusEl) statusEl.textContent = "No data for " + yr + ".";
+      if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
+      wrap.innerHTML = "";
+      return;
+    }
     if (statusEl) statusEl.textContent = "";
 
     // Destroy old chart and replace canvas to guarantee a clean render
@@ -5930,11 +5937,13 @@
         yearSel.innerHTML = yearList.map(function (y) {
           return '<option value="' + y + '">' + y + '</option>';
         }).join("");
-        yearSel.onchange = function () {
-          __monthlyInvestCatYear = yearSel.value;
-          drawMonthlyInvestCatChart(__monthlyInvestCatYear);
-        };
       }
+      // Bind unconditionally so the handler can never be lost
+      yearSel.onchange = function () {
+        console.log("[MIC v11] year changed to", yearSel.value);
+        __monthlyInvestCatYear = yearSel.value;
+        drawMonthlyInvestCatChart(__monthlyInvestCatYear);
+      };
       yearSel.value = __monthlyInvestCatYear;
     }
 
