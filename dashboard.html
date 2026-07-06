@@ -626,7 +626,24 @@
           <button type="button" class="exp-subtab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
         </div>
-        <div class="exp-top-bar-center"></div>
+        <div class="exp-top-bar-center">
+          <div class="rec-period-picker" id="rec-period-picker-inline" style="max-width:340px; width:100%; display:none;">
+            <button type="button" id="rec-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
+            <button type="button" id="rec-period-btn" class="rec-period-main">
+              <span id="rec-period-label">This month</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button type="button" id="rec-period-next" class="rec-period-nav" aria-label="Next">›</button>
+            <div class="pp-popover" id="rec-period-popover" hidden>
+              <div class="pp-tabs">
+                <button type="button" data-pp-tab="custom">Custom</button>
+                <button type="button" data-pp-tab="months" class="active">Months</button>
+                <button type="button" data-pp-tab="years">Years</button>
+              </div>
+              <div class="pp-body" id="rec-period-body"></div>
+            </div>
+          </div>
+        </div>
         <button type="button" class="bench-mode-btn rec-add-btn" id="rec-open-btn">+ Add record</button>
       </div>
 
@@ -753,24 +770,7 @@
           </aside>
 
           <div class="rec-main">
-            <div class="rec-period-header" style="display:flex; justify-content:center; margin-bottom:8px;">
-              <div class="rec-period-picker" style="max-width:340px; width:100%;">
-                <button type="button" id="rec-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
-                <button type="button" id="rec-period-btn" class="rec-period-main">
-                  <span id="rec-period-label">This month</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                </button>
-                <button type="button" id="rec-period-next" class="rec-period-nav" aria-label="Next">›</button>
-                <div class="pp-popover" id="rec-period-popover" hidden>
-                  <div class="pp-tabs">
-                    <button type="button" data-pp-tab="custom">Custom</button>
-                    <button type="button" data-pp-tab="months" class="active">Months</button>
-                    <button type="button" data-pp-tab="years">Years</button>
-                  </div>
-                  <div class="pp-body" id="rec-period-body"></div>
-                </div>
-              </div>
-            </div>
+
             <div class="rec-actions-bar">
               <label class="rec-select-all-label"><input type="checkbox" id="rec-select-all" /> Select all</label>
               <span class="rec-actions-sep">|</span>
@@ -969,6 +969,8 @@
             var p = document.getElementById("dash-exp-subpanel-" + k);
             if (p) p.hidden = (k !== key);
           });
+          var inlinePicker = document.getElementById("rec-period-picker-inline");
+          if (inlinePicker) inlinePicker.style.display = (key === "records") ? "" : "none";
         });
       });
 
