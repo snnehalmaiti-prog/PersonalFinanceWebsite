@@ -5922,6 +5922,7 @@
         pointHoverRadius: 4,
         tension: 0.2,
         stack: "wd-" + cat,
+        yAxisID: "yOut",
         order: 0
       });
     });
@@ -5952,7 +5953,18 @@
         },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
-          y: { stacked: true, beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } } }
+          y: {
+            stacked: true, beginAtZero: true, position: "left",
+            title: { display: true, text: "Invested", font: { size: 11 } },
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } }
+          },
+          yOut: {
+            beginAtZero: true, position: "right", display: outCatList.length > 0,
+            title: { display: true, text: "Withdrawn", font: { size: 11 } },
+            grid: { drawOnChartArea: false },
+            ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } }
+          }
         }
       }
     });
