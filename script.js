@@ -5728,7 +5728,7 @@
     var instrCatMap = {};
     ["mfmapping", "stocksetfmapping"].forEach(function (mp) {
       var mrows = getSheetRows(mp);
-      if (!mrows || mrows.length < 2) return;
+      if (!mrows || mrows.length < 2) { console.log("[MIC] mapping sheet missing:", mp); return; }
       var mhdr = mrows[0].map(normalizeText);
       var miIdx = mhdr.indexOf("instrument name");
       // Prefer "instrument sub category" > "market segment" > "segment" > "category"
@@ -5736,19 +5736,21 @@
       if (mcIdx === -1) mcIdx = mhdr.findIndex(function (h) { return h.indexOf("market segment") !== -1; });
       if (mcIdx === -1) mcIdx = mhdr.findIndex(function (h) { return h.indexOf("segment") !== -1; });
       if (mcIdx === -1) mcIdx = mhdr.findIndex(function (h) { return h.indexOf("category") !== -1; });
+      console.log("[MIC] mapping", mp, "headers:", mhdr, "instrIdx:", miIdx, "catIdx:", mcIdx);
       if (miIdx === -1 || mcIdx === -1) return;
       mrows.slice(1).forEach(function (r) {
         var instr = (r[miIdx] || "").trim();
         var cat = (r[mcIdx] || "").trim();
         if (instr && cat) instrCatMap[normalizeText(instr)] = cat;
       });
+      console.log("[MIC] mapping", mp, "entries:", Object.keys(instrCatMap).length);
     });
 
     var byMonthCat = {};
     var allYears = {};
     ["equity", "stocksetf"].forEach(function (prefix) {
       var rows = getSheetRows(prefix);
-      if (!rows || rows.length < 2) return;
+      if (!rows || rows.length < 2) { console.log("[MIC] txn sheet missing:", prefix); return; }
       var header = rows[0].map(normalizeText);
       var typeIdx = header.indexOf("transaction type");
       var dateIdx = header.indexOf("transaction date");
@@ -5757,8 +5759,10 @@
       var amtIdx = header.indexOf("amount");
       var instrIdx = header.indexOf("instrument name");
       var subCatIdx = header.indexOf("instrument sub category");
-      if (typeIdx === -1 || dateIdx === -1) return;
-      if (amtIdx === -1 && (unitsIdx === -1 || priceIdx === -1)) return;
+      console.log("[MIC]", prefix, "headers:", header, "typeIdx:", typeIdx, "dateIdx:", dateIdx, "amtIdx:", amtIdx, "unitsIdx:", unitsIdx, "priceIdx:", priceIdx);
+      if (typeIdx === -1 || dateIdx === -1) { console.log("[MIC]", prefix, "SKIP: missing type/date col"); return; }
+      if (amtIdx === -1 && (unitsIdx === -1 || priceIdx === -1)) { console.log("[MIC]", prefix, "SKIP: missing amount cols"); return; }
+      var txnCount = 0;
       rows.slice(1).forEach(function (row) {
         var type = normalizeText(row[typeIdx] || "");
         if (type.indexOf("buy") === -1) return;
@@ -5776,19 +5780,22 @@
         var key = yr + "-" + mo;
         if (!byMonthCat[key]) byMonthCat[key] = {};
         byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+        txnCount++;
       });
+      console.log("[MIC]", prefix, "buy transactions counted:", txnCount, "years:", Object.keys(allYears));
     });
 
     // Fixed Income: instrument sub category directly, transaction type contains "deposit"
     (function () {
       var rows = getSheetRows("fixedincome");
-      if (!rows || rows.length < 2) return;
+      if (!rows || rows.length < 2) { console.log("[MIC] fixedincome sheet missing/empty"); return; }
       var header = rows[0].map(normalizeText);
       var typeIdx   = header.indexOf("transaction type");
       var dateIdx   = header.indexOf("transaction date");
       var amtIdx    = header.indexOf("amount");
       var subCatIdx = header.indexOf("instrument sub category");
-      if (typeIdx === -1 || dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
+      console.log("[MIC] fixedincome headers:", header, "typeIdx:", typeIdx, "dateIdx:", dateIdx, "amtIdx:", amtIdx, "subCatIdx:", subCatIdx);
+      if (typeIdx === -1 || dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) { console.log("[MIC] fixedincome SKIP: missing cols"); return; }
       rows.slice(1).forEach(function (row) {
         var type = normalizeText(row[typeIdx] || "");
         if (type.indexOf("deposit") === -1) return;
@@ -5806,7 +5813,9 @@
       });
     }());
 
-    return { byMonthCat: byMonthCat, yearList: Object.keys(allYears).sort() };
+    var result = { byMonthCat: byMonthCat, yearList: Object.keys(allYears).sort() };
+    console.log("[MIC] final: yearList=", result.yearList, "monthKeys=", Object.keys(byMonthCat));
+    return result;
   }
 
   function drawMonthlyInvestCatChart(yr) {
