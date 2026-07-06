@@ -1752,11 +1752,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 /* Account Value chart: half width, aligned to the left. */
 #account-value-card {
-  width: 50%;
-  margin-right: auto;
+  flex: 2 1 400px;
 }
 @media (max-width: 760px) {
-  #account-value-card { width: 100%; }
+  #account-value-card { flex: 1 1 100%; }
+  #monthly-invest-cat-card { flex: 1 1 100%; }
 }
 .value-chart-header {
   display: flex;
