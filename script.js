@@ -5747,7 +5747,19 @@
     });
 
     var byMonthCat = {};
+    var byMonthCatOut = {}; // withdrawals / sells / redemptions
     var allYears = {};
+    function addTo(target, d, cat, amount) {
+      var yr = String(d.getFullYear());
+      var key = yr + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      allYears[yr] = true;
+      if (!target[key]) target[key] = {};
+      target[key][cat] = (target[key][cat] || 0) + amount;
+    }
+    function isOutType(type) {
+      return type.indexOf("sell") !== -1 || type.indexOf("redeem") !== -1 ||
+             type.indexOf("redemption") !== -1 || type.indexOf("withdraw") !== -1;
+    }
     ["equity", "stocksetf"].forEach(function (prefix) {
       var rows = getSheetRows(prefix);
       if (!rows || rows.length < 2) return;
@@ -5763,7 +5775,9 @@
       if (amtIdx === -1 && (unitsIdx === -1 || priceIdx === -1)) return;
       rows.slice(1).forEach(function (row) {
         var type = normalizeText(row[typeIdx] || "");
-        if (type.indexOf("buy") === -1) return;
+        var isBuy = type.indexOf("buy") !== -1;
+        var isOut = isOutType(type);
+        if (!isBuy && !isOut) return;
         var d = parseFlexibleDate(row[dateIdx]);
         if (!d) return;
         var amount = amtIdx !== -1 ? parseNumber(row[amtIdx]) : (parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]));
@@ -5772,12 +5786,7 @@
         var cat = (instrName && instrCatMap[instrName])
           ? instrCatMap[instrName]
           : (subCatIdx !== -1 && row[subCatIdx] ? (row[subCatIdx] || "").trim() : "Other");
-        var yr = String(d.getFullYear());
-        var mo = String(d.getMonth() + 1).padStart(2, "0");
-        allYears[yr] = true;
-        var key = yr + "-" + mo;
-        if (!byMonthCat[key]) byMonthCat[key] = {};
-        byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+        addTo(isBuy ? byMonthCat : byMonthCatOut, d, cat, Math.abs(amount));
       });
     });
 
@@ -5793,18 +5802,15 @@
       if (typeIdx === -1 || dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         var type = normalizeText(row[typeIdx] || "");
-        if (type.indexOf("deposit") === -1) return;
+        var isDep = type.indexOf("deposit") !== -1;
+        var isOut = isOutType(type);
+        if (!isDep && !isOut) return;
         var d = parseFlexibleDate(row[dateIdx]);
         if (!d) return;
         var amount = parseNumber(row[amtIdx]);
         if (!amount) return;
         var cat = (row[subCatIdx] || "").trim() || "Fixed Income";
-        var yr2 = String(d.getFullYear());
-        var mo = String(d.getMonth() + 1).padStart(2, "0");
-        allYears[yr2] = true;
-        var key = yr2 + "-" + mo;
-        if (!byMonthCat[key]) byMonthCat[key] = {};
-        byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+        addTo(isDep ? byMonthCat : byMonthCatOut, d, cat, Math.abs(amount));
       });
     }());
 
@@ -5820,25 +5826,22 @@
       var typeIdx   = header.indexOf("transaction type");
       if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
+        var isOut = false;
         if (typeIdx !== -1) {
           var type = normalizeText(row[typeIdx] || "");
-          if (type && type.indexOf("deposit") === -1 && type.indexOf("invest") === -1 && type.indexOf("buy") === -1) return;
+          isOut = isOutType(type);
+          if (!isOut && type && type.indexOf("deposit") === -1 && type.indexOf("invest") === -1 && type.indexOf("buy") === -1) return;
         }
         var d = parseFlexibleDate(row[dateIdx]);
         if (!d) return;
         var amount = parseNumber(row[amtIdx]);
         if (!amount) return;
         var cat = (row[subCatIdx] || "").trim() || "Fixed Deposit";
-        var yr2 = String(d.getFullYear());
-        var mo = String(d.getMonth() + 1).padStart(2, "0");
-        allYears[yr2] = true;
-        var key = yr2 + "-" + mo;
-        if (!byMonthCat[key]) byMonthCat[key] = {};
-        byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+        addTo(isOut ? byMonthCatOut : byMonthCat, d, cat, Math.abs(amount));
       });
     }());
 
-    return { byMonthCat: byMonthCat, yearList: Object.keys(allYears).sort() };
+    return { byMonthCat: byMonthCat, byMonthCatOut: byMonthCatOut, yearList: Object.keys(allYears).sort() };
   }
 
   function drawMonthlyInvestCatChart(yr) {
@@ -5853,6 +5856,7 @@
     }
     try {
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
+    var byMonthCatOut = __monthlyInvestCatData.byMonthCatOut || {};
 
     // Month keys and axis labels for the requested view:
     // all-time = every month from the first investment to the last,
@@ -5860,7 +5864,7 @@
     var monthKeys = [];
     var labels = [];
     if (yr === "all") {
-      var sortedKeys = Object.keys(byMonthCat).sort();
+      var sortedKeys = Object.keys(byMonthCat).concat(Object.keys(byMonthCatOut)).sort();
       if (sortedKeys.length) {
         var first = sortedKeys[0].split("-"), last = sortedKeys[sortedKeys.length - 1].split("-");
         var cur = new Date(parseInt(first[0], 10), parseInt(first[1], 10) - 1, 1);
@@ -5896,8 +5900,34 @@
       };
     });
 
-    console.log("[MIC v12] year", yr, "categories:", catList.join(", ") || "(none)");
-    if (!catList.length) {
+    // Withdrawal lines: one dashed line per sub-category that had any
+    // sell/redeem/withdraw activity in the visible window.
+    var outCats = {};
+    monthKeys.forEach(function (k) {
+      if (byMonthCatOut[k]) Object.keys(byMonthCatOut[k]).forEach(function (c) { outCats[c] = true; });
+    });
+    var outCatList = Object.keys(outCats).sort();
+    outCatList.forEach(function (cat, i) {
+      datasets.push({
+        type: "line",
+        label: cat + " (withdrawn)",
+        data: monthKeys.map(function (k2) {
+          return (byMonthCatOut[k2] && byMonthCatOut[k2][cat]) ? byMonthCatOut[k2][cat] : 0;
+        }),
+        borderColor: MIC_PALETTE[(catList.indexOf(cat) !== -1 ? catList.indexOf(cat) : i) % MIC_PALETTE.length],
+        backgroundColor: "transparent",
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        tension: 0.2,
+        stack: "wd-" + cat,
+        order: 0
+      });
+    });
+
+    console.log("[MIC v12] year", yr, "categories:", catList.join(", ") || "(none)", "| withdrawals:", outCatList.join(", ") || "(none)");
+    if (!catList.length && !outCatList.length) {
       if (statusEl) statusEl.textContent = "No data for " + (yr === "all" ? "all time" : yr) + ".";
       if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
       wrap.innerHTML = "";
