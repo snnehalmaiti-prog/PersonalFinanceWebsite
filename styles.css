@@ -3078,3 +3078,23 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .rec-day-add:hover { color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, transparent); }
 .rec-list-footer { font-size: 0.78rem; color: var(--muted); text-align: center; padding: 8px 0 4px; }
+
+/* ── Cash Flow YTD summary row ──────────────────────────────────────────── */
+.cashflow-ytd-row {
+  display: flex; gap: 12px; flex-wrap: wrap; margin: 6px 0 10px;
+}
+.cashflow-ytd-stat {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface-alt); border-radius: 8px;
+  padding: 6px 12px; flex: 1 1 0; min-width: 120px;
+}
+.cashflow-ytd-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.cashflow-ytd-label {
+  font-size: 0.72rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.04em; flex: 1;
+}
+.cashflow-ytd-val {
+  font-size: 0.88rem; font-weight: 700; color: var(--text);
+}

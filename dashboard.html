@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign5" />
+<link rel="stylesheet" href="styles.css?v=recdesign6" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -643,7 +643,7 @@
               <span class="acc-section-label">CASH FLOW · MONTHLY</span>
               <select id="dash-exp-monthly-year" class="acc-pill-select"></select>
             </div>
-            <p class="muted small" id="dash-exp-monthly-status" style="margin:4px 0 10px;"></p>
+            <div id="dash-exp-monthly-ytd" class="cashflow-ytd-row"></div>
             <div style="position:relative; height:240px;">
               <canvas id="dash-exp-monthly-chart"></canvas>
             </div>
@@ -1140,7 +1140,17 @@
           else if (r.type === "budget") budget[mo] += amt;
           else if (r.type === "expense") expense[mo] += amt;
         });
-        if (status) status.textContent = "Year " + currentYr;
+        if (status) status.textContent = "";
+        var ytdEl = document.getElementById("dash-exp-monthly-ytd");
+        if (ytdEl) {
+          var ytdIncome = income.reduce(function(a,b){return a+b;},0);
+          var ytdBudget = budget.reduce(function(a,b){return a+b;},0);
+          var ytdExpense = expense.reduce(function(a,b){return a+b;},0);
+          ytdEl.innerHTML =
+            '<div class="cashflow-ytd-stat"><span class="cashflow-ytd-dot" style="background:#10B981"></span><span class="cashflow-ytd-label">YTD Income</span><span class="cashflow-ytd-val">' + fmtMoney(ytdIncome) + '</span></div>' +
+            '<div class="cashflow-ytd-stat"><span class="cashflow-ytd-dot" style="background:#3B82F6"></span><span class="cashflow-ytd-label">YTD Budget</span><span class="cashflow-ytd-val">' + fmtMoney(ytdBudget) + '</span></div>' +
+            '<div class="cashflow-ytd-stat"><span class="cashflow-ytd-dot" style="background:#EF4444"></span><span class="cashflow-ytd-label">YTD Expense</span><span class="cashflow-ytd-val">' + fmtMoney(ytdExpense) + '</span></div>';
+        }
         var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         // Trim trailing months with no activity to reduce empty space at the right
         var lastMonthWithData = -1;
