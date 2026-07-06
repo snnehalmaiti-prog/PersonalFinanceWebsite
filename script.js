@@ -5713,6 +5713,10 @@
       }
       var data = labels.map(function (n) { return investedByName[n]; });
       var total = data.reduce(function (sum, v) { return sum + v; }, 0);
+      console.log("[SPLIT] pie components:", JSON.parse(JSON.stringify(investedByName)), "total:", total);
+      console.log("[SPLIT] overview components: mf=", _ov.mfInvested, "se=", _ov.seInvested, "fi=", _ov.fiInvested, "comm=", _ov.commInvested,
+        "overviewTotal:", _ov.mfInvested + _ov.seInvested + (isFixedIncomeExcluded() ? 0 : _ov.fiInvested) + _ov.commInvested,
+        "| selected portfolio:", localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all");
       statusEl.textContent = "Invested value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
       renderApplePieChart(canvas, {
         instanceKey: "__wfSplitChart",
