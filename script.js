@@ -5717,9 +5717,11 @@
     });
   }
 
-  var __monthlyInvestCatChart = null;
-  var __monthlyInvestCatData = null; // { byMonthCat, yearList }
-  var __monthlyInvestCatYear = null;
+  // No initializers: renderMonthlyInvestmentByCategory() runs earlier in this
+  // script, and `= null` here would wipe the state it already set.
+  var __monthlyInvestCatChart;
+  var __monthlyInvestCatData; // { byMonthCat, yearList }
+  var __monthlyInvestCatYear;
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
