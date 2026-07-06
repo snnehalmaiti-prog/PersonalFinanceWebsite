@@ -5812,7 +5812,7 @@
       type: "bar",
       data: { labels: MON_LABELS, datasets: datasets },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
           legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 8, font: { size: 11 } } },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + formatCurrency(ctx.parsed.y); } } }
