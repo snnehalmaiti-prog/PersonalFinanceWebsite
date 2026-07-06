@@ -5846,12 +5846,14 @@
     if (!canvas || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
 
+    console.log("[draw] yr=", yr, "byMonthCat keys=", Object.keys(byMonthCat).filter(function(k){return k.indexOf(yr)===0;}));
     var allCats = {};
     for (var mi = 0; mi < 12; mi++) {
       var k = yr + "-" + String(mi + 1).padStart(2, "0");
       if (byMonthCat[k]) Object.keys(byMonthCat[k]).forEach(function (c) { allCats[c] = true; });
     }
     var catList = Object.keys(allCats).sort();
+    console.log("[draw] catList=", catList);
 
     var datasets = catList.map(function (cat, i) {
       var vals = [];
@@ -5923,6 +5925,7 @@
       }).join("");
       yearSel.value = __monthlyInvestCatYear;
       yearSel.onchange = function () {
+        console.log("[year] onchange fired, value=", yearSel.value);
         __monthlyInvestCatYear = yearSel.value;
         drawMonthlyInvestCatChart(__monthlyInvestCatYear);
       };
