@@ -227,6 +227,20 @@
         <p class="muted small" id="benchmark-status" hidden></p>
       </div>
 
+      <!-- Monthly Investment by Sub-Category chart — full width below overview stats -->
+      <div class="value-chart-card" id="monthly-invest-cat-card" style="width:100%;box-sizing:border-box;">
+        <div class="value-chart-header">
+          <h3>Monthly Investment by Category</h3>
+          <div class="value-chart-actions">
+            <select id="monthly-invest-cat-year" class="btn btn-outline btn-sm" style="padding:4px 10px;"></select>
+          </div>
+        </div>
+        <p class="muted small" id="monthly-invest-cat-status"></p>
+        <div style="position:relative;height:300px;">
+          <canvas id="monthly-invest-cat-chart"></canvas>
+        </div>
+      </div>
+
       <div class="value-chart-card" id="account-value-card">
         <div class="value-chart-header">
           <div class="value-chart-title-group">
@@ -2839,7 +2853,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=catcards2"></script>
+  <script src="script.js?v=micat1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

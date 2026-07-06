@@ -3791,7 +3791,7 @@
         updateRefreshButtonStatus(prefix);
         populatePortfolioSelect();
         if (prefix === "equity") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
-        if (prefix === "fixedincome") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); }
+        if (prefix === "fixedincome") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); }
         if (prefix === "fd") { renderValueChart(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
         if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
@@ -5774,6 +5774,33 @@
         byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
       });
     });
+
+    // Fixed Income: instrument sub category directly, transaction type contains "deposit"
+    (function () {
+      var rows = getSheetRows("fixedincome");
+      if (!rows || rows.length < 2) return;
+      var header = rows[0].map(normalizeText);
+      var typeIdx   = header.indexOf("transaction type");
+      var dateIdx   = header.indexOf("transaction date");
+      var amtIdx    = header.indexOf("amount");
+      var subCatIdx = header.indexOf("instrument sub category");
+      if (typeIdx === -1 || dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
+      rows.slice(1).forEach(function (row) {
+        var type = normalizeText(row[typeIdx] || "");
+        if (type.indexOf("deposit") === -1) return;
+        var d = parseFlexibleDate(row[dateIdx]);
+        if (!d) return;
+        var amount = parseNumber(row[amtIdx]);
+        if (!amount) return;
+        var cat = (row[subCatIdx] || "").trim() || "Fixed Income";
+        var yr2 = String(d.getFullYear());
+        var mo = String(d.getMonth() + 1).padStart(2, "0");
+        allYears[yr2] = true;
+        var key = yr2 + "-" + mo;
+        if (!byMonthCat[key]) byMonthCat[key] = {};
+        byMonthCat[key][cat] = (byMonthCat[key][cat] || 0) + amount;
+      });
+    }());
 
     return { byMonthCat: byMonthCat, yearList: Object.keys(allYears).sort() };
   }
