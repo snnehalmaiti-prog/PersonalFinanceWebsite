@@ -5837,9 +5837,20 @@
       return;
     }
 
-    // Pick year: preserve selection if valid, else default to latest
+    // Pick year: preserve selection if valid, else default to most recent year with data
     if (!__monthlyInvestCatYear || yearList.indexOf(__monthlyInvestCatYear) < 0) {
-      __monthlyInvestCatYear = yearList[yearList.length - 1];
+      var byMonthCat = __monthlyInvestCatData.byMonthCat;
+      var defaultYr = yearList[yearList.length - 1];
+      for (var yi = yearList.length - 1; yi >= 0; yi--) {
+        var testYr = yearList[yi];
+        var hasData = false;
+        for (var mi2 = 0; mi2 < 12; mi2++) {
+          var tk = testYr + "-" + String(mi2 + 1).padStart(2, "0");
+          if (byMonthCat[tk]) { hasData = true; break; }
+        }
+        if (hasData) { defaultYr = testYr; break; }
+      }
+      __monthlyInvestCatYear = defaultYr;
     }
 
     // Build year selector once
