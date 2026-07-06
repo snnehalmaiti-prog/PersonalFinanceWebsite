@@ -3009,7 +3009,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-actions-bar {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
+  border: 1px solid var(--border); border-radius: 10px; margin-bottom: 4px;
 }
 .rec-select-all-label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
 .rec-actions-sep { color: var(--border); font-size: 1rem; }
@@ -3025,7 +3025,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* ── Records day header ──────────────────────────────────────────────────── */
 .rec-day-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0 6px; border-bottom: 1px solid var(--border); margin-bottom: 0;
+  padding: 6px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 0;
 }
 .rec-day-left { display: flex; align-items: center; gap: 8px; }
 .rec-day-weekday { font-weight: 700; font-size: 0.9rem; }
