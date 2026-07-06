@@ -5791,20 +5791,23 @@
     }
     var catList = Object.keys(allCats).sort();
     var datasets = catList.map(function (cat, i) {
+      var vals = [];
+      for (var mi = 0; mi < 12; mi++) {
+        var k = yr + "-" + String(mi + 1).padStart(2, "0");
+        vals.push((byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0);
+      }
       return {
         label: cat,
-        data: Array.from({length: 12}, function (_, mi) {
-          var k = yr + "-" + String(mi + 1).padStart(2, "0");
-          return (byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0;
-        }),
+        data: vals,
         backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length],
         borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
       };
     });
 
+    if (!catList.length) { if (statusEl) statusEl.textContent = "No data for " + yr + "."; return; }
     if (statusEl) statusEl.textContent = "";
     if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
-    __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
+    try { __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: MON_LABELS, datasets: datasets },
       options: {
@@ -5818,7 +5821,7 @@
           y: { stacked: true, beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } } }
         }
       }
-    });
+    }); } catch(e) { if (statusEl) statusEl.textContent = "Chart error: " + e.message; }
   }
 
   function renderMonthlyInvestmentByCategory() {
