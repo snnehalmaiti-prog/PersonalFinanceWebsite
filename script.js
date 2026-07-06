@@ -5977,12 +5977,14 @@
       if (byMonthCatOut[k]) Object.keys(byMonthCatOut[k]).forEach(function (c) { outCats[c] = true; });
     });
     var outCatList = Object.keys(outCats).sort();
+    // Months without withdrawals are null (not 0) so no dots render there
     function withdrawLine(label, color, vals, stackId) {
       return {
         type: "line", label: label, data: vals,
         borderColor: color, backgroundColor: "transparent",
         borderWidth: 2, borderDash: [6, 4],
         pointRadius: 2, pointHoverRadius: 4, tension: 0.2,
+        spanGaps: false,
         stack: stackId, yAxisID: "yOut", order: 0
       };
     }
@@ -5991,7 +5993,7 @@
         datasets.push(withdrawLine(cat + " (withdrawn)",
           MIC_PALETTE[(catList.indexOf(cat) !== -1 ? catList.indexOf(cat) : i) % MIC_PALETTE.length],
           monthKeys.map(function (k2) {
-            return (byMonthCatOut[k2] && byMonthCatOut[k2][cat]) ? byMonthCatOut[k2][cat] : 0;
+            return (byMonthCatOut[k2] && byMonthCatOut[k2][cat]) ? byMonthCatOut[k2][cat] : null;
           }),
           "wd-" + cat));
       });
@@ -5999,8 +6001,9 @@
       datasets.push(withdrawLine("Total withdrawn", "#EF4444",
         monthKeys.map(function (k2) {
           var m = byMonthCatOut[k2];
-          if (!m) return 0;
-          return Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0);
+          if (!m) return null;
+          var s = Object.keys(m).reduce(function (acc, c) { return acc + m[c]; }, 0);
+          return s > 0 ? s : null;
         }),
         "wd-total"));
     }
