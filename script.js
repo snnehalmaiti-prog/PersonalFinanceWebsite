@@ -5723,6 +5723,7 @@
   var __monthlyInvestCatData; // { byMonthCat, yearList }
   var __monthlyInvestCatYear;
   var __monthlyInvestCatAllTime = false;
+  var __monthlyInvestCatSplit = false; // off = single total bar per month
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
@@ -5888,20 +5889,37 @@
     });
     var catList = Object.keys(allCats).sort();
 
-    var datasets = catList.map(function (cat, i) {
-      var vals = monthKeys.map(function (k2) {
-        return (byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0;
+    // Hex + "99" alpha (~60% opacity) so withdrawal lines stay visible behind bars
+    var datasets;
+    if (__monthlyInvestCatSplit) {
+      datasets = catList.map(function (cat, i) {
+        var vals = monthKeys.map(function (k2) {
+          return (byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0;
+        });
+        return {
+          label: cat,
+          data: vals,
+          backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "99",
+          borderColor: MIC_PALETTE[i % MIC_PALETTE.length],
+          borderWidth: 1,
+          borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
+        };
       });
-      // Hex + "99" alpha (~60% opacity) so withdrawal lines stay visible behind bars
-      return {
-        label: cat,
-        data: vals,
-        backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "99",
-        borderColor: MIC_PALETTE[i % MIC_PALETTE.length],
+    } else {
+      // Split off: one total bar per month
+      datasets = catList.length ? [{
+        label: "Total invested",
+        data: monthKeys.map(function (k2) {
+          var m = byMonthCat[k2];
+          if (!m) return 0;
+          return Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0);
+        }),
+        backgroundColor: MIC_PALETTE[0] + "99",
+        borderColor: MIC_PALETTE[0],
         borderWidth: 1,
         borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
-      };
-    });
+      }] : [];
+    }
 
     // Withdrawal lines: one dashed line per sub-category that had any
     // sell/redeem/withdraw activity in the visible window.
@@ -5910,25 +5928,33 @@
       if (byMonthCatOut[k]) Object.keys(byMonthCatOut[k]).forEach(function (c) { outCats[c] = true; });
     });
     var outCatList = Object.keys(outCats).sort();
-    outCatList.forEach(function (cat, i) {
-      datasets.push({
-        type: "line",
-        label: cat + " (withdrawn)",
-        data: monthKeys.map(function (k2) {
-          return (byMonthCatOut[k2] && byMonthCatOut[k2][cat]) ? byMonthCatOut[k2][cat] : 0;
-        }),
-        borderColor: MIC_PALETTE[(catList.indexOf(cat) !== -1 ? catList.indexOf(cat) : i) % MIC_PALETTE.length],
-        backgroundColor: "transparent",
-        borderWidth: 2,
-        borderDash: [6, 4],
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        tension: 0.2,
-        stack: "wd-" + cat,
-        yAxisID: "yOut",
-        order: 0
+    function withdrawLine(label, color, vals, stackId) {
+      return {
+        type: "line", label: label, data: vals,
+        borderColor: color, backgroundColor: "transparent",
+        borderWidth: 2, borderDash: [6, 4],
+        pointRadius: 2, pointHoverRadius: 4, tension: 0.2,
+        stack: stackId, yAxisID: "yOut", order: 0
+      };
+    }
+    if (__monthlyInvestCatSplit) {
+      outCatList.forEach(function (cat, i) {
+        datasets.push(withdrawLine(cat + " (withdrawn)",
+          MIC_PALETTE[(catList.indexOf(cat) !== -1 ? catList.indexOf(cat) : i) % MIC_PALETTE.length],
+          monthKeys.map(function (k2) {
+            return (byMonthCatOut[k2] && byMonthCatOut[k2][cat]) ? byMonthCatOut[k2][cat] : 0;
+          }),
+          "wd-" + cat));
       });
-    });
+    } else if (outCatList.length) {
+      datasets.push(withdrawLine("Total withdrawn", "#EF4444",
+        monthKeys.map(function (k2) {
+          var m = byMonthCatOut[k2];
+          if (!m) return 0;
+          return Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0);
+        }),
+        "wd-total"));
+    }
 
     console.log("[MIC v12] year", yr, "categories:", catList.join(", ") || "(none)", "| withdrawals:", outCatList.join(", ") || "(none)");
     if (!catList.length && !outCatList.length) {
@@ -6024,6 +6050,16 @@
       };
       yearSel.value = __monthlyInvestCatYear;
       yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
+    }
+
+    var splitBtn = document.getElementById("monthly-invest-cat-split");
+    if (splitBtn) {
+      splitBtn.classList.toggle("active", __monthlyInvestCatSplit);
+      splitBtn.onclick = function () {
+        __monthlyInvestCatSplit = !__monthlyInvestCatSplit;
+        splitBtn.classList.toggle("active", __monthlyInvestCatSplit);
+        drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+      };
     }
 
     var allBtn = document.getElementById("monthly-invest-cat-alltime");
