@@ -227,8 +227,9 @@
         <p class="muted small" id="benchmark-status" hidden></p>
       </div>
 
-      <!-- Monthly Investment by Sub-Category chart — full width below overview stats -->
-      <div class="value-chart-card" id="monthly-invest-cat-card" style="width:100%;box-sizing:border-box;">
+      <!-- Monthly Investment + Account Value side by side (stack on mobile) -->
+      <div class="charts-row" id="overview-top-charts-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">
+      <div class="value-chart-card" id="monthly-invest-cat-card" style="flex:1 1 420px;min-width:0;box-sizing:border-box;">
         <div class="value-chart-header">
           <h3>Monthly Investment by Category</h3>
           <div class="value-chart-actions">
@@ -240,7 +241,7 @@
         <div id="monthly-invest-cat-wrap" style="position:relative;height:300px;"></div>
       </div>
 
-      <div class="value-chart-card" id="account-value-card">
+      <div class="value-chart-card" id="account-value-card" style="flex:1 1 420px;min-width:0;box-sizing:border-box;">
         <div class="value-chart-header">
           <div class="value-chart-title-group">
             <h3>Account Value</h3>
@@ -268,6 +269,7 @@
         </div>
         <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
       </div>
+      </div><!-- /overview-top-charts-row -->
 
 
       <div class="value-chart-card">
@@ -2852,7 +2854,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat17"></script>
+  <script src="script.js?v=micat18"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
