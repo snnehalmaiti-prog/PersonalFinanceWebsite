@@ -5790,6 +5790,7 @@
       if (byMonthCat[k]) Object.keys(byMonthCat[k]).forEach(function (c) { allCats[c] = true; });
     }
     var catList = Object.keys(allCats).sort();
+    if (statusEl) statusEl.textContent = "yr=" + yr + " cats=" + catList.length + " keys=" + Object.keys(byMonthCat).filter(function(k){return k.indexOf(yr)===0;}).join(",");
     var datasets = catList.map(function (cat, i) {
       var vals = [];
       for (var mi = 0; mi < 12; mi++) {
