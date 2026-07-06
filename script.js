@@ -5731,9 +5731,11 @@
       if (!mrows || mrows.length < 2) return;
       var mhdr = mrows[0].map(normalizeText);
       var miIdx = mhdr.indexOf("instrument name");
-      var mcIdx = mhdr.findIndex(function (h) {
-        return h.indexOf("market segment") !== -1 || h.indexOf("category") !== -1 || h.indexOf("segment") !== -1;
-      });
+      // Prefer "instrument sub category" > "market segment" > "segment" > "category"
+      var mcIdx = mhdr.findIndex(function (h) { return h.indexOf("sub category") !== -1 || h === "instrument sub category"; });
+      if (mcIdx === -1) mcIdx = mhdr.findIndex(function (h) { return h.indexOf("market segment") !== -1; });
+      if (mcIdx === -1) mcIdx = mhdr.findIndex(function (h) { return h.indexOf("segment") !== -1; });
+      if (mcIdx === -1) mcIdx = mhdr.findIndex(function (h) { return h.indexOf("category") !== -1; });
       if (miIdx === -1 || mcIdx === -1) return;
       mrows.slice(1).forEach(function (r) {
         var instr = (r[miIdx] || "").trim();
@@ -5752,20 +5754,22 @@
       var dateIdx = header.indexOf("transaction date");
       var unitsIdx = header.indexOf("units");
       var priceIdx = header.indexOf("price");
+      var amtIdx = header.indexOf("amount");
       var instrIdx = header.indexOf("instrument name");
-      var catIdx = header.indexOf("instrument category");
-      if (typeIdx === -1 || dateIdx === -1 || unitsIdx === -1 || priceIdx === -1) return;
+      var subCatIdx = header.indexOf("instrument sub category");
+      if (typeIdx === -1 || dateIdx === -1) return;
+      if (amtIdx === -1 && (unitsIdx === -1 || priceIdx === -1)) return;
       rows.slice(1).forEach(function (row) {
         var type = normalizeText(row[typeIdx] || "");
         if (type.indexOf("buy") === -1) return;
         var d = parseFlexibleDate(row[dateIdx]);
         if (!d) return;
-        var amount = parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]);
+        var amount = amtIdx !== -1 ? parseNumber(row[amtIdx]) : (parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]));
         if (!amount) return;
         var instrName = instrIdx !== -1 ? normalizeText((row[instrIdx] || "").trim()) : "";
         var cat = (instrName && instrCatMap[instrName])
           ? instrCatMap[instrName]
-          : (catIdx !== -1 && row[catIdx] ? row[catIdx].trim() : "Other");
+          : (subCatIdx !== -1 && row[subCatIdx] ? (row[subCatIdx] || "").trim() : "Other");
         var yr = String(d.getFullYear());
         var mo = String(d.getMonth() + 1).padStart(2, "0");
         allYears[yr] = true;
