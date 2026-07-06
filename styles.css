@@ -3093,3 +3093,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .overview-charts-row {
   display: flex; gap: 16px; align-items: flex-start;
 }
+
+/* Active state for the Monthly Investment "All time" toggle */
+.btn-outline.active {
+  background: var(--accent, #3B82F6);
+  color: #fff;
+  border-color: var(--accent, #3B82F6);
+}

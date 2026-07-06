@@ -5722,6 +5722,7 @@
   var __monthlyInvestCatChart;
   var __monthlyInvestCatData; // { byMonthCat, yearList }
   var __monthlyInvestCatYear;
+  var __monthlyInvestCatAllTime = false;
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
@@ -5853,19 +5854,40 @@
     try {
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
 
-    var allCats = {};
-    for (var mi = 0; mi < 12; mi++) {
-      var k = yr + "-" + String(mi + 1).padStart(2, "0");
-      if (byMonthCat[k]) Object.keys(byMonthCat[k]).forEach(function (c) { allCats[c] = true; });
+    // Month keys and axis labels for the requested view:
+    // all-time = every month from the first investment to the last,
+    // yearly   = Jan..Dec of the selected year.
+    var monthKeys = [];
+    var labels = [];
+    if (yr === "all") {
+      var sortedKeys = Object.keys(byMonthCat).sort();
+      if (sortedKeys.length) {
+        var first = sortedKeys[0].split("-"), last = sortedKeys[sortedKeys.length - 1].split("-");
+        var cur = new Date(parseInt(first[0], 10), parseInt(first[1], 10) - 1, 1);
+        var end = new Date(parseInt(last[0], 10), parseInt(last[1], 10) - 1, 1);
+        while (cur <= end) {
+          monthKeys.push(cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0"));
+          labels.push(MON_LABELS[cur.getMonth()] + " '" + String(cur.getFullYear()).slice(2));
+          cur.setMonth(cur.getMonth() + 1);
+        }
+      }
+    } else {
+      for (var mi = 0; mi < 12; mi++) {
+        monthKeys.push(yr + "-" + String(mi + 1).padStart(2, "0"));
+        labels.push(MON_LABELS[mi]);
+      }
     }
+
+    var allCats = {};
+    monthKeys.forEach(function (k) {
+      if (byMonthCat[k]) Object.keys(byMonthCat[k]).forEach(function (c) { allCats[c] = true; });
+    });
     var catList = Object.keys(allCats).sort();
 
     var datasets = catList.map(function (cat, i) {
-      var vals = [];
-      for (var mi2 = 0; mi2 < 12; mi2++) {
-        var k2 = yr + "-" + String(mi2 + 1).padStart(2, "0");
-        vals.push((byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0);
-      }
+      var vals = monthKeys.map(function (k2) {
+        return (byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0;
+      });
       return {
         label: cat,
         data: vals,
@@ -5876,7 +5898,7 @@
 
     console.log("[MIC v12] year", yr, "categories:", catList.join(", ") || "(none)");
     if (!catList.length) {
-      if (statusEl) statusEl.textContent = "No data for " + yr + ".";
+      if (statusEl) statusEl.textContent = "No data for " + (yr === "all" ? "all time" : yr) + ".";
       if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
       wrap.innerHTML = "";
       return;
@@ -5891,7 +5913,7 @@
 
     __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
-      data: { labels: MON_LABELS, datasets: datasets },
+      data: { labels: labels, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
@@ -5956,9 +5978,21 @@
         drawMonthlyInvestCatChart(__monthlyInvestCatYear);
       };
       yearSel.value = __monthlyInvestCatYear;
+      yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
     }
 
-    drawMonthlyInvestCatChart(__monthlyInvestCatYear);
+    var allBtn = document.getElementById("monthly-invest-cat-alltime");
+    if (allBtn) {
+      allBtn.classList.toggle("active", __monthlyInvestCatAllTime);
+      allBtn.onclick = function () {
+        __monthlyInvestCatAllTime = !__monthlyInvestCatAllTime;
+        allBtn.classList.toggle("active", __monthlyInvestCatAllTime);
+        if (yearSel) yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
+        drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+      };
+    }
+
+    drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
   }
 
   var equityHoldingsSortState = { key: null, dir: 1 };
