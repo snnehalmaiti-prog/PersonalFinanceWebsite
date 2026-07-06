@@ -5841,9 +5841,9 @@
   function drawMonthlyInvestCatChart(yr) {
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
-    var canvas = document.getElementById("monthly-invest-cat-chart");
+    var wrap = document.getElementById("monthly-invest-cat-wrap");
     var statusEl = document.getElementById("monthly-invest-cat-status");
-    if (!canvas || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
+    if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
 
     var allCats = {};
@@ -5855,9 +5855,9 @@
 
     var datasets = catList.map(function (cat, i) {
       var vals = [];
-      for (var mi = 0; mi < 12; mi++) {
-        var k = yr + "-" + String(mi + 1).padStart(2, "0");
-        vals.push((byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0);
+      for (var mi2 = 0; mi2 < 12; mi2++) {
+        var k2 = yr + "-" + String(mi2 + 1).padStart(2, "0");
+        vals.push((byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0);
       }
       return {
         label: cat,
@@ -5869,12 +5869,13 @@
 
     if (!catList.length) { if (statusEl) statusEl.textContent = "No data for " + yr + "."; return; }
     if (statusEl) statusEl.textContent = "";
-    // Update in place to avoid canvas height collapsing on destroy/recreate
-    if (__monthlyInvestCatChart) {
-      __monthlyInvestCatChart.data = { labels: MON_LABELS, datasets: datasets };
-      __monthlyInvestCatChart.update();
-      return;
-    }
+
+    // Destroy old chart and replace canvas to guarantee a clean render
+    if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
+    wrap.innerHTML = "";
+    var canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+
     try { __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: MON_LABELS, datasets: datasets },
