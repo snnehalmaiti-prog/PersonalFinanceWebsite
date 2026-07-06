@@ -5846,14 +5846,12 @@
     if (!canvas || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
 
-    console.log("[draw] yr=", yr, "byMonthCat keys=", Object.keys(byMonthCat).filter(function(k){return k.indexOf(yr)===0;}));
     var allCats = {};
     for (var mi = 0; mi < 12; mi++) {
       var k = yr + "-" + String(mi + 1).padStart(2, "0");
       if (byMonthCat[k]) Object.keys(byMonthCat[k]).forEach(function (c) { allCats[c] = true; });
     }
     var catList = Object.keys(allCats).sort();
-    console.log("[draw] catList=", catList);
 
     var datasets = catList.map(function (cat, i) {
       var vals = [];
@@ -5871,7 +5869,12 @@
 
     if (!catList.length) { if (statusEl) statusEl.textContent = "No data for " + yr + "."; return; }
     if (statusEl) statusEl.textContent = "";
-    if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
+    // Update in place to avoid canvas height collapsing on destroy/recreate
+    if (__monthlyInvestCatChart) {
+      __monthlyInvestCatChart.data.datasets = datasets;
+      __monthlyInvestCatChart.update("none");
+      return;
+    }
     try { __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: MON_LABELS, datasets: datasets },
@@ -5918,17 +5921,20 @@
       __monthlyInvestCatYear = defaultYr;
     }
 
-    // Build year selector once
+    // Rebuild year selector only when the year list changes; bind onchange once
     if (yearSel) {
-      yearSel.innerHTML = yearList.map(function (y) {
-        return '<option value="' + y + '">' + y + '</option>';
-      }).join("");
+      var existingYears = [];
+      for (var oi = 0; oi < yearSel.options.length; oi++) existingYears.push(yearSel.options[oi].value);
+      if (existingYears.join(",") !== yearList.join(",")) {
+        yearSel.innerHTML = yearList.map(function (y) {
+          return '<option value="' + y + '">' + y + '</option>';
+        }).join("");
+        yearSel.onchange = function () {
+          __monthlyInvestCatYear = yearSel.value;
+          drawMonthlyInvestCatChart(__monthlyInvestCatYear);
+        };
+      }
       yearSel.value = __monthlyInvestCatYear;
-      yearSel.onchange = function () {
-        console.log("[year] onchange fired, value=", yearSel.value);
-        __monthlyInvestCatYear = yearSel.value;
-        drawMonthlyInvestCatChart(__monthlyInvestCatYear);
-      };
     }
 
     drawMonthlyInvestCatChart(__monthlyInvestCatYear);
