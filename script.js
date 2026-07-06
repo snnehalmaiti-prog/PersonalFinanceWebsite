@@ -5892,10 +5892,13 @@
       var vals = monthKeys.map(function (k2) {
         return (byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0;
       });
+      // Hex + "99" alpha (~60% opacity) so withdrawal lines stay visible behind bars
       return {
         label: cat,
         data: vals,
-        backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length],
+        backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "99",
+        borderColor: MIC_PALETTE[i % MIC_PALETTE.length],
+        borderWidth: 1,
         borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
       };
     });
