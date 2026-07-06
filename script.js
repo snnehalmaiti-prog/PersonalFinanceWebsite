@@ -5796,8 +5796,9 @@
     if (yearList.indexOf(currentYr) < 0) currentYr = yearList[yearList.length - 1];
     if (yearSel) {
       yearSel.innerHTML = yearList.map(function (y) {
-        return '<option value="' + y + '"' + (y === currentYr ? " selected" : "") + '>' + y + '</option>';
+        return '<option value="' + y + '">' + y + '</option>';
       }).join("");
+      yearSel.value = currentYr;
       yearSel.onchange = renderMonthlyInvestmentByCategory;
     }
 
