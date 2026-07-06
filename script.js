@@ -5871,8 +5871,8 @@
     if (statusEl) statusEl.textContent = "";
     // Update in place to avoid canvas height collapsing on destroy/recreate
     if (__monthlyInvestCatChart) {
-      __monthlyInvestCatChart.data.datasets = datasets;
-      __monthlyInvestCatChart.update("none");
+      __monthlyInvestCatChart.data = { labels: MON_LABELS, datasets: datasets };
+      __monthlyInvestCatChart.update();
       return;
     }
     try { __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
