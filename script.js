@@ -5718,8 +5718,9 @@
   }
 
   var __monthlyInvestCatChart = null;
+  var __monthlyInvestCatYear = null;
 
-  function renderMonthlyInvestmentByCategory() {
+  function renderMonthlyInvestmentByCategory(selectedYr) {
     var canvas = document.getElementById("monthly-invest-cat-chart");
     var statusEl = document.getElementById("monthly-invest-cat-status");
     var yearSel = document.getElementById("monthly-invest-cat-year");
@@ -5792,14 +5793,22 @@
     }
 
     // Year selector
-    var currentYr = yearSel && yearSel.value ? yearSel.value : String(new Date().getFullYear());
-    if (yearList.indexOf(currentYr) < 0) currentYr = yearList[yearList.length - 1];
+    if (selectedYr) __monthlyInvestCatYear = selectedYr;
+    if (!__monthlyInvestCatYear || yearList.indexOf(__monthlyInvestCatYear) < 0) {
+      __monthlyInvestCatYear = yearList[yearList.length - 1];
+    }
+    var currentYr = __monthlyInvestCatYear;
     if (yearSel) {
-      yearSel.innerHTML = yearList.map(function (y) {
-        return '<option value="' + y + '">' + y + '</option>';
-      }).join("");
+      if (!yearSel.__micInit) {
+        yearSel.__micInit = true;
+        yearSel.innerHTML = yearList.map(function (y) {
+          return '<option value="' + y + '">' + y + '</option>';
+        }).join("");
+        yearSel.addEventListener("change", function () {
+          renderMonthlyInvestmentByCategory(yearSel.value);
+        });
+      }
       yearSel.value = currentYr;
-      yearSel.onchange = renderMonthlyInvestmentByCategory;
     }
 
     // Build labels and datasets for selected year
