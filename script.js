@@ -5839,12 +5839,16 @@
   }
 
   function drawMonthlyInvestCatChart(yr) {
-    console.log("[MIC v11] draw called for year", yr);
+    console.log("[MIC v12] draw called for year", yr);
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
     var wrap = document.getElementById("monthly-invest-cat-wrap");
     var statusEl = document.getElementById("monthly-invest-cat-status");
-    if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
+    if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) {
+      console.log("[MIC v12] guard exit: wrap=", !!wrap, "Chart=", typeof Chart !== "undefined", "data=", !!__monthlyInvestCatData);
+      return;
+    }
+    try {
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
 
     var allCats = {};
@@ -5868,7 +5872,7 @@
       };
     });
 
-    console.log("[MIC v11] year", yr, "categories:", catList.join(", ") || "(none)");
+    console.log("[MIC v12] year", yr, "categories:", catList.join(", ") || "(none)");
     if (!catList.length) {
       if (statusEl) statusEl.textContent = "No data for " + yr + ".";
       if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
@@ -5883,7 +5887,7 @@
     var canvas = document.createElement("canvas");
     wrap.appendChild(canvas);
 
-    try { __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
+    __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: MON_LABELS, datasets: datasets },
       options: {
@@ -5897,7 +5901,12 @@
           y: { stacked: true, beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } } }
         }
       }
-    }); } catch(e) { if (statusEl) statusEl.textContent = "Chart error: " + e.message; }
+    });
+    console.log("[MIC v12] chart created OK for", yr);
+    } catch(e) {
+      console.error("[MIC v12] draw failed:", e);
+      if (statusEl) statusEl.textContent = "Chart error: " + e.message;
+    }
   }
 
   function renderMonthlyInvestmentByCategory() {
@@ -5940,7 +5949,7 @@
       }
       // Bind unconditionally so the handler can never be lost
       yearSel.onchange = function () {
-        console.log("[MIC v11] year changed to", yearSel.value);
+        console.log("[MIC v12] year changed to", yearSel.value);
         __monthlyInvestCatYear = yearSel.value;
         drawMonthlyInvestCatChart(__monthlyInvestCatYear);
       };
