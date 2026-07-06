@@ -5700,9 +5700,17 @@
         namedSum += invested;
       }
     });
-    // Rows with a blank Portfolio Name still count toward the overview total
-    var unassigned = computeTotalInvestment("all", prefixes) - namedSum;
-    if (unassigned > UNITS_EPSILON) investedByName["Unassigned"] = unassigned;
+    // Reconcile to the overview's "all" figure: blank-portfolio rows become an
+    // Unassigned slice; a small negative remainder (per-portfolio FIFO cost
+    // matching vs "all") is scaled away so both totals agree exactly.
+    var allTotal = computeTotalInvestment("all", prefixes);
+    var unassigned = allTotal - namedSum;
+    if (unassigned > UNITS_EPSILON) {
+      investedByName["Unassigned"] = unassigned;
+    } else if (unassigned < -UNITS_EPSILON && namedSum > 0) {
+      var scale = allTotal / namedSum;
+      Object.keys(investedByName).forEach(function (n) { investedByName[n] *= scale; });
+    }
 
     function drawSplitPie() {
       var labels = Object.keys(investedByName);
