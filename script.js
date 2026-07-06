@@ -5725,6 +5725,24 @@
     var yearSel = document.getElementById("monthly-invest-cat-year");
     if (!canvas || typeof Chart === "undefined") return;
 
+    // Build instrument → category maps from mapping sheets
+    var instrCatMap = {};
+    ["mfmapping", "stocksetfmapping"].forEach(function (mp) {
+      var mrows = getSheetRows(mp);
+      if (!mrows || mrows.length < 2) return;
+      var mhdr = mrows[0].map(normalizeText);
+      var miIdx = mhdr.indexOf("instrument name");
+      var mcIdx = mhdr.findIndex(function (h) {
+        return h.indexOf("market segment") !== -1 || h.indexOf("category") !== -1 || h.indexOf("segment") !== -1;
+      });
+      if (miIdx === -1 || mcIdx === -1) return;
+      mrows.slice(1).forEach(function (r) {
+        var instr = (r[miIdx] || "").trim();
+        var cat = (r[mcIdx] || "").trim();
+        if (instr && cat) instrCatMap[normalizeText(instr)] = cat;
+      });
+    });
+
     // Collect buy transactions from equity and stocksetf sheets
     var byMonthCat = {}; // { "YYYY-MM": { cat: amount } }
     var allYears = {};
@@ -5738,7 +5756,7 @@
       var dateIdx = header.indexOf("transaction date");
       var unitsIdx = header.indexOf("units");
       var priceIdx = header.indexOf("price");
-      var subCatIdx = header.indexOf("instrument sub category");
+      var instrIdx = header.indexOf("instrument name");
       var catIdx = header.indexOf("instrument category");
       if (typeIdx === -1 || dateIdx === -1 || unitsIdx === -1 || priceIdx === -1) return;
 
@@ -5751,7 +5769,13 @@
         var price = parseNumber(row[priceIdx]);
         var amount = units * price;
         if (!amount) return;
-        var cat = (subCatIdx !== -1 && row[subCatIdx] ? row[subCatIdx] : (catIdx !== -1 && row[catIdx] ? row[catIdx] : "Other")).trim();
+
+        // Resolve category: try mapping sheet first, then instrument category column
+        var instrName = instrIdx !== -1 ? normalizeText((row[instrIdx] || "").trim()) : "";
+        var cat = (instrName && instrCatMap[instrName])
+          ? instrCatMap[instrName]
+          : (catIdx !== -1 && row[catIdx] ? row[catIdx].trim() : "Other");
+
         var yr = d.getFullYear();
         var mo = String(d.getMonth() + 1).padStart(2, "0");
         var key = yr + "-" + mo;
