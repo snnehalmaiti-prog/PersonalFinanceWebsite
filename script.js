@@ -5707,10 +5707,11 @@
       byMonth[ym].investment += investByMonth[ym];
     });
 
-    // Build year list ONLY from years that have expense/income records
-    // (investment-only years like 2024 should not appear).
+    // Build year list ONLY from years that have expense/income records,
+    // and only from 2026 onwards.
     var yearSet = {};
     Object.keys(byMonth).forEach(function(ym) {
+      if (ym < "2026-01") return;
       if (byMonth[ym].income > 0 || byMonth[ym].expense > 0) yearSet[ym.slice(0,4)] = 1;
     });
     var yearList = Object.keys(yearSet).sort();
@@ -5768,7 +5769,7 @@
         // Bound the range to months that actually have income/expense records
         // (ignore investment-only months like a 2024-only investment history).
         var expKeys = allKeys.filter(function(k) {
-          return byMonth[k] && (byMonth[k].income > 0 || byMonth[k].expense > 0);
+          return k >= "2026-01" && byMonth[k] && (byMonth[k].income > 0 || byMonth[k].expense > 0);
         });
         if (expKeys.length) {
           first = expKeys[0];
