@@ -5661,7 +5661,7 @@
   // ── Monthly Cash Flow chart (Income / Investment / Expense) ──────────────
   var __mcfChart;
   var __mcfYear;
-  var __mcfAllTime = false;
+  var __mcfAllTime = true;
   var __mcfData; // { byMonth: { "YYYY-MM": { income, expense, investment } }, yearList }
 
   function buildMcfInvestmentByMonth() {
@@ -5762,6 +5762,8 @@
       var allKeys = Object.keys(byMonth).sort();
       if (allKeys.length) {
         var first = allKeys[0], last = allKeys[allKeys.length - 1];
+        // Clamp start to 2026-01
+        if (first < "2026-01") first = "2026-01";
         monthKeys = []; labels = [];
         var cy = parseInt(first.slice(0,4)), cm = parseInt(first.slice(5,7));
         var ey = parseInt(last.slice(0,4)), em = parseInt(last.slice(5,7));
