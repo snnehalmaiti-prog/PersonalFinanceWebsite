@@ -5520,6 +5520,9 @@
 
         statusEl.hidden = true;
 
+        // Render the raw Account Value (₹) chart next to Growth-of-₹100.
+        try { _renderPortfolioValueChart(points); } catch (e) {}
+
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
 
@@ -5875,6 +5878,61 @@
     }).catch(function (err) {
       statusEl.textContent = "Couldn't render the chart: " + (err && err.message ? err.message : err);
     });
+
+    function _renderPortfolioValueChart(points) {
+      var canvas2 = document.getElementById("portfolio-value-chart");
+      if (!canvas2 || typeof Chart === "undefined") return;
+      if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.destroy();
+      var wrap = canvas2.parentNode;
+      if (wrap) { wrap.innerHTML = ""; canvas2 = document.createElement("canvas"); canvas2.id = "portfolio-value-chart"; canvas2.height = 320; wrap.appendChild(canvas2); }
+      var ctx2 = canvas2.getContext("2d");
+      var grad = ctx2.createLinearGradient(0, 0, 0, canvas2.clientHeight || 320);
+      grad.addColorStop(0, "rgba(16,185,129,0.28)");
+      grad.addColorStop(1, "rgba(16,185,129,0)");
+      var lastVal = points.length ? points[points.length - 1].y : 0;
+      var lastEl = document.getElementById("pvc-current-value");
+      if (lastEl) lastEl.textContent = "₹" + Math.round(lastVal).toLocaleString("en-IN");
+      window.__wfPortfolioValueChart = new Chart(ctx2, {
+        type: "line",
+        data: {
+          datasets: [{
+            label: "Current Value",
+            data: points,
+            borderColor: "#10B981",
+            backgroundColor: grad,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.12
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) { return "₹" + Math.round(ctx.parsed.y).toLocaleString("en-IN"); }
+              }
+            }
+          },
+          scales: {
+            x: { type: "time", time: { unit: "year" }, grid: { display: false } },
+            y: {
+              ticks: {
+                callback: function (v) {
+                  if (v >= 1e7) return "₹" + (v / 1e7).toFixed(1) + "Cr";
+                  if (v >= 1e5) return "₹" + (v / 1e5).toFixed(1) + "L";
+                  if (v >= 1e3) return "₹" + (v / 1e3).toFixed(0) + "K";
+                  return "₹" + v;
+                }
+              },
+              grid: { color: "rgba(0,0,0,0.05)" }
+            }
+          }
+        }
+      });
+    }
 
     if (resetBtn && !resetBtn.dataset.bound) {
       resetBtn.dataset.bound = "1";

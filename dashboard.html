@@ -228,7 +228,8 @@
         <p class="muted small" id="benchmark-status" hidden></p>
       </div>
 
-      <div class="avc-card" id="account-value-card">
+      <div id="account-value-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;">
+      <div class="avc-card" id="account-value-card" style="flex:1 1 480px;min-width:0;">
         <div class="avc-header">
           <span class="avc-eyebrow" id="avc-eyebrow">GROWTH OF &#8377;100 &middot; SINCE INCEPTION</span>
           <div class="avc-legend">
@@ -258,6 +259,26 @@
         <span id="value-chart-callout" hidden><span id="value-chart-callout-value"></span><span id="value-chart-callout-date"></span></span>
         <div id="value-chart-range-picker" hidden></div>
       </div>
+
+      <div class="avc-card" id="portfolio-value-card" style="flex:1 1 480px;min-width:0;">
+        <div class="avc-header">
+          <span class="avc-eyebrow" id="pvc-eyebrow">ACCOUNT VALUE &middot; OVER TIME</span>
+          <div class="avc-legend">
+            <div class="avc-legend-item">
+              <span class="avc-legend-line avc-legend-portfolio"></span>
+              <span class="avc-legend-name">Current Value</span>
+              <span class="avc-legend-sep">&middot;</span>
+              <span class="avc-legend-value avc-portfolio-value" id="pvc-current-value">&#8377;—</span>
+            </div>
+          </div>
+        </div>
+        <p class="muted small" id="pvc-status" hidden></p>
+        <div class="avc-chart-wrap">
+          <canvas id="portfolio-value-chart" height="320"></canvas>
+        </div>
+        <p class="muted small" style="margin:8px 20px 4px;font-size:0.72rem;font-style:italic;">Shows the market value of your equity holdings over time.</p>
+      </div>
+      </div><!-- /account-value-row -->
 
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->
       <div id="monthly-invest-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;margin-top:16px;">
@@ -2905,7 +2926,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat54"></script>
+  <script src="script.js?v=micat55"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
