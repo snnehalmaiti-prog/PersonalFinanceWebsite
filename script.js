@@ -5674,11 +5674,23 @@
           if (indexPrices) {
             var basePortDate = formatDateISO(points[basePortIdx] ? points[basePortIdx].x : first);
             var baseIdxPrice = lookupIndexPrice(indexPrices, basePortDate);
+            var baseIdxIdx = basePortIdx;
+            // If index has no price at the portfolio's inception (e.g. portfolio
+            // starts in 2015 but index history only from 2018), find the first
+            // timeline date where the index has a price and rebase both series
+            // so they start at the same NAV on that later date.
+            if (!baseIdxPrice) {
+              for (var bi = basePortIdx; bi < points.length; bi++) {
+                var p = lookupIndexPrice(indexPrices, formatDateISO(points[bi].x));
+                if (p) { baseIdxPrice = p; baseIdxIdx = bi; break; }
+              }
+            }
             if (baseIdxPrice) {
+              var portNavAtIdxBase = (normPortPoints[baseIdxIdx] && normPortPoints[baseIdxIdx].y) || 100;
               normIdxPoints = points.map(function (p, i) {
-                if (i < basePortIdx) return { x: p.x, y: null };
+                if (i < baseIdxIdx) return { x: p.x, y: null };
                 var price = lookupIndexPrice(indexPrices, formatDateISO(p.x));
-                return { x: p.x, y: price ? (price * 100 / baseIdxPrice) : null };
+                return { x: p.x, y: price ? (price * portNavAtIdxBase / baseIdxPrice) : null };
               });
               for (var li = normIdxPoints.length - 1; li >= 0; li--) {
                 if (normIdxPoints[li].y != null) { lastIdxNorm = normIdxPoints[li].y; break; }
