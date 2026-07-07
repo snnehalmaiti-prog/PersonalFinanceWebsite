@@ -5707,14 +5707,17 @@
       byMonth[ym].investment += investByMonth[ym];
     });
 
-    // Build year list from all data
+    // Build year list ONLY from years that have expense/income records
+    // (investment-only years like 2024 should not appear).
     var yearSet = {};
-    Object.keys(byMonth).forEach(function(ym) { yearSet[ym.slice(0,4)] = 1; });
+    Object.keys(byMonth).forEach(function(ym) {
+      if (byMonth[ym].income > 0 || byMonth[ym].expense > 0) yearSet[ym.slice(0,4)] = 1;
+    });
     var yearList = Object.keys(yearSet).sort();
     __mcfData = { byMonth: byMonth, yearList: yearList };
 
     if (!yearList.length) {
-      if (statusEl) statusEl.textContent = "No cash flow data found.";
+      if (statusEl) statusEl.textContent = "No expense records yet.";
       return;
     }
     if (!__mcfYear || yearList.indexOf(__mcfYear) < 0) __mcfYear = yearList[yearList.length - 1];
@@ -5762,11 +5765,15 @@
       var allKeys = Object.keys(byMonth).sort();
       if (allKeys.length) {
         var first = allKeys[0], last = allKeys[allKeys.length - 1];
-        // Clamp start to the earliest month that has income or expense data
-        var expFirst = allKeys.find(function(k) {
+        // Bound the range to months that actually have income/expense records
+        // (ignore investment-only months like a 2024-only investment history).
+        var expKeys = allKeys.filter(function(k) {
           return byMonth[k] && (byMonth[k].income > 0 || byMonth[k].expense > 0);
         });
-        if (expFirst && expFirst > first) first = expFirst;
+        if (expKeys.length) {
+          first = expKeys[0];
+          last = expKeys[expKeys.length - 1];
+        }
         monthKeys = []; labels = [];
         var cy = parseInt(first.slice(0,4)), cm = parseInt(first.slice(5,7));
         var ey = parseInt(last.slice(0,4)), em = parseInt(last.slice(5,7));
