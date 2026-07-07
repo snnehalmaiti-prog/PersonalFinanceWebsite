@@ -3795,6 +3795,7 @@
         if (prefix === "fd") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
         if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
+        renderMonthlyCashFlow();
       }, canonicalFields);
     });
   });
@@ -5664,35 +5665,17 @@
   var __mcfData; // { byMonth: { "YYYY-MM": { income, expense, investment } }, yearList }
 
   function buildMcfInvestmentByMonth() {
-    // Aggregate investment amounts from the same sheets as Monthly Investment
+    // Use the already-built Monthly Investment data to avoid duplication
     var result = {};
-    function addInv(prefix, getAmt) {
-      var rows = getSheetRows(prefix);
-      if (!rows || rows.length < 2) return;
-      var hdr = rows[0].map(normalizeText);
-      var dateIdx = hdr.indexOf("date");
-      var amtIdx = hdr.indexOf("amount invested");
-      if (amtIdx < 0) amtIdx = hdr.indexOf("invested amount");
-      if (amtIdx < 0) amtIdx = hdr.indexOf("invested");
-      var typeIdx = hdr.indexOf("transaction type");
-      if (dateIdx < 0 || amtIdx < 0) return;
-      for (var i = 1; i < rows.length; i++) {
-        var row = rows[i];
-        var rawType = typeIdx >= 0 ? normalizeText(String(row[typeIdx] || "")) : "";
-        if (rawType && (rawType === "sell" || rawType === "redeem" || rawType === "withdraw" || rawType === "withdrawal")) continue;
-        var d = parseFlexibleDate(row[dateIdx]);
-        if (!d) continue;
-        var amt = parseNumber(row[amtIdx]);
-        if (!amt || amt <= 0) continue;
-        var ym = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-        if (!result[ym]) result[ym] = 0;
-        result[ym] += amt;
-      }
+    if (__monthlyInvestCatData && __monthlyInvestCatData.byMonthCat) {
+      var byMonthCat = __monthlyInvestCatData.byMonthCat;
+      Object.keys(byMonthCat).forEach(function(ym) {
+        var cats = byMonthCat[ym];
+        var total = 0;
+        Object.keys(cats).forEach(function(cat) { total += cats[cat] || 0; });
+        if (total > 0) result[ym] = total;
+      });
     }
-    addInv("equity");
-    addInv("fixedincome");
-    addInv("fd");
-    addInv("stocksetf");
     return result;
   }
 
