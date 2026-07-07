@@ -6269,6 +6269,27 @@
         "wd-total"));
     }
 
+    // Trendline of investment across months (follows the filtered instrument in
+    // split mode, otherwise the monthly total). Plotted on the left axis.
+    if (catList.length) {
+      var trendVals = monthKeys.map(function (k) {
+        if (__monthlyInvestCatSplit && __monthlyInvestCatFilter) return barCell(k, __monthlyInvestCatFilter);
+        return barTotal(k);
+      });
+      datasets.push({
+        type: "line",
+        label: "Investment trend",
+        data: trendVals,
+        borderColor: "#1B6E45",
+        backgroundColor: "rgba(27,110,69,0.08)",
+        borderWidth: 2.5,
+        pointRadius: 2.5, pointHoverRadius: 5,
+        pointBackgroundColor: "#1B6E45",
+        tension: 0.35, fill: false, spanGaps: true,
+        yAxisID: "y", order: 1, stack: "trendline"
+      });
+    }
+
     if (!catList.length && !outCatList.length) {
       if (statusEl) statusEl.textContent = "No data for " + (yr === "all" ? "all time" : yr) + ".";
       if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
@@ -6348,7 +6369,13 @@
         legendEl.innerHTML =
           '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + MIC_GREEN + '"></div>' +
           (net ? "Net invested" : "Invested (left axis)") + '</div>' +
+          '<div class="mic-legend-item"><div class="mic-legend-line" style="border-top-style:solid;border-top-color:#1B6E45;"></div>Trend</div>' +
           (!net && outCatList.length ? '<div class="mic-legend-item"><div class="mic-legend-line"></div>Withdrawn (right axis)</div>' : '');
+      }
+      // Append trend legend entry in split mode too
+      if (__monthlyInvestCatSplit && catList.length) {
+        legendEl.insertAdjacentHTML("beforeend",
+          '<div class="mic-legend-item"><div class="mic-legend-line" style="border-top-style:solid;border-top-color:#1B6E45;"></div>Trend</div>');
       }
     }
 
