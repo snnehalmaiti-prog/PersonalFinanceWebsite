@@ -5328,8 +5328,12 @@
       var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
-      var epfEvents = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
-      var fdValueEvents = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
+      // Account Value / Growth-of-₹100 chart compares equity-style returns
+      // against an equity index; fixed-income instruments (EPF, PF, FD,
+      // Savings, Investment Corpus) are always excluded so the comparison
+      // is apples-to-apples.
+      var epfEvents = [];
+      var fdValueEvents = [];
 
       // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
@@ -5550,8 +5554,8 @@
           });
         }
 
-        // Fixed Income (EPF): deposits only, interest is a return not a contribution
-        if (!isFixedIncomeExcluded()) {
+        // Fixed Income (EPF, PF, FD, Savings): excluded from Growth-of-₹100 chart.
+        if (false) {
           var fiRowsForFlow = getSheetRows("fixedincome");
           if (fiRowsForFlow && fiRowsForFlow.length) {
             var fiHdr = fiRowsForFlow[0].map(normalizeText);
@@ -5709,28 +5713,9 @@
           var idxValEl = document.getElementById("avc-index-value");
           if (idxValEl) idxValEl.textContent = lastIdxNorm != null ? "₹" + Math.round(lastIdxNorm) : "—";
 
-          // Verdict callout
+          // Verdict callout removed per user request; keep element hidden.
           var verdictEl = document.getElementById("avc-verdict");
-          var verdictHead = document.getElementById("avc-verdict-headline");
-          var verdictDetail = document.getElementById("avc-verdict-detail");
-          if (verdictEl && verdictHead && verdictDetail && lastPortNorm != null && lastIdxNorm != null) {
-            var years = Math.max(0.0833, (last.getTime() - (points[basePortIdx] ? points[basePortIdx].x.getTime() : first.getTime())) / (1000 * 60 * 60 * 24 * 365.25));
-            var portCagr = Math.pow(lastPortNorm / 100, 1 / years) - 1;
-            var idxCagr = Math.pow(lastIdxNorm / 100, 1 / years) - 1;
-            var alphaPp = (portCagr - idxCagr) * 100;
-            var beaten = alphaPp >= 0;
-            verdictEl.classList.toggle("negative", !beaten);
-            verdictHead.textContent = beaten
-              ? "You've beaten " + indexDisplayName + " by " + alphaPp.toFixed(2) + "pp annualised since " + inceptionYear + "."
-              : "You're trailing " + indexDisplayName + " by " + Math.abs(alphaPp).toFixed(2) + "pp annualised since " + inceptionYear + ".";
-            function fmtGrowth(v) { return "₹" + Math.round(v * 1000).toLocaleString("en-IN") + "00"; } // ₹1L * v/100 = v*1000 (thousand)
-            var portGrew = Math.round(100000 * lastPortNorm / 100).toLocaleString("en-IN");
-            var idxGrew = Math.round(100000 * lastIdxNorm / 100).toLocaleString("en-IN");
-            verdictDetail.textContent = "₹1L invested in your portfolio grew to ₹" + portGrew + " vs ₹" + idxGrew + " in " + indexDisplayName + ".";
-            verdictEl.hidden = false;
-          } else if (verdictEl) {
-            verdictEl.hidden = true;
-          }
+          if (verdictEl) verdictEl.hidden = true;
           return { normIdxPoints: normIdxPoints };
         }).then(function (idxResult) {
           _renderNormalizedChart(idxResult ? idxResult.normIdxPoints : []);
