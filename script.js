@@ -6091,6 +6091,45 @@
       "Commodity": 0
     };
 
+    // Per-portfolio splits within each category — populated below and refreshed
+    // when the async commodity data joins. Rendered as chips under each row.
+    var perCat = { "Equity": {}, "Fixed Income": {}, "Commodity": {} };
+    // Palette shared with Portfolio Split for stable per-portfolio colors
+    var PORTF_PALETTE = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
+    var portfolioColor = {};
+
+    var portfolioPrefixes = fiExcluded ? ["equity", "stocksetf"] : ["equity", "stocksetf", "fixedincome", "fd"];
+    var portfolioNames = (selected === "all") ? collectPortfolioNamesFromSheets(portfolioPrefixes) : [selected];
+    // Rank portfolios by total investment (desc) so color assignment matches Portfolio Split
+    var ranked = portfolioNames
+      .map(function (n) { return { name: n, total: computeTotalInvestment(n, portfolioPrefixes) }; })
+      .filter(function (p) { return p.total > UNITS_EPSILON; })
+      .sort(function (a, b) { return b.total - a.total; });
+    ranked.forEach(function (p, i) { portfolioColor[p.name] = PORTF_PALETTE[i % PORTF_PALETTE.length]; });
+
+    portfolioNames.forEach(function (n) {
+      var eq = computeTotalInvestment(n, ["equity", "stocksetf"]);
+      if (eq > UNITS_EPSILON) perCat["Equity"][n] = eq;
+      if (!fiExcluded) {
+        var fi = computeTotalInvestment(n, ["fixedincome", "fd"]);
+        if (fi > UNITS_EPSILON) perCat["Fixed Income"][n] = fi;
+      }
+    });
+
+    function portfolioChipsForCat(catKey) {
+      var byName = perCat[catKey] || {};
+      var names = Object.keys(byName).sort(function (a, b) { return byName[b] - byName[a]; });
+      var sum = names.reduce(function (s, n) { return s + byName[n]; }, 0);
+      if (sum <= 0) return "";
+      return names.map(function (n) {
+        var pc = (byName[n] / sum) * 100;
+        var pcStr = (pc >= 10 ? pc.toFixed(0) : pc.toFixed(1)) + "%";
+        var color = portfolioColor[n] || "#94A3B8";
+        return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + color + '"></span>' +
+          n + ' ' + pcStr + '</span>';
+      }).join("");
+    }
+
     function draw() {
       var entries = CATS
         .map(function (c) { return { name: c.key, value: investedByCat[c.key] || 0, meta: c }; })
@@ -6114,6 +6153,15 @@
         return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + e.meta.bar + ';" title="' + e.name + '"></span>';
       }).join("");
 
+      // Subtract commodity from Fixed Income per portfolio (fd sheet holds both)
+      var fiAdjusted = {};
+      Object.keys(perCat["Fixed Income"]).forEach(function (n) {
+        var v = perCat["Fixed Income"][n] - (perCat["Commodity"][n] || 0);
+        if (v > UNITS_EPSILON) fiAdjusted[n] = v;
+      });
+      var _origFI = perCat["Fixed Income"];
+      perCat["Fixed Income"] = fiAdjusted;
+
       listEl.innerHTML = entries.map(function (e) {
         var pct = (e.value / total) * 100;
         var pctStr = (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + "%";
@@ -6121,6 +6169,7 @@
           '<div class="isc-avatar" style="background:' + e.meta.tint + ';color:' + e.meta.ink + ';">' + e.meta.icon + '</div>' +
           '<div class="isc-row-body">' +
             '<div class="isc-row-name">' + e.name + '</div>' +
+            '<div class="isc-row-sub isc-cat-sub">' + portfolioChipsForCat(e.name) + '</div>' +
           '</div>' +
           '<div class="isc-row-nums">' +
             '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
@@ -6129,6 +6178,8 @@
         '</div>';
       }).join("");
 
+      // Restore for next draw so the subtraction doesn't compound
+      perCat["Fixed Income"] = _origFI;
       statusEl.textContent = "";
     }
     draw();
@@ -6150,7 +6201,12 @@
           results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
           var commHoldings = buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices) || [];
           var commTotal = 0;
-          commHoldings.forEach(function (h) { if (h.invested > UNITS_EPSILON) commTotal += h.invested; });
+          commHoldings.forEach(function (h) {
+            if (!(h.invested > UNITS_EPSILON)) return;
+            commTotal += h.invested;
+            var name = (h.portfolio || "").trim() || "Unassigned";
+            perCat["Commodity"][name] = (perCat["Commodity"][name] || 0) + h.invested;
+          });
           if (commTotal > UNITS_EPSILON) { investedByCat["Commodity"] = commTotal; draw(); }
         });
       }
