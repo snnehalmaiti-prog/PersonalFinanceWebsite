@@ -5328,12 +5328,15 @@
       var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       var skipped = Object.keys(unitEvents).length - instruments.length;
-      // Account Value / Growth-of-₹100 chart compares equity-style returns
-      // against an equity index; fixed-income instruments (EPF, PF, FD,
-      // Savings, Investment Corpus) are always excluded so the comparison
-      // is apples-to-apples.
+      // Growth-of-₹100 compares equity-style returns against an equity index;
+      // fixed-income (EPF, PF, FD, Savings, Investment Corpus) is always
+      // excluded so the comparison is apples-to-apples.
       var epfEvents = [];
       var fdValueEvents = [];
+      // For the raw Account Value chart, honour the user's exclusion filters
+      // — include fixed-income + savings when the user hasn't excluded them.
+      var epfEventsAll = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
+      var fdValueEventsAll = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
 
       // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
@@ -5520,8 +5523,17 @@
 
         statusEl.hidden = true;
 
+        // Build a parallel points-all series that layers fixed-income /
+        // savings on top of the equity value so the Account Value chart
+        // reflects total portfolio worth respecting the exclusion toggles.
+        var pointsAll = points.map(function (p) {
+          var extra = (lastAtOrBefore(epfEventsAll, p.x, "cumulativeValue") || 0)
+                    + (lastAtOrBefore(fdValueEventsAll, p.x, "cumulativeValue") || 0);
+          return { x: p.x, y: p.y + extra };
+        });
+
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
-        try { _renderPortfolioValueChart(points); } catch (e) {}
+        try { _renderPortfolioValueChart(pointsAll); } catch (e) {}
 
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
@@ -5955,6 +5967,9 @@
   // Re-render Growth-of-₹100 whenever the benchmark index changes on the
   // Benchmark Comparison card so both stay in sync.
   document.addEventListener("wf-benchmark-changed", function () {
+    renderValueChart();
+  });
+  document.addEventListener("wf-exclusion-changed", function () {
     renderValueChart();
   });
 
