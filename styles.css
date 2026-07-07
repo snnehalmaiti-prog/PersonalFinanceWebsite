@@ -3255,10 +3255,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* Account Value chart redesign — growth-of-100 comparison */
 .avc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px 16px; margin-top: 16px; }
-.avc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.avc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: nowrap; margin-bottom: 8px; }
 .avc-eyebrow { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
-.avc-legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.avc-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; }
+.avc-legend { display: flex; align-items: center; gap: 18px; flex-wrap: nowrap; white-space: nowrap; }
+.avc-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+.avc-eyebrow { white-space: nowrap; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .avc-legend-line { width: 22px; height: 0; border-top: 2.5px solid var(--emerald, #10B981); border-radius: 999px; flex-shrink: 0; }
 .avc-legend-line.avc-legend-index { border-top-style: dashed; border-top-color: #94A3B8; }
 .avc-legend-name { color: var(--text); }
