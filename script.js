@@ -6236,6 +6236,14 @@
     return names;
   }
 
+  // Returns a Promise<number> giving the INR-converted invested amount for the
+  // stocksetf sheet under a given portfolio filter (US lots × historical
+  // USD/INR rate from stock_prices.json).
+  function computeStocksEtfInvestmentINR(portfolioFilter) {
+    var info = computeStocksEtfInvestmentByRegion(portfolioFilter);
+    return info.promise.then(function (r) { return (r.India || 0) + (r.US || 0); });
+  }
+
   var ISC_MODE_KEY = "wf-isc-mode";
   function getIscMode() { return localStorage.getItem(ISC_MODE_KEY) === "region" ? "region" : "portfolio"; }
 
@@ -6418,6 +6426,28 @@
     }
     drawSplitPie();
 
+    // US stocks/ETF INR conversion joins asynchronously. Replace the raw
+    // stocksetf portion of each portfolio's total with the historical
+    // USD/INR-adjusted value so US positions aren't undercounted.
+    (function applyStocksEtfInrConversion() {
+      var portfolios = Object.keys(investedByName);
+      Promise.all(portfolios.map(function (name) {
+        var raw = computeTotalInvestment(name, ["stocksetf"]);
+        return computeStocksEtfInvestmentINR(name).then(function (inr) {
+          return { name: name, delta: inr - raw };
+        }).catch(function () { return null; });
+      })).then(function (results) {
+        var changed = false;
+        results.forEach(function (r) {
+          if (r && Math.abs(r.delta) > 0.01) {
+            investedByName[r.name] = (investedByName[r.name] || 0) + r.delta;
+            changed = true;
+          }
+        });
+        if (changed) drawSplitPie();
+      });
+    })();
+
     // Commodity (gold) invested amounts join asynchronously, mirroring the overview
     if (!fiExcluded) {
       var fdRowsPie = getSheetRows("fd");
@@ -6588,6 +6618,29 @@
         if (fi > UNITS_EPSILON) perCat["Fixed Income"][n] = fi;
       }
     });
+
+    // Adjust Equity per-portfolio + total by INR-converting US stocks/ETFs.
+    (function applyEquityInrConversion() {
+      Promise.all(portfolioNames.map(function (n) {
+        var raw = computeTotalInvestment(n, ["stocksetf"]);
+        return computeStocksEtfInvestmentINR(n).then(function (inr) {
+          return { name: n, delta: inr - raw };
+        }).catch(function () { return null; });
+      })).then(function (results) {
+        var totalDelta = 0, changed = false;
+        results.forEach(function (r) {
+          if (r && Math.abs(r.delta) > 0.01) {
+            perCat["Equity"][r.name] = (perCat["Equity"][r.name] || 0) + r.delta;
+            totalDelta += r.delta;
+            changed = true;
+          }
+        });
+        if (changed) {
+          investedByCat["Equity"] += totalDelta;
+          draw();
+        }
+      });
+    })();
 
     function portfolioChipsForCat(catKey) {
       var byName = perCat[catKey] || {};
