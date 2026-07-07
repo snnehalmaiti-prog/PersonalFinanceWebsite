@@ -5213,16 +5213,22 @@
     if (portfolioIdx === -1 || bankIdx === -1 || instrumentIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1) return [];
 
     var entries = [];
-    rows.slice(1).forEach(function (row) {
+    rows.slice(1).forEach(function (row, rowIdx) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var subCategory = normalizeText(row[subCategoryIdx]);
-      if (subCategory !== "investment corpus" && subCategory !== "savings account") return;
+      var isBalance = (subCategory === "investment corpus" || subCategory === "savings account");
+      var isPf = (subCategory === "provident fund");
+      if (!isBalance && !isPf) return;
 
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date) return;
-      var key = normalizeText(portfolio) + "||" + normalizeText(row[bankIdx]) + "||" + normalizeText(row[instrumentIdx]);
+      // Balance rows share a key per portfolio/bank/instrument (replacement).
+      // PF rows are discrete deposits, so use a unique key per row so each adds.
+      var key = isPf
+        ? "pf||" + rowIdx
+        : normalizeText(portfolio) + "||" + normalizeText(row[bankIdx]) + "||" + normalizeText(row[instrumentIdx]);
       entries.push({ date: date, key: key, amount: parseNumber(row[amountIdx]) });
     });
 
@@ -5592,7 +5598,7 @@
                 var amt = parseNumber(row[fdAmtIdx]);
                 if (!amt) return;
 
-                if (sub === "fixed deposit") {
+                if (sub === "fixed deposit" || sub === "provident fund") {
                   // Discrete deposit — contribution
                   contribEvents.push({ date: date, delta: amt });
                 } else if (sub === "gold" || sub === "silver" || sub === "commodity") {
