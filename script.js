@@ -5942,27 +5942,70 @@
     }
 
     function drawSplitPie() {
-      var labels = Object.keys(investedByName);
-      if (!labels.length) {
+      var barEl = document.getElementById("isc-bar");
+      var listEl = document.getElementById("isc-list");
+      var totalEl = document.getElementById("isc-total-value");
+      var eyebrowEl = document.getElementById("isc-eyebrow-text");
+      if (!barEl || !listEl || !totalEl) return;
+
+      var entries = Object.keys(investedByName)
+        .map(function (n) { return { name: n, value: investedByName[n] }; })
+        .filter(function (e) { return e.value > UNITS_EPSILON; })
+        .sort(function (a, b) { return b.value - a.value; });
+
+      if (!entries.length) {
         statusEl.textContent = "No invested amount found yet across your portfolios.";
-        if (window.__wfSplitChart) { window.__wfSplitChart.destroy(); window.__wfSplitChart = null; }
+        barEl.innerHTML = "";
+        listEl.innerHTML = "";
+        totalEl.textContent = "—";
         return;
       }
-      var data = labels.map(function (n) { return investedByName[n]; });
-      var total = data.reduce(function (sum, v) { return sum + v; }, 0);
-      console.log("[SPLIT] pie components:", JSON.parse(JSON.stringify(investedByName)), "total:", total);
-      console.log("[SPLIT] overview components: mf=", _ov.mfInvested, "se=", _ov.seInvested, "fi=", _ov.fiInvested, "comm=", _ov.commInvested,
-        "overviewTotal:", _ov.mfInvested + _ov.seInvested + (isFixedIncomeExcluded() ? 0 : _ov.fiInvested) + _ov.commInvested,
-        "| selected portfolio:", localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all");
-      statusEl.textContent = "Invested value split across " + labels.length + " portfolio(s), total " + formatCurrency(total) + ".";
-      renderApplePieChart(canvas, {
-        instanceKey: "__wfSplitChart",
-        labels: labels,
-        data: data,
-        total: total,
-        centerLabel: "Invested",
-        formatLabel: formatCurrency
-      });
+      var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+
+      // Palette: green, orange, blue, purple, teal, pink, amber, indigo …
+      var PALETTE = [
+        { bar: "#10B981", tint: "#D1FAE5", ink: "#065F46" }, // green
+        { bar: "#F59E0B", tint: "#FEF3C7", ink: "#B45309" }, // orange
+        { bar: "#3B82F6", tint: "#DBEAFE", ink: "#1E40AF" }, // blue
+        { bar: "#8B5CF6", tint: "#EDE9FE", ink: "#5B21B6" }, // purple
+        { bar: "#06B6D4", tint: "#CFFAFE", ink: "#0E7490" }, // teal
+        { bar: "#EC4899", tint: "#FCE7F3", ink: "#9D174D" }, // pink
+        { bar: "#84CC16", tint: "#ECFCCB", ink: "#3F6212" }, // lime
+        { bar: "#6366F1", tint: "#E0E7FF", ink: "#3730A3" }  // indigo
+      ];
+
+      if (eyebrowEl) {
+        eyebrowEl.textContent = "INVESTED SPLIT · " + entries.length + " PORTFOLIO" + (entries.length === 1 ? "" : "S");
+      }
+      totalEl.textContent = formatCurrency(total);
+
+      // Segmented bar
+      barEl.innerHTML = entries.map(function (e, i) {
+        var pct = (e.value / total) * 100;
+        var col = PALETTE[i % PALETTE.length];
+        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + col.bar + ';" title="' + e.name.replace(/"/g, '&quot;') + '"></span>';
+      }).join("");
+
+      // Portfolio rows
+      listEl.innerHTML = entries.map(function (e, i) {
+        var pct = (e.value / total) * 100;
+        var col = PALETTE[i % PALETTE.length];
+        var initial = (e.name.trim().charAt(0) || "?").toUpperCase();
+        var pctStr = (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + "%";
+        return '<div class="isc-row">' +
+          '<div class="isc-avatar" style="background:' + col.tint + ';color:' + col.ink + ';">' + initial + '</div>' +
+          '<div class="isc-row-body">' +
+            '<div class="isc-row-name">' + e.name + '</div>' +
+            '<div class="isc-row-sub">Personal portfolio</div>' +
+          '</div>' +
+          '<div class="isc-row-nums">' +
+            '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
+            '<div class="isc-row-pct" style="color:' + col.bar + ';">' + pctStr + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+
+      statusEl.textContent = "";
     }
     drawSplitPie();
 

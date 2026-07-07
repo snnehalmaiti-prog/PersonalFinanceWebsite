@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign12" />
+<link rel="stylesheet" href="styles.css?v=recdesign13" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -253,15 +253,18 @@
         <div class="mic-legend" id="monthly-invest-cat-legend"></div>
       </div>
 
-      <div class="value-chart-card" style="flex:1 1 220px;min-width:240px;box-sizing:border-box;">
-        <div class="value-chart-header">
-          <h3>Investment Split</h3>
+      <div class="isc-card" id="investment-split-card">
+        <div class="isc-header">
+          <span class="isc-eyebrow"><span id="isc-eyebrow-text">INVESTED SPLIT</span><span class="isc-eyebrow-dot"></span></span>
+          <h3 class="isc-title">Investment split</h3>
         </div>
-        <p class="muted small" id="portfolio-split-status">Loading portfolio split…</p>
-        <div class="pie-chart-resize" id="portfolio-split-resize">
-          <canvas id="portfolio-split-chart"></canvas>
+        <div class="isc-total-block">
+          <span class="isc-total-label">INVESTED TOTAL</span>
+          <span class="isc-total-value" id="isc-total-value">—</span>
         </div>
-        <p class="muted small value-chart-hint">Drag the bottom-right corner of the chart to resize it.</p>
+        <div class="isc-bar" id="isc-bar" aria-hidden="true"></div>
+        <div class="isc-list" id="isc-list"></div>
+        <p class="muted small" id="portfolio-split-status" style="margin:8px 20px 0;font-size:0.72rem;"></p>
       </div>
       </div><!-- /monthly-invest-row -->
 
@@ -2889,7 +2892,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat39"></script>
+  <script src="script.js?v=micat40"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
