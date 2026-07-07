@@ -3703,6 +3703,7 @@
     updateDashboardStats();
     renderValueChart();
     renderInvestmentSplitChart();
+    renderInstrumentSplitChart();
     document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
   }
 
@@ -3728,6 +3729,7 @@
       updateDashboardStats();
       renderValueChart();
       renderInvestmentSplitChart();
+      renderInstrumentSplitChart();
       document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
       closeExclusionsMenu();
     });
@@ -3761,6 +3763,7 @@
   renderEquityHoldingsTable();
   renderAllFixedIncomeHoldingsTable();
   renderInvestmentSplitChart();
+  renderInstrumentSplitChart();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
@@ -3795,6 +3798,7 @@
         if (prefix === "fd") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
         if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
+        renderInstrumentSplitChart();
         renderMonthlyCashFlow();
       }, canonicalFields);
     });
@@ -3836,6 +3840,7 @@
       renderMarketSegmentChart();
       renderMutualFundPortfolioSplitChart();
       renderInvestmentSplitChart();
+      renderInstrumentSplitChart();
       setTimeout(function () {
         equityRefreshNavBtn.disabled = false;
         equityRefreshNavBtn.textContent = originalLabel;
@@ -6032,6 +6037,99 @@
             added = true;
           });
           if (added) drawSplitPie();
+        });
+      }
+    }
+  }
+
+  // Split invested value across instrument categories (Equity, Fixed Income,
+  // Commodity) using the same sources as the Overview, so the totals reconcile.
+  function renderInstrumentSplitChart() {
+    var statusEl = document.getElementById("instrument-split-status");
+    var barEl = document.getElementById("iscat-bar");
+    var listEl = document.getElementById("iscat-list");
+    var totalEl = document.getElementById("iscat-total-value");
+    var eyebrowEl = document.getElementById("iscat-eyebrow-text");
+    if (!statusEl || !barEl || !listEl || !totalEl) return;
+
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var fiExcluded = isFixedIncomeExcluded();
+
+    // Category → color + display icon
+    var CATS = [
+      { key: "Equity",       bar: "#10B981", tint: "#D1FAE5", ink: "#065F46", icon: "📈" },
+      { key: "Fixed Income", bar: "#3B82F6", tint: "#DBEAFE", ink: "#1E40AF", icon: "🏦" },
+      { key: "Commodity",    bar: "#F59E0B", tint: "#FEF3C7", ink: "#B45309", icon: "🪙" }
+    ];
+
+    var investedByCat = {
+      "Equity": computeTotalInvestment(selected, ["equity", "stocksetf"]),
+      "Fixed Income": fiExcluded ? 0 : computeTotalInvestment(selected, ["fixedincome", "fd"]),
+      "Commodity": 0
+    };
+
+    function draw() {
+      var entries = CATS
+        .map(function (c) { return { name: c.key, value: investedByCat[c.key] || 0, meta: c }; })
+        .filter(function (e) { return e.value > UNITS_EPSILON; })
+        .sort(function (a, b) { return b.value - a.value; });
+
+      if (!entries.length) {
+        statusEl.textContent = "No invested amount found yet.";
+        barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
+        return;
+      }
+      var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+
+      if (eyebrowEl) {
+        eyebrowEl.textContent = "ASSET SPLIT · " + entries.length + " CATEGOR" + (entries.length === 1 ? "Y" : "IES");
+      }
+      totalEl.textContent = formatCurrency(total);
+
+      barEl.innerHTML = entries.map(function (e) {
+        var pct = (e.value / total) * 100;
+        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + e.meta.bar + ';" title="' + e.name + '"></span>';
+      }).join("");
+
+      listEl.innerHTML = entries.map(function (e) {
+        var pct = (e.value / total) * 100;
+        var pctStr = (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + "%";
+        return '<div class="isc-row">' +
+          '<div class="isc-avatar" style="background:' + e.meta.tint + ';color:' + e.meta.ink + ';">' + e.meta.icon + '</div>' +
+          '<div class="isc-row-body">' +
+            '<div class="isc-row-name">' + e.name + '</div>' +
+            '<div class="isc-row-sub">Asset class</div>' +
+          '</div>' +
+          '<div class="isc-row-nums">' +
+            '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
+            '<div class="isc-row-pct" style="color:' + e.meta.bar + ';">' + pctStr + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+
+      statusEl.textContent = "";
+    }
+    draw();
+
+    // Commodity (gold/silver) invested amount joins asynchronously, mirroring the overview
+    if (!fiExcluded) {
+      var fdRows = getSheetRows("fd");
+      var uniqueDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
+      if (fdRows && fdRows.length) {
+        Promise.all([
+          fetchGoldPriceINRPerGram().catch(function () { return null; }),
+          Promise.all(uniqueDates.map(function (d) {
+            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+          }))
+        ]).then(function (results) {
+          var goldPrice = results[0];
+          if (!goldPrice) return;
+          var histPrices = {};
+          results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+          var commHoldings = buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices) || [];
+          var commTotal = 0;
+          commHoldings.forEach(function (h) { if (h.invested > UNITS_EPSILON) commTotal += h.invested; });
+          if (commTotal > UNITS_EPSILON) { investedByCat["Commodity"] = commTotal; draw(); }
         });
       }
     }
