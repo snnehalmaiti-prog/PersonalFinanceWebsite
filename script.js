@@ -5899,6 +5899,8 @@
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
     var MIC_GREEN = "#52B788"; var MIC_GREEN_PEAK = "#1B6E45"; var MIC_RED = "#E8623A";
+    // Warm palette for split-by-instrument mode (matches screenshot)
+    var MIC_SPLIT_PALETTE = ["#E8623A","#F5A623","#4DC0B5","#8B5CF6","#3B82F6","#10B981","#EC4899","#84CC16"];
     var wrap = document.getElementById("monthly-invest-cat-wrap");
     var statusEl = document.getElementById("monthly-invest-cat-status");
     if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
@@ -5960,13 +5962,14 @@
     var datasets;
     if (__monthlyInvestCatSplit) {
       datasets = catList.map(function (cat, i) {
+        var col = MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
         return {
-          label: cat + (net ? " (net)" : ""),
+          label: cat,
           data: monthKeys.map(function (k2) { return barCell(k2, cat); }),
-          backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "CC",
-          borderColor: MIC_PALETTE[i % MIC_PALETTE.length],
-          borderWidth: 1,
-          borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
+          backgroundColor: col,
+          borderColor: col,
+          borderWidth: 0,
+          borderRadius: 3, categoryPercentage: 0.72, barPercentage: 0.9
         };
       });
     } else {
@@ -6038,29 +6041,59 @@
     var canvas = document.createElement("canvas");
     wrap.appendChild(canvas);
 
-    // Compute stats for the header row
+    // Compute stats
+    var activeMonths = monthKeys.filter(function (k) { return investedTotal(k) > 0; }).length || 1;
     var totalInvested = monthKeys.reduce(function (s, k) { return s + investedTotal(k); }, 0);
     var totalOut = monthKeys.reduce(function (s, k) { return s + outTotal(k); }, 0);
     var totalNet = totalInvested - totalOut;
+    var avgPerMonth = totalInvested / activeMonths;
+
+    function fmtCompact(v) {
+      var a = Math.abs(v);
+      if (a >= 1e5) return "₹" + (v / 1e5).toFixed(a % 1e5 === 0 ? 0 : 1) + "L";
+      if (a >= 1e3) return "₹" + Math.round(v / 1e3) + "k";
+      return "₹" + Math.round(v);
+    }
+
     var statsEl = document.getElementById("monthly-invest-cat-stats");
     if (statsEl) {
-      var hasOut = totalOut > 0;
-      var peakFmt = peakVal > 0 ? (peakLabel + " &middot; " + formatCurrency(peakVal)) : "—";
-      statsEl.innerHTML =
-        '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
-        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
-        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '') +
-        '<div class="mic-stat"><span class="mic-stat-label">Peak Month</span><span class="mic-stat-value mic-stat-peak">' + peakFmt + '</span></div>';
+      if (__monthlyInvestCatSplit) {
+        // Split mode: "₹X avg invested / month" headline only — legend carries per-category avgs
+        statsEl.innerHTML =
+          '<div class="mic-stat"><span class="mic-stat-value" style="font-size:1.5rem;">' +
+          fmtCompact(avgPerMonth) + '</span><span class="mic-stat-label" style="font-size:0.75rem;letter-spacing:0;">avg invested / month</span></div>';
+      } else {
+        var hasOut = totalOut > 0;
+        var peakFmt = peakVal > 0 ? (peakLabel + " &middot; " + formatCurrency(peakVal)) : "—";
+        statsEl.innerHTML =
+          '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
+          (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
+          (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '') +
+          '<div class="mic-stat"><span class="mic-stat-label">Peak Month</span><span class="mic-stat-value mic-stat-peak">' + peakFmt + '</span></div>';
+      }
     }
 
     // Custom legend
     var legendEl = document.getElementById("monthly-invest-cat-legend");
     if (legendEl) {
-      var barColor = __monthlyInvestCatSplit ? MIC_PALETTE[0] : MIC_GREEN;
-      legendEl.innerHTML =
-        '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + barColor + '"></div>' +
-        (net ? "Net invested" : "Invested (left axis)") + '</div>' +
-        (!net && outCatList.length ? '<div class="mic-legend-item"><div class="mic-legend-line"></div>Withdrawn (right axis)</div>' : '');
+      if (__monthlyInvestCatSplit) {
+        // Per-category colour swatch + avg/month
+        legendEl.innerHTML = catList.map(function (cat, i) {
+          var col = MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
+          var catTotal = monthKeys.reduce(function (s, k) {
+            return s + ((byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0);
+          }, 0);
+          var catAvg = catTotal / activeMonths;
+          return '<div class="mic-legend-item">' +
+            '<div class="mic-legend-bar" style="background:' + col + '"></div>' +
+            cat + ' ' + fmtCompact(catAvg) + '</div>';
+        }).join("");
+      } else {
+        legendEl.innerHTML =
+          '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + MIC_GREEN + '"></div>' +
+          (net ? "Net invested" : "Invested (left axis)") + '</div>' +
+          (!net && outCatList.length ? '<div class="mic-legend-item"><div class="mic-legend-line"></div>Withdrawn (right axis)</div>' : '');
+      }
     }
 
     __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
