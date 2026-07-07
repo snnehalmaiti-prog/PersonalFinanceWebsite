@@ -5598,7 +5598,7 @@
                 var amt = parseNumber(row[fdAmtIdx]);
                 if (!amt) return;
 
-                if (sub === "fixed deposit" || sub === "provident fund") {
+                if (sub === "fixed deposit") {
                   // Discrete deposit — contribution
                   contribEvents.push({ date: date, delta: amt });
                 } else if (sub === "gold" || sub === "silver" || sub === "commodity") {
