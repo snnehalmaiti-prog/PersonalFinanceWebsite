@@ -5532,6 +5532,18 @@
           return { x: p.x, y: p.y + extra };
         });
 
+        // Snap the last point to Overview's authoritative current value:
+        // Overview's fiCurrent/commCurrent include interest accrual + live
+        // prices that the historical timeline can't replay. Historical points
+        // stay as deposits (correct); only the tail matches Overview.
+        (function snapLastPointToOverview() {
+          if (!pointsAll.length || typeof _ov === "undefined" || !_ov) return;
+          var live = (_ov.mfCurrent || 0) + (_ov.seCurrent > 0 ? _ov.seCurrent : 0)
+            + (isFixedIncomeExcluded() ? 0 : (_ov.fiCurrent || 0))
+            + (isFixedIncomeExcluded() ? 0 : (_ov.commCurrent || 0));
+          if (live > 0) pointsAll[pointsAll.length - 1] = { x: pointsAll[pointsAll.length - 1].x, y: live };
+        })();
+
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
         try { _renderPortfolioValueChart(pointsAll); } catch (e) {}
 
@@ -5977,6 +5989,7 @@
   document.addEventListener("wf-overview-flows-ready", function () {
     if (typeof renderInvestmentSplitChart === "function") renderInvestmentSplitChart();
     if (typeof renderInstrumentSplitChart === "function") renderInstrumentSplitChart();
+    renderValueChart();
   });
 
   // Wire the Portfolio Split card's Portfolio/Region toggle.
