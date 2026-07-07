@@ -250,17 +250,8 @@
         <div class="avc-chart-wrap">
           <canvas id="value-chart" height="320"></canvas>
         </div>
-        <div class="avc-verdict" id="avc-verdict" hidden>
-          <div class="avc-verdict-icon" id="avc-verdict-icon" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </div>
-          <div class="avc-verdict-body">
-            <div class="avc-verdict-headline" id="avc-verdict-headline">—</div>
-            <div class="avc-verdict-detail" id="avc-verdict-detail">—</div>
-          </div>
-          <button type="button" class="avc-verdict-btn" id="avc-change-benchmark">Change benchmark</button>
-        </div>
-        <!-- Hidden legacy elements preserved so existing code paths don't error -->
+        <!-- Verdict removed per user request; legacy nodes preserved hidden for code paths -->
+        <div id="avc-verdict" hidden><span id="avc-verdict-headline"></span><span id="avc-verdict-detail"></span><button type="button" id="avc-change-benchmark" hidden></button></div>
         <span id="value-chart-range" hidden></span>
         <button type="button" id="value-chart-reset" hidden></button>
         <span id="value-chart-callout" hidden><span id="value-chart-callout-value"></span><span id="value-chart-callout-date"></span></span>
@@ -2913,7 +2904,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat50"></script>
+  <script src="script.js?v=micat51"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
