@@ -6121,7 +6121,6 @@
           '<div class="isc-avatar" style="background:' + e.meta.tint + ';color:' + e.meta.ink + ';">' + e.meta.icon + '</div>' +
           '<div class="isc-row-body">' +
             '<div class="isc-row-name">' + e.name + '</div>' +
-            '<div class="isc-row-sub">Asset class</div>' +
           '</div>' +
           '<div class="isc-row-nums">' +
             '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
