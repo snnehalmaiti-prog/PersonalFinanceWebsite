@@ -6195,24 +6195,29 @@
         return {
           label: cat,
           data: monthKeys.map(function (k2) { return barCell(k2, cat); }),
-          backgroundColor: col,
+          backgroundColor: col + "99",
           borderColor: col,
           borderWidth: 0,
-          borderRadius: 3, categoryPercentage: 0.72, barPercentage: 0.9
+          borderRadius: 3, categoryPercentage: 0.72, barPercentage: 0.9,
+          order: 2
         };
       });
     } else {
       // Non-split: green bars, peak month highlighted darker
       var barColors = monthKeys.map(function (_, i) {
+        return (i === peakIdx ? MIC_GREEN_PEAK : MIC_GREEN) + "99";
+      });
+      var barBorders = monthKeys.map(function (_, i) {
         return i === peakIdx ? MIC_GREEN_PEAK : MIC_GREEN;
       });
       datasets = catList.length ? [{
         label: net ? "Net investment" : "Invested",
         data: monthKeys.map(function (k2) { return barTotal(k2); }),
         backgroundColor: barColors,
-        borderColor: barColors,
+        borderColor: barBorders,
         borderWidth: 0,
-        borderRadius: 4, categoryPercentage: 0.72, barPercentage: 0.9
+        borderRadius: 4, categoryPercentage: 0.72, barPercentage: 0.9,
+        order: 2
       }] : [];
     }
 
