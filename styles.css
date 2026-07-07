@@ -3206,3 +3206,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); font-weight: 500; }
 .mic-legend-bar { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
 .mic-legend-line { width: 22px; height: 0; border-top: 2px dashed #E8623A; flex-shrink: 0; }
+.mic-legend-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; transition: background 0.12s ease, opacity 0.12s ease; user-select: none; }
+.mic-legend-clickable:hover { background: var(--bg); }
+.mic-legend-dimmed { opacity: 0.4; }

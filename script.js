@@ -6003,6 +6003,7 @@
   var __monthlyInvestCatAllTime = false;
   var __monthlyInvestCatSplit = false; // off = single total bar per month
   var __monthlyInvestCatNet = false; // on = bars show invested minus withdrawn
+  var __monthlyInvestCatFilter = null; // split mode: when set, show only this instrument category
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
@@ -6190,9 +6191,15 @@
 
     var datasets;
     if (__monthlyInvestCatSplit) {
-      datasets = catList.map(function (cat, i) {
+      // If a legend filter is active but the category isn't in view, clear it
+      if (__monthlyInvestCatFilter && catList.indexOf(__monthlyInvestCatFilter) === -1) {
+        __monthlyInvestCatFilter = null;
+      }
+      datasets = [];
+      catList.forEach(function (cat, i) {
+        if (__monthlyInvestCatFilter && cat !== __monthlyInvestCatFilter) return;
         var col = MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
-        return {
+        datasets.push({
           label: cat,
           data: monthKeys.map(function (k2) { return barCell(k2, cat); }),
           backgroundColor: col + "99",
@@ -6200,7 +6207,7 @@
           borderWidth: 0,
           borderRadius: 3, categoryPercentage: 0.72, barPercentage: 0.9,
           order: 2
-        };
+        });
       });
     } else {
       // Non-split: green bars, peak month highlighted darker
@@ -6243,6 +6250,7 @@
       // Net mode folds withdrawals into the bars, so no separate lines
     } else if (__monthlyInvestCatSplit) {
       outCatList.forEach(function (cat, i) {
+        if (__monthlyInvestCatFilter && cat !== __monthlyInvestCatFilter) return;
         datasets.push(withdrawLine(cat + " (withdrawn)",
           MIC_PALETTE[(catList.indexOf(cat) !== -1 ? catList.indexOf(cat) : i) % MIC_PALETTE.length],
           monthKeys.map(function (k2) {
@@ -6311,17 +6319,31 @@
     var legendEl = document.getElementById("monthly-invest-cat-legend");
     if (legendEl) {
       if (__monthlyInvestCatSplit) {
-        // Per-category colour swatch + avg/month
+        // Per-category colour swatch + avg/month; clicking filters to that instrument
         legendEl.innerHTML = catList.map(function (cat, i) {
           var col = MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
           var catTotal = monthKeys.reduce(function (s, k) {
             return s + ((byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0);
           }, 0);
           var catAvg = catTotal / activeMonths;
-          return '<div class="mic-legend-item">' +
+          var dimmed = __monthlyInvestCatFilter && __monthlyInvestCatFilter !== cat;
+          return '<div class="mic-legend-item mic-legend-clickable' + (dimmed ? ' mic-legend-dimmed' : '') + '"' +
+            ' role="button" tabindex="0" data-mic-cat="' + cat.replace(/"/g, '&quot;') + '">' +
             '<div class="mic-legend-bar" style="background:' + col + '"></div>' +
             cat + ' ' + fmtCompact(catAvg) + '</div>';
         }).join("");
+        // Wire clicks: toggle filter for the clicked instrument, then redraw
+        Array.prototype.forEach.call(legendEl.querySelectorAll("[data-mic-cat]"), function (item) {
+          function toggle() {
+            var cat = item.getAttribute("data-mic-cat");
+            __monthlyInvestCatFilter = (__monthlyInvestCatFilter === cat) ? null : cat;
+            drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+          }
+          item.addEventListener("click", toggle);
+          item.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+          });
+        });
       } else {
         legendEl.innerHTML =
           '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + MIC_GREEN + '"></div>' +
@@ -6444,6 +6466,7 @@
       splitBtn.classList.toggle("active", !!__monthlyInvestCatSplit);
       splitBtn.onclick = function () {
         __monthlyInvestCatSplit = !__monthlyInvestCatSplit;
+        __monthlyInvestCatFilter = null; // reset instrument filter when toggling split
         splitBtn.classList.toggle("active", !!__monthlyInvestCatSplit);
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
