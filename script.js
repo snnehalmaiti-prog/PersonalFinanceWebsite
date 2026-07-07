@@ -5905,9 +5905,8 @@
   }
 
   function renderInvestmentSplitChart() {
-    var canvas = document.getElementById("portfolio-split-chart");
     var statusEl = document.getElementById("portfolio-split-status");
-    if (!canvas || !statusEl || typeof Chart === "undefined") return;
+    if (!statusEl) return;
 
     // Same sheet coverage as the Overview's Total Investment: MF, Stocks/ETF,
     // Fixed Income (EPF) and FD — the latter two dropped when FI is excluded.
