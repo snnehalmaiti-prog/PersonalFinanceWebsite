@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign17" />
+<link rel="stylesheet" href="styles.css?v=recdesign18" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -300,33 +300,43 @@
       </div>
       </div><!-- /monthly-cashflow-row -->
 
-      <div class="value-chart-card" id="account-value-card">
-        <div class="value-chart-header">
-          <div class="value-chart-title-group">
-            <h3>Account Value</h3>
-            <div class="value-chart-callout" id="value-chart-callout" hidden>
-              <span class="value-chart-callout-value" id="value-chart-callout-value">—</span>
-              <span class="value-chart-callout-date" id="value-chart-callout-date">—</span>
+      <div class="avc-card" id="account-value-card">
+        <div class="avc-header">
+          <span class="avc-eyebrow" id="avc-eyebrow">GROWTH OF &#8377;100 &middot; SINCE INCEPTION</span>
+          <div class="avc-legend">
+            <div class="avc-legend-item">
+              <span class="avc-legend-line avc-legend-portfolio"></span>
+              <span class="avc-legend-name">Portfolio</span>
+              <span class="avc-legend-sep">&middot;</span>
+              <span class="avc-legend-value avc-portfolio-value" id="avc-portfolio-value">&#8377;—</span>
             </div>
-          </div>
-          <div class="value-chart-actions">
-            <span class="muted small" id="value-chart-range">—</span>
-            <button type="button" class="btn btn-outline btn-sm" id="value-chart-reset">Reset zoom</button>
+            <div class="avc-legend-item">
+              <span class="avc-legend-line avc-legend-index"></span>
+              <span class="avc-legend-name" id="avc-index-name">Nifty 50</span>
+              <span class="avc-legend-sep">&middot;</span>
+              <span class="avc-legend-value avc-index-value" id="avc-index-value">&#8377;—</span>
+            </div>
           </div>
         </div>
         <p class="muted small" id="value-chart-status" hidden>Loading NAV history…</p>
-        <div class="value-chart-wrap">
+        <div class="avc-chart-wrap">
           <canvas id="value-chart" height="320"></canvas>
         </div>
-        <div class="value-chart-range-picker" id="value-chart-range-picker" role="group" aria-label="Select time range">
-          <button type="button" class="range-pill" data-range="1M">1M</button>
-          <button type="button" class="range-pill" data-range="6M">6M</button>
-          <button type="button" class="range-pill" data-range="1Y">1Y</button>
-          <button type="button" class="range-pill active" data-range="3Y">3Y</button>
-          <button type="button" class="range-pill" data-range="5Y">5Y</button>
-          <button type="button" class="range-pill" data-range="ALL">All</button>
+        <div class="avc-verdict" id="avc-verdict" hidden>
+          <div class="avc-verdict-icon" id="avc-verdict-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="avc-verdict-body">
+            <div class="avc-verdict-headline" id="avc-verdict-headline">—</div>
+            <div class="avc-verdict-detail" id="avc-verdict-detail">—</div>
+          </div>
+          <button type="button" class="avc-verdict-btn" id="avc-change-benchmark">Change benchmark</button>
         </div>
-        <p class="muted small value-chart-hint">Scroll/pinch to zoom, drag to pan. The visible time period updates as you zoom.</p>
+        <!-- Hidden legacy elements preserved so existing code paths don't error -->
+        <span id="value-chart-range" hidden></span>
+        <button type="button" id="value-chart-reset" hidden></button>
+        <span id="value-chart-callout" hidden><span id="value-chart-callout-value"></span><span id="value-chart-callout-date"></span></span>
+        <div id="value-chart-range-picker" hidden></div>
       </div>
 
 
@@ -2904,7 +2914,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat45"></script>
+  <script src="script.js?v=micat46"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

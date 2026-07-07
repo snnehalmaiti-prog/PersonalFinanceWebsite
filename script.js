@@ -5302,6 +5302,18 @@
     var resetBtn = document.getElementById("value-chart-reset");
     if (!canvas || typeof Chart === "undefined") return;
 
+    // Wire "Change benchmark" button to scroll to and open the benchmark card
+    var changeBtn = document.getElementById("avc-change-benchmark");
+    if (changeBtn && !changeBtn.dataset.bound) {
+      changeBtn.dataset.bound = "1";
+      changeBtn.addEventListener("click", function () {
+        var benchCard = document.getElementById("benchmark-card");
+        if (benchCard) benchCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        var benchToggle = document.getElementById("benchmark-toggle");
+        if (benchToggle) setTimeout(function () { benchToggle.click(); }, 400);
+      });
+    }
+
     statusEl.hidden = false;
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
@@ -5503,39 +5515,136 @@
 
         var fullMinTime = first.getTime();
         var fullMaxTime = last.getTime();
-        var threeYearsMs = 1000 * 60 * 60 * 24 * 365 * 3;
-        var initialMin = Math.max(fullMinTime, fullMaxTime - threeYearsMs);
-        var initialMax = fullMaxTime;
+
+        // === Growth-of-₹100 normalization + benchmark overlay ===
+        var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
+        var indexDisplayName = indexKey === "NIFTY50" ? "Nifty 50"
+          : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
+          : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
+          : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
+
+        // Normalize portfolio value series to 100 at inception (first nonzero point).
+        var basePortIdx = 0;
+        while (basePortIdx < points.length && !(points[basePortIdx].y > 0)) basePortIdx++;
+        var basePortVal = basePortIdx < points.length ? points[basePortIdx].y : 0;
+        var normPortPoints = basePortVal > 0
+          ? points.map(function (p) { return { x: p.x, y: p.y > 0 ? (p.y * 100 / basePortVal) : null }; })
+          : points.map(function (p) { return { x: p.x, y: null }; });
+        var lastPortNorm = null;
+        for (var lp = normPortPoints.length - 1; lp >= 0; lp--) {
+          if (normPortPoints[lp].y != null) { lastPortNorm = normPortPoints[lp].y; break; }
+        }
+
+        // Fetch index history and build normalized benchmark series aligned to portfolio dates.
+        fetchIndexHistory().then(function (indexHistory) {
+          var indexData = indexHistory && indexHistory[indexKey];
+          var indexPrices = indexData && indexData.prices ? indexData.prices : null;
+          var normIdxPoints = [];
+          var lastIdxNorm = null;
+          if (indexPrices) {
+            var basePortDate = formatDateISO(points[basePortIdx] ? points[basePortIdx].x : first);
+            var baseIdxPrice = lookupIndexPrice(indexPrices, basePortDate);
+            if (baseIdxPrice) {
+              normIdxPoints = points.map(function (p, i) {
+                if (i < basePortIdx) return { x: p.x, y: null };
+                var price = lookupIndexPrice(indexPrices, formatDateISO(p.x));
+                return { x: p.x, y: price ? (price * 100 / baseIdxPrice) : null };
+              });
+              for (var li = normIdxPoints.length - 1; li >= 0; li--) {
+                if (normIdxPoints[li].y != null) { lastIdxNorm = normIdxPoints[li].y; break; }
+              }
+            }
+          }
+
+          // Update header legend + eyebrow with inception year
+          var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
+          var eyebrowEl = document.getElementById("avc-eyebrow");
+          if (eyebrowEl) eyebrowEl.textContent = "GROWTH OF ₹100 · SINCE " + inceptionYear;
+          var portValEl = document.getElementById("avc-portfolio-value");
+          if (portValEl) portValEl.textContent = lastPortNorm != null ? "₹" + Math.round(lastPortNorm) : "—";
+          var idxNameEl = document.getElementById("avc-index-name");
+          if (idxNameEl) idxNameEl.textContent = indexDisplayName;
+          var idxValEl = document.getElementById("avc-index-value");
+          if (idxValEl) idxValEl.textContent = lastIdxNorm != null ? "₹" + Math.round(lastIdxNorm) : "—";
+
+          // Verdict callout
+          var verdictEl = document.getElementById("avc-verdict");
+          var verdictHead = document.getElementById("avc-verdict-headline");
+          var verdictDetail = document.getElementById("avc-verdict-detail");
+          if (verdictEl && verdictHead && verdictDetail && lastPortNorm != null && lastIdxNorm != null) {
+            var years = Math.max(0.0833, (last.getTime() - (points[basePortIdx] ? points[basePortIdx].x.getTime() : first.getTime())) / (1000 * 60 * 60 * 24 * 365.25));
+            var portCagr = Math.pow(lastPortNorm / 100, 1 / years) - 1;
+            var idxCagr = Math.pow(lastIdxNorm / 100, 1 / years) - 1;
+            var alphaPp = (portCagr - idxCagr) * 100;
+            var beaten = alphaPp >= 0;
+            verdictEl.classList.toggle("negative", !beaten);
+            verdictHead.textContent = beaten
+              ? "You've beaten " + indexDisplayName + " by " + alphaPp.toFixed(2) + "pp annualised since " + inceptionYear + "."
+              : "You're trailing " + indexDisplayName + " by " + Math.abs(alphaPp).toFixed(2) + "pp annualised since " + inceptionYear + ".";
+            function fmtGrowth(v) { return "₹" + Math.round(v * 1000).toLocaleString("en-IN") + "00"; } // ₹1L * v/100 = v*1000 (thousand)
+            var portGrew = Math.round(100000 * lastPortNorm / 100).toLocaleString("en-IN");
+            var idxGrew = Math.round(100000 * lastIdxNorm / 100).toLocaleString("en-IN");
+            verdictDetail.textContent = "₹1L invested in your portfolio grew to ₹" + portGrew + " vs ₹" + idxGrew + " in " + indexDisplayName + ".";
+            verdictEl.hidden = false;
+          } else if (verdictEl) {
+            verdictEl.hidden = true;
+          }
+          return { normIdxPoints: normIdxPoints };
+        }).then(function (idxResult) {
+          _renderNormalizedChart(idxResult ? idxResult.normIdxPoints : []);
+        }).catch(function () {
+          _renderNormalizedChart([]);
+        });
 
         var calloutEl = document.getElementById("value-chart-callout");
         var calloutValueEl = document.getElementById("value-chart-callout-value");
         var calloutDateEl = document.getElementById("value-chart-callout-date");
         var rangePicker = document.getElementById("value-chart-range-picker");
 
+        function _renderNormalizedChart(normIdxPoints) {
         if (window.__wfValueChart) window.__wfValueChart.destroy();
         var ctx = canvas.getContext("2d");
-        var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
-        fillGradient.addColorStop(0, "rgba(59,130,246,0.28)");
-        fillGradient.addColorStop(1, "rgba(59,130,246,0)");
+        var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 340);
+        fillGradient.addColorStop(0, "rgba(16,185,129,0.22)");
+        fillGradient.addColorStop(1, "rgba(16,185,129,0)");
+        var datasets = [{
+          label: "Portfolio",
+          data: normPortPoints,
+          borderColor: "#10B981",
+          backgroundColor: fillGradient,
+          fill: true,
+          tension: 0.25,
+          cubicInterpolationMode: "monotone",
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: "#10B981",
+          pointHoverBorderColor: "#fff",
+          pointHoverBorderWidth: 2,
+          borderWidth: 2.5,
+          spanGaps: true
+        }];
+        if (normIdxPoints && normIdxPoints.length) {
+          datasets.push({
+            label: indexDisplayName,
+            data: normIdxPoints,
+            borderColor: "#94A3B8",
+            backgroundColor: "transparent",
+            borderDash: [6, 5],
+            fill: false,
+            tension: 0.25,
+            cubicInterpolationMode: "monotone",
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: "#94A3B8",
+            pointHoverBorderColor: "#fff",
+            pointHoverBorderWidth: 2,
+            borderWidth: 2,
+            spanGaps: true
+          });
+        }
         window.__wfValueChart = new Chart(ctx, {
           type: "line",
-          data: {
-            datasets: [{
-              label: "Current",
-              data: points,
-              borderColor: "#3B82F6",
-              backgroundColor: fillGradient,
-              fill: true,
-              tension: 0.25,
-              cubicInterpolationMode: "monotone",
-              pointRadius: 0,
-              pointHoverRadius: 5,
-              pointHoverBackgroundColor: "#3B82F6",
-              pointHoverBorderColor: "#fff",
-              pointHoverBorderWidth: 2,
-              borderWidth: 2
-            }]
-          },
+          data: { datasets: datasets },
           options: {
             maintainAspectRatio: false,
             animation: { duration: 350, easing: "easeOutQuart" },
@@ -5543,26 +5652,36 @@
             scales: {
               x: {
                 type: "time",
-                time: { unit: "month", displayFormats: { month: "MMM" } },
-                min: initialMin,
-                max: initialMax,
+                time: { unit: "year", displayFormats: { year: "yyyy", month: "MMM" } },
+                min: fullMinTime,
+                max: fullMaxTime,
                 grid: { display: false },
                 ticks: {
                   maxRotation: 0,
                   autoSkip: true,
                   major: { enabled: true },
                   font: function (ctx) { return ctx.tick && ctx.tick.major ? { weight: "bold" } : {}; },
-                  callback: function (value, index, ticks) {
+                  callback: function (value) {
                     var d = new Date(value);
                     return d.getMonth() === 0 ? String(d.getFullYear()) : d.toLocaleDateString("en-US", { month: "short" });
                   }
                 }
               },
-              y: { ticks: { callback: function (v) { return formatCompactINR(v); } }, grid: { color: "rgba(150,150,150,0.12)" } }
+              y: { ticks: { callback: function (v) { return "₹" + Math.round(v); } }, grid: { color: "rgba(150,150,150,0.12)" } }
             },
             plugins: {
               legend: { display: false },
-              tooltip: { enabled: false },
+              tooltip: {
+                enabled: true,
+                callbacks: {
+                  title: function (items) {
+                    if (!items || !items.length) return "";
+                    var d = new Date(items[0].parsed.x);
+                    return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+                  },
+                  label: function (ctx) { return ctx.dataset.label + ": ₹" + Math.round(ctx.parsed.y); }
+                }
+              },
               zoom: {
                 limits: {
                   x: {
@@ -5583,24 +5702,10 @@
                 }
               }
             },
-            onHover: function (evt, activeEls, chart) {
-              if (!activeEls.length) {
-                if (calloutEl) calloutEl.hidden = true;
-                return;
-              }
-              var idx = activeEls[0].index;
-              var pt = points[idx];
-              if (!pt) return;
-              if (calloutEl) calloutEl.hidden = false;
-              if (calloutValueEl) calloutValueEl.textContent = formatCurrency(pt.y);
-              if (calloutDateEl) calloutDateEl.textContent = pt.x.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
-            }
           }
         });
-
-        canvas.addEventListener("mouseleave", function () {
-          if (calloutEl) calloutEl.hidden = true;
-        });
+        updateVisibleRangeLabel(window.__wfValueChart);
+        } // end _renderNormalizedChart
 
         function updateVisibleRangeLabel(chart) {
           var xScale = chart.scales.x;
@@ -5639,7 +5744,6 @@
           });
         }
 
-        updateVisibleRangeLabel(window.__wfValueChart);
       });
     }).catch(function (err) {
       statusEl.textContent = "Couldn't render the chart: " + (err && err.message ? err.message : err);
