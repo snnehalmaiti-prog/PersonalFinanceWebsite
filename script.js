@@ -6512,7 +6512,9 @@
     var eyebrowEl = document.getElementById("iscat-eyebrow-text");
     if (!statusEl || !barEl || !listEl || !totalEl) return;
 
-    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    // Category Split always covers ALL portfolios so its total reconciles with
+    // Portfolio Split (which also uses "all"). Ignoring the header filter here.
+    var selected = "all";
     var fiExcluded = isFixedIncomeExcluded();
 
     // Category → color + display icon
