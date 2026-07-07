@@ -5896,15 +5896,12 @@
   }
 
   function drawMonthlyInvestCatChart(yr) {
-    console.log("[MIC v12] draw called for year", yr);
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
+    var MIC_GREEN = "#52B788"; var MIC_GREEN_PEAK = "#1B6E45"; var MIC_RED = "#E8623A";
     var wrap = document.getElementById("monthly-invest-cat-wrap");
     var statusEl = document.getElementById("monthly-invest-cat-status");
-    if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) {
-      console.log("[MIC v12] guard exit: wrap=", !!wrap, "Chart=", typeof Chart !== "undefined", "data=", !!__monthlyInvestCatData);
-      return;
-    }
+    if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
     try {
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
     var byMonthCatOut = __monthlyInvestCatData.byMonthCatOut || {};
@@ -5952,28 +5949,38 @@
     }
     function barTotal(k) { return net ? investedTotal(k) - outTotal(k) : investedTotal(k); }
 
-    // Hex + "99" alpha (~60% opacity) so withdrawal lines stay visible behind bars
+    // Find peak investment month index (for highlighting)
+    var peakIdx = 0, peakVal = -Infinity;
+    monthKeys.forEach(function (k, i) {
+      var v = investedTotal(k);
+      if (v > peakVal) { peakVal = v; peakIdx = i; }
+    });
+    var peakLabel = labels[peakIdx] || "";
+
     var datasets;
     if (__monthlyInvestCatSplit) {
       datasets = catList.map(function (cat, i) {
         return {
           label: cat + (net ? " (net)" : ""),
           data: monthKeys.map(function (k2) { return barCell(k2, cat); }),
-          backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "99",
+          backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "CC",
           borderColor: MIC_PALETTE[i % MIC_PALETTE.length],
           borderWidth: 1,
           borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
         };
       });
     } else {
-      // Split off: one total bar per month
+      // Non-split: green bars, peak month highlighted darker
+      var barColors = monthKeys.map(function (_, i) {
+        return i === peakIdx ? MIC_GREEN_PEAK : MIC_GREEN;
+      });
       datasets = catList.length ? [{
-        label: net ? "Net investment" : "Total invested",
+        label: net ? "Net investment" : "Invested",
         data: monthKeys.map(function (k2) { return barTotal(k2); }),
-        backgroundColor: MIC_PALETTE[0] + "99",
-        borderColor: MIC_PALETTE[0],
-        borderWidth: 1,
-        borderRadius: 3, categoryPercentage: 0.7, barPercentage: 0.9
+        backgroundColor: barColors,
+        borderColor: barColors,
+        borderWidth: 0,
+        borderRadius: 4, categoryPercentage: 0.72, barPercentage: 0.9
       }] : [];
     }
 
@@ -5988,7 +5995,7 @@
     function withdrawLine(label, color, vals, stackId) {
       return {
         type: "line", label: label, data: vals,
-        borderColor: color, backgroundColor: "transparent",
+        borderColor: MIC_RED, backgroundColor: "transparent",
         borderWidth: 2, borderDash: [6, 4],
         pointRadius: 2, pointHoverRadius: 4, tension: 0.2,
         spanGaps: false,
@@ -6017,7 +6024,6 @@
         "wd-total"));
     }
 
-    console.log("[MIC v12] year", yr, "categories:", catList.join(", ") || "(none)", "| withdrawals:", outCatList.join(", ") || "(none)");
     if (!catList.length && !outCatList.length) {
       if (statusEl) statusEl.textContent = "No data for " + (yr === "all" ? "all time" : yr) + ".";
       if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
@@ -6032,35 +6038,78 @@
     var canvas = document.createElement("canvas");
     wrap.appendChild(canvas);
 
+    // Compute stats for the header row
+    var totalInvested = monthKeys.reduce(function (s, k) { return s + investedTotal(k); }, 0);
+    var totalOut = monthKeys.reduce(function (s, k) { return s + outTotal(k); }, 0);
+    var totalNet = totalInvested - totalOut;
+    var statsEl = document.getElementById("monthly-invest-cat-stats");
+    if (statsEl) {
+      var hasOut = totalOut > 0;
+      var peakFmt = peakVal > 0 ? (peakLabel + " &middot; " + formatCurrency(peakVal)) : "—";
+      statsEl.innerHTML =
+        '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
+        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
+        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '') +
+        '<div class="mic-stat"><span class="mic-stat-label">Peak Month</span><span class="mic-stat-value mic-stat-peak">' + peakFmt + '</span></div>';
+    }
+
+    // Custom legend
+    var legendEl = document.getElementById("monthly-invest-cat-legend");
+    if (legendEl) {
+      var barColor = __monthlyInvestCatSplit ? MIC_PALETTE[0] : MIC_GREEN;
+      legendEl.innerHTML =
+        '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + barColor + '"></div>' +
+        (net ? "Net invested" : "Invested (left axis)") + '</div>' +
+        (!net && outCatList.length ? '<div class="mic-legend-item"><div class="mic-legend-line"></div>Withdrawn (right axis)</div>' : '');
+    }
+
     __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: labels, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 8, font: { size: 11 } } },
-          tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + formatCurrency(ctx.parsed.y); } } }
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) { return ctx.dataset.label + ": " + formatCurrency(ctx.parsed.y); },
+              afterBody: function (items) {
+                var k = monthKeys[items[0].dataIndex];
+                if (!k) return [];
+                var inv = investedTotal(k), out = outTotal(k);
+                var lines = [];
+                if (!net && out > 0) lines.push("Withdrawn: " + formatCurrency(out));
+                if (out > 0) lines.push("Net: " + formatCurrency(inv - out));
+                return lines;
+              }
+            }
+          }
         },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
           y: {
             stacked: true, beginAtZero: !net, position: "left",
-            title: { display: true, text: net ? "Net invested" : "Invested", font: { size: 11 } },
             grid: { color: "rgba(0,0,0,0.05)" },
-            ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } }
+            ticks: { font: { size: 11 }, callback: function (v) {
+              var abs = Math.abs(v);
+              if (abs >= 1e5) return (v/1e5).toFixed(abs % 1e5 === 0 ? 0 : 1) + "L";
+              if (abs >= 1e3) return (v/1e3).toFixed(0) + "k";
+              return v;
+            }}
           },
           yOut: {
             beginAtZero: true, position: "right", display: !net && outCatList.length > 0,
-            title: { display: true, text: "Withdrawn", font: { size: 11 } },
             grid: { drawOnChartArea: false },
-            ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } }
+            ticks: { font: { size: 11 }, callback: function (v) {
+              if (v >= 1e5) return (v/1e5).toFixed(0) + "L";
+              if (v >= 1e3) return (v/1e3).toFixed(0) + "k";
+              return v;
+            }}
           }
         }
       }
     });
-    console.log("[MIC v12] chart created OK for", yr);
     } catch(e) {
-      console.error("[MIC v12] draw failed:", e);
       if (statusEl) statusEl.textContent = "Chart error: " + e.message;
     }
   }
@@ -6142,6 +6191,8 @@
         if (yearSel) yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
+      // Update chevron text based on state
+      allBtn.querySelector("svg") && (allBtn.childNodes[0].textContent = __monthlyInvestCatAllTime ? "All time " : "All time ");
     }
 
     drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);

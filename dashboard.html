@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign10" />
+<link rel="stylesheet" href="styles.css?v=recdesign11" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -230,18 +230,27 @@
 
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->
       <div id="monthly-invest-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;margin-top:16px;">
-      <div class="value-chart-card" id="monthly-invest-cat-card" style="flex:1 1 65%;min-width:320px;box-sizing:border-box;">
-        <div class="value-chart-header">
-          <h3>Monthly Investment</h3>
-          <div class="value-chart-actions">
-            <button id="monthly-invest-cat-net" type="button" class="btn btn-outline btn-sm" style="padding:4px 10px;">Net Investment</button>
-            <button id="monthly-invest-cat-split" type="button" class="btn btn-outline btn-sm" style="padding:4px 10px;">Split by Instrument</button>
-            <button id="monthly-invest-cat-alltime" type="button" class="btn btn-outline btn-sm" style="padding:4px 10px;">All time</button>
-            <select id="monthly-invest-cat-year" class="btn btn-outline btn-sm" style="padding:4px 10px;"></select>
+      <div class="value-chart-card mic-card" id="monthly-invest-cat-card" style="flex:1 1 65%;min-width:320px;box-sizing:border-box;">
+        <div class="mic-header">
+          <div class="mic-title-group">
+            <span class="mic-eyebrow">CASH FLOW &middot; MONTHLY</span>
+            <h3 class="mic-title">Monthly investment</h3>
+          </div>
+          <div class="mic-controls">
+            <div class="mic-toggle-group">
+              <button id="monthly-invest-cat-net" type="button" class="mic-toggle-btn">Net</button>
+              <button id="monthly-invest-cat-split" type="button" class="mic-toggle-btn">By instrument</button>
+            </div>
+            <button id="monthly-invest-cat-alltime" type="button" class="mic-dropdown-btn">
+              All time <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <select id="monthly-invest-cat-year" class="mic-dropdown-btn mic-year-sel"></select>
           </div>
         </div>
-        <p class="muted small" id="monthly-invest-cat-status"></p>
-        <div id="monthly-invest-cat-wrap" style="position:relative;height:300px;"></div>
+        <div class="mic-stats-row" id="monthly-invest-cat-stats"></div>
+        <p class="muted small" id="monthly-invest-cat-status" style="margin:0;padding:0 20px 4px;font-size:0.7rem;"></p>
+        <div id="monthly-invest-cat-wrap" style="position:relative;height:280px;"></div>
+        <div class="mic-legend" id="monthly-invest-cat-legend"></div>
       </div>
 
       <div class="value-chart-card" style="flex:1 1 220px;min-width:240px;box-sizing:border-box;">
@@ -2858,7 +2867,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat26"></script>
+  <script src="script.js?v=micat27"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
