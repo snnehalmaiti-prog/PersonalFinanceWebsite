@@ -1201,47 +1201,55 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
 }
 .overview-header-left {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+}
+.overview-title-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .overview-stats-inline {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   width: 100%;
-  overflow: hidden;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
 }
 .overview-stat-inline {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 16px 0;
+  gap: 6px;
+  padding: 14px 20px;
   flex: 1;
-  align-items: center;
+  align-items: flex-start;
   white-space: nowrap;
+  min-width: 100px;
 }
 .overview-stat-divider {
   width: 1px;
-  height: 36px;
   background: var(--border);
   flex-shrink: 0;
+  align-self: stretch;
 }
 .overview-stat-label {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  min-height: unset;
   line-height: 1.2;
 }
 .overview-stat-value {
   font-family: "Sora", sans-serif;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
