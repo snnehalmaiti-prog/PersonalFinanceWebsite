@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign19" />
+<link rel="stylesheet" href="styles.css?v=recdesign20" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -307,7 +307,11 @@
 
       <div class="isc-card" id="investment-split-card">
         <div class="isc-header">
-          <h3 class="isc-title">Portfolio Split</h3>
+          <h3 class="isc-title" id="isc-title">Portfolio Split</h3>
+          <div class="isc-toggle" role="group" aria-label="Split mode">
+            <button type="button" class="isc-toggle-btn active" data-isc-mode="portfolio">Portfolio</button>
+            <button type="button" class="isc-toggle-btn" data-isc-mode="region">Region</button>
+          </div>
         </div>
         <div class="isc-total-block">
           <span class="isc-total-label">INVESTED TOTAL</span>
@@ -2926,7 +2930,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat57"></script>
+  <script src="script.js?v=micat58"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

@@ -5973,6 +5973,23 @@
     renderValueChart();
   });
 
+  // Wire the Portfolio Split card's Portfolio/Region toggle.
+  (function () {
+    var card = document.getElementById("investment-split-card");
+    if (!card) return;
+    var buttons = card.querySelectorAll("[data-isc-mode]");
+    var savedMode = getIscMode();
+    buttons.forEach(function (btn) {
+      btn.classList.toggle("active", btn.dataset.iscMode === savedMode);
+      btn.addEventListener("click", function () {
+        var mode = btn.dataset.iscMode;
+        localStorage.setItem(ISC_MODE_KEY, mode);
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        renderInvestmentSplitChart();
+      });
+    });
+  })();
+
   // ── Monthly Cash Flow chart (Income / Investment / Expense) ──────────────
   var __mcfChart;
   var __mcfYear;
@@ -6219,6 +6236,29 @@
     return names;
   }
 
+  var ISC_MODE_KEY = "wf-isc-mode";
+  function getIscMode() { return localStorage.getItem(ISC_MODE_KEY) === "region" ? "region" : "portfolio"; }
+
+  // Region split for Stocks/ETF using the stocksetfmapping "Region" column.
+  function computeStocksEtfInvestmentByRegion(portfolioFilter) {
+    var rows = getSheetRows("stocksetf");
+    var out = { India: 0, US: 0 };
+    if (!rows) return out;
+    var mapping = buildStockMappingTable();
+    var byInst = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!byInst) return out;
+    Object.keys(byInst).forEach(function (instrument) {
+      var m = mapping[normalizeText(instrument)];
+      var region = (m && m.region) || "India";
+      var lots = fifoRemainingLots(byInst[instrument]);
+      var inv = 0;
+      lots.forEach(function (lot) { inv += lot.units * lot.price; });
+      if (region === "US") out.US += inv;
+      else out.India += inv;
+    });
+    return out;
+  }
+
   function renderInvestmentSplitChart() {
     var statusEl = document.getElementById("portfolio-split-status");
     if (!statusEl) return;
@@ -6227,6 +6267,12 @@
     // Fixed Income (EPF) and FD — the latter two dropped when FI is excluded.
     var fiExcluded = isFixedIncomeExcluded();
     var prefixes = fiExcluded ? ["equity", "stocksetf"] : ["equity", "stocksetf", "fixedincome", "fd"];
+    var mode = getIscMode();
+    var titleEl = document.getElementById("isc-title");
+    if (titleEl) titleEl.textContent = mode === "region" ? "Region Split" : "Portfolio Split";
+
+    if (mode === "region") { _renderRegionSplit(prefixes, fiExcluded, statusEl); return; }
+
     var names = collectPortfolioNamesFromSheets(prefixes);
     if (!names.length) {
       statusEl.textContent = "No portfolios found yet. Connect your transaction sheets in Settings.";
@@ -6370,6 +6416,87 @@
             added = true;
           });
           if (added) drawSplitPie();
+        });
+      }
+    }
+  }
+
+  function _renderRegionSplit(prefixes, fiExcluded, statusEl) {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var barEl = document.getElementById("isc-bar");
+    var listEl = document.getElementById("isc-list");
+    var totalEl = document.getElementById("isc-total-value");
+    if (!barEl || !listEl || !totalEl) return;
+
+    // MF + Fixed Income + FD (if not excluded) → India.
+    // Stocks/ETF split by mapping Region column.
+    var mfInvested = computeTotalInvestment(selected, ["equity"]);
+    var fiInvested = fiExcluded ? 0 : computeTotalInvestment(selected, ["fixedincome", "fd"]);
+    var seByRegion = computeStocksEtfInvestmentByRegion(selected);
+
+    var investedByRegion = {
+      "India": mfInvested + fiInvested + seByRegion.India,
+      "US":    seByRegion.US
+    };
+
+    var REGION_META = {
+      "India": { bar: "#10B981", tint: "#D1FAE5", ink: "#065F46", flag: "🇮🇳" },
+      "US":    { bar: "#6366F1", tint: "#E0E7FF", ink: "#3730A3", flag: "🇺🇸" }
+    };
+
+    function draw() {
+      var entries = Object.keys(investedByRegion)
+        .map(function (r) { return { name: r, value: investedByRegion[r] }; })
+        .filter(function (e) { return e.value > UNITS_EPSILON; })
+        .sort(function (a, b) { return b.value - a.value; });
+      if (!entries.length) {
+        statusEl.textContent = "No invested amount found yet.";
+        barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
+        return;
+      }
+      var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+      totalEl.textContent = formatCurrency(total);
+      barEl.innerHTML = entries.map(function (e) {
+        var pct = (e.value / total) * 100;
+        var meta = REGION_META[e.name] || REGION_META["India"];
+        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + meta.bar + ';" title="' + e.name + '"></span>';
+      }).join("");
+      listEl.innerHTML = entries.map(function (e) {
+        var pct = (e.value / total) * 100;
+        var meta = REGION_META[e.name] || REGION_META["India"];
+        var pctStr = (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + "%";
+        return '<div class="isc-row">' +
+          '<div class="isc-avatar" style="background:' + meta.tint + ';color:' + meta.ink + ';font-size:0.85rem;">' + meta.flag + '</div>' +
+          '<div class="isc-row-body">' +
+            '<div class="isc-row-name">' + e.name + '</div>' +
+          '</div>' +
+          '<div class="isc-row-nums">' +
+            '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
+            '<div class="isc-row-pct" style="color:' + meta.bar + ';">' + pctStr + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+      statusEl.textContent = "";
+    }
+    draw();
+
+    // Fold in commodity (gold) as India once historical prices resolve.
+    if (!fiExcluded) {
+      var fdRows = getSheetRows("fd");
+      if (fdRows && fdRows.length) {
+        var uniqueDates = collectCommodityUniqueDates(fdRows, "all");
+        Promise.all([
+          fetchGoldPriceINRPerGram().catch(function () { return null; }),
+          Promise.all(uniqueDates.map(function (d) {
+            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+          }))
+        ]).then(function (results) {
+          var goldPrice = results[0]; if (!goldPrice) return;
+          var histPrices = {}; results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
+          var commHoldings = buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices) || [];
+          var extra = 0;
+          commHoldings.forEach(function (h) { if (h.invested > UNITS_EPSILON) extra += h.invested; });
+          if (extra > 0) { investedByRegion["India"] += extra; draw(); }
         });
       }
     }
