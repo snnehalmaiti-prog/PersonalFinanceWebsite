@@ -265,6 +265,26 @@
       </div>
       </div><!-- /monthly-invest-row -->
 
+      <!-- Monthly Cash Flow chart (50% width) -->
+      <div style="display:flex;gap:16px;margin-top:16px;">
+      <div class="value-chart-card mic-card" id="monthly-cashflow-card" style="flex:0 0 calc(50% - 8px);min-width:300px;box-sizing:border-box;">
+        <div class="mic-header">
+          <div class="mic-title-group">
+            <span class="mic-eyebrow">CASH FLOW       </div><!-- /monthly-invest-row -->middot; MONTHLY</span>
+            <h3 class="mic-title">Income &amp; Expenses</h3>
+          </div>
+          <div class="mic-controls">
+            <button id="mcf-alltime" type="button" class="mic-dropdown-btn">All time <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+            <select id="mcf-year" class="mic-dropdown-btn mic-year-sel"></select>
+          </div>
+        </div>
+        <div class="mic-stats-row" id="mcf-stats"></div>
+        <p class="muted small" id="mcf-status" style="margin:0;padding:0 20px 4px;font-size:0.7rem;"></p>
+        <div id="mcf-wrap" style="position:relative;height:280px;"></div>
+        <div class="mic-legend" id="mcf-legend"></div>
+      </div>
+      </div><!-- /monthly-cashflow-row -->
+
       <div class="value-chart-card" id="account-value-card">
         <div class="value-chart-header">
           <div class="value-chart-title-group">
@@ -2867,7 +2887,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat28"></script>
+  <script src="script.js?v=micat29"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

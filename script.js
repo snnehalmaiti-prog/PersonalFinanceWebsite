@@ -5655,6 +5655,250 @@
 
   renderValueChart();
   renderMonthlyInvestmentByCategory();
+  renderMonthlyCashFlow();
+
+  // ── Monthly Cash Flow chart (Income / Investment / Expense) ──────────────
+  var __mcfChart;
+  var __mcfYear;
+  var __mcfAllTime = false;
+  var __mcfData; // { byMonth: { "YYYY-MM": { income, expense, investment } }, yearList }
+
+  function buildMcfInvestmentByMonth() {
+    // Aggregate investment amounts from the same sheets as Monthly Investment
+    var result = {};
+    function addInv(prefix, getAmt) {
+      var rows = getSheetRows(prefix);
+      if (!rows || rows.length < 2) return;
+      var hdr = rows[0].map(normalizeText);
+      var dateIdx = hdr.indexOf("date");
+      var amtIdx = hdr.indexOf("amount invested");
+      if (amtIdx < 0) amtIdx = hdr.indexOf("invested amount");
+      if (amtIdx < 0) amtIdx = hdr.indexOf("invested");
+      var typeIdx = hdr.indexOf("transaction type");
+      if (dateIdx < 0 || amtIdx < 0) return;
+      for (var i = 1; i < rows.length; i++) {
+        var row = rows[i];
+        var rawType = typeIdx >= 0 ? normalizeText(String(row[typeIdx] || "")) : "";
+        if (rawType && (rawType === "sell" || rawType === "redeem" || rawType === "withdraw" || rawType === "withdrawal")) continue;
+        var d = parseFlexibleDate(row[dateIdx]);
+        if (!d) continue;
+        var amt = parseNumber(row[amtIdx]);
+        if (!amt || amt <= 0) continue;
+        var ym = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+        if (!result[ym]) result[ym] = 0;
+        result[ym] += amt;
+      }
+    }
+    addInv("equity");
+    addInv("fixedincome");
+    addInv("fd");
+    addInv("stocksetf");
+    return result;
+  }
+
+  function renderMonthlyCashFlow() {
+    var statusEl = document.getElementById("mcf-status");
+    var yearSel = document.getElementById("mcf-year");
+    if (typeof Chart === "undefined") return;
+
+    // Build investment data from sheets (sync)
+    var investByMonth = buildMcfInvestmentByMonth();
+
+    // Fetch expense_records from Supabase (async)
+    if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
+      // Not logged in — only show investment bars
+      __mcfData = { byMonth: {}, yearList: [], investByMonth: investByMonth };
+      Object.keys(investByMonth).forEach(function(ym) {
+        if (!__mcfData.byMonth[ym]) __mcfData.byMonth[ym] = { income: 0, expense: 0, investment: 0 };
+        __mcfData.byMonth[ym].investment = investByMonth[ym];
+      });
+      __mcfData.yearList = Object.keys(__mcfData.byMonth).map(function(k) { return k.slice(0,4); })
+        .filter(function(v,i,a){ return a.indexOf(v)===i; }).sort();
+      _drawMcfChart();
+      return;
+    }
+
+    WfDb.select("expense_records", "select=txn_date,amount,type&order=txn_date.asc").then(function(records) {
+      var byMonth = {};
+      (records || []).forEach(function(r) {
+        if (!r.txn_date || !r.amount) return;
+        var ym = String(r.txn_date).slice(0, 7);
+        if (!byMonth[ym]) byMonth[ym] = { income: 0, expense: 0, investment: 0 };
+        var amt = parseFloat(r.amount) || 0;
+        if (r.type === "income") byMonth[ym].income += amt;
+        else if (r.type === "expense") byMonth[ym].expense += amt;
+        else if (r.type === "budget") byMonth[ym].income += amt; // budget as income
+      });
+      // Merge investment data
+      Object.keys(investByMonth).forEach(function(ym) {
+        if (!byMonth[ym]) byMonth[ym] = { income: 0, expense: 0, investment: 0 };
+        byMonth[ym].investment += investByMonth[ym];
+      });
+      // Build year list from all data
+      var yearSet = {};
+      Object.keys(byMonth).forEach(function(ym) { yearSet[ym.slice(0,4)] = 1; });
+      var yearList = Object.keys(yearSet).sort();
+      __mcfData = { byMonth: byMonth, yearList: yearList };
+
+      if (!yearList.length) {
+        if (statusEl) statusEl.textContent = "No cash flow data found.";
+        return;
+      }
+      if (!__mcfYear || yearList.indexOf(__mcfYear) < 0) __mcfYear = yearList[yearList.length - 1];
+      if (yearSel) {
+        var existing = [];
+        for (var oi = 0; oi < yearSel.options.length; oi++) existing.push(yearSel.options[oi].value);
+        if (existing.join(",") !== yearList.join(",")) {
+          yearSel.innerHTML = yearList.map(function(y){ return '<option value="'+y+'">'+y+'</option>'; }).join("");
+        }
+        yearSel.value = __mcfYear;
+        yearSel.style.display = __mcfAllTime ? "none" : "";
+        yearSel.onchange = function() {
+          __mcfYear = yearSel.value;
+          _drawMcfChart();
+        };
+      }
+      var allBtn = document.getElementById("mcf-alltime");
+      if (allBtn) {
+        allBtn.classList.toggle("active", !!__mcfAllTime);
+        allBtn.onclick = function() {
+          __mcfAllTime = !__mcfAllTime;
+          allBtn.classList.toggle("active", !!__mcfAllTime);
+          if (yearSel) yearSel.style.display = __mcfAllTime ? "none" : "";
+          _drawMcfChart();
+        };
+      }
+      _drawMcfChart();
+    }).catch(function(e) {
+      if (statusEl) statusEl.textContent = "Could not load expense data.";
+    });
+  }
+
+  function _drawMcfChart() {
+    var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var wrap = document.getElementById("mcf-wrap");
+    var statsEl = document.getElementById("mcf-stats");
+    var legendEl = document.getElementById("mcf-legend");
+    if (!wrap || typeof Chart === "undefined" || !__mcfData) return;
+
+    var byMonth = __mcfData.byMonth;
+    var yearList = __mcfData.yearList;
+
+    // Determine month keys and labels
+    var monthKeys, labels;
+    if (__mcfAllTime && yearList.length) {
+      var allKeys = Object.keys(byMonth).sort();
+      if (allKeys.length) {
+        var first = allKeys[0], last = allKeys[allKeys.length - 1];
+        monthKeys = []; labels = [];
+        var cy = parseInt(first.slice(0,4)), cm = parseInt(first.slice(5,7));
+        var ey = parseInt(last.slice(0,4)), em = parseInt(last.slice(5,7));
+        while (cy < ey || (cy === ey && cm <= em)) {
+          var ym = cy + "-" + String(cm).padStart(2,"0");
+          monthKeys.push(ym);
+          labels.push(MON_LABELS[cm-1] + " " + String(cy).slice(2));
+          cm++; if (cm > 12) { cm = 1; cy++; }
+        }
+      } else { monthKeys = []; labels = []; }
+    } else {
+      var yr = __mcfYear || (yearList[yearList.length - 1]);
+      monthKeys = []; labels = [];
+      for (var m = 1; m <= 12; m++) {
+        var ym2 = yr + "-" + String(m).padStart(2,"0");
+        monthKeys.push(ym2); labels.push(MON_LABELS[m-1]);
+      }
+    }
+
+    var COL_INCOME = "#52B788";     // green
+    var COL_INVEST = "#3B82F6";     // blue
+    var COL_EXPENSE = "#E8623A";    // coral/red
+
+    var incomeData = monthKeys.map(function(k){ return (byMonth[k] && byMonth[k].income) || 0; });
+    var investData = monthKeys.map(function(k){ return (byMonth[k] && byMonth[k].investment) || 0; });
+    var expenseData = monthKeys.map(function(k){ return (byMonth[k] && byMonth[k].expense) || 0; });
+
+    var totalIncome = incomeData.reduce(function(a,b){return a+b;},0);
+    var totalInvest = investData.reduce(function(a,b){return a+b;},0);
+    var totalExpense = expenseData.reduce(function(a,b){return a+b;},0);
+
+    function fmtC(v) {
+      if (v >= 1e7) return "₹" + (v/1e7).toFixed(1) + "Cr";
+      if (v >= 1e5) return "₹" + (v/1e5).toFixed(1) + "L";
+      if (v >= 1e3) return "₹" + (v/1e3).toFixed(0) + "k";
+      return "₹" + Math.round(v);
+    }
+
+    // Stats row
+    if (statsEl) {
+      var stats = [
+        { label: "Income", value: fmtC(totalIncome), cls: "positive" },
+        { label: "Invested", value: fmtC(totalInvest), cls: "" },
+        { label: "Expenses", value: fmtC(totalExpense), cls: totalExpense > 0 ? "negative" : "" }
+      ];
+      statsEl.innerHTML = stats.map(function(s){
+        return '<div class="mic-stat"><span class="mic-stat-label">'+s.label+'</span>'
+          +'<span class="mic-stat-value '+s.cls+'">'+s.value+'</span></div>';
+      }).join("");
+    }
+
+    // Legend
+    if (legendEl) {
+      legendEl.innerHTML = [
+        { color: COL_INCOME, label: "Income" },
+        { color: COL_INVEST, label: "Invested" },
+        { color: COL_EXPENSE, label: "Expenses" }
+      ].map(function(l){
+        return '<div class="mic-legend-item"><span class="mic-legend-bar" style="background:'+l.color+'"></span>'+l.label+'</div>';
+      }).join("");
+    }
+
+    // Destroy and recreate canvas (nuclear fix)
+    if (__mcfChart) { try { __mcfChart.destroy(); } catch(e) {} }
+    wrap.innerHTML = "";
+    var canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+
+    try {
+      __mcfChart = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [
+            { label: "Income", data: incomeData, backgroundColor: COL_INCOME + "CC", borderWidth: 0, borderRadius: 3 },
+            { label: "Invested", data: investData, backgroundColor: COL_INVEST + "CC", borderWidth: 0, borderRadius: 3 },
+            { label: "Expenses", data: expenseData, backgroundColor: COL_EXPENSE + "CC", borderWidth: 0, borderRadius: 3 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) { return ctx.dataset.label + ": " + fmtC(ctx.parsed.y); }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: false, grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(0,0,0,0.05)" },
+              ticks: { font: { size: 11 }, callback: function(v) {
+                var abs = Math.abs(v);
+                if (abs >= 1e5) return (v/1e5).toFixed(abs % 1e5 === 0 ? 0 : 1) + "L";
+                if (abs >= 1e3) return (v/1e3).toFixed(0) + "k";
+                return v;
+              }}
+            }
+          }
+        }
+      });
+    } catch(e) {
+      var st = document.getElementById("mcf-status");
+      if (st) st.textContent = "Chart error: " + e.message;
+    }
+  }
 
   function collectPortfolioNamesFromSheets(prefixes) {
     var names = [];
