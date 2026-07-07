@@ -1122,6 +1122,7 @@
       }
 
       var dashExpState = { accounts: [], categories: [], paymentMethods: [], records: [], recType: "expense" };
+      window.dashExpState = dashExpState;
 
       function loadDashAccounts() {
         if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
@@ -1143,6 +1144,7 @@
           fillAnaFilterDropdowns();
           renderDashRecords();
           renderExpMonthlyChart();
+          if (window.renderMonthlyCashFlow) window.renderMonthlyCashFlow();
           renderExpWaterfallChart();
           renderExpSpendMatrix();
           renderPaymentToJoint();
@@ -2887,7 +2889,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat30"></script>
+  <script src="script.js?v=micat31"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
