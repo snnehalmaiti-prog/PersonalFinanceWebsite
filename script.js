@@ -6106,20 +6106,20 @@
 
     var splitBtn = document.getElementById("monthly-invest-cat-split");
     if (splitBtn) {
-      splitBtn.classList.toggle("active", __monthlyInvestCatSplit);
+      splitBtn.classList.toggle("active", !!__monthlyInvestCatSplit);
       splitBtn.onclick = function () {
         __monthlyInvestCatSplit = !__monthlyInvestCatSplit;
-        splitBtn.classList.toggle("active", __monthlyInvestCatSplit);
+        splitBtn.classList.toggle("active", !!__monthlyInvestCatSplit);
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
     }
 
     var allBtn = document.getElementById("monthly-invest-cat-alltime");
     if (allBtn) {
-      allBtn.classList.toggle("active", __monthlyInvestCatAllTime);
+      allBtn.classList.toggle("active", !!__monthlyInvestCatAllTime);
       allBtn.onclick = function () {
         __monthlyInvestCatAllTime = !__monthlyInvestCatAllTime;
-        allBtn.classList.toggle("active", __monthlyInvestCatAllTime);
+        allBtn.classList.toggle("active", !!__monthlyInvestCatAllTime);
         if (yearSel) yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
