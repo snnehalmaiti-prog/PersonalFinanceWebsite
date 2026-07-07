@@ -5972,6 +5972,12 @@
   document.addEventListener("wf-exclusion-changed", function () {
     renderValueChart();
   });
+  // Re-render split cards once Overview finishes hydrating _ov.* so the
+  // "INVESTED TOTAL" numbers snap to Overview's authoritative figure.
+  document.addEventListener("wf-overview-flows-ready", function () {
+    if (typeof renderInvestmentSplitChart === "function") renderInvestmentSplitChart();
+    if (typeof renderInstrumentSplitChart === "function") renderInstrumentSplitChart();
+  });
 
   // Wire the Portfolio Split card's Portfolio/Region toggle.
   (function () {
@@ -6244,6 +6250,17 @@
     return info.promise.then(function (r) { return (r.India || 0) + (r.US || 0); });
   }
 
+  // Overview's authoritative "Invested" total (built by updateDashboardStats).
+  // May return null on very early first render before _ov is populated.
+  function getOverviewInvestedTotal() {
+    if (typeof _ov === "undefined" || !_ov) return null;
+    var fiEx = isFixedIncomeExcluded();
+    var fi = fiEx ? 0 : (_ov.fiInvested || 0);
+    var comm = fiEx ? 0 : (_ov.commInvested || 0);
+    var total = (_ov.mfInvested || 0) + (_ov.seInvested || 0) + fi + comm;
+    return total > 0 ? total : null;
+  }
+
   var ISC_MODE_KEY = "wf-isc-mode";
   function getIscMode() { return localStorage.getItem(ISC_MODE_KEY) === "region" ? "region" : "portfolio"; }
 
@@ -6376,6 +6393,14 @@
         listEl.innerHTML = "";
         totalEl.textContent = "—";
         return;
+      }
+      // Reconcile to Overview's authoritative Invested total (single source of
+      // truth). Scale per-portfolio slices proportionally so the sum matches.
+      var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
+      var overviewTotal = getOverviewInvestedTotal();
+      if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
+        var s = overviewTotal / rawSum;
+        entries.forEach(function (e) { e.value *= s; });
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
@@ -6666,6 +6691,13 @@
         statusEl.textContent = "No invested amount found yet.";
         barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
         return;
+      }
+      // Reconcile to Overview's Invested total.
+      var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
+      var overviewTotal = getOverviewInvestedTotal();
+      if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
+        var scl = overviewTotal / rawSum;
+        entries.forEach(function (e) { e.value *= scl; });
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
