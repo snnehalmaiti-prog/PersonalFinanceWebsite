@@ -5523,16 +5523,140 @@
           : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
           : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
 
-        // Normalize portfolio value series to 100 at inception (first nonzero point).
+        // === Time-Weighted Return NAV computation ===
+        // Collect contribution/withdrawal events from all sheets. Positive delta
+        // means money flowed into the portfolio (a contribution), negative means
+        // money was withdrawn. Interest/gains are NOT included — they show up as
+        // increases in portfolio value and are what drives NAV growth.
+        var contribEvents = [];
+
+        // MF + Stocks/ETF: buildXirrCashFlows returns negative for buys, positive for sells.
+        var equityRowsForFlow = getSheetRows("equity");
+        var seRowsForFlow = getSheetRows("stocksetf");
+        if (equityRowsForFlow) {
+          buildXirrCashFlows(equityRowsForFlow, selectedPortfolio).forEach(function (f) {
+            contribEvents.push({ date: f.date, delta: -f.amount });
+          });
+        }
+        if (seRowsForFlow) {
+          buildXirrCashFlows(seRowsForFlow, selectedPortfolio).forEach(function (f) {
+            contribEvents.push({ date: f.date, delta: -f.amount });
+          });
+        }
+
+        // Fixed Income (EPF): deposits only, interest is a return not a contribution
+        if (!isFixedIncomeExcluded()) {
+          var fiRowsForFlow = getSheetRows("fixedincome");
+          if (fiRowsForFlow && fiRowsForFlow.length) {
+            var fiHdr = fiRowsForFlow[0].map(normalizeText);
+            var fiPortIdx = fiHdr.indexOf("portfolio name");
+            var fiTypeIdx = fiHdr.indexOf("transaction type");
+            var fiAmtIdx = fiHdr.indexOf("amount");
+            var fiCatIdx = fiHdr.indexOf("instrument category");
+            var fiDateIdx = fiHdr.findIndex(function (h) { return h.indexOf("date") !== -1; });
+            if (fiPortIdx !== -1 && fiTypeIdx !== -1 && fiAmtIdx !== -1 && fiDateIdx !== -1) {
+              fiRowsForFlow.slice(1).forEach(function (row) {
+                var portfolio = (row[fiPortIdx] || "").trim();
+                if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
+                if (fiCatIdx !== -1 && normalizeText(row[fiCatIdx]) !== "fixed income") return;
+                var type = normalizeText(row[fiTypeIdx]);
+                if (type.indexOf("deposit") === -1) return;
+                var date = parseFlexibleDate(row[fiDateIdx]);
+                if (!date) return;
+                var amt = parseNumber(row[fiAmtIdx]);
+                if (!amt) return;
+                contribEvents.push({ date: date, delta: amt });
+              });
+            }
+          }
+
+          // FD sheet — fixed deposits: each row is a discrete deposit
+          // Investment corpus / savings: use buildFdValueEvents deltas as contribution proxy
+          // Gold/commodity: buy = contribution, sell = withdrawal
+          var fdRowsForFlow = getSheetRows("fd");
+          if (fdRowsForFlow && fdRowsForFlow.length) {
+            var fdHdr = fdRowsForFlow[0].map(normalizeText);
+            var fdPortIdx = fdHdr.indexOf("portfolio name");
+            var fdTypeIdx = fdHdr.indexOf("transaction type");
+            var fdAmtIdx = fdHdr.indexOf("invested amount");
+            var fdDateIdx = fdHdr.indexOf("transaction date");
+            var fdSubIdx = fdHdr.indexOf("instrument sub category");
+            if (fdPortIdx !== -1 && fdAmtIdx !== -1 && fdDateIdx !== -1) {
+              fdRowsForFlow.slice(1).forEach(function (row) {
+                var portfolio = (row[fdPortIdx] || "").trim();
+                if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
+                var sub = fdSubIdx !== -1 ? normalizeText(row[fdSubIdx]) : "";
+                var type = fdTypeIdx !== -1 ? normalizeText(row[fdTypeIdx]) : "";
+                var date = parseFlexibleDate(row[fdDateIdx]);
+                if (!date) return;
+                var amt = parseNumber(row[fdAmtIdx]);
+                if (!amt) return;
+
+                if (sub === "fixed deposit") {
+                  // Discrete deposit — contribution
+                  contribEvents.push({ date: date, delta: amt });
+                } else if (sub === "gold" || sub === "silver" || sub === "commodity") {
+                  var isBuy = type.indexOf("buy") !== -1 || !type;
+                  contribEvents.push({ date: date, delta: isBuy ? amt : -amt });
+                }
+                // Investment Corpus / Savings Account: skipped here — handled below via
+                // buildFdValueEvents balance-delta stream to catch running-balance changes
+              });
+            }
+
+            // Investment Corpus / Savings: balance deltas as contribution proxy.
+            // (Interest accrual is small for these; treating balance moves as
+            // contributions is a reasonable approximation.)
+            var fdBalanceEvents = buildFdValueEvents(selectedPortfolio);
+            var prevBal = 0;
+            fdBalanceEvents.forEach(function (ev) {
+              var delta = ev.cumulativeValue - prevBal;
+              prevBal = ev.cumulativeValue;
+              if (Math.abs(delta) > 0.01) contribEvents.push({ date: ev.date, delta: delta });
+            });
+          }
+        }
+
+        contribEvents.sort(function (a, b) { return a.date - b.date; });
+
+        // Cumulative contributions at each timeline date (running sum through time)
+        var cumContribAt = new Array(points.length).fill(0);
+        var evIdx = 0, runningContrib = 0;
+        for (var pi = 0; pi < points.length; pi++) {
+          while (evIdx < contribEvents.length && contribEvents[evIdx].date <= points[pi].x) {
+            runningContrib += contribEvents[evIdx].delta;
+            evIdx++;
+          }
+          cumContribAt[pi] = runningContrib;
+        }
+
+        // TWR NAV: start at 100 on the first day the portfolio has value.
+        // units_0 = value_0 / 100. Thereafter, when contributions arrive at
+        // date t, units grow by Δcontrib / NAV(previous). Between contributions,
+        // NAV moves purely with portfolio value.
         var basePortIdx = 0;
         while (basePortIdx < points.length && !(points[basePortIdx].y > 0)) basePortIdx++;
-        var basePortVal = basePortIdx < points.length ? points[basePortIdx].y : 0;
-        var normPortPoints = basePortVal > 0
-          ? points.map(function (p) { return { x: p.x, y: p.y > 0 ? (p.y * 100 / basePortVal) : null }; })
-          : points.map(function (p) { return { x: p.x, y: null }; });
+        var normPortPoints = points.map(function () { return { x: null, y: null }; });
         var lastPortNorm = null;
-        for (var lp = normPortPoints.length - 1; lp >= 0; lp--) {
-          if (normPortPoints[lp].y != null) { lastPortNorm = normPortPoints[lp].y; break; }
+        if (basePortIdx < points.length && points[basePortIdx].y > 0) {
+          var units = points[basePortIdx].y / 100;
+          normPortPoints[basePortIdx] = { x: points[basePortIdx].x, y: 100 };
+          var prevNav = 100;
+          var prevContrib = cumContribAt[basePortIdx];
+          for (var i = basePortIdx + 1; i < points.length; i++) {
+            var dContrib = cumContribAt[i] - prevContrib;
+            if (Math.abs(dContrib) > 0.01 && prevNav > 0) {
+              // Units adjust for cash flow at the prevailing NAV
+              units += dContrib / prevNav;
+            }
+            var nav = units > 0 && points[i].y > 0 ? (points[i].y / units) : prevNav;
+            normPortPoints[i] = { x: points[i].x, y: nav };
+            prevNav = nav;
+            prevContrib = cumContribAt[i];
+          }
+          lastPortNorm = prevNav;
+        } else {
+          normPortPoints = points.map(function (p) { return { x: p.x, y: null }; });
         }
 
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
