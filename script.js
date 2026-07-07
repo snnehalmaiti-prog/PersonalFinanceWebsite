@@ -5894,6 +5894,12 @@
   renderMonthlyInvestmentByCategory();
   renderMonthlyCashFlow();
 
+  // Re-render Growth-of-₹100 whenever the benchmark index changes on the
+  // Benchmark Comparison card so both stay in sync.
+  document.addEventListener("wf-benchmark-changed", function () {
+    renderValueChart();
+  });
+
   // ── Monthly Cash Flow chart (Income / Investment / Expense) ──────────────
   var __mcfChart;
   var __mcfYear;
