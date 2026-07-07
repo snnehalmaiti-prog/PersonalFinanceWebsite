@@ -5762,8 +5762,11 @@
       var allKeys = Object.keys(byMonth).sort();
       if (allKeys.length) {
         var first = allKeys[0], last = allKeys[allKeys.length - 1];
-        // Clamp start to 2026-01
-        if (first < "2026-01") first = "2026-01";
+        // Clamp start to the earliest month that has income or expense data
+        var expFirst = allKeys.find(function(k) {
+          return byMonth[k] && (byMonth[k].income > 0 || byMonth[k].expense > 0);
+        });
+        if (expFirst && expFirst > first) first = expFirst;
         monthKeys = []; labels = [];
         var cy = parseInt(first.slice(0,4)), cm = parseInt(first.slice(5,7));
         var ey = parseInt(last.slice(0,4)), em = parseInt(last.slice(5,7));
