@@ -5773,6 +5773,7 @@
   var __monthlyInvestCatYear;
   var __monthlyInvestCatAllTime = false;
   var __monthlyInvestCatSplit = false; // off = single total bar per month
+  var __monthlyInvestCatNet = false; // on = bars show invested minus withdrawn
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
@@ -5938,16 +5939,26 @@
     });
     var catList = Object.keys(allCats).sort();
 
+    // In Net mode, each bar is invested minus withdrawn for that cell.
+    var net = __monthlyInvestCatNet;
+    function investedCell(k, cat) { return (byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0; }
+    function outCell(k, cat) { return (byMonthCatOut[k] && byMonthCatOut[k][cat]) ? byMonthCatOut[k][cat] : 0; }
+    function barCell(k, cat) { return net ? investedCell(k, cat) - outCell(k, cat) : investedCell(k, cat); }
+    function investedTotal(k) {
+      var m = byMonthCat[k]; return m ? Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0) : 0;
+    }
+    function outTotal(k) {
+      var m = byMonthCatOut[k]; return m ? Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0) : 0;
+    }
+    function barTotal(k) { return net ? investedTotal(k) - outTotal(k) : investedTotal(k); }
+
     // Hex + "99" alpha (~60% opacity) so withdrawal lines stay visible behind bars
     var datasets;
     if (__monthlyInvestCatSplit) {
       datasets = catList.map(function (cat, i) {
-        var vals = monthKeys.map(function (k2) {
-          return (byMonthCat[k2] && byMonthCat[k2][cat]) ? byMonthCat[k2][cat] : 0;
-        });
         return {
-          label: cat,
-          data: vals,
+          label: cat + (net ? " (net)" : ""),
+          data: monthKeys.map(function (k2) { return barCell(k2, cat); }),
           backgroundColor: MIC_PALETTE[i % MIC_PALETTE.length] + "99",
           borderColor: MIC_PALETTE[i % MIC_PALETTE.length],
           borderWidth: 1,
@@ -5957,12 +5968,8 @@
     } else {
       // Split off: one total bar per month
       datasets = catList.length ? [{
-        label: "Total invested",
-        data: monthKeys.map(function (k2) {
-          var m = byMonthCat[k2];
-          if (!m) return 0;
-          return Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0);
-        }),
+        label: net ? "Net investment" : "Total invested",
+        data: monthKeys.map(function (k2) { return barTotal(k2); }),
         backgroundColor: MIC_PALETTE[0] + "99",
         borderColor: MIC_PALETTE[0],
         borderWidth: 1,
@@ -5988,7 +5995,9 @@
         stack: stackId, yAxisID: "yOut", order: 0
       };
     }
-    if (__monthlyInvestCatSplit) {
+    if (net) {
+      // Net mode folds withdrawals into the bars, so no separate lines
+    } else if (__monthlyInvestCatSplit) {
       outCatList.forEach(function (cat, i) {
         datasets.push(withdrawLine(cat + " (withdrawn)",
           MIC_PALETTE[(catList.indexOf(cat) !== -1 ? catList.indexOf(cat) : i) % MIC_PALETTE.length],
@@ -6035,13 +6044,13 @@
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
           y: {
-            stacked: true, beginAtZero: true, position: "left",
-            title: { display: true, text: "Invested", font: { size: 11 } },
+            stacked: true, beginAtZero: !net, position: "left",
+            title: { display: true, text: net ? "Net invested" : "Invested", font: { size: 11 } },
             grid: { color: "rgba(0,0,0,0.05)" },
             ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } }
           },
           yOut: {
-            beginAtZero: true, position: "right", display: outCatList.length > 0,
+            beginAtZero: true, position: "right", display: !net && outCatList.length > 0,
             title: { display: true, text: "Withdrawn", font: { size: 11 } },
             grid: { drawOnChartArea: false },
             ticks: { font: { size: 11 }, callback: function (v) { return formatCurrency(v); } }
@@ -6102,6 +6111,16 @@
       };
       yearSel.value = __monthlyInvestCatYear;
       yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
+    }
+
+    var netBtn = document.getElementById("monthly-invest-cat-net");
+    if (netBtn) {
+      netBtn.classList.toggle("active", !!__monthlyInvestCatNet);
+      netBtn.onclick = function () {
+        __monthlyInvestCatNet = !__monthlyInvestCatNet;
+        netBtn.classList.toggle("active", !!__monthlyInvestCatNet);
+        drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+      };
     }
 
     var splitBtn = document.getElementById("monthly-invest-cat-split");
