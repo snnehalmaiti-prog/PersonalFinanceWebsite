@@ -6240,23 +6240,50 @@
   function getIscMode() { return localStorage.getItem(ISC_MODE_KEY) === "region" ? "region" : "portfolio"; }
 
   // Region split for Stocks/ETF using the stocksetfmapping "Region" column.
+  // Returns { syncRegions, promise } — syncRegions gives immediate values
+  // (US in USD-not-yet-INR); promise resolves with INR-converted US using
+  // historical USD/INR rates from stock_prices.json.
   function computeStocksEtfInvestmentByRegion(portfolioFilter) {
     var rows = getSheetRows("stocksetf");
-    var out = { India: 0, US: 0 };
-    if (!rows) return out;
+    var syncOut = { India: 0, US: 0 };
+    var lotsByRegion = { India: [], US: [] };
+    if (!rows) return { sync: syncOut, promise: Promise.resolve(syncOut) };
     var mapping = buildStockMappingTable();
     var byInst = groupUnitTransactionsByInstrument(rows, portfolioFilter);
-    if (!byInst) return out;
+    if (!byInst) return { sync: syncOut, promise: Promise.resolve(syncOut) };
     Object.keys(byInst).forEach(function (instrument) {
       var m = mapping[normalizeText(instrument)];
       var region = (m && m.region) || "India";
-      var lots = fifoRemainingLots(byInst[instrument]);
-      var inv = 0;
-      lots.forEach(function (lot) { inv += lot.units * lot.price; });
-      if (region === "US") out.US += inv;
-      else out.India += inv;
+      // FIFO remaining lots with dates (needed for historical USD/INR lookup).
+      var buyQueue = [];
+      byInst[instrument].forEach(function (txn) {
+        if (txn.type === "buy") { buyQueue.push({ units: txn.units, price: txn.price, date: txn.date }); return; }
+        var toMatch = txn.units;
+        while (toMatch > 0 && buyQueue.length) {
+          var head = buyQueue[0];
+          var matched = Math.min(toMatch, head.units);
+          head.units -= matched; toMatch -= matched;
+          if (head.units <= 0) buyQueue.shift();
+        }
+      });
+      buyQueue.forEach(function (lot) {
+        lotsByRegion[region === "US" ? "US" : "India"].push(lot);
+        syncOut[region === "US" ? "US" : "India"] += lot.units * lot.price;
+      });
     });
-    return out;
+    var promise = fetchAllStockPrices()
+      .catch(function () { return { usd_inr_history: {} }; })
+      .then(function (data) {
+        var rateMap = (data && data.usd_inr_history) || {};
+        var indiaInr = 0, usInr = 0;
+        lotsByRegion.India.forEach(function (lot) { indiaInr += lot.units * lot.price; });
+        lotsByRegion.US.forEach(function (lot) {
+          var rate = rateMap[formatDateISO(lot.date)] || 84;
+          usInr += lot.units * lot.price * rate;
+        });
+        return { India: indiaInr, US: usInr };
+      });
+    return { sync: syncOut, promise: promise };
   }
 
   function renderInvestmentSplitChart() {
@@ -6429,15 +6456,22 @@
     if (!barEl || !listEl || !totalEl) return;
 
     // MF + Fixed Income + FD (if not excluded) → India.
-    // Stocks/ETF split by mapping Region column.
+    // Stocks/ETF split by mapping Region column (US uses USD → INR at
+    // historical per-lot rates once stock_prices.json resolves).
     var mfInvested = computeTotalInvestment(selected, ["equity"]);
     var fiInvested = fiExcluded ? 0 : computeTotalInvestment(selected, ["fixedincome", "fd"]);
-    var seByRegion = computeStocksEtfInvestmentByRegion(selected);
+    var seRegionInfo = computeStocksEtfInvestmentByRegion(selected);
 
     var investedByRegion = {
-      "India": mfInvested + fiInvested + seByRegion.India,
-      "US":    seByRegion.US
+      "India": mfInvested + fiInvested + seRegionInfo.sync.India,
+      "US":    seRegionInfo.sync.US
     };
+
+    seRegionInfo.promise.then(function (inr) {
+      investedByRegion["India"] = mfInvested + fiInvested + inr.India;
+      investedByRegion["US"] = inr.US;
+      draw();
+    }).catch(function () {});
 
     var REGION_META = {
       "India": { bar: "#10B981", tint: "#D1FAE5", ink: "#065F46", flag: "🇮🇳" },
