@@ -5925,6 +5925,7 @@
     }
 
     var investedByName = {};
+    var commodityByName = {}; // per-portfolio commodity invested (joins asynchronously)
     var namedSum = 0;
     names.forEach(function (name) {
       var invested = computeTotalInvestment(name, prefixes);
@@ -5933,6 +5934,27 @@
         namedSum += invested;
       }
     });
+
+    // Instrument-category breakdown for one portfolio → sub-line under its name
+    function portfolioCatSubline(name) {
+      if (name === "Unassigned") return "";
+      var eq = computeTotalInvestment(name, ["equity", "stocksetf"]);
+      var fi = fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"]);
+      var comm = fiExcluded ? 0 : (commodityByName[name] || 0);
+      var parts = [
+        { label: "Equity", value: eq, color: "#10B981" },
+        { label: "Fixed Income", value: fi, color: "#3B82F6" },
+        { label: "Commodity", value: comm, color: "#F59E0B" }
+      ].filter(function (p) { return p.value > UNITS_EPSILON; });
+      var sum = parts.reduce(function (s, p) { return s + p.value; }, 0);
+      if (sum <= 0) return "";
+      return parts.map(function (p) {
+        var pc = (p.value / sum) * 100;
+        var pcStr = (pc >= 10 ? pc.toFixed(0) : pc.toFixed(1)) + "%";
+        return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + p.color + '"></span>' +
+          p.label + ' ' + pcStr + '</span>';
+      }).join("");
+    }
     // Reconcile to the overview's "all" figure: blank-portfolio rows become an
     // Unassigned slice; a small negative remainder (per-portfolio FIFO cost
     // matching vs "all") is scaled away so both totals agree exactly.
@@ -6000,7 +6022,7 @@
           '<div class="isc-avatar" style="background:' + col.tint + ';color:' + col.ink + ';">' + initial + '</div>' +
           '<div class="isc-row-body">' +
             '<div class="isc-row-name">' + e.name + '</div>' +
-            '<div class="isc-row-sub">Personal portfolio</div>' +
+            '<div class="isc-row-sub isc-cat-sub">' + portfolioCatSubline(e.name) + '</div>' +
           '</div>' +
           '<div class="isc-row-nums">' +
             '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
@@ -6034,6 +6056,7 @@
             if (!(h.invested > UNITS_EPSILON)) return;
             var name = (h.portfolio || "").trim() || "Unassigned";
             investedByName[name] = (investedByName[name] || 0) + h.invested;
+            commodityByName[name] = (commodityByName[name] || 0) + h.invested;
             added = true;
           });
           if (added) drawSplitPie();

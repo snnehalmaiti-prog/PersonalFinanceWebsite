@@ -3249,6 +3249,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .isc-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .isc-row-name { font-size: 0.72rem; font-weight: 700; color: var(--text); }
 .isc-row-sub { font-size: 0.55rem; color: var(--muted); }
+.isc-cat-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; margin-top: 2px; }
+.isc-cat-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 0.55rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.isc-cat-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 .isc-row-nums { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
 .isc-row-amount { font-size: 0.72rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .isc-row-pct { font-size: 0.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
