@@ -8720,7 +8720,7 @@
   // Phase 2: allocation — segment (market cap) OR portfolio breakdown
   function renderMfAllocation(rowsData) {
     var listEl = document.getElementById("mfalloc-list");
-    var eyebrow = document.getElementById("mfalloc-mode-label");
+    var eyebrow = null; // eyebrow is now static ("ALLOCATION · MUTUAL FUNDS")
     if (!listEl) return;
     var segmentMap = buildInstrumentSegmentMap();
     var PAL = ["#10B981", "#D4A017", "#3B82F6", "#E8623A", "#8B5CF6", "#64748B", "#06B6D4", "#EC4899"];
