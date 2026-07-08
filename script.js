@@ -964,34 +964,6 @@
     }
   }
 
-  // Fold/unfold long holdings lists: when there are >3 instrument rows,
-  // insert a toggle before the subtotal that hides the detail rows.
-  // Fold state persists across re-renders keyed by list DOM id.
-  var WF_FOLD_STATE = {};
-  function applyHoldingsFold(listId, threshold) {
-    threshold = threshold || 3;
-    var list = document.getElementById(listId);
-    if (!list) return;
-    var rows = list.querySelectorAll(".mfh-row");
-    if (rows.length <= threshold + 1) return;
-    var subtotal = rows[rows.length - 1];
-    var details = Array.prototype.slice.call(rows, 0, rows.length - 1);
-    var state = WF_FOLD_STATE[listId] || (WF_FOLD_STATE[listId] = { folded: true });
-    var toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "wf-fold-toggle";
-    toggle.style.cssText = "background:transparent;border:1px dashed var(--border,#d1d5db);color:var(--muted,#6b7280);font-size:0.75rem;font-weight:600;cursor:pointer;padding:8px 12px;margin:6px 0;border-radius:6px;width:100%;text-align:center;";
-    function apply() {
-      details.forEach(function (d) { d.style.display = state.folded ? "none" : ""; });
-      toggle.textContent = state.folded
-        ? ("▸ Show " + details.length + " instruments")
-        : ("▾ Hide instruments");
-    }
-    toggle.addEventListener("click", function () { state.folded = !state.folded; apply(); });
-    list.insertBefore(toggle, subtotal);
-    apply();
-  }
-
   function computeTotalInvestment(portfolioFilter, prefixes) {
     var total = 0;
     prefixes.forEach(function (prefix) {
@@ -2353,7 +2325,6 @@
       '<div class="mfh-col-num" style="color:' + (subPct > 0 ? "var(--emerald)" : subPct < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subPct > 0 ? "+" : "") + subPct.toFixed(2) + '%</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
-    try { applyHoldingsFold("fih-list"); } catch (e) {}
     list.querySelectorAll("[data-fih-sort-col]").forEach(function (el) {
       el.addEventListener("click", function () {
         var col = el.dataset.fihSortCol;
@@ -3704,13 +3675,11 @@
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
       '<span>Instrument</span><span>Sub-Cat</span><span class="mfh-col-num">Rate</span><span class="mfh-col-num">Gms</span>' +
       '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
-    var _subInv = 0, _subCur = 0, _subDay = 0;
     var body = holdings.map(function (h, i) {
       var pal = { bg: "#FEF3C7", fg: "#B45309", accent: "amber" };
       var pnl = h.current - h.invested;
       var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
       var dayChg = (dayChangePerGram || 0) * (h.grams || 0);
-      _subInv += h.invested; _subCur += h.current; _subDay += dayChg;
       return '<div class="mfh-row mfh-color-amber" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
         '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">Au</div>' +
           '<div class="mfh-inst-body"><div class="mfh-inst-name">' + (h.instrument || "Gold") + '</div><div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div></div></div>' +
@@ -3723,17 +3692,7 @@
         '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : pnlPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
       '</div>';
     }).join("");
-    var _subPnl = _subCur - _subInv;
-    var _subPct = _subInv > 0 ? (_subPnl / _subInv) * 100 : 0;
-    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 12px;margin-top:6px;">' +
-      '<div style="grid-column:span 4;font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);">SUB-TOTAL · ' + holdings.length + ' HOLDINGS</div>' +
-      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(_subInv) + '</div>' +
-      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(_subCur) + '</div>' +
-      '<div class="mfh-col-num mfh-num-day ' + (Math.abs(_subDay) < 0.01 ? "mfh-muted" : (_subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(_subDay) < 0.01 ? "—" : ((_subDay >= 0 ? "+" : "") + formatCurrency(_subDay))) + '</div>' +
-      '<div class="mfh-col-num ' + (_subPct > 0 ? "mfh-positive" : _subPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (_subPct > 0 ? "+" : "") + _subPct.toFixed(2) + '%</div>' +
-      '</div>';
-    list.innerHTML = header + body + footer;
-    try { applyHoldingsFold("cmh-list"); } catch (e) {}
+    list.innerHTML = header + body;
   }
 
   // ── Stocks/ETF tab redesign ────────────────────────────────────────────
@@ -4198,7 +4157,6 @@
       '<div class="mfh-col-num mfh-num-day ' + (Math.abs(subDay) < 0.01 ? "mfh-muted" : (subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(subDay) < 0.01 ? "—" : ((subDay >= 0 ? "+" : "") + formatCurrency(subDay))) + '</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
-    try { applyHoldingsFold(listId); } catch (e) {}
     list.querySelectorAll("[data-seh-sort-col]").forEach(function (el) {
       el.addEventListener("click", function () {
         var col = el.dataset.sehSortCol;
@@ -8792,7 +8750,6 @@
       '<div class="mfh-col-num mfh-num-xirr mfh-muted">—</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
-    try { applyHoldingsFold("mfh-list"); } catch (e) {}
     list.querySelectorAll("[data-mfh-sort-col]").forEach(function (el) {
       el.addEventListener("click", function () {
         var col = el.dataset.mfhSortCol;
