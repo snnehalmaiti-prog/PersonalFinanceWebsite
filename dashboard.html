@@ -455,7 +455,13 @@
           <div class="mfalloc-list" id="sealloc-list"></div>
         </div>
         <div class="mfmid-card" id="secap-card">
-          <div class="mfmid-eyebrow">MARKET-CAP SPLIT &middot; DIRECT EQUITY</div>
+          <div class="mfmid-eyebrow-row">
+            <div class="mfmid-eyebrow" id="secap-eyebrow">MARKET-CAP SPLIT &middot; DIRECT EQUITY</div>
+            <div class="isc-toggle" role="group" aria-label="Split mode">
+              <button type="button" class="isc-toggle-btn active" data-secap-mode="marketcap">Market-cap</button>
+              <button type="button" class="isc-toggle-btn" data-secap-mode="portfolio">Portfolio</button>
+            </div>
+          </div>
           <div class="mfalloc-single-bar" id="secap-bar" style="margin-top:12px;"></div>
           <div class="mfalloc-rows" id="secap-rows" style="margin-top:12px;"></div>
         </div>
@@ -2858,7 +2864,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat104"></script>
+  <script src="script.js?v=micat105"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

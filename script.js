@@ -3745,6 +3745,7 @@
         rowsData.forEach(function (h) { if (!h._portfolio) h._portfolio = pByI[h.instrument] || ""; });
       }
     }
+    window.__seLastOpenRowsData = openOnly;
     renderSePortfolioCards(openOnly);
     renderSeAllocation(openOnly);
     renderSeMarketCapSplit(openOnly);
@@ -3876,19 +3877,50 @@
     listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
   }
 
+  var SECAP_STATE = { mode: "marketcap" };
   function renderSeMarketCapSplit(rowsData) {
     var bar = document.getElementById("secap-bar");
     var rows = document.getElementById("secap-rows");
+    var eyebrow = document.getElementById("secap-eyebrow");
     if (!bar || !rows) return;
+    if (SECAP_STATE.mode === "portfolio") {
+      if (eyebrow) eyebrow.textContent = "PORTFOLIO SPLIT · STOCKS & ETF";
+      var byPort = {};
+      rowsData.forEach(function (h) {
+        var p = h._portfolio || "Unassigned";
+        byPort[p] = (byPort[p] || 0) + (h.currentINR || 0);
+      });
+      var entries = Object.keys(byPort).map(function (k) { return { name: k, value: byPort[k] }; })
+        .filter(function (e) { return e.value > 0.01; })
+        .sort(function (a, b) { return b.value - a.value; });
+      var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+      if (!entries.length || total <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No portfolio data.</p>'; return; }
+      var PAL = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
+      bar.innerHTML = entries.map(function (e, i) {
+        var pct = (e.value / total) * 100;
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
+      }).join("");
+      rows.innerHTML = entries.map(function (e, i) {
+        var pct = (e.value / total) * 100;
+        var col = PAL[i % PAL.length];
+        return '<div class="mfalloc-row">' +
+          '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+          '<span class="mfalloc-nums">' +
+            '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
+            '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
+          '</span>' +
+        '</div>';
+      }).join("");
+      return;
+    }
+    if (eyebrow) eyebrow.textContent = "MARKET-CAP SPLIT · DIRECT EQUITY";
     var mapping = buildStockMappingTable();
     var byCap = { "Large-cap": 0, "Mid-cap": 0, "Small-cap": 0 };
     rowsData.forEach(function (h) {
       var m = mapping[normalizeText(h.instrument)];
       if (!m) return;
       var cat = normalizeText(m.category || "");
-      if (cat.indexOf("etf") !== -1) return; // direct equity only
-      // Market cap can live in 'Market Segment', 'Instrument Sub Category', or
-      // sometimes 'Instrument Category'. Check them all.
+      if (cat.indexOf("etf") !== -1) return;
       var seg = String((m.segment || "") + " " + (m.subCat || "") + " " + (m.category || "")).toLowerCase();
       var key = seg.indexOf("large") !== -1 ? "Large-cap"
         : seg.indexOf("mid") !== -1 ? "Mid-cap"
@@ -3913,6 +3945,21 @@
       '</div>';
     }).join("");
   }
+
+  // Wire the Market-cap / Portfolio toggle on the Stocks/ETF split card.
+  (function wireSecapToggle() {
+    var card = document.getElementById("secap-card");
+    if (!card) return;
+    var buttons = card.querySelectorAll("[data-secap-mode]");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        SECAP_STATE.mode = btn.dataset.secapMode;
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        // Re-render using the last-cached rowsData (openOnly subset).
+        if (window.__seLastOpenRowsData) renderSeMarketCapSplit(window.__seLastOpenRowsData);
+      });
+    });
+  })();
 
   function _sehSortCompare(a, b, key) {
     var av, bv;
