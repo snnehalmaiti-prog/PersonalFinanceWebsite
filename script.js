@@ -7824,12 +7824,25 @@
         barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
         return;
       }
-      // Reconcile to Overview's Invested total.
+      // Reconcile to Overview's total. Commodity already reflects live current
+      // value (physical gold + MF/ETF), so leave it alone and scale only Equity
+      // and Fixed Income to fit the remaining slice.
       var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
       var overviewTotal = getOverviewCurrentTotal();
       if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
-        var scl = overviewTotal / rawSum;
-        entries.forEach(function (e) { e.value *= scl; });
+        var commEntry = entries.filter(function (e) { return e.name === "Commodity"; })[0];
+        var commVal = commEntry ? commEntry.value : 0;
+        var others = entries.filter(function (e) { return e.name !== "Commodity"; });
+        var othersRaw = others.reduce(function (s, e) { return s + e.value; }, 0);
+        var target = overviewTotal - commVal;
+        if (othersRaw > 0 && target > 0) {
+          var scl = target / othersRaw;
+          others.forEach(function (e) { e.value *= scl; });
+        } else {
+          // Fallback to previous behavior if we can't isolate commodity
+          var _scl2 = overviewTotal / rawSum;
+          entries.forEach(function (e) { e.value *= _scl2; });
+        }
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
