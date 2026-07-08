@@ -7689,9 +7689,19 @@
       { key: "Commodity",    bar: "#F59E0B", tint: "#FEF3C7", ink: "#B45309", icon: "🪙" }
     ];
 
+    // Compute Equity and Fixed Income as SUM of per-portfolio FIFO invested amounts
+    // (not once at "all" scope) so the numbers align with Portfolio Split, which
+    // runs FIFO per portfolio. Otherwise cross-portfolio matches / mismatches cause
+    // the two charts' reconciled commodity share to differ.
+    var _portfoliosForSums = (selected === "all") ? (collectPortfolioNamesFromSheets(fiExcluded ? ["equity", "stocksetf"] : ["equity", "stocksetf", "fixedincome", "fd"]) || []) : [selected];
+    var _sumEqPerPortfolio = 0, _sumFiPerPortfolio = 0;
+    _portfoliosForSums.forEach(function (n) {
+      _sumEqPerPortfolio += computeTotalInvestment(n, ["equity", "stocksetf"]);
+      if (!fiExcluded) _sumFiPerPortfolio += computeTotalInvestment(n, ["fixedincome", "fd"]);
+    });
     var investedByCat = {
-      "Equity": computeTotalInvestment(selected, ["equity", "stocksetf"]),
-      "Fixed Income": fiExcluded ? 0 : computeTotalInvestment(selected, ["fixedincome", "fd"]),
+      "Equity": _sumEqPerPortfolio,
+      "Fixed Income": fiExcluded ? 0 : _sumFiPerPortfolio,
       "Commodity": 0
     };
 
