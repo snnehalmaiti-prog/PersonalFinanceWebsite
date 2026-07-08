@@ -3160,9 +3160,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-year-sel { padding-right: 10px; }
 .mic-stats-row {
   display: flex;
-  gap: 28px;
+  gap: 20px;
   padding: 4px 20px 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 .mic-stat { display: flex; flex-direction: column; gap: 2px; }
 .mic-stat-label {
