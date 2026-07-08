@@ -443,7 +443,13 @@
           document.querySelectorAll(".exp-detail-panel").forEach(function (p) {
             p.hidden = p.id !== "exp-detail-" + panel;
           });
-          if (panel === "template") renderExpenseTemplates();
+              if (panel === "template") {
+            if (window.WfAuth && WfAuth.isLoggedIn()) {
+              WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderExpenseTemplates(); });
+            } else {
+              renderExpenseTemplates();
+            }
+          }
         });
       });
     })();
@@ -453,7 +459,10 @@
     function loadTemplates() {
       try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || []; } catch (e) { return []; }
     }
-    function saveTemplates(list) { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list)); }
+    function saveTemplates(list) {
+      localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
+      if (window.WfAuth && WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
+    }
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
     function renderExpenseTemplates() {
       var list = document.getElementById("exp-template-list");
