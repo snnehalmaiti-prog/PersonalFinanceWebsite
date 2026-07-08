@@ -7635,8 +7635,48 @@
       .sort(function (a, b) { return b.total - a.total; });
     ranked.forEach(function (p, i) { portfolioColor[p.name] = PORTF_PALETTE[i % PORTF_PALETTE.length]; });
 
+    // Move commodity-category MF/ETF invested amounts from Equity into Commodity.
+    // Wrapped in try/catch so any mapping/parsing error can't kill Category Split
+    // (which shares state with downstream charts like Monthly investment).
+    var _commByPortfolio = {};
+    try {
+      var _mfCatMap = (typeof buildMfCategoryMap === "function") ? buildMfCategoryMap() : {};
+      var _seMap = (typeof buildStockMappingTable === "function") ? buildStockMappingTable() : {};
+      portfolioNames.forEach(function (n) {
+        var total = 0;
+        ["equity", "stocksetf"].forEach(function (prefix) {
+          try {
+            var rowsX = getSheetRows(prefix);
+            if (!rowsX || !rowsX.length) return;
+            var txByI = groupUnitTransactionsByInstrument(rowsX, n);
+            if (!txByI) return;
+            Object.keys(txByI).forEach(function (name) {
+              var isCommodity = false;
+              if (prefix === "equity") {
+                isCommodity = _mfCatMap[normalizeText(name)] === "commodity";
+              } else {
+                var m = _seMap[normalizeText(name)];
+                isCommodity = !!(m && m.category && normalizeText(m.category) === "commodity");
+              }
+              if (!isCommodity) return;
+              var remaining = fifoRemainingLots(txByI[name]);
+              remaining.forEach(function (l) { total += l.units * l.price; });
+            });
+          } catch (e) { /* per-prefix error — skip */ }
+        });
+        if (total > UNITS_EPSILON) _commByPortfolio[n] = total;
+      });
+    } catch (e) { _commByPortfolio = {}; }
+
     portfolioNames.forEach(function (n) {
       var eq = computeTotalInvestment(n, ["equity", "stocksetf"]);
+      var commFromEquity = _commByPortfolio[n] || 0;
+      eq -= commFromEquity;
+      if (commFromEquity > UNITS_EPSILON) {
+        perCat["Commodity"][n] = (perCat["Commodity"][n] || 0) + commFromEquity;
+        investedByCat["Commodity"] += commFromEquity;
+        investedByCat["Equity"] -= commFromEquity;
+      }
       if (eq > UNITS_EPSILON) perCat["Equity"][n] = eq;
       if (!fiExcluded) {
         var fi = computeTotalInvestment(n, ["fixedincome", "fd"]);
