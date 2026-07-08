@@ -3818,6 +3818,17 @@
     }).join("");
   }
 
+  function _sehSortCompare(a, b, key) {
+    var av, bv;
+    switch (key) {
+      case "instrument": av = String(a.instrument || "").toLowerCase(); bv = String(b.instrument || "").toLowerCase(); return av < bv ? -1 : av > bv ? 1 : 0;
+      case "invested": return (a.investedINR || 0) - (b.investedINR || 0);
+      case "current": return (a.currentINR || 0) - (b.currentINR || 0);
+      case "pnl": return (a.pnl || 0) - (b.pnl || 0);
+      case "day": return (a.dayChangeINR || 0) - (b.dayChangeINR || 0);
+    }
+    return 0;
+  }
   function renderSeHoldingsCardList(rowsData, region, usdInrToday) {
     var listId = region === "us" ? "seh-us-list" : "seh-india-list";
     var eyebrowId = region === "us" ? "seh-us-eyebrow" : "seh-india-eyebrow";
@@ -3834,10 +3845,10 @@
       }
       return true;
     });
-    filtered.sort(function (a, b) {
-      var pnlA = a.pnl || 0, pnlB = b.pnl || 0;
-      return SEH_STATE.sort === "pnl-asc" ? pnlA - pnlB : pnlB - pnlA;
-    });
+    var sParts = String(SEH_STATE.sort || "pnl-desc").split("-");
+    var sortKey = sParts[0];
+    var sortDir = sParts[1] === "asc" ? 1 : -1;
+    filtered.sort(function (a, b) { return sortDir * _sehSortCompare(a, b, sortKey); });
     var label = region === "us" ? "US" : "INDIA";
     var count = filtered.length;
     if (eyebrow) {
@@ -3848,12 +3859,13 @@
       }
     }
     if (!filtered.length) { list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + label.toLowerCase() + ' holdings.</p>'; return; }
+    function _sArrow(k) { return sortKey === k ? (sortDir === -1 ? " ↓" : " ↑") : ""; }
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;">' +
-      '<span>Instrument</span>' +
-      '<span class="mfh-col-num">Invested</span>' +
-      '<span class="mfh-col-num">Current</span>' +
-      '<span class="mfh-col-num">P&amp;L · Return</span>' +
-      '<span class="mfh-col-num">Day Chg.</span></div>';
+      '<span class="mfh-sortable" data-seh-sort-col="instrument">Instrument' + _sArrow("instrument") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="invested">Invested' + _sArrow("invested") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="current">Current' + _sArrow("current") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="pnl">P&amp;L · Return' + _sArrow("pnl") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="day">Day Chg.' + _sArrow("day") + '</span></div>';
     var subInv = 0, subCur = 0, subDay = 0;
     var body = filtered.map(function (h, i) {
       var pal = SE_AVATAR_PALETTE[i % SE_AVATAR_PALETTE.length];
@@ -3897,6 +3909,15 @@
       '<div class="mfh-col-num mfh-num-day ' + (Math.abs(subDay) < 0.01 ? "mfh-muted" : (subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(subDay) < 0.01 ? "—" : ((subDay >= 0 ? "+" : "") + formatCurrency(subDay))) + '</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
+    list.querySelectorAll("[data-seh-sort-col]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var col = el.dataset.sehSortCol;
+        var cur = String(SEH_STATE.sort || "").split("-");
+        SEH_STATE.sort = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
+        renderSeHoldingsCardList(rowsData, "india");
+        renderSeHoldingsCardList(rowsData, "us", usdInrToday);
+      });
+    });
   }
 
   // Wire Stocks/ETF controls
