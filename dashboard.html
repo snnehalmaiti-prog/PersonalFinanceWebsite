@@ -996,6 +996,31 @@
       </div>
     </section><!-- /panel-expense -->
 
+    <script>
+      // Make <select multiple> filter lists behave like plain toggle-checkboxes:
+      // any click toggles that option in/out of the selection, no Ctrl/Cmd needed.
+      (function () {
+        function wireToggleMulti() {
+          document.querySelectorAll("select[multiple].rec-filter-select").forEach(function (sel) {
+            if (sel.dataset.togglemultiWired === "1") return;
+            sel.dataset.togglemultiWired = "1";
+            sel.addEventListener("mousedown", function (e) {
+              var opt = e.target && e.target.tagName === "OPTION" ? e.target : null;
+              if (!opt) return;
+              e.preventDefault();
+              opt.selected = !opt.selected;
+              sel.focus();
+              sel.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+          });
+        }
+        // Wire on page ready and after any DOM updates (fillRecFilterDropdowns rewrites innerHTML).
+        document.addEventListener("DOMContentLoaded", wireToggleMulti);
+        // Re-wire periodically in case dropdowns get repopulated.
+        window.__wfWireToggleMulti = wireToggleMulti;
+      })();
+    </script>
+
     <style>
       /* Multi-select filter dropdowns: compact scrollable list */
       .rec-filter-select[multiple] {
@@ -2041,6 +2066,7 @@
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
         if (pmSel) pmSel.innerHTML =
           dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
+        if (window.__wfWireToggleMulti) window.__wfWireToggleMulti();
         var personSel = document.getElementById("rec-filter-person");
         if (personSel) {
           personSel.innerHTML = '<option value="">Everyone</option>' +
@@ -2060,6 +2086,7 @@
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
         if (pmSel) pmSel.innerHTML =
           dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
+        if (window.__wfWireToggleMulti) window.__wfWireToggleMulti();
         var personSel = document.getElementById("ana-filter-person");
         if (personSel) {
           personSel.innerHTML = '<option value="">Everyone</option>' +
