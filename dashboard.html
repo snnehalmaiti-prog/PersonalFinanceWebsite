@@ -3126,9 +3126,22 @@
           console.log("[Templates] auto-open params:", { addFlag: addFlag, editId: editId, search: location.search });
           if (!addFlag && !editId) return;
           function openIt() {
+            console.log("[Templates] openIt firing");
             if (addFlag) {
               console.log("[Templates] opening Add Template modal");
               openRecModal(null, { template: true });
+              // Guard: if any code opens the modal in Record mode after us,
+              // re-apply the template UI overrides for the next second.
+              var deadline = Date.now() + 1000;
+              var enforcer = setInterval(function () {
+                var titleEl = document.getElementById("rec-modal-title");
+                if (!titleEl) return;
+                if (titleEl.textContent !== "Add Template") {
+                  console.log("[Templates] re-applying template mode (was reset)");
+                  openRecModal(null, { template: true });
+                }
+                if (Date.now() > deadline) clearInterval(enforcer);
+              }, 100);
             } else if (editId) {
               var tpls = loadTemplates();
               var t = tpls.find(function (x) { return x.id === editId; });
@@ -3136,12 +3149,11 @@
             }
           }
           setTimeout(function () {
+            console.log("[Templates] switching to Expense tab");
             var expTab = document.getElementById("tab-expense");
             if (expTab && !expTab.classList.contains("active")) expTab.click();
-            // Open modal with a longer delay so any Expense-tab-init openRecModal
-            // calls don't overwrite our template-mode call.
-            setTimeout(openIt, 800);
-          }, 300);
+            setTimeout(openIt, 1200);
+          }, 500);
         } catch (e) { console.warn("Template auto-open failed:", e); }
       })();
       document.getElementById("rec-modal-close").addEventListener("click", closeRecModal);
