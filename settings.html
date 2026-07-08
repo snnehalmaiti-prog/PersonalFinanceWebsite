@@ -14,6 +14,68 @@
     window.location.replace("index.html");
   }
 </script>
+  <style>
+    .wf-card-grid { display: grid; gap: 10px; }
+    .wf-item-card {
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: var(--card-bg, #fff);
+      display: flex; flex-direction: column; gap: 8px;
+      transition: box-shadow .15s ease, border-color .15s ease;
+    }
+    .wf-item-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-color: #d1d5db; }
+    .wf-item-card-head { display: flex; align-items: center; gap: 12px; }
+    .wf-item-badge {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; flex: 0 0 auto;
+    }
+    .wf-item-title-wrap { flex: 1; min-width: 0; }
+    .wf-item-title { font-size: 0.95rem; font-weight: 600; color: var(--text, #111827); }
+    .wf-item-sub {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; color: var(--muted, #6b7280); margin-top: 3px;
+      flex-wrap: wrap;
+    }
+    .wf-item-chip {
+      padding: 2px 8px; border-radius: 999px; font-weight: 600;
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.02em;
+    }
+    .wf-item-dot { opacity: 0.5; }
+    .wf-item-amt {
+      font-size: 1rem; font-weight: 700; color: var(--text, #111827);
+      white-space: nowrap;
+    }
+    .wf-item-note {
+      font-size: 0.78rem; color: var(--muted, #6b7280);
+      padding: 8px 10px; background: rgba(0,0,0,0.02); border-radius: 8px;
+    }
+    .wf-item-meta-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px 14px; font-size: 0.75rem;
+    }
+    .wf-item-meta-cell { display: flex; flex-direction: column; gap: 2px; }
+    .wf-item-meta-label { color: var(--muted, #6b7280); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    .wf-item-meta-val { color: var(--text, #111827); font-weight: 500; }
+    .wf-item-actions {
+      display: flex; gap: 6px; justify-content: flex-end;
+      border-top: 1px solid rgba(0,0,0,0.05); padding-top: 8px;
+    }
+    .wf-icon-btn {
+      background: transparent; border: 1px solid var(--border, #e5e7eb);
+      padding: 6px 12px; border-radius: 8px; font-size: 0.78rem;
+      cursor: pointer; color: var(--text, #111827);
+      transition: background .12s ease, border-color .12s ease;
+    }
+    .wf-icon-btn:hover { background: rgba(0,0,0,0.04); }
+    .wf-icon-btn-danger { color: #dc2626; }
+    .wf-icon-btn-danger:hover { background: #fef2f2; border-color: #fecaca; }
+    .wf-item-progress {
+      height: 4px; background: rgba(0,0,0,0.06); border-radius: 999px; overflow: hidden;
+    }
+    .wf-item-progress-fill { height: 100%; background: #3b82f6; transition: width .3s ease; }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -526,10 +588,27 @@
       if (window.WfAuth && WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
     }
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    function tplTypeStyle(type) {
+      if (type === "income")  return { bg: "#ecfdf5", fg: "#047857", icon: "↓" };
+      if (type === "budget")  return { bg: "#eff6ff", fg: "#1d4ed8", icon: "◎" };
+      return                         { bg: "#fef2f2", fg: "#b91c1c", icon: "↑" };
+    }
+    function tplCategoryName(catId, subId) {
+      if (!tplRefs || !tplRefs.categories) return "";
+      var cat = tplRefs.categories.find(function (c) { return c.id === catId; });
+      var sub = tplRefs.categories.find(function (c) { return c.id === subId; });
+      if (cat && sub) return cat.name + " · " + sub.name;
+      if (cat) return cat.name;
+      return "";
+    }
     function renderExpenseTemplates() {
       var list = document.getElementById("exp-template-list");
       var status = document.getElementById("exp-template-status");
       if (!list) return;
+      // Kick off ref-load so the card can show category names on next render.
+      if (typeof tplLoadRefs === "function" && !tplRefs.loaded) {
+        tplLoadRefs().then(function () { renderExpenseTemplates(); });
+      }
       var tpls = loadTemplates();
       if (!tpls.length) {
         if (status) { status.hidden = false; status.textContent = "No templates yet."; }
@@ -537,18 +616,32 @@
         return;
       }
       if (status) status.hidden = true;
-      list.innerHTML = tpls.map(function (t) {
+      list.innerHTML = '<div class="wf-card-grid">' + tpls.map(function (t) {
         var r = t.row || {};
-        var meta = [];
-        if (r.type) meta.push(r.type);
-        if (r.amount) meta.push("₹" + r.amount);
-        return '<div class="exp-list-item"><div style="flex:1;"><div style="font-weight:600;">' + esc(t.name) + '</div>' +
-          '<div class="muted small" style="font-size:0.72rem;">' + esc(meta.join(" · ")) + '</div></div>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-tpl-edit="' + esc(t.id) + '">Edit</button>' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-tpl-del="' + esc(t.id) + '" style="color:#dc2626;">Delete</button>' +
-          '</div></div>';
-      }).join("");
+        var st = tplTypeStyle(r.type);
+        var typeLbl = (r.type || "expense").replace(/^./, function (c) { return c.toUpperCase(); });
+        var amt = r.amount ? "₹" + Number(r.amount).toLocaleString("en-IN") : "—";
+        var catLine = tplCategoryName(r.category_id, r.subcategory_id);
+        var noteLine = r.note ? esc(r.note) : "";
+        return '<div class="wf-item-card">' +
+          '<div class="wf-item-card-head">' +
+            '<div class="wf-item-badge" style="background:' + st.bg + ';color:' + st.fg + ';">' + st.icon + '</div>' +
+            '<div class="wf-item-title-wrap">' +
+              '<div class="wf-item-title">' + esc(t.name) + '</div>' +
+              '<div class="wf-item-sub">' +
+                '<span class="wf-item-chip" style="background:' + st.bg + ';color:' + st.fg + ';">' + esc(typeLbl) + '</span>' +
+                (catLine ? '<span class="wf-item-dot">·</span><span>' + esc(catLine) + '</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<div class="wf-item-amt">' + amt + '</div>' +
+          '</div>' +
+          (noteLine ? '<div class="wf-item-note">' + noteLine + '</div>' : '') +
+          '<div class="wf-item-actions">' +
+            '<button type="button" class="wf-icon-btn" data-tpl-edit="' + esc(t.id) + '" title="Edit">✎ Edit</button>' +
+            '<button type="button" class="wf-icon-btn wf-icon-btn-danger" data-tpl-del="' + esc(t.id) + '" title="Delete">🗑 Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("") + '</div>';
       list.querySelectorAll("[data-tpl-del]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           if (!confirm("Delete this template?")) return;
@@ -701,20 +794,40 @@
         return;
       }
       if (status) status.hidden = true;
-      list.innerHTML = items.map(function (r) {
+      list.innerHTML = '<div class="wf-card-grid">' + items.map(function (r) {
         var row = r.row || {};
-        var meta = [];
-        if (row.type) meta.push(row.type);
-        if (row.amount) meta.push("₹" + row.amount);
-        if (row.frequency) meta.push(row.frequency);
-        if (row.next_due) meta.push("next: " + row.next_due);
-        return '<div class="exp-list-item"><div style="flex:1;"><div style="font-weight:600;">' + esc(r.name) + '</div>' +
-          '<div class="muted small" style="font-size:0.72rem;">' + esc(meta.join(" · ")) + '</div></div>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-rp-edit="' + esc(r.id) + '">Edit</button>' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-rp-del="' + esc(r.id) + '" style="color:#dc2626;">Delete</button>' +
-          '</div></div>';
-      }).join("");
+        var st = tplTypeStyle(row.type);
+        var typeLbl = (row.type || "expense").replace(/^./, function (c) { return c.toUpperCase(); });
+        var amt = row.amount ? "₹" + Number(row.amount).toLocaleString("en-IN") : "—";
+        var freq = row.frequency ? row.frequency.replace(/^./, function (c) { return c.toUpperCase(); }) : "—";
+        var done = row.installments_done || 0;
+        var maxN = row.num_payments || null;
+        var progPct = maxN ? Math.min(100, Math.round((done / maxN) * 100)) : 0;
+        var progLabel = maxN ? (done + " / " + maxN) : (done + " done");
+        return '<div class="wf-item-card">' +
+          '<div class="wf-item-card-head">' +
+            '<div class="wf-item-badge" style="background:' + st.bg + ';color:' + st.fg + ';">↻</div>' +
+            '<div class="wf-item-title-wrap">' +
+              '<div class="wf-item-title">' + esc(r.name) + '</div>' +
+              '<div class="wf-item-sub">' +
+                '<span class="wf-item-chip" style="background:' + st.bg + ';color:' + st.fg + ';">' + esc(typeLbl) + '</span>' +
+                '<span class="wf-item-dot">·</span><span>' + esc(freq) + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="wf-item-amt">' + amt + '</div>' +
+          '</div>' +
+          '<div class="wf-item-meta-grid">' +
+            '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Next due</span><span class="wf-item-meta-val">' + esc(row.next_due || "—") + '</span></div>' +
+            '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Installments</span><span class="wf-item-meta-val">' + esc(progLabel) + '</span></div>' +
+            (row.end_date ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Ends</span><span class="wf-item-meta-val">' + esc(row.end_date) + '</span></div>' : '') +
+          '</div>' +
+          (maxN ? '<div class="wf-item-progress"><div class="wf-item-progress-fill" style="width:' + progPct + '%;"></div></div>' : '') +
+          '<div class="wf-item-actions">' +
+            '<button type="button" class="wf-icon-btn" data-rp-edit="' + esc(r.id) + '" title="Edit">✎ Edit</button>' +
+            '<button type="button" class="wf-icon-btn wf-icon-btn-danger" data-rp-del="' + esc(r.id) + '" title="Delete">🗑 Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("") + '</div>';
       list.querySelectorAll("[data-rp-del]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           if (!confirm("Delete this recurring payment?")) return;
