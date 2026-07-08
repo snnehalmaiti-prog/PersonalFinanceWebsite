@@ -3624,6 +3624,254 @@
     list.innerHTML = header + body;
   }
 
+  // ── Stocks/ETF tab redesign ────────────────────────────────────────────
+  var SEH_STATE = { sort: "pnl-desc", portfolio: "all", showClosed: false };
+  var SE_AVATAR_PALETTE = [
+    { bg: "#D1FAE5", fg: "#065F46", accent: "green" },
+    { bg: "#FEF3C7", fg: "#B45309", accent: "amber" },
+    { bg: "#DBEAFE", fg: "#1E40AF", accent: "blue" },
+    { bg: "#EDE9FE", fg: "#5B21B6", accent: "purple" },
+    { bg: "#FCE7F3", fg: "#9D174D", accent: "red" },
+    { bg: "#CFFAFE", fg: "#0E7490", accent: "teal" }
+  ];
+  function _seInit(name) { var p = String(name || "").trim().split(/\s+/); return p[0] ? p[0].charAt(0).toUpperCase() : "?"; }
+  function _seShortCode(name) {
+    if (!name) return "SE";
+    var w = String(name).replace(/[^\w\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+    if (w.length >= 3) return (w[0].charAt(0) + w[1].charAt(0) + w[2].charAt(0)).toUpperCase();
+    if (w.length === 2) return (w[0].substring(0, 2) + w[1].charAt(0)).toUpperCase();
+    return w[0].substring(0, 3).toUpperCase();
+  }
+
+  function renderStocksEtfRedesign(rowsData, usdInrToday) {
+    var open = rowsData.filter(function (r) { return (r.units || 0) > 0 && !r.isClosed; });
+    renderSePortfolioCards(open);
+    renderSeAllocation(open);
+    renderSeMarketCapSplit(open);
+    renderSeHoldingsCardList(open, "india");
+    renderSeHoldingsCardList(open, "us", usdInrToday);
+  }
+
+  function renderSePortfolioCards(rowsData) {
+    var row = document.getElementById("sepc-row");
+    if (!row) return;
+    var rows = getSheetRows("stocksetf");
+    if (!rows) { row.innerHTML = ""; return; }
+    // Map instrument → portfolio (first occurrence in transactions).
+    var header = rows[0].map(normalizeText);
+    var pIdx = header.indexOf("portfolio name");
+    var iIdx = header.indexOf("instrument name");
+    var portfolioByInst = {};
+    if (pIdx !== -1 && iIdx !== -1) {
+      rows.slice(1).forEach(function (r) {
+        var name = (r[iIdx] || "").trim();
+        if (!name || portfolioByInst[name]) return;
+        portfolioByInst[name] = (r[pIdx] || "").trim();
+      });
+    }
+    var byPort = {};
+    rowsData.forEach(function (h) {
+      var p = portfolioByInst[h.instrument] || "Unassigned";
+      if (!byPort[p]) byPort[p] = { invested: 0, current: 0, india: 0, us: 0 };
+      byPort[p].invested += h.investedINR || 0;
+      byPort[p].current += h.currentINR || 0;
+      if (h.region === "US") byPort[p].us += h.currentINR || 0;
+      else byPort[p].india += h.currentINR || 0;
+    });
+    var names = Object.keys(byPort).sort(function (a, b) { return byPort[b].current - byPort[a].current; });
+    var combined = { invested: 0, current: 0, india: 0, us: 0 };
+    names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.india += byPort[n].india; combined.us += byPort[n].us; });
+    var namedList = names.map(function (n) { var p = byPort[n]; p.name = n; return p; });
+    var all = [{ name: "Joint", invested: combined.invested, current: combined.current, india: combined.india, us: combined.us, isCombined: true }].concat(namedList);
+
+    row.innerHTML = all.map(function (p, i) {
+      var pnl = p.current - p.invested;
+      var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
+      var isNeg = pnl < 0;
+      var pal = p.isCombined ? { bg: "#23211D", fg: "#fff" } : SE_AVATAR_PALETTE[i % 3];
+      var initial = p.isCombined ? "Σ" : _seInit(p.name);
+      var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
+      var totalCur = p.india + p.us;
+      var iPct = totalCur > 0 ? Math.round(p.india / totalCur * 100) : 0;
+      var uPct = totalCur > 0 ? Math.round(p.us / totalCur * 100) : 0;
+      var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
+      // XIRR
+      var xirrPct = null;
+      try {
+        var flows = buildXirrCashFlows(rows, p.isCombined ? "all" : p.name) || [];
+        if (p.current > 0) flows.push({ date: new Date(), amount: p.current });
+        var x = calculateXIRR(flows);
+        if (x != null && isFinite(x)) xirrPct = x * 100;
+      } catch (e) {}
+      return '<div class="mfpc-card ' + (p.isCombined ? "mfpc-combined" : "") + '">' +
+        '<div class="mfpc-head">' +
+          '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
+          '<div class="mfpc-name-block"><div class="mfpc-name">' + p.name + '</div><div class="mfpc-subtitle">' + subtitle + '</div></div>' +
+        '</div>' +
+        '<div class="mfpc-current-label">CURRENT VALUE</div>' +
+        '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+        '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
+        '<div class="mfpc-return-row">' +
+          '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
+          '<span class="mfpc-gain">' + (isNeg ? "" : "+") + formatCurrency(pnl) + '</span>' +
+        '</div>' +
+        '<div class="mfpc-footer">' +
+          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
+          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
+          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">India · US</span><span class="mfpc-foot-value"><span style="color:#10B981;">' + iPct + '%</span> · <span style="color:#E8623A;">' + uPct + '%</span></span></div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  function renderSeAllocation(rowsData) {
+    var listEl = document.getElementById("sealloc-list");
+    if (!listEl) return;
+    var india = 0, us = 0, iCount = 0, uCount = 0;
+    rowsData.forEach(function (h) {
+      if (h.region === "US") { us += h.currentINR || 0; uCount++; }
+      else { india += h.currentINR || 0; iCount++; }
+    });
+    var total = india + us;
+    if (total <= 0) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
+    var iPct = india / total * 100, uPct = us / total * 100;
+    var bar = '<div class="mfalloc-single-bar">' +
+      '<span class="mfalloc-seg" style="flex:' + iPct + ' 0 0;background:#10B981;"></span>' +
+      '<span class="mfalloc-seg" style="flex:' + uPct + ' 0 0;background:#E8623A;"></span>' +
+      '</div>';
+    var rows = '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#10B981;"></span>India <span class="muted" style="font-weight:500;">· ' + iCount + ' holdings</span></span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(india) + '</span><span class="mfalloc-pct" style="color:#10B981;">' + iPct.toFixed(1) + '%</span></span></div>' +
+      '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#E8623A;"></span>US <span class="muted" style="font-weight:500;">· ' + uCount + ' holdings</span></span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(us) + '</span><span class="mfalloc-pct" style="color:#E8623A;">' + uPct.toFixed(1) + '%</span></span></div>';
+    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
+  }
+
+  function renderSeMarketCapSplit(rowsData) {
+    var bar = document.getElementById("secap-bar");
+    var rows = document.getElementById("secap-rows");
+    if (!bar || !rows) return;
+    var mapping = buildStockMappingTable();
+    var byCap = { "Large-cap": 0, "Mid-cap": 0, "Small-cap": 0 };
+    rowsData.forEach(function (h) {
+      var m = mapping[normalizeText(h.instrument)];
+      if (!m) return;
+      var cat = normalizeText(m.category || "");
+      if (cat.indexOf("etf") !== -1) return; // direct equity only
+      var seg = String(m.subCat || m.segment || "").toLowerCase();
+      var key = seg.indexOf("large") !== -1 ? "Large-cap"
+        : seg.indexOf("mid") !== -1 ? "Mid-cap"
+        : seg.indexOf("small") !== -1 ? "Small-cap" : null;
+      if (key) byCap[key] += h.currentINR || 0;
+    });
+    var total = byCap["Large-cap"] + byCap["Mid-cap"] + byCap["Small-cap"];
+    if (total <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No market-cap data (add sub-category to stocksetfmapping).</p>'; return; }
+    var COL = { "Large-cap": "#E8623A", "Mid-cap": "#D4A017", "Small-cap": "#10B981" };
+    bar.innerHTML = ["Large-cap", "Mid-cap", "Small-cap"].map(function (k) {
+      var pct = byCap[k] / total * 100;
+      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + COL[k] + ';"></span>';
+    }).join("");
+    rows.innerHTML = ["Large-cap", "Mid-cap", "Small-cap"].map(function (k) {
+      var pct = byCap[k] / total * 100;
+      return '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + COL[k] + ';"></span>' + k + '</span><span class="mfalloc-nums"><span class="mfalloc-pct" style="color:' + COL[k] + ';">' + Math.round(pct) + '%</span></span></div>';
+    }).join("");
+  }
+
+  function renderSeHoldingsCardList(rowsData, region, usdInrToday) {
+    var listId = region === "us" ? "seh-us-list" : "seh-india-list";
+    var eyebrowId = region === "us" ? "seh-us-eyebrow" : "seh-india-eyebrow";
+    var list = document.getElementById(listId);
+    var eyebrow = document.getElementById(eyebrowId);
+    if (!list) return;
+    var mapping = buildStockMappingTable();
+    var filtered = rowsData.filter(function (h) {
+      var isUS = h.region === "US";
+      if (region === "us" && !isUS) return false;
+      if (region === "india" && isUS) return false;
+      return true;
+    });
+    filtered.sort(function (a, b) {
+      var pnlA = a.pnl || 0, pnlB = b.pnl || 0;
+      return SEH_STATE.sort === "pnl-asc" ? pnlA - pnlB : pnlB - pnlA;
+    });
+    var label = region === "us" ? "US" : "INDIA";
+    var count = filtered.length;
+    if (eyebrow) {
+      if (region === "us") {
+        eyebrow.innerHTML = 'US · ' + count + ' OPEN <span id="seh-us-usdinr" class="mfh-sip-badge" style="margin-left:6px;">USD/INR · ' + (usdInrToday ? Number(usdInrToday).toFixed(2) : "—") + '</span>';
+      } else {
+        eyebrow.textContent = label + " · " + count + " OPEN";
+      }
+    }
+    if (!filtered.length) { list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + label.toLowerCase() + ' holdings.</p>'; return; }
+    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;">' +
+      '<span>Instrument</span>' +
+      '<span class="mfh-col-num">Invested</span>' +
+      '<span class="mfh-col-num">Current</span>' +
+      '<span class="mfh-col-num">P&amp;L · Return</span>' +
+      '<span class="mfh-col-num">Day Chg.</span></div>';
+    var subInv = 0, subCur = 0, subDay = 0;
+    var body = filtered.map(function (h, i) {
+      var pal = SE_AVATAR_PALETTE[i % SE_AVATAR_PALETTE.length];
+      var m = mapping[normalizeText(h.instrument)];
+      var cat = m ? (m.category || "") : "";
+      var segment = m ? (m.subCat || m.segment || "") : "";
+      var isEtf = normalizeText(cat).indexOf("etf") !== -1;
+      var code = _seShortCode(h.instrument);
+      if (isEtf) code = "ETF";
+      var pnl = h.pnl || 0;
+      var pnlPct = h.pnlPct || 0;
+      var day = h.dayChangeINR || 0;
+      subInv += h.investedINR || 0; subCur += h.currentINR || 0; subDay += day;
+      var badges = '';
+      if (isEtf) badges += ' <span class="mfh-sip-badge" style="background:#F1EBDD;color:#7A7568;">ETF</span>';
+      var subLine = (segment ? segment : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ₹' + Number(h.avgCostINR || 0).toFixed(2);
+      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;">' +
+        '<div class="mfh-inst">' +
+          '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
+          '<div class="mfh-inst-body">' +
+            '<div class="mfh-inst-name">' + h.instrument + badges + '</div>' +
+            '<div class="mfh-inst-sub">' + subLine + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.investedINR || 0) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.currentINR || 0) + '</div>' +
+        '<div class="mfh-col-num mfh-num-pnl">' +
+          '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '">' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
+          '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
+        '</div>' +
+        '<div class="mfh-col-num mfh-num-day ' + (Math.abs(day) < 0.01 ? "mfh-muted" : (day >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(day) < 0.01 ? "—" : ((day >= 0 ? "+" : "") + formatCurrency(day))) + '</div>' +
+      '</div>';
+    }).join("");
+    var subPnl = subCur - subInv;
+    var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
+      '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · IN INR" : "") + '</div></div>' +
+      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subInv) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subCur) + '</div>' +
+      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '">' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
+      '<div class="mfh-col-num mfh-num-day ' + (Math.abs(subDay) < 0.01 ? "mfh-muted" : (subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(subDay) < 0.01 ? "—" : ((subDay >= 0 ? "+" : "") + formatCurrency(subDay))) + '</div>' +
+      '</div>';
+    list.innerHTML = header + body + footer;
+  }
+
+  // Wire Stocks/ETF controls
+  (function wireSeControls() {
+    var openBtn = document.getElementById("seh-open-toggle");
+    var sortBtn = document.getElementById("seh-sort-toggle");
+    if (openBtn) openBtn.addEventListener("click", function () {
+      SEH_STATE.showClosed = !SEH_STATE.showClosed;
+      openBtn.textContent = SEH_STATE.showClosed ? "Closed" : "Open";
+      var cb = document.getElementById("stocksetf-show-closed");
+      if (cb) cb.checked = SEH_STATE.showClosed;
+      var cb2 = document.getElementById("stocksetf-us-show-closed");
+      if (cb2) cb2.checked = SEH_STATE.showClosed;
+      renderStockEtfHoldingsTable();
+    });
+    if (sortBtn) sortBtn.addEventListener("click", function () {
+      SEH_STATE.sort = SEH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
+      sortBtn.innerHTML = "Sort P&amp;L " + (SEH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;");
+      renderStockEtfHoldingsTable();
+    });
+  })();
+
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are
   // excluded — they're accrued growth already reflected in the terminal balance, not
   // an external contribution. A terminal positive cash flow (current EPF balance) is
@@ -9066,8 +9314,8 @@
           if (indiaHoldings.length) {
             renderSeHoldingsRows(indiaTbody, indiaRowsData);
             attachSeHoldingsSortHandlers(indiaTbody, indiaRowsData);
-            indiaStatusEl.textContent = indiaRowsData.length + " holding(s).";
-            if (indiaTableWrap) indiaTableWrap.hidden = false;
+            indiaStatusEl.textContent = "";
+            if (indiaTableWrap) indiaTableWrap.hidden = true;
           } else {
             indiaStatusEl.textContent = "No India holdings found.";
             if (indiaTableWrap) indiaTableWrap.hidden = true;
@@ -9076,12 +9324,13 @@
           if (usHoldings.length) {
             renderSeHoldingsRows(usTbody, usRowsData);
             attachSeHoldingsSortHandlers(usTbody, usRowsData);
-            usStatusEl.textContent = usRowsData.length + " holding(s). Values in INR at today\'s USD/INR rate.";
-            if (usTableWrap) usTableWrap.hidden = false;
+            usStatusEl.textContent = "";
+            if (usTableWrap) usTableWrap.hidden = true;
           } else {
             usStatusEl.textContent = "No US holdings found.";
             if (usTableWrap) usTableWrap.hidden = true;
           }
+          try { renderStocksEtfRedesign(rowsData, usdInrToday); } catch (e) { console.error("Se redesign failed:", e); }
 
           // Feed live totals back into overview accumulator and refresh dashboard
           // Use FIFO-adjusted invested (remaining lots only), not all-time buy total
