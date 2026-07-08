@@ -3718,12 +3718,15 @@
   }
 
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
-    // Respect the Open/Closed toggle: when Closed, show sold-out positions;
-    // otherwise show open positions only.
-    var open = rowsData.filter(function (r) {
+    // Portfolio Cards / Geography / Market-cap panels ALWAYS reflect the
+    // OPEN positions regardless of the Open/Closed toggle. Only the holdings
+    // card list flips between open and closed views.
+    var openOnly = rowsData.filter(function (r) { return !((r.units || 0) < 1 || r.isClosed); });
+    var visible = rowsData.filter(function (r) {
       var isClosed = (r.units || 0) < 1 || r.isClosed;
       return SEH_STATE.showClosed ? isClosed : !isClosed;
     });
+    var open = openOnly; // legacy variable name — used below for summary cards
     // Enrich each holding with its portfolio ONLY if it wasn't already tagged
     // upstream (e.g. by _buildPerPortfolioSeRowsData). This preserves proper
     // per-(portfolio × instrument) attribution.
@@ -3741,12 +3744,12 @@
         open.forEach(function (h) { if (!h._portfolio) h._portfolio = pByI[h.instrument] || ""; });
       }
     }
-    renderSePortfolioCards(open);
-    renderSeAllocation(open);
-    renderSeMarketCapSplit(open);
-    _wireSeHoldingsPortfolioToggle(open, usdInrToday);
-    renderSeHoldingsCardList(open, "india");
-    renderSeHoldingsCardList(open, "us", usdInrToday);
+    renderSePortfolioCards(openOnly);
+    renderSeAllocation(openOnly);
+    renderSeMarketCapSplit(openOnly);
+    _wireSeHoldingsPortfolioToggle(visible, usdInrToday);
+    renderSeHoldingsCardList(visible, "india");
+    renderSeHoldingsCardList(visible, "us", usdInrToday);
   }
 
   function _wireSeHoldingsPortfolioToggle(open, usdInrToday) {
