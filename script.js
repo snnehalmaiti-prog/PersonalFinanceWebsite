@@ -7669,7 +7669,7 @@
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + truncateInstrumentNameToFund(r.instrument) + (isSip ? '<span class="mfh-sip-badge">SIP</span>' : '') + '</div>' +
+            '<div class="mfh-inst-name">' + truncateInstrumentNameToFund(r.instrument) + '</div>' +
             '<div class="mfh-inst-sub">' + sub + '</div>' +
           '</div>' +
         '</div>' +
