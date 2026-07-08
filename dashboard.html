@@ -379,33 +379,8 @@
       <!-- Phase 1: Per-portfolio cards row -->
       <div class="mfpc-row" id="mfpc-row"></div>
 
-      <!-- Phase 2: Performance + Allocation -->
+      <!-- Phase 2: Allocation only (Portfolio vs Nifty perf chart removed) -->
       <div class="mfmid-row">
-        <div class="mfmid-card mfperf-card" id="mfperf-card">
-          <div class="mfmid-eyebrow">PERFORMANCE &middot; SINCE INCEPTION</div>
-          <div class="mfperf-headline-row">
-            <h3 class="mfmid-title">Portfolio vs Nifty 50 TRI</h3>
-            <div class="mfperf-range" id="mfperf-range" role="group" aria-label="Range">
-              <button type="button" class="mfperf-pill" data-mfperf-range="1M">1M</button>
-              <button type="button" class="mfperf-pill" data-mfperf-range="6M">6M</button>
-              <button type="button" class="mfperf-pill" data-mfperf-range="1Y">1Y</button>
-              <button type="button" class="mfperf-pill" data-mfperf-range="3Y">3Y</button>
-              <button type="button" class="mfperf-pill active" data-mfperf-range="All">All</button>
-            </div>
-          </div>
-          <div class="mfperf-alpha-row">
-            <span class="mfperf-alpha-label">Alpha p.a.</span>
-            <span class="mfperf-alpha-value" id="mfperf-alpha">—</span>
-          </div>
-          <div class="mfperf-chart-wrap">
-            <canvas id="mfperf-chart" height="260"></canvas>
-          </div>
-          <div class="mfperf-legend">
-            <span class="mfperf-legend-item"><span class="mfperf-legend-line mfperf-legend-port"></span> Portfolio <span class="mfperf-legend-sep">·</span> <span id="mfperf-port-return" class="mfperf-legend-value mfperf-legend-value-port">—</span></span>
-            <span class="mfperf-legend-item"><span class="mfperf-legend-line mfperf-legend-idx"></span> Nifty 50 <span class="mfperf-legend-sep">·</span> <span id="mfperf-idx-return" class="mfperf-legend-value mfperf-legend-value-idx">—</span></span>
-          </div>
-        </div>
-
         <div class="mfmid-card mfalloc-card" id="mfalloc-card">
           <div class="mfmid-eyebrow-row">
             <div class="mfmid-eyebrow">ALLOCATION &middot; <span id="mfalloc-mode-label">SEGMENT</span></div>
