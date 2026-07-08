@@ -285,9 +285,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent);
 }
 #benchmark-dropdown-wrap .portfolio-toggle {
-  background: var(--emerald);
-  border-color: var(--emerald);
-  color: #fff;
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
   font-weight: 700;
   padding: 4px 10px;
   font-size: 0.7rem;
@@ -297,13 +297,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 #benchmark-dropdown-wrap .portfolio-toggle .portfolio-chevron { width: 10px; height: 10px; }
 #benchmark-dropdown-wrap .portfolio-toggle .portfolio-chevron { color: #fff; }
 #benchmark-dropdown-wrap .portfolio-toggle:hover {
-  background: color-mix(in srgb, var(--emerald) 85%, #000);
+  background: color-mix(in srgb, var(--text) 85%, #000);
   border-color: transparent;
 }
 #benchmark-dropdown-wrap .portfolio-toggle[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--emerald) 85%, #000);
+  background: color-mix(in srgb, var(--text) 85%, #000);
   border-color: transparent;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--emerald) 30%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 .portfolio-menu {
