@@ -7387,12 +7387,44 @@
       }
     });
 
+    // Commodity-category MF/ETF (from mapping.category === "commodity") should
+    // be counted under Commodity, not Equity. Compute once per portfolio.
+    var _mfCatMap_ps = {}, _seMap_ps = {};
+    try { _mfCatMap_ps = buildMfCategoryMap(); } catch (e) {}
+    try { _seMap_ps = buildStockMappingTable(); } catch (e) {}
+    function _commodityFromEquitySources(portfolioName) {
+      var total = 0;
+      ["equity", "stocksetf"].forEach(function (prefix) {
+        try {
+          var rowsX = getSheetRows(prefix);
+          if (!rowsX || !rowsX.length) return;
+          var txByI = groupUnitTransactionsByInstrument(rowsX, portfolioName);
+          if (!txByI) return;
+          Object.keys(txByI).forEach(function (nm) {
+            var isCommodity = false;
+            if (prefix === "equity") {
+              isCommodity = _mfCatMap_ps[normalizeText(nm)] === "commodity";
+            } else {
+              var m = _seMap_ps[normalizeText(nm)];
+              isCommodity = !!(m && m.category && normalizeText(m.category) === "commodity");
+            }
+            if (!isCommodity) return;
+            var remaining = fifoRemainingLots(txByI[nm]);
+            remaining.forEach(function (l) { total += l.units * l.price; });
+          });
+        } catch (e) {}
+      });
+      return total;
+    }
+
     // Instrument-category breakdown for one portfolio → sub-line under its name
     function portfolioCatSubline(name) {
       if (name === "Unassigned") return "";
       var eq = computeTotalInvestment(name, ["equity", "stocksetf"]);
+      var extraComm = _commodityFromEquitySources(name);
+      eq -= extraComm; // reclassify commodity MF/ETF out of Equity
       var fi = fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"]);
-      var comm = fiExcluded ? 0 : (commodityByName[name] || 0);
+      var comm = (fiExcluded ? 0 : (commodityByName[name] || 0)) + extraComm;
       var parts = [
         { label: "Equity", value: eq, color: "#10B981" },
         { label: "Fixed Income", value: fi, color: "#3B82F6" },
