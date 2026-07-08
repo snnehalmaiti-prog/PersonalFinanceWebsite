@@ -3792,9 +3792,14 @@
         portfolioByInst[name] = (r[pIdx] || "").trim();
       });
     }
+    // Seed byPort with every portfolio that appears in the sheet — so cards
+    // still render for portfolios whose positions are all closed.
     var byPort = {};
+    (collectPortfolioNamesFromSheets(["stocksetf"]) || []).forEach(function (p) {
+      byPort[p] = { invested: 0, current: 0, india: 0, us: 0 };
+    });
     rowsData.forEach(function (h) {
-      var p = portfolioByInst[h.instrument] || "Unassigned";
+      var p = h._portfolio || portfolioByInst[h.instrument] || "Unassigned";
       if (!byPort[p]) byPort[p] = { invested: 0, current: 0, india: 0, us: 0 };
       byPort[p].invested += h.investedINR || 0;
       byPort[p].current += h.currentINR || 0;
