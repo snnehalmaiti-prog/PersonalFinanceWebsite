@@ -3557,21 +3557,23 @@
     if (!rows || !rows.length) return Promise.resolve([]);
     var mappingTable = buildStockMappingTable();
     if (!Object.keys(mappingTable).length) return Promise.resolve([]);
-    // Run FIFO per portfolio so units don't mix across owners.
-    var portfolios = (portfolioFilter && portfolioFilter !== "all")
-      ? [portfolioFilter]
-      : (collectPortfolioNamesFromSheets(["stocksetf"]) || []);
-    if (!portfolios.length) return Promise.resolve([]);
     return Promise.all([
-      Promise.all(portfolios.map(function (p) {
-        return buildStockHoldings(rows, mappingTable, p, false, { categoryMode: "commodity-only" })
-          .then(function (list) { return (list || []).map(function (h) { h._portfolio = p; return h; }); });
-      })),
+      buildStockHoldings(rows, mappingTable, portfolioFilter, false, { categoryMode: "commodity-only" }),
       fetchAllStockPrices().catch(function () { return { prices: {} }; })
     ]).then(function (r) {
-      var holdings = [];
-      (r[0] || []).forEach(function (arr) { arr.forEach(function (h) { holdings.push(h); }); });
+      var holdings = r[0] || [];
       var allPrices = (r[1] && r[1].prices) || {};
+      // Attach portfolio from mapping sheet row (first occurrence).
+      var pByI = {};
+      var hdr = rows[0].map(normalizeText);
+      var pI = hdr.indexOf("portfolio name");
+      var iI = hdr.indexOf("instrument name");
+      if (pI !== -1 && iI !== -1) {
+        rows.slice(1).forEach(function (row) {
+          var name = (row[iI] || "").trim();
+          if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
+        });
+      }
       return holdings.map(function (h) {
         var pe = allPrices[h.ticker] || null;
         var ltp = pe ? pe.price : null;
@@ -3583,7 +3585,7 @@
         var mapping = mappingTable[normalizeText(h.instrument)] || {};
         return {
           instrument: h.instrument,
-          portfolio: h._portfolio || "",
+          portfolio: pByI[h.instrument] || "",
           units: h.units,
           invested: h.investedINR,
           current: current,
@@ -3604,26 +3606,29 @@
     var rows = getSheetRows("equity");
     if (!rows || !rows.length) return Promise.resolve([]);
     var catMap = buildMfCategoryMap();
-    var portfolios = (portfolioFilter && portfolioFilter !== "all")
-      ? [portfolioFilter]
-      : (collectPortfolioNamesFromSheets(["equity"]) || []);
-    if (!portfolios.length) return Promise.resolve([]);
-    // Per-portfolio FIFO
-    var holdingsList = [];
-    portfolios.forEach(function (p) {
-      var txByI = groupUnitTransactionsByInstrument(rows, p);
-      if (!txByI) return;
-      Object.keys(txByI).forEach(function (name) {
-        if (catMap[normalizeText(name)] !== "commodity") return;
+    var txByI = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!txByI) return Promise.resolve([]);
+    var commodityInstruments = Object.keys(txByI).filter(function (name) {
+      return catMap[normalizeText(name)] === "commodity";
+    });
+    if (!commodityInstruments.length) return Promise.resolve([]);
+    var pByI = {};
+    var hdr = rows[0].map(normalizeText);
+    var pI = hdr.indexOf("portfolio name");
+    var iI = hdr.indexOf("instrument name");
+    if (pI !== -1 && iI !== -1) {
+      rows.slice(1).forEach(function (row) {
+        var name = (row[iI] || "").trim();
+        if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
+      });
+    }
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var holdings = commodityInstruments.map(function (name) {
         var remainingLots = fifoRemainingLots(txByI[name]);
         var units = 0, invested = 0;
         remainingLots.forEach(function (l) { units += l.units; invested += l.units * l.price; });
-        if (units >= 1) holdingsList.push({ instrument: name, portfolio: p, units: units, invested: invested });
-      });
-    });
-    if (!holdingsList.length) return Promise.resolve([]);
-    return buildInstrumentSchemeMap().then(function (schemeMap) {
-      var holdings = holdingsList;
+        return { instrument: name, units: units, invested: invested };
+      }).filter(function (h) { return h.units >= 1; });
       if (!holdings.length) return [];
       return Promise.all(holdings.map(function (h) {
         var code = lookupSchemeCode(schemeMap, h.instrument);
@@ -3640,7 +3645,7 @@
           var dayChg = (latest && prev) ? (latest.nav - prev.nav) * h.units : null;
           return {
             instrument: h.instrument,
-            portfolio: h.portfolio || "",
+            portfolio: pByI[h.instrument] || "",
             units: h.units,
             invested: h.invested,
             current: current,
