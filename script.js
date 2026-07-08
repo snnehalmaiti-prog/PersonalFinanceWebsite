@@ -3647,13 +3647,8 @@
     if (!byInst) return Promise.resolve([]);
     // Filter to commodity-mapped instruments only.
     var commInstruments = Object.keys(byInst).filter(function (n) {
-      var cat = normalizeText(catMap[normalizeText(n)] || "");
-      // Accept exact "commodity" or values containing it (e.g. "Commodity/Gold").
-      return cat === "commodity" || cat.indexOf("commodity") !== -1;
+      return normalizeText(catMap[normalizeText(n)] || "") === "commodity";
     });
-    console.log("MF commodity: instruments matched:", commInstruments,
-      "| catMap keys:", Object.keys(catMap).slice(0, 10),
-      "| equity instruments:", Object.keys(byInst).slice(0, 10));
     if (!commInstruments.length) return Promise.resolve([]);
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       // Build promise list: fetch NAV history for instruments with AMFI codes,
