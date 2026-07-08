@@ -7417,10 +7417,15 @@
       return total;
     }
 
+    // US Stocks/ETF INR-conversion delta per portfolio — populated
+    // asynchronously by applyStocksEtfInrConversion(). portfolioCatSubline
+    // adds it to Equity so chip percentages line up with the row total.
+    var _seInrDeltaByName = {};
+
     // Instrument-category breakdown for one portfolio → sub-line under its name
     function portfolioCatSubline(name) {
       if (name === "Unassigned") return "";
-      var eq = computeTotalInvestment(name, ["equity", "stocksetf"]);
+      var eq = computeTotalInvestment(name, ["equity", "stocksetf"]) + (_seInrDeltaByName[name] || 0);
       var extraComm = _commodityFromEquitySources(name);
       eq -= extraComm; // reclassify commodity MF/ETF out of Equity
       var fi = fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"]);
@@ -7542,6 +7547,7 @@
         results.forEach(function (r) {
           if (r && Math.abs(r.delta) > 0.01) {
             investedByName[r.name] = (investedByName[r.name] || 0) + r.delta;
+            _seInrDeltaByName[r.name] = (_seInrDeltaByName[r.name] || 0) + r.delta;
             changed = true;
           }
         });
