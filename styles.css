@@ -3307,36 +3307,36 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* === MF Tab Redesign === */
 
-/* Phase 1: Portfolio cards row */
-.mfpc-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+/* Phase 1: Portfolio cards row — sized to match Expense budget cards */
+.mfpc-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .mfpc-card {
-  background: var(--surface); border-radius: var(--radius-md); padding: 18px 20px;
+  background: var(--surface); border-radius: 10px; padding: 8px 14px 10px;
   box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
   border-left: 3px solid var(--emerald);
 }
 .mfpc-card.mfpc-combined { border-left-color: #23211D; }
-.mfpc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.mfpc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .mfpc-avatar {
-  width: 34px; height: 34px; border-radius: 10px;
+  width: 24px; height: 24px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.85rem; font-weight: 700; flex-shrink: 0;
+  font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
 }
 .mfpc-name-block { flex: 1; min-width: 0; }
-.mfpc-name { font-size: 1.05rem; font-weight: 700; color: var(--text); line-height: 1.15; }
-.mfpc-subtitle { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
-.mfpc-current-label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin: 14px 0 4px; }
-.mfpc-current-value { font-size: 1.75rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.mfpc-bar { height: 4px; border-radius: 999px; background: var(--bg); overflow: hidden; margin: 12px 0 8px; }
+.mfpc-name { font-size: 0.88rem; font-weight: 700; color: var(--text); line-height: 1.1; }
+.mfpc-subtitle { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin-top: 1px; }
+.mfpc-current-label { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin: 6px 0 1px; }
+.mfpc-current-value { font-size: 1.05rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1.15; }
+.mfpc-bar { height: 3px; border-radius: 999px; background: var(--border); overflow: hidden; margin: 6px 0 4px; }
 .mfpc-bar-fill { height: 100%; background: var(--emerald); border-radius: 999px; transition: width 0.4s ease; }
 .mfpc-card.mfpc-combined .mfpc-bar-fill { background: #23211D; }
-.mfpc-return-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.mfpc-return-pct { font-size: 0.9rem; font-weight: 700; color: var(--emerald); font-variant-numeric: tabular-nums; }
+.mfpc-return-row { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.mfpc-return-pct { font-size: 0.75rem; font-weight: 700; color: var(--emerald); font-variant-numeric: tabular-nums; }
 .mfpc-return-pct.mfpc-negative { color: var(--negative); }
-.mfpc-gain { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.mfpc-footer { display: flex; gap: 24px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.mfpc-foot-item { display: flex; flex-direction: column; gap: 2px; }
-.mfpc-foot-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
-.mfpc-foot-value { font-size: 0.95rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.mfpc-gain { font-size: 0.65rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mfpc-footer { display: flex; gap: 18px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.mfpc-foot-item { display: flex; flex-direction: column; gap: 1px; }
+.mfpc-foot-label { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.mfpc-foot-value { font-size: 0.8rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .mfpc-foot-value.mfpc-xirr { color: var(--emerald); }
 .mfpc-foot-value.mfpc-xirr.mfpc-negative { color: var(--negative); }
 
