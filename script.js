@@ -8987,6 +8987,7 @@
       openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
       var cb = document.getElementById("equity-holdings-show-closed-only");
       if (cb) cb.checked = MFH_STATE.showClosed;
+      console.log("MF Open toggle → showClosed:", MFH_STATE.showClosed, "checkbox.checked:", cb && cb.checked);
       renderEquityHoldingsTable();
     });
     if (sortBtn) sortBtn.addEventListener("click", function () {
