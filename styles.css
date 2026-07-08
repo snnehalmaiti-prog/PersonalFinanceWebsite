@@ -289,9 +289,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   border-color: var(--emerald);
   color: #fff;
   font-weight: 700;
-  padding: 6px 14px;
-  font-size: 0.82rem;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  min-height: 26px;
+  border-radius: 999px;
 }
+#benchmark-dropdown-wrap .portfolio-toggle .portfolio-chevron { width: 10px; height: 10px; }
 #benchmark-dropdown-wrap .portfolio-toggle .portfolio-chevron { color: #fff; }
 #benchmark-dropdown-wrap .portfolio-toggle:hover {
   background: color-mix(in srgb, var(--emerald) 85%, #000);
