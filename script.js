@@ -3644,7 +3644,12 @@
   }
 
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
-    var open = rowsData.filter(function (r) { return (r.units || 0) > 0 && !r.isClosed; });
+    // Respect the Open/Closed toggle: when Closed, show sold-out positions;
+    // otherwise show open positions only.
+    var open = rowsData.filter(function (r) {
+      var isClosed = (r.units || 0) < 1 || r.isClosed;
+      return SEH_STATE.showClosed ? isClosed : !isClosed;
+    });
     // Enrich each holding with its portfolio (first-seen in the transactions).
     var seRows = getSheetRows("stocksetf");
     if (seRows && seRows.length) {
@@ -3920,23 +3925,35 @@
     });
   }
 
-  // Wire Stocks/ETF controls
+  // Wire Stocks/ETF controls — both India and US card headers share state.
   (function wireSeControls() {
-    var openBtn = document.getElementById("seh-open-toggle");
-    var sortBtn = document.getElementById("seh-sort-toggle");
-    if (openBtn) openBtn.addEventListener("click", function () {
-      SEH_STATE.showClosed = !SEH_STATE.showClosed;
-      openBtn.textContent = SEH_STATE.showClosed ? "Closed" : "Open";
-      var cb = document.getElementById("stocksetf-show-closed");
-      if (cb) cb.checked = SEH_STATE.showClosed;
-      var cb2 = document.getElementById("stocksetf-us-show-closed");
-      if (cb2) cb2.checked = SEH_STATE.showClosed;
-      renderStockEtfHoldingsTable();
+    var openIds = ["seh-open-toggle", "seh-us-open-toggle"];
+    var sortIds = ["seh-sort-toggle", "seh-us-sort-toggle"];
+    function _syncOpenBtns() {
+      openIds.forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = SEH_STATE.showClosed ? "Closed" : "Open"; });
+    }
+    function _syncSortBtns() {
+      sortIds.forEach(function (id) { var el = document.getElementById(id); if (el) el.innerHTML = "Sort P&amp;L " + (SEH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;"); });
+    }
+    openIds.forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        SEH_STATE.showClosed = !SEH_STATE.showClosed;
+        _syncOpenBtns();
+        var cb = document.getElementById("stocksetf-show-closed"); if (cb) cb.checked = SEH_STATE.showClosed;
+        var cb2 = document.getElementById("stocksetf-us-show-closed"); if (cb2) cb2.checked = SEH_STATE.showClosed;
+        renderStockEtfHoldingsTable();
+      });
     });
-    if (sortBtn) sortBtn.addEventListener("click", function () {
-      SEH_STATE.sort = SEH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
-      sortBtn.innerHTML = "Sort P&amp;L " + (SEH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;");
-      renderStockEtfHoldingsTable();
+    sortIds.forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        SEH_STATE.sort = SEH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
+        _syncSortBtns();
+        renderStockEtfHoldingsTable();
+      });
     });
   })();
 
