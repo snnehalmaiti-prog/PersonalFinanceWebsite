@@ -2211,7 +2211,7 @@
     var fSortKey = fparts[0];
     var fSortDir = fparts[1] === "asc" ? 1 : -1;
     filtered.sort(function (a, b) { return fSortDir * _fihSortCompare(a, b, fSortKey); });
-    if (eyebrow) eyebrow.textContent = "FIXED INCOME · " + filtered.length + " HOLDINGS";
+    if (eyebrow) eyebrow.textContent = "";
     if (!filtered.length) {
       list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No fixed income holdings.</p>';
       return;
@@ -3596,7 +3596,7 @@
     var asof = document.getElementById("cmh-gold-asof");
     var goldTop = document.getElementById("fi-gold-asof");
     if (!list) return;
-    if (eyebrow) eyebrow.textContent = "PHYSICAL COMMODITY · " + holdings.length + " HOLDING" + (holdings.length === 1 ? "" : "S");
+    if (eyebrow) eyebrow.textContent = "";
     var asofText = rateDate ? "Gold rate as of " + rateDate + " · ₹" + Math.round(goldPrice).toLocaleString("en-IN") + "/g" : "";
     if (asof) asof.textContent = asofText;
     if (goldTop) goldTop.innerHTML = asofText ? "&#128337; " + asofText : "";
