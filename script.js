@@ -499,6 +499,16 @@
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim().toLowerCase();
   }
 
+  // Escape strings coming from Google Sheet cells (instrument/portfolio/sub-cat
+  // names, etc.) before interpolating into innerHTML. The dashboard origin holds
+  // the Supabase session + GitHub PAT in localStorage, so an unescaped sheet cell
+  // like <img src=x onerror=...> would be a real stored-XSS vector.
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
   function sumInvestmentForRows(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
@@ -2136,7 +2146,7 @@
         '<div class="mfpc-head">' +
           '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
           '<div class="mfpc-name-block">' +
-            '<div class="mfpc-name">' + p.name + '</div>' +
+            '<div class="mfpc-name">' + escapeHtml(p.name) + '</div>' +
             '<div class="mfpc-subtitle">' + subtitle + '</div>' +
           '</div>' +
         '</div>' +
@@ -2184,7 +2194,7 @@
       subList.forEach(function (s, i) { subColor[s] = PAL[i % PAL.length]; });
       var portBar = '<div class="mfalloc-single-bar">' + portEntries.map(function (e, i) {
         var pct = (e.total / grand) * 100;
-        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + e.name + '"></span>';
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + escapeHtml(e.name) + '"></span>';
       }).join("") + '</div>';
       var portRows = portEntries.map(function (e, i) {
         var pct = (e.total / grand) * 100;
@@ -2196,7 +2206,7 @@
         }).join("");
         return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
           '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
-            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) + '</span>' +
             '<span class="mfalloc-nums">' +
               '<span class="mfalloc-amount">' + formatCurrency(e.total) + '</span>' +
               '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
@@ -2222,13 +2232,13 @@
     if (!entries.length) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
     var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
-      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
+      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + escapeHtml(e.name) + '"></span>';
     }).join("") + '</div>';
     var rows = entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
       var col = PAL[i % PAL.length];
       return '<div class="mfalloc-row">' +
-        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + ' <span class="muted" style="font-weight:500;">· ' + e.count + ' holdings</span></span>' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) + ' <span class="muted" style="font-weight:500;">· ' + e.count + ' holdings</span></span>' +
         '<span class="mfalloc-nums">' +
           '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
           '<span class="mfalloc-pct" style="color:' + col + ';">' + (pct < 1 ? "<1%" : pct.toFixed(0) + "%") + '</span>' +
@@ -2334,11 +2344,11 @@
       return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
         '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + h.instrument + idleBadge + '</div>' +
-            '<div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) + idleBadge + '</div>' +
+            '<div class="mfh-inst-sub">' + escapeHtml(h.portfolio || "—") + '</div>' +
           '</div>' +
         '</div>' +
-        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + h.subCategory + '</span></div>' +
+        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + escapeHtml(h.subCategory) + '</span></div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.current) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary ' + (pnl >= 0 ? "" : "mfh-negative") + '" style="color:' + (pnl > 0 ? "var(--emerald)" : pnl < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (pnl > 0 ? "+" : "") + (pnl === 0 ? "₹0" : formatCurrency(pnl)) + '</div>' +
@@ -2653,7 +2663,6 @@
 
   var GOLD_PRICE_CACHE_KEY = "wf-gold-price-inr-per-gram";
   var GOLD_PRICE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
-  var GOLD_API_KEY = "goldapi-bb93d5efdf450d839eba8c4fe351ead2-io";
   var GOLD_DAY_CHANGE_CACHE_KEY = "wf-gold-day-change-inr-per-gram";
   var GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
   var TROY_OZ_TO_GRAM = 31.1035;
@@ -3706,8 +3715,8 @@
       _subInv += h.invested; _subCur += h.current; _subDay += dayChg;
       return '<div class="mfh-row mfh-color-amber" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
         '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">Au</div>' +
-          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + (h.instrument || "Gold") + '</div><div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div></div></div>' +
-        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + (h.subCategory || "Gold") + '</span></div>' +
+          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + escapeHtml(h.instrument || "Gold") + '</div><div class="mfh-inst-sub">' + escapeHtml(h.portfolio || "—") + '</div></div></div>' +
+        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + escapeHtml(h.subCategory || "Gold") + '</span></div>' +
         '<div class="mfh-col-num mfh-num-primary">₹' + Math.round(goldPrice || 0).toLocaleString("en-IN") + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + (h.grams || 0).toFixed(2) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
@@ -3944,7 +3953,7 @@
       return '<div class="mfpc-card ' + (p.isCombined ? "mfpc-combined" : "") + '">' +
         '<div class="mfpc-head">' +
           '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
-          '<div class="mfpc-name-block"><div class="mfpc-name">' + p.name + '</div><div class="mfpc-subtitle">' + subtitle + '</div></div>' +
+          '<div class="mfpc-name-block"><div class="mfpc-name">' + escapeHtml(p.name) + '</div><div class="mfpc-subtitle">' + subtitle + '</div></div>' +
         '</div>' +
         '<div class="mfpc-current-label">CURRENT VALUE</div>' +
         '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
@@ -4020,7 +4029,7 @@
       var PORT_PAL = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
       bar.innerHTML = entries.map(function (e, i) {
         var pct = (e.total / grand) * 100;
-        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + e.name + '"></span>';
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + escapeHtml(e.name) + '"></span>';
       }).join("");
       rows.innerHTML = entries.map(function (e, i) {
         var pct = (e.total / grand) * 100;
@@ -4033,7 +4042,7 @@
           }).join("");
         return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
           '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
-            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) + '</span>' +
             '<span class="mfalloc-nums">' +
               '<span class="mfalloc-amount">' + formatCurrency(e.total) + '</span>' +
               '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
@@ -4163,12 +4172,12 @@
       subInv += h.investedINR || 0; subCur += h.currentINR || 0; subDay += day;
       var badges = '';
       if (isEtf) badges += ' <span class="mfh-sip-badge" style="background:#F1EBDD;color:#7A7568;">ETF</span>';
-      var subLine = (segment ? segment : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ₹' + Number(h.avgCostINR || 0).toFixed(2);
+      var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ₹' + Number(h.avgCostINR || 0).toFixed(2);
       return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + h.instrument + badges + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) + badges + '</div>' +
             '<div class="mfh-inst-sub">' + subLine + '</div>' +
           '</div>' +
         '</div>' +
@@ -4837,11 +4846,19 @@
         var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
         var branch = gh.branch || "main";
         var body = JSON.stringify({ ref: branch });
-        ["update-amfi-nav.yml", "update-amfi-isin-map.yml"].forEach(function (wf) {
-          fetch(apiBase + wf + "/dispatches", { method: "POST", headers: headers, body: body })
-            .catch(function () {}); // silent — workflows run in background
+        Promise.all(["update-amfi-nav.yml", "update-amfi-isin-map.yml"].map(function (wf) {
+          return fetch(apiBase + wf + "/dispatches", { method: "POST", headers: headers, body: body })
+            .then(function (r) { return r.ok; })
+            .catch(function () { return false; });
+        })).then(function (results) {
+          var okCount = results.filter(Boolean).length;
+          // Reflect real dispatch status instead of always claiming success —
+          // an expired/invalid PAT returns 401/404 and should not read as "Triggered".
+          equityRefreshNavBtn.textContent = okCount === results.length
+            ? "Triggered ✓"
+            : (okCount > 0 ? "Partly triggered" : "Trigger failed — check GitHub token");
         });
-        equityRefreshNavBtn.textContent = "Triggered ✓";
+        equityRefreshNavBtn.textContent = "Triggering…";
       } else {
         equityRefreshNavBtn.textContent = "Refreshing…";
       }
@@ -7509,7 +7526,7 @@
         return '<div class="isc-row">' +
           '<div class="isc-avatar" style="background:' + col.tint + ';color:' + col.ink + ';">' + initial + '</div>' +
           '<div class="isc-row-body">' +
-            '<div class="isc-row-name">' + e.name + '</div>' +
+            '<div class="isc-row-name">' + escapeHtml(e.name) + '</div>' +
             '<div class="isc-row-sub isc-cat-sub">' + portfolioCatSubline(e.name) + '</div>' +
           '</div>' +
           '<div class="isc-row-nums">' +
@@ -7621,7 +7638,7 @@
       barEl.innerHTML = entries.map(function (e) {
         var pct = (e.value / total) * 100;
         var meta = REGION_META[e.name] || REGION_META["India"];
-        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + meta.bar + ';" title="' + e.name + '"></span>';
+        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + meta.bar + ';" title="' + escapeHtml(e.name) + '"></span>';
       }).join("");
       listEl.innerHTML = entries.map(function (e) {
         var pct = (e.value / total) * 100;
@@ -7630,7 +7647,7 @@
         return '<div class="isc-row">' +
           '<div class="isc-avatar" style="background:' + meta.tint + ';color:' + meta.ink + ';font-size:0.85rem;">' + meta.flag + '</div>' +
           '<div class="isc-row-body">' +
-            '<div class="isc-row-name">' + e.name + '</div>' +
+            '<div class="isc-row-name">' + escapeHtml(e.name) + '</div>' +
           '</div>' +
           '<div class="isc-row-nums">' +
             '<div class="isc-row-amount">' + formatCurrency(e.value) + '</div>' +
@@ -7807,7 +7824,7 @@
 
       barEl.innerHTML = entries.map(function (e) {
         var pct = (e.value / total) * 100;
-        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + e.meta.bar + ';" title="' + e.name + '"></span>';
+        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + e.meta.bar + ';" title="' + escapeHtml(e.name) + '"></span>';
       }).join("");
 
       listEl.innerHTML = entries.map(function (e) {
@@ -7816,7 +7833,7 @@
         return '<div class="isc-row">' +
           '<div class="isc-avatar" style="background:' + e.meta.tint + ';color:' + e.meta.ink + ';">' + e.meta.icon + '</div>' +
           '<div class="isc-row-body">' +
-            '<div class="isc-row-name">' + e.name + '</div>' +
+            '<div class="isc-row-name">' + escapeHtml(e.name) + '</div>' +
             '<div class="isc-row-sub isc-cat-sub">' + portfolioChipsForCat(e.name) + '</div>' +
           '</div>' +
           '<div class="isc-row-nums">' +
@@ -8904,7 +8921,7 @@
           '<div class="mfpc-head">' +
             '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
             '<div class="mfpc-name-block">' +
-              '<div class="mfpc-name">' + p.name + '</div>' +
+              '<div class="mfpc-name">' + escapeHtml(p.name) + '</div>' +
               '<div class="mfpc-subtitle">' + subtitle + '</div>' +
             '</div>' +
           '</div>' +
@@ -8999,7 +9016,7 @@
       segList.forEach(function (s, i) { segColor[s] = PAL[i % PAL.length]; });
       var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
         var pct = (e.total / grand) * 100;
-        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + e.name + '"></span>';
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + escapeHtml(e.name) + '"></span>';
       }).join("") + '</div>';
       var rowsHtml = entries.map(function (e, i) {
         var pct = (e.total / grand) * 100;
@@ -9011,7 +9028,7 @@
         }).join("");
         return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
           '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
-            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) + '</span>' +
             '<span class="mfalloc-nums">' +
               '<span class="mfalloc-amount">' + formatCurrency(e.total) + '</span>' +
               '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
@@ -9038,13 +9055,13 @@
     var PAL = ["#10B981", "#D4A017", "#3B82F6", "#E8623A", "#8B5CF6", "#64748B", "#06B6D4", "#EC4899"];
     var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
-      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
+      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + escapeHtml(e.name) + '"></span>';
     }).join("") + '</div>';
     var rows = entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
       var col = PAL[i % PAL.length];
       return '<div class="mfalloc-row">' +
-        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) + '</span>' +
         '<span class="mfalloc-nums">' +
           '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
           '<span class="mfalloc-pct" style="color:' + col + ';">' + pct.toFixed(1) + '%</span>' +

@@ -547,7 +547,7 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=csvvalidate"></script>
+  <script src="script.js?v=review1"></script>
   <script src="expense.js?v=recdup1"></script>
   <script>
     // Expense left-nav panel switching
@@ -678,7 +678,12 @@
         tplRefs.categories = res[1] || [];
         tplRefs.paymentMethods = res[2] || [];
         tplRefs.loaded = true;
-      }).catch(function () {});
+      }).catch(function () {
+        // Mark loaded even on failure so renderExpenseTemplates()'s
+        // "!tplRefs.loaded → tplLoadRefs().then(render)" doesn't loop forever
+        // hammering the network on every transient error.
+        tplRefs.loaded = true;
+      });
     }
 
     function tplFillSelect(sel, items, selectedId, placeholder) {

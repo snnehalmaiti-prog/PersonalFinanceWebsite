@@ -1017,10 +1017,17 @@
               sel.parentNode.insertBefore(wrap, sel);
               sel.__wfCheckWrap = wrap;
             }
+            var _escHtml = function (s) {
+              return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+              });
+            };
             var opts = Array.prototype.slice.call(sel.options);
             wrap.innerHTML = opts.map(function (o) {
               var checked = o.selected ? " checked" : "";
-              return '<label class="rec-filter-check"><input type="checkbox" data-val="' + o.value.replace(/"/g, "&quot;") + '"' + checked + ' /><span>' + o.textContent + '</span></label>';
+              // o.textContent decodes previously-escaped names back to raw text, so
+              // it MUST be re-escaped before going back into innerHTML (stored XSS).
+              return '<label class="rec-filter-check"><input type="checkbox" data-val="' + _escHtml(o.value) + '"' + checked + ' /><span>' + _escHtml(o.textContent) + '</span></label>';
             }).join("");
             wrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
               cb.addEventListener("change", function () {
@@ -2674,6 +2681,11 @@
       }
       function saveTemplates(list) {
         localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
+        // Push to cloud so a subsequent loadSettingsFromCloud() (settings visit /
+        // page load) doesn't clobber dashboard-created templates. Mirrors settings.html.
+        if (window.WfAuth && WfAuth.isLoggedIn() && WfAuth.saveSettingsToCloud) {
+          WfAuth.saveSettingsToCloud().catch(function () {});
+        }
       }
       function refreshTemplateSelect() {
         var sel = document.getElementById("rec-template");
@@ -3182,7 +3194,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=goldkeyless"></script>
+  <script src="script.js?v=review1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
