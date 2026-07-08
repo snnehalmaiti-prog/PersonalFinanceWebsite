@@ -2030,6 +2030,19 @@
   function renderFiPortfolioCards(holdings) {
     var row = document.getElementById("fipc-row");
     if (!row) return;
+    // Local palette copy — MFH_AVATAR_PALETTE is defined later in the file and
+    // may not be initialised the first time this runs.
+    var FI_AVATAR_PALETTE = [
+      { bg: "#D1FAE5", fg: "#065F46", accent: "green" },
+      { bg: "#EDE9FE", fg: "#5B21B6", accent: "purple" },
+      { bg: "#DBEAFE", fg: "#1E40AF", accent: "blue" },
+      { bg: "#FEF3C7", fg: "#B45309", accent: "amber" },
+      { bg: "#CFFAFE", fg: "#0E7490", accent: "teal" }
+    ];
+    function _fiInit(name) {
+      var parts = String(name || "").trim().split(/\s+/);
+      return parts[0] ? parts[0].charAt(0).toUpperCase() : "?";
+    }
     // Group by portfolio
     var byPort = {};
     holdings.forEach(function (h) {
@@ -2050,8 +2063,8 @@
       var pnl = p.current - p.invested;
       var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
       var isNeg = pnl < 0;
-      var pal = p.isCombined ? { bg: "#23211D", fg: "#fff" } : MFH_AVATAR_PALETTE[i % 3];
-      var initial = p.isCombined ? "Σ" : _initials(p.name).charAt(0);
+      var pal = p.isCombined ? { bg: "#23211D", fg: "#fff" } : FI_AVATAR_PALETTE[i % FI_AVATAR_PALETTE.length];
+      var initial = p.isCombined ? "Σ" : _fiInit(p.name);
       var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
       var totalCur = p.fi + p.gold;
       var fiPct = totalCur > 0 ? (p.fi / totalCur) * 100 : 0;
@@ -2176,8 +2189,14 @@
       '<span>Instrument</span><span>Sub-Cat</span>' +
       '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span>' +
       '<span class="mfh-col-num">Unrealized</span><span class="mfh-col-num">Return %</span></div>';
+    var FI_AVATAR_PALETTE = [
+      { bg: "#D1FAE5", fg: "#065F46", accent: "green" },
+      { bg: "#EDE9FE", fg: "#5B21B6", accent: "purple" },
+      { bg: "#DBEAFE", fg: "#1E40AF", accent: "blue" },
+      { bg: "#FEF3C7", fg: "#B45309", accent: "amber" }
+    ];
     var body = filtered.map(function (h, i) {
-      var pal = MFH_AVATAR_PALETTE[i % MFH_AVATAR_PALETTE.length];
+      var pal = FI_AVATAR_PALETTE[i % FI_AVATAR_PALETTE.length];
       var initial = (h.portfolio || "?").charAt(0).toUpperCase();
       var pnl = h.current - h.invested;
       var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
