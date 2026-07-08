@@ -283,10 +283,10 @@
       <div id="exp-content" class="exp-two-panel">
         <!-- Left nav -->
         <nav class="exp-left-nav" aria-label="Expense settings sections">
-          <div class="exp-nav-section-label">EXPENSE</div>
           <button type="button" class="exp-nav-item active" data-exp-panel="accounts">Accounts</button>
           <button type="button" class="exp-nav-item" data-exp-panel="payment-methods">Payment methods</button>
           <button type="button" class="exp-nav-item" data-exp-panel="categories">Categories</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="template">Template</button>
           <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
         </nav>
 
@@ -327,6 +327,16 @@
             <p class="muted small equity-desc">Expense and income categories with subcategories.</p>
             <p class="muted small" id="exp-categories-status">Loading…</p>
             <div id="exp-categories-body"></div>
+          </div>
+
+          <!-- Template -->
+          <div class="exp-detail-panel" id="exp-detail-template" hidden>
+            <div class="exp-detail-header">
+              <h3>Template</h3>
+            </div>
+            <p class="muted small equity-desc">Reusable transaction templates. Coming soon.</p>
+            <p class="muted small" id="exp-template-status">No templates yet.</p>
+            <div id="exp-template-list" class="exp-list"></div>
           </div>
 
           <!-- Bulk import -->
