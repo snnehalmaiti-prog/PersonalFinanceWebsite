@@ -2056,8 +2056,8 @@
     var names = Object.keys(byPort).sort(function (a, b) { return byPort[b].current - byPort[a].current; });
     var combined = { invested: 0, current: 0, fi: 0, gold: 0 };
     names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.fi += byPort[n].fi; combined.gold += byPort[n].gold; });
-    var all = names.map(function (n, i) { var p = byPort[n]; p.name = n; p.paletteIdx = i; return p; })
-      .concat([{ name: "Joint", invested: combined.invested, current: combined.current, fi: combined.fi, gold: combined.gold, isCombined: true }]);
+    var namedList = names.map(function (n, i) { var p = byPort[n]; p.name = n; p.paletteIdx = i; return p; });
+    var all = [{ name: "Joint", invested: combined.invested, current: combined.current, fi: combined.fi, gold: combined.gold, isCombined: true }].concat(namedList);
 
     row.innerHTML = all.map(function (p, i) {
       var pnl = p.current - p.invested;
@@ -8101,7 +8101,7 @@
       var comboFlows = buildXirrCashFlows(equityRows, "all");
       if (combinedCur > 0) comboFlows.push({ date: new Date(), amount: combinedCur });
       var comboXirr = calculateXIRR(comboFlows);
-      var all = perPortfolio.concat([{ name: "Combined", invested: combinedInv, current: combinedCur, xirr: comboXirr, dayChange: combinedDay, isCombined: true }]);
+      var all = [{ name: "Combined", invested: combinedInv, current: combinedCur, xirr: comboXirr, dayChange: combinedDay, isCombined: true }].concat(perPortfolio);
       row.innerHTML = all.map(function (p, i) {
         var pnl = p.current - p.invested;
         var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
