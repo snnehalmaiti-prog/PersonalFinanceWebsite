@@ -458,13 +458,16 @@
       list.querySelectorAll("[data-tpl-edit]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var id = btn.getAttribute("data-tpl-edit");
-          location.href = "dashboard.html?tab=expense&editTemplate=" + encodeURIComponent(id);
+          // Use sessionStorage so browser reload does NOT re-trigger the modal.
+          sessionStorage.setItem("wf-open-edit-template", id);
+          location.href = "dashboard.html";
         });
       });
     }
     var addTemplateBtn = document.getElementById("exp-add-template-btn");
     if (addTemplateBtn) addTemplateBtn.addEventListener("click", function () {
-      location.href = "dashboard.html?tab=expense&addTemplate=1";
+      sessionStorage.setItem("wf-open-add-template", "1");
+      location.href = "dashboard.html";
     });
   </script>
   <script>

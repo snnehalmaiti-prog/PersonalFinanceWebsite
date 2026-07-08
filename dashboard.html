@@ -3117,20 +3117,17 @@
       });
       document.getElementById("rec-open-btn").addEventListener("click", function () { openRecModal(null); });
 
-      // Auto-open template modal from settings link — switch to Expense tab first,
-      // then open the modal and re-enforce template mode briefly in case another
-      // handler overwrites the title.
+      // Auto-open template modal from settings — flag lives in sessionStorage so
+      // it survives a same-tab navigation but is cleared before the modal opens,
+      // preventing browser reloads from re-triggering it.
       (function () {
         try {
-          var params = new URLSearchParams(location.search);
-          var addFlag = params.get("addTemplate") === "1";
-          var editId = params.get("editTemplate");
+          var addFlag = sessionStorage.getItem("wf-open-add-template") === "1";
+          var editId = sessionStorage.getItem("wf-open-edit-template");
           if (!addFlag && !editId) return;
-          // Strip the param immediately so a reload doesn't re-open the modal.
-          try {
-            var cleanUrl = location.pathname + location.hash;
-            history.replaceState({}, "", cleanUrl);
-          } catch (e) {}
+          // Clear immediately so reload doesn't re-open.
+          sessionStorage.removeItem("wf-open-add-template");
+          sessionStorage.removeItem("wf-open-edit-template");
           function openIt() {
             if (addFlag) {
               openRecModal(null, { template: true });
