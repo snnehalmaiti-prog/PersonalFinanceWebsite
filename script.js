@@ -3742,7 +3742,7 @@
           var name = (row[iI] || "").trim();
           if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
         });
-        open.forEach(function (h) { if (!h._portfolio) h._portfolio = pByI[h.instrument] || ""; });
+        rowsData.forEach(function (h) { if (!h._portfolio) h._portfolio = pByI[h.instrument] || ""; });
       }
     }
     renderSePortfolioCards(openOnly);
