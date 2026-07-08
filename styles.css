@@ -3387,6 +3387,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   font-size: 0.5rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted);
 }
 .mfh-list-header .mfh-col-num { text-align: right; }
+.mfh-sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
+.mfh-sortable:hover { color: var(--text); }
 .mfh-list { display: flex; flex-direction: column; }
 .mfh-row {
   display: grid; grid-template-columns: minmax(180px, 2.2fr) 0.9fr 0.9fr 0.85fr 1fr 0.85fr; gap: 10px;

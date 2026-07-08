@@ -2182,6 +2182,22 @@
   }
 
   var FIH_STATE = { sort: "pnl-desc", portfolio: "all" };
+  function _fihSortCompare(a, b, key) {
+    var pnlA = a.current - a.invested, pnlB = b.current - b.invested;
+    var av, bv;
+    switch (key) {
+      case "instrument": av = String(a.instrument || "").toLowerCase(); bv = String(b.instrument || "").toLowerCase(); return av < bv ? -1 : av > bv ? 1 : 0;
+      case "sub": av = String(a.subCategory || "").toLowerCase(); bv = String(b.subCategory || "").toLowerCase(); return av < bv ? -1 : av > bv ? 1 : 0;
+      case "invested": return (a.invested || 0) - (b.invested || 0);
+      case "current": return (a.current || 0) - (b.current || 0);
+      case "pnl": return pnlA - pnlB;
+      case "pct":
+        var pctA = a.invested > 0 ? pnlA / a.invested : 0;
+        var pctB = b.invested > 0 ? pnlB / b.invested : 0;
+        return pctA - pctB;
+    }
+    return 0;
+  }
   function renderFiHoldingsCardList(holdings) {
     var list = document.getElementById("fih-list");
     var eyebrow = document.getElementById("fih-eyebrow");
@@ -2191,21 +2207,24 @@
       if (_fiIsGold(h.subCategory)) return false; // gold shown in commodity card
       return true;
     });
-    filtered.sort(function (a, b) {
-      var pnlA = a.current - a.invested;
-      var pnlB = b.current - b.invested;
-      return FIH_STATE.sort === "pnl-asc" ? pnlA - pnlB : pnlB - pnlA;
-    });
+    var fparts = String(FIH_STATE.sort || "pnl-desc").split("-");
+    var fSortKey = fparts[0];
+    var fSortDir = fparts[1] === "asc" ? 1 : -1;
+    filtered.sort(function (a, b) { return fSortDir * _fihSortCompare(a, b, fSortKey); });
     if (eyebrow) eyebrow.textContent = "FIXED INCOME · " + filtered.length + " HOLDINGS";
     if (!filtered.length) {
       list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No fixed income holdings.</p>';
       return;
     }
     var subtotalInv = 0, subtotalCur = 0;
+    function _fArrow(k) { return fSortKey === k ? (fSortDir === -1 ? " ↓" : " ↑") : ""; }
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
-      '<span>Instrument</span><span>Sub-Cat</span>' +
-      '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span>' +
-      '<span class="mfh-col-num">Unrealized</span><span class="mfh-col-num">Return %</span></div>';
+      '<span class="mfh-sortable" data-fih-sort-col="instrument">Instrument' + _fArrow("instrument") + '</span>' +
+      '<span class="mfh-sortable" data-fih-sort-col="sub">Sub-Cat' + _fArrow("sub") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-fih-sort-col="invested">Invested' + _fArrow("invested") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-fih-sort-col="current">Current' + _fArrow("current") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-fih-sort-col="pnl">Unrealized' + _fArrow("pnl") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-fih-sort-col="pct">Return %' + _fArrow("pct") + '</span></div>';
     var FI_AVATAR_PALETTE = [
       { bg: "#D1FAE5", fg: "#065F46", accent: "green" },
       { bg: "#EDE9FE", fg: "#5B21B6", accent: "purple" },
@@ -2244,6 +2263,14 @@
       '<div class="mfh-col-num" style="color:' + (subPct > 0 ? "var(--emerald)" : subPct < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subPct > 0 ? "+" : "") + subPct.toFixed(2) + '%</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
+    list.querySelectorAll("[data-fih-sort-col]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var col = el.dataset.fihSortCol;
+        var cur = String(FIH_STATE.sort || "").split("-");
+        FIH_STATE.sort = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
+        renderFiHoldingsCardList(holdings);
+      });
+    });
 
     // Wire portfolio pill toggle
     var pf = document.getElementById("fih-portfolio-toggle");
@@ -8018,6 +8045,18 @@
   }
 
   // Phase 3: card list rendering
+  function _mfhSortCompare(a, b, key) {
+    var av, bv;
+    switch (key) {
+      case "instrument": av = String(a.instrument || "").toLowerCase(); bv = String(b.instrument || "").toLowerCase(); return av < bv ? -1 : av > bv ? 1 : 0;
+      case "invested": return (a.invested || 0) - (b.invested || 0);
+      case "current": return (a.current || 0) - (b.current || 0);
+      case "day": return ((a.dayChgPct || 0) * (a.current || 0) - (b.dayChgPct || 0) * (b.current || 0)) / 100;
+      case "pnl": return (a.pnl || 0) - (b.pnl || 0);
+      case "xirr": return (a.xirrPct == null ? -Infinity : a.xirrPct) - (b.xirrPct == null ? -Infinity : b.xirrPct);
+    }
+    return 0;
+  }
   function renderMfHoldingsCardList(rowsData) {
     var list = document.getElementById("mfh-list");
     var eyebrow = document.getElementById("mfh-eyebrow");
@@ -8026,20 +8065,25 @@
       var closed = r.units < 1;
       return MFH_STATE.showClosed ? closed : !closed;
     });
-    var sortKey = MFH_STATE.sort;
-    filtered.sort(function (a, b) {
-      if (sortKey === "pnl-desc") return (b.pnl || 0) - (a.pnl || 0);
-      if (sortKey === "pnl-asc") return (a.pnl || 0) - (b.pnl || 0);
-      if (sortKey === "current-desc") return (b.current || 0) - (a.current || 0);
-      return 0;
-    });
+    var parts = String(MFH_STATE.sort || "pnl-desc").split("-");
+    var sortKey = parts[0];
+    var sortDir = parts[1] === "asc" ? 1 : -1;
+    filtered.sort(function (a, b) { return sortDir * _mfhSortCompare(a, b, sortKey); });
     var segmentMap = buildInstrumentSegmentMap();
     if (eyebrow) eyebrow.textContent = "HOLDINGS · " + filtered.length + (MFH_STATE.showClosed ? " CLOSED" : " OPEN");
     if (!filtered.length) {
       list.innerHTML = '<p class="muted small" style="padding:20px;text-align:center;">No holdings to show.</p>';
       return;
     }
-    var header = '<div class="mfh-list-header"><span>Instrument</span><span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">P&amp;L · Return</span><span class="mfh-col-num">XIRR</span></div>';
+    function _arrow(k) { return sortKey === k ? (sortDir === -1 ? " ↓" : " ↑") : ""; }
+    var header = '<div class="mfh-list-header">' +
+      '<span class="mfh-sortable" data-mfh-sort-col="instrument">Instrument' + _arrow("instrument") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="invested">Invested' + _arrow("invested") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="current">Current' + _arrow("current") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="day">Day Chg' + _arrow("day") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="pnl">P&amp;L · Return' + _arrow("pnl") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="xirr">XIRR' + _arrow("xirr") + '</span>' +
+      '</div>';
     var body = filtered.map(function (r, i) {
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
@@ -8073,6 +8117,14 @@
       '</div>';
     }).join("");
     list.innerHTML = header + body;
+    list.querySelectorAll("[data-mfh-sort-col]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var col = el.dataset.mfhSortCol;
+        var cur = String(MFH_STATE.sort || "").split("-");
+        MFH_STATE.sort = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
+        renderMfHoldingsCardList(rowsData);
+      });
+    });
   }
 
   // Phase 1: portfolio cards (per-portfolio MF invested/current/xirr)
