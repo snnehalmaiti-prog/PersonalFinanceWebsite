@@ -749,10 +749,7 @@
               <button type="button" id="rec-filter-reset" class="rec-filter-clear-btn">Clear</button>
             </div>
 
-            <div class="rec-filter-search-wrap">
-              <svg class="rec-filter-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input type="search" id="rec-filter-search" class="rec-filter-search-input" placeholder="Search notes, categories..." />
-            </div>
+            <input type="search" id="rec-filter-search" hidden />
 
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="rec-filter-account">ACCOUNT</label>
@@ -775,10 +772,7 @@
               <label class="rec-filter-label" for="rec-filter-payment">PAYMENT TYPE</label>
               <select id="rec-filter-payment" class="rec-filter-select"><option value="">All payments</option></select>
             </div>
-            <div class="rec-filter-section">
-              <label class="rec-filter-label" for="rec-filter-person">PERSON</label>
-              <select id="rec-filter-person" class="rec-filter-select"><option value="">Everyone</option></select>
-            </div>
+            <select id="rec-filter-person" hidden><option value="">Everyone</option></select>
 
             <div id="rec-filter-chips" class="rec-filter-chips"></div>
 
@@ -934,10 +928,7 @@
               <button type="button" id="ana-filter-reset" class="rec-filter-clear-btn">Clear</button>
             </div>
 
-            <div class="rec-filter-search-wrap">
-              <svg class="rec-filter-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input type="search" id="ana-filter-search" class="rec-filter-search-input" placeholder="Search notes, categories..." />
-            </div>
+            <input type="search" id="ana-filter-search" hidden />
 
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="ana-filter-account">ACCOUNT</label>
@@ -960,10 +951,7 @@
               <label class="rec-filter-label" for="ana-filter-payment">PAYMENT TYPE</label>
               <select id="ana-filter-payment" class="rec-filter-select"><option value="">All payments</option></select>
             </div>
-            <div class="rec-filter-section">
-              <label class="rec-filter-label" for="ana-filter-person">PERSON</label>
-              <select id="ana-filter-person" class="rec-filter-select"><option value="">Everyone</option></select>
-            </div>
+            <select id="ana-filter-person" hidden><option value="">Everyone</option></select>
 
             <div class="rec-filter-section">
               <label class="rec-filter-label">AMOUNT RANGE</label>
