@@ -3798,7 +3798,7 @@
     // Portfolio Cards / Geography / Market-cap panels ALWAYS reflect the
     // OPEN positions regardless of the Open/Closed toggle. Holdings lists
     // filter independently per region below.
-    var openOnly = rowsData.filter(function (r) { return !((r.units || 0) < 1 || r.isClosed); });
+    var openOnly = rowsData.filter(function (r) { return !((r.units || 0) < UNITS_EPSILON || r.isClosed); });
     // Enrich each holding with its portfolio ONLY if it wasn't already tagged
     // upstream (e.g. by _buildPerPortfolioSeRowsData). This preserves proper
     // per-(portfolio × instrument) attribution.
@@ -4085,7 +4085,7 @@
       var isUS = h.region === "US";
       if (region === "us" && !isUS) return false;
       if (region === "india" && isUS) return false;
-      var isClosed = (h.units || 0) < 1 || h.isClosed;
+      var isClosed = (h.units || 0) < UNITS_EPSILON || h.isClosed;
       if (regionShowClosed ? !isClosed : isClosed) return false;
       if (regionPortfolio && regionPortfolio !== "all") {
         if (normalizeText(h._portfolio || "") !== normalizeText(regionPortfolio)) return false;
