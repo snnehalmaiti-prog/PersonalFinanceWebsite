@@ -7635,8 +7635,43 @@
       .sort(function (a, b) { return b.total - a.total; });
     ranked.forEach(function (p, i) { portfolioColor[p.name] = PORTF_PALETTE[i % PORTF_PALETTE.length]; });
 
+    // Compute invested amount contributed by commodity-category instruments in
+    // the MF + Stocks/ETF sheets (based on their mapping's Instrument Category).
+    var _mfCatMapForSplit = buildMfCategoryMap();
+    var _seMappingForSplit = buildStockMappingTable();
+    function commodityInvestedFromEquitySources(portfolioName) {
+      var total = 0;
+      ["equity", "stocksetf"].forEach(function (prefix) {
+        var rowsX = getSheetRows(prefix);
+        if (!rowsX || !rowsX.length) return;
+        var txByI = groupUnitTransactionsByInstrument(rowsX, portfolioName);
+        if (!txByI) return;
+        Object.keys(txByI).forEach(function (name) {
+          var isCommodity;
+          if (prefix === "equity") {
+            isCommodity = _mfCatMapForSplit[normalizeText(name)] === "commodity";
+          } else {
+            var m = _seMappingForSplit[normalizeText(name)];
+            isCommodity = m && m.category && normalizeText(m.category) === "commodity";
+          }
+          if (!isCommodity) return;
+          var remaining = fifoRemainingLots(txByI[name]);
+          remaining.forEach(function (l) { total += l.units * l.price; });
+        });
+      });
+      return total;
+    }
+
     portfolioNames.forEach(function (n) {
       var eq = computeTotalInvestment(n, ["equity", "stocksetf"]);
+      var commFromEquity = commodityInvestedFromEquitySources(n);
+      // Reclassify commodity-category MF/ETF from Equity into Commodity
+      eq -= commFromEquity;
+      if (commFromEquity > UNITS_EPSILON) {
+        perCat["Commodity"][n] = (perCat["Commodity"][n] || 0) + commFromEquity;
+        investedByCat["Commodity"] += commFromEquity;
+        investedByCat["Equity"] -= commFromEquity;
+      }
       if (eq > UNITS_EPSILON) perCat["Equity"][n] = eq;
       if (!fiExcluded) {
         var fi = computeTotalInvestment(n, ["fixedincome", "fd"]);
