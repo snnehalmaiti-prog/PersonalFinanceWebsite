@@ -565,7 +565,13 @@
       <!-- Allocation + Interest split -->
       <div class="mfmid-row">
         <div class="mfmid-card" id="fialloc-card">
-          <div class="mfmid-eyebrow">ALLOCATION &middot; FIXED INCOME</div>
+          <div class="mfmid-eyebrow-row">
+            <div class="mfmid-eyebrow">ALLOCATION &middot; FIXED INCOME</div>
+            <div class="isc-toggle" role="group" aria-label="FI allocation split mode">
+              <button type="button" class="isc-toggle-btn active" data-fialloc-mode="sub">Sub-Category</button>
+              <button type="button" class="isc-toggle-btn" data-fialloc-mode="portfolio">Portfolio</button>
+            </div>
+          </div>
           <div class="mfalloc-list" id="fialloc-list"></div>
         </div>
         <div class="mfmid-card" id="fisplit-card">
@@ -2865,7 +2871,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat112"></script>
+  <script src="script.js?v=micat113"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

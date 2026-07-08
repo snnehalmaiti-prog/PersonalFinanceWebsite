@@ -2125,9 +2125,60 @@
     }).join("");
   }
 
+  var FIALLOC_MODE = { mode: "sub" };
   function renderFiAllocation(holdings) {
     var listEl = document.getElementById("fialloc-list");
     if (!listEl) return;
+    var PAL = ["#10B981", "#E8623A", "#8B5CF6", "#3B82F6", "#D4A017", "#64748B", "#06B6D4", "#EC4899"];
+    var PORT_PAL = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
+
+    if (FIALLOC_MODE.mode === "portfolio") {
+      // Aggregate by portfolio; each portfolio row breaks down into sub-cat chips.
+      var byPort = {}; // { p: { total, bySub: {sub: value} } }
+      holdings.forEach(function (h) {
+        var p = (h.portfolio || "Unassigned").trim() || "Unassigned";
+        var s = h.subCategory || "Unclassified";
+        if (!byPort[p]) byPort[p] = { total: 0, bySub: {} };
+        byPort[p].total += h.current || 0;
+        byPort[p].bySub[s] = (byPort[p].bySub[s] || 0) + (h.current || 0);
+      });
+      var portEntries = Object.keys(byPort).map(function (k) { return { name: k, total: byPort[k].total, bySub: byPort[k].bySub }; })
+        .filter(function (e) { return e.total > 0.01; })
+        .sort(function (a, b) { return b.total - a.total; });
+      var grand = portEntries.reduce(function (s, e) { return s + e.total; }, 0);
+      if (!portEntries.length || grand <= 0) { listEl.innerHTML = '<p class="muted small">No portfolio allocation data.</p>'; return; }
+      var allSubs = {};
+      portEntries.forEach(function (e) { Object.keys(e.bySub).forEach(function (k) { allSubs[k] = true; }); });
+      var subList = Object.keys(allSubs);
+      var subColor = {};
+      subList.forEach(function (s, i) { subColor[s] = PAL[i % PAL.length]; });
+      var portBar = '<div class="mfalloc-single-bar">' + portEntries.map(function (e, i) {
+        var pct = (e.total / grand) * 100;
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + e.name + '"></span>';
+      }).join("") + '</div>';
+      var portRows = portEntries.map(function (e, i) {
+        var pct = (e.total / grand) * 100;
+        var col = PORT_PAL[i % PORT_PAL.length];
+        var subs = Object.keys(e.bySub).sort(function (a, b) { return e.bySub[b] - e.bySub[a]; });
+        var chips = subs.filter(function (s) { return e.bySub[s] > 0.01; }).map(function (s) {
+          var sp = (e.bySub[s] / e.total) * 100;
+          return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + subColor[s] + '"></span>' + s + ' ' + Math.round(sp) + '%</span>';
+        }).join("");
+        return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
+          '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
+            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+            '<span class="mfalloc-nums">' +
+              '<span class="mfalloc-amount">' + formatCurrency(e.total) + '</span>' +
+              '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
+            '</span>' +
+          '</div>' +
+          (chips ? '<div class="isc-cat-sub">' + chips + '</div>' : '') +
+        '</div>';
+      }).join("");
+      listEl.innerHTML = portBar + '<div class="mfalloc-rows">' + portRows + '</div>';
+      return;
+    }
+
     var bySub = {};
     var countSub = {};
     holdings.forEach(function (h) {
@@ -2139,7 +2190,6 @@
       .sort(function (a, b) { return b.value - a.value; });
     var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
     if (!entries.length) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
-    var PAL = ["#10B981", "#E8623A", "#8B5CF6", "#3B82F6", "#D4A017", "#64748B", "#06B6D4", "#EC4899"];
     var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
       return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
@@ -2157,6 +2207,18 @@
     }).join("");
     listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
   }
+
+  // Wire the FI allocation Sub-Category ⇄ Portfolio toggle.
+  (function wireFiAllocToggle() {
+    var buttons = document.querySelectorAll("[data-fialloc-mode]");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        FIALLOC_MODE.mode = btn.dataset.fiallocMode;
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        renderAllFixedIncomeHoldingsTable();
+      });
+    });
+  })();
 
   function renderFiInterestSplit(holdings) {
     var bar = document.getElementById("fisplit-bar");
