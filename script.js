@@ -3719,13 +3719,9 @@
         var usdRateHist = (spd && spd.usd_inr_history) || {};
         var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
         var out = [];
-        console.log("Stocksetf commodity: total holdings", holdings.length,
-          "| sample mapping keys", Object.keys(mapping).slice(0, 5),
-          "| categories", holdings.map(function (h) { var m = mapping[normalizeText(h.instrument)]; return h.instrument + "=" + (m && m.category); }));
         holdings.forEach(function (h) {
           var m = mapping[normalizeText(h.instrument)];
-          var cat = normalizeText((m && m.category) || "");
-          if (!m || (cat !== "commodity" && cat.indexOf("commodity") === -1)) return;
+          if (!m || normalizeText(m.category) !== "commodity") return;
           var invested = 0;
           h.lots.forEach(function (lot) {
             if (h.region === "US") {
@@ -9269,8 +9265,7 @@
               dayChg = (ltpINR - prevINR) * h.units;
             }
             var m = seMappingTable[normalizeText(h.instrument)];
-            var mCat = normalizeText((m && m.category) || "");
-            var isComm = !!m && (mCat === "commodity" || mCat.indexOf("commodity") !== -1);
+            var isComm = m && normalizeText(m.category) === "commodity";
             if (isComm) {
               commCurrentINR += cur;
               commInvestedINR += h.investedINR;
