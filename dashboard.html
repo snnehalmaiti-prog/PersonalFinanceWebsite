@@ -997,46 +997,58 @@
     </section><!-- /panel-expense -->
 
     <script>
-      // Make <select multiple> filter lists behave like plain toggle-checkboxes:
-      // any click toggles that option in/out of the selection, no Ctrl/Cmd needed.
+      // Replace each multi-select filter with a scrollable checkbox list.
+      // The underlying <select multiple> stays in the DOM (hidden) and is
+      // kept in sync so all existing filter-reading logic keeps working.
       (function () {
         function wireToggleMulti() {
           document.querySelectorAll("select[multiple].rec-filter-select").forEach(function (sel) {
-            if (sel.dataset.togglemultiWired === "1") return;
-            sel.dataset.togglemultiWired = "1";
-            sel.addEventListener("mousedown", function (e) {
-              var opt = e.target && e.target.tagName === "OPTION" ? e.target : null;
-              if (!opt) return;
-              e.preventDefault();
-              opt.selected = !opt.selected;
-              sel.focus();
-              sel.dispatchEvent(new Event("change", { bubbles: true }));
+            // (Re)build the checkbox UI every call so option changes propagate.
+            var wrap = sel.__wfCheckWrap;
+            if (!wrap) {
+              wrap = document.createElement("div");
+              wrap.className = "rec-filter-checklist";
+              sel.style.display = "none";
+              sel.parentNode.insertBefore(wrap, sel);
+              sel.__wfCheckWrap = wrap;
+            }
+            var opts = Array.prototype.slice.call(sel.options);
+            wrap.innerHTML = opts.map(function (o) {
+              var checked = o.selected ? " checked" : "";
+              return '<label class="rec-filter-check"><input type="checkbox" data-val="' + o.value.replace(/"/g, "&quot;") + '"' + checked + ' /><span>' + o.textContent + '</span></label>';
+            }).join("");
+            wrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+              cb.addEventListener("change", function () {
+                var opt = Array.prototype.find.call(sel.options, function (o) { return o.value === cb.dataset.val; });
+                if (opt) opt.selected = cb.checked;
+                sel.dispatchEvent(new Event("change", { bubbles: true }));
+              });
             });
           });
         }
-        // Wire on page ready and after any DOM updates (fillRecFilterDropdowns rewrites innerHTML).
         document.addEventListener("DOMContentLoaded", wireToggleMulti);
-        // Re-wire periodically in case dropdowns get repopulated.
         window.__wfWireToggleMulti = wireToggleMulti;
       })();
     </script>
 
     <style>
-      /* Multi-select filter dropdowns: compact scrollable list */
-      .rec-filter-select[multiple] {
-        padding: 4px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--surface);
-        font-size: 0.82rem;
+      /* Checkbox-list filter (replaces native <select multiple>) */
+      .rec-filter-checklist {
+        max-height: 160px; overflow-y: auto;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: var(--surface); padding: 4px 2px;
       }
-      .rec-filter-select[multiple] option {
-        padding: 4px 8px; border-radius: 4px;
+      .rec-filter-check {
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 10px; border-radius: 6px; cursor: pointer;
+        font-size: 0.82rem; color: var(--text);
+        user-select: none;
       }
-      .rec-filter-select[multiple] option:checked {
-        background: var(--text) linear-gradient(0deg, var(--text), var(--text));
-        color: var(--bg);
+      .rec-filter-check:hover { background: var(--bg); }
+      .rec-filter-check input[type="checkbox"] {
+        width: 14px; height: 14px; accent-color: var(--text); margin: 0; flex-shrink: 0;
       }
+      .rec-filter-check span { line-height: 1.2; }
       .rec-filter-hint {
         font-size: 0.62rem; color: var(--muted); margin-top: 3px; font-style: italic;
       }
@@ -1904,10 +1916,13 @@
         if (resetBtn) resetBtn.addEventListener("click", function () {
           ["ana-filter-search","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment","ana-filter-person","ana-filter-min","ana-filter-max"].forEach(function (id) {
             var el = document.getElementById(id);
-            if (el) el.value = "";
+            if (!el) return;
+            if (el.multiple) { Array.prototype.forEach.call(el.options, function (o) { o.selected = false; }); }
+            else el.value = "";
           });
           var sortEl = document.getElementById("ana-filter-sort");
           if (sortEl) sortEl.value = "date-desc";
+          if (window.__wfWireToggleMulti) window.__wfWireToggleMulti();
           renderAnalyticsTable();
         });
       })();
@@ -2556,13 +2571,14 @@
       document.getElementById("rec-filter-reset").addEventListener("click", function () {
         document.getElementById("rec-filter-search").value = "";
         document.getElementById("rec-filter-sort").value = "date-desc";
-        document.getElementById("rec-filter-account").value = "";
-        document.getElementById("rec-filter-category").value = "";
-        document.getElementById("rec-filter-type").value = "";
-        document.getElementById("rec-filter-payment").value = "";
+        ["rec-filter-account","rec-filter-category","rec-filter-type","rec-filter-payment"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el && el.multiple) Array.prototype.forEach.call(el.options, function (o) { o.selected = false; });
+        });
         var p = document.getElementById("rec-filter-person"); if (p) p.value = "";
         var mn = document.getElementById("rec-filter-min"); if (mn) mn.value = "";
         var mx = document.getElementById("rec-filter-max"); if (mx) mx.value = "";
+        if (window.__wfWireToggleMulti) window.__wfWireToggleMulti();
         renderDashRecords();
       });
       document.getElementById("rec-period-prev").addEventListener("click", function (e) {
