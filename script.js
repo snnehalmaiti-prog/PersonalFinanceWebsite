@@ -2542,7 +2542,9 @@
 
   // Build holdings array for Stocks/ETF with FIFO lots and USD/INR conversion.
   // Returns a Promise resolving to array of { instrument, ticker, region, exchange, units, avgCostINR, investedINR, lots }
-  function buildStockHoldings(rows, mappingTable, portfolioFilter, showClosed) {
+  function buildStockHoldings(rows, mappingTable, portfolioFilter, showClosed, opts) {
+    opts = opts || {};
+    var mode = opts.categoryMode || "non-commodity"; // "non-commodity" | "commodity-only" | "all"
     var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, portfolioFilter);
     if (!transactionsByInstrument) return Promise.resolve([]);
 
@@ -2560,8 +2562,9 @@
 
       var mapping = mappingTable[normalizeText(instrument)];
       if (!mapping) return; // skip instruments not found in mapping sheet
-      // Commodity-category instruments show up under Commodity Holdings only.
-      if (mapping.category && normalizeText(mapping.category) === "commodity") return;
+      var isCommodity = mapping.category && normalizeText(mapping.category) === "commodity";
+      if (mode === "non-commodity" && isCommodity) return;
+      if (mode === "commodity-only" && !isCommodity) return;
       var ticker = mapping.ticker;
       var region = mapping.region;
       var exchange = mapping.exchange || null;
@@ -3546,6 +3549,143 @@
     return holdings;
   }
 
+  // Build commodity-category holdings from Stocks/ETF transactions, priced via
+  // stock_prices.json. Returns [{instrument, portfolio, units, invested, current,
+  // ltp, dayChg, pnl, pnlPct, sub}].
+  function buildCommodityEtfHoldings(portfolioFilter) {
+    var rows = getSheetRows("stocksetf");
+    if (!rows || !rows.length) return Promise.resolve([]);
+    var mappingTable = buildStockMappingTable();
+    if (!Object.keys(mappingTable).length) return Promise.resolve([]);
+    return Promise.all([
+      buildStockHoldings(rows, mappingTable, portfolioFilter, false, { categoryMode: "commodity-only" }),
+      fetchAllStockPrices().catch(function () { return { prices: {} }; })
+    ]).then(function (r) {
+      var holdings = r[0] || [];
+      var allPrices = (r[1] && r[1].prices) || {};
+      // Attach portfolio from mapping sheet row (first occurrence).
+      var pByI = {};
+      var hdr = rows[0].map(normalizeText);
+      var pI = hdr.indexOf("portfolio name");
+      var iI = hdr.indexOf("instrument name");
+      if (pI !== -1 && iI !== -1) {
+        rows.slice(1).forEach(function (row) {
+          var name = (row[iI] || "").trim();
+          if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
+        });
+      }
+      return holdings.map(function (h) {
+        var pe = allPrices[h.ticker] || null;
+        var ltp = pe ? pe.price : null;
+        var prev = pe ? pe.prev_close : null;
+        var current = (ltp !== null) ? h.units * ltp : null;
+        var pnl = (current !== null) ? current - h.investedINR : null;
+        var pnlPct = (pnl !== null && h.investedINR > 0) ? (pnl / h.investedINR) * 100 : null;
+        var dayChg = (ltp !== null && prev !== null) ? (ltp - prev) * h.units : null;
+        var mapping = mappingTable[normalizeText(h.instrument)] || {};
+        return {
+          instrument: h.instrument,
+          portfolio: pByI[h.instrument] || "",
+          units: h.units,
+          invested: h.investedINR,
+          current: current,
+          ltp: ltp,
+          dayChg: dayChg,
+          pnl: pnl,
+          pnlPct: pnlPct,
+          sub: mapping.subCat || "ETF",
+          source: "ETF"
+        };
+      }).filter(function (h) { return h.units > UNITS_EPSILON; });
+    });
+  }
+
+  // Build commodity-category MF holdings from Mutual Fund transactions, priced
+  // via AMFI NAV. Returns rows shaped like buildCommodityEtfHoldings output.
+  function buildCommodityMfHoldings(portfolioFilter) {
+    var rows = getSheetRows("equity");
+    if (!rows || !rows.length) return Promise.resolve([]);
+    var catMap = buildMfCategoryMap();
+    var txByI = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!txByI) return Promise.resolve([]);
+    var commodityInstruments = Object.keys(txByI).filter(function (name) {
+      return catMap[normalizeText(name)] === "commodity";
+    });
+    if (!commodityInstruments.length) return Promise.resolve([]);
+    var pByI = {};
+    var hdr = rows[0].map(normalizeText);
+    var pI = hdr.indexOf("portfolio name");
+    var iI = hdr.indexOf("instrument name");
+    if (pI !== -1 && iI !== -1) {
+      rows.slice(1).forEach(function (row) {
+        var name = (row[iI] || "").trim();
+        if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
+      });
+    }
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var holdings = commodityInstruments.map(function (name) {
+        var remainingLots = fifoRemainingLots(txByI[name]);
+        var units = 0, invested = 0;
+        remainingLots.forEach(function (l) { units += l.units; invested += l.units * l.price; });
+        return { instrument: name, units: units, invested: invested };
+      }).filter(function (h) { return h.units >= 1; });
+      if (!holdings.length) return [];
+      return Promise.all(holdings.map(function (h) {
+        var code = lookupSchemeCode(schemeMap, h.instrument);
+        return code ? fetchNavHistory(code).catch(function () { return []; }) : Promise.resolve([]);
+      })).then(function (navHistories) {
+        return holdings.map(function (h, i) {
+          var nh = navHistories[i] || [];
+          var latest = nh.length ? nh[nh.length - 1] : null;
+          var prev = nh.length > 1 ? nh[nh.length - 2] : null;
+          var ltp = latest ? latest.nav : null;
+          var current = ltp !== null ? h.units * ltp : null;
+          var pnl = current !== null ? current - h.invested : null;
+          var pnlPct = (pnl !== null && h.invested > 0) ? (pnl / h.invested) * 100 : null;
+          var dayChg = (latest && prev) ? (latest.nav - prev.nav) * h.units : null;
+          return {
+            instrument: h.instrument,
+            portfolio: pByI[h.instrument] || "",
+            units: h.units,
+            invested: h.invested,
+            current: current,
+            ltp: ltp,
+            dayChg: dayChg,
+            pnl: pnl,
+            pnlPct: pnlPct,
+            sub: "MF",
+            source: "MF"
+          };
+        });
+      });
+    });
+  }
+
+  function renderCommodityInstrumentCards(items) {
+    var list = document.getElementById("cmh-list");
+    if (!list || !items || !items.length) return;
+    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr; margin-top:12px;">' +
+      '<span>Instrument (ETF/MF)</span><span>Source</span><span class="mfh-col-num">LTP</span><span class="mfh-col-num">Units</span>' +
+      '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
+    var body = items.map(function (h) {
+      var pal = { bg: "#FEF3C7", fg: "#B45309" };
+      var pnlPct = h.pnlPct != null ? h.pnlPct : 0;
+      var dc = h.dayChg;
+      return '<div class="mfh-row mfh-color-amber" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
+        '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + _seShortCode(h.instrument) + '</div>' +
+          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + h.instrument + '</div><div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div></div></div>' +
+        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + h.source + '</span></div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + (h.ltp != null ? "₹" + Number(h.ltp).toLocaleString("en-IN", {maximumFractionDigits: 2}) : "—") + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + Number(h.units).toFixed(3) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + (h.current != null ? formatCurrency(h.current) : "—") + '</div>' +
+        '<div class="mfh-col-num mfh-num-day ' + (dc == null || Math.abs(dc) < 0.01 ? "mfh-muted" : (dc >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (dc == null ? "—" : ((dc >= 0 ? "+" : "") + formatCurrency(dc))) + '</div>' +
+        '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : pnlPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
+      '</div>';
+    }).join("");
+    list.insertAdjacentHTML("beforeend", header + body);
+  }
+
   function renderCommodityHoldingsTable() {
     var statusEl = document.getElementById("commodity-holdings-status");
     var tableWrap = document.getElementById("commodity-holdings-table-wrap");
@@ -3587,7 +3727,22 @@
       // Only show active (unsold) holdings in the table
       var holdings = allHoldings.filter(function (h) { return !h.isSold; });
       if (!holdings.length) {
-        statusEl.textContent = "No Physical Commodity holdings found.";
+        // Physical is empty — clear the card list so ETF/MF commodity cards
+        // can still render below via the extras call.
+        var _cmList = document.getElementById("cmh-list");
+        if (_cmList) _cmList.innerHTML = "";
+        Promise.all([
+          buildCommodityEtfHoldings(selectedPortfolio).catch(function () { return []; }),
+          buildCommodityMfHoldings(selectedPortfolio).catch(function () { return []; })
+        ]).then(function (arr) {
+          var extras = (arr[0] || []).concat(arr[1] || []);
+          if (extras.length) {
+            try { renderCommodityInstrumentCards(extras); } catch (e) {}
+            statusEl.textContent = "";
+          } else {
+            statusEl.textContent = "No commodity holdings found.";
+          }
+        });
         tableWrap.hidden = true;
         return;
       }
@@ -3660,6 +3815,19 @@
       statusEl.textContent = "";
       tableWrap.hidden = true;
       try { renderCmHoldingsCardList(holdings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
+      // Append ETF/MF commodity holdings under the physical rows
+      Promise.all([
+        buildCommodityEtfHoldings(selectedPortfolio).catch(function () { return []; }),
+        buildCommodityMfHoldings(selectedPortfolio).catch(function () { return []; })
+      ]).then(function (arr) {
+        var extras = (arr[0] || []).concat(arr[1] || []);
+        if (extras.length) {
+          try { renderCommodityInstrumentCards(extras); } catch (e) {}
+          if (statusEl) statusEl.textContent = "";
+        } else if (!holdings.length) {
+          if (statusEl) statusEl.textContent = "No commodity holdings found.";
+        }
+      });
     });
   }
 
