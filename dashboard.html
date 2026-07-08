@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign21" />
+<link rel="stylesheet" href="styles.css?v=recdesign22" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -376,110 +376,84 @@
           </button>
         </div>
       </div>
-      <p class="muted">A breakdown of your mutual fund holdings.</p>
       <p class="muted small nav-asof" id="equity-nav-asof" hidden>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
         <span id="equity-nav-asof-text">—</span>
       </p>
 
-      <div class="cat-overview-card" style="margin-bottom:16px;">
-        <div class="cat-stats-row">
-          <div class="cat-stat">
-            <span class="cat-stat-label">Invested</span>
-            <span class="cat-stat-value" id="equity-total-investment">—</span>
+      <!-- Phase 1: Per-portfolio cards row -->
+      <div class="mfpc-row" id="mfpc-row"></div>
+
+      <!-- Phase 2: Performance + Allocation -->
+      <div class="mfmid-row">
+        <div class="mfmid-card mfperf-card" id="mfperf-card">
+          <div class="mfmid-eyebrow">PERFORMANCE &middot; SINCE INCEPTION</div>
+          <div class="mfperf-headline-row">
+            <h3 class="mfmid-title">Portfolio vs Nifty 50 TRI</h3>
+            <div class="mfperf-range" id="mfperf-range" role="group" aria-label="Range">
+              <button type="button" class="mfperf-pill" data-mfperf-range="1M">1M</button>
+              <button type="button" class="mfperf-pill" data-mfperf-range="6M">6M</button>
+              <button type="button" class="mfperf-pill" data-mfperf-range="1Y">1Y</button>
+              <button type="button" class="mfperf-pill" data-mfperf-range="3Y">3Y</button>
+              <button type="button" class="mfperf-pill active" data-mfperf-range="All">All</button>
+            </div>
           </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Current</span>
-            <span class="cat-stat-value" id="equity-total-current-value">—</span>
+          <div class="mfperf-alpha-row">
+            <span class="mfperf-alpha-label">Alpha p.a.</span>
+            <span class="mfperf-alpha-value" id="mfperf-alpha">—</span>
           </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Day Change</span>
-            <span class="cat-stat-value" id="equity-day-change">—</span>
+          <div class="mfperf-chart-wrap">
+            <canvas id="mfperf-chart" height="260"></canvas>
           </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Unrealized P&amp;L</span>
-            <span class="cat-stat-value" id="equity-unrealized-return">—</span>
+          <div class="mfperf-legend">
+            <span class="mfperf-legend-item"><span class="mfperf-legend-line mfperf-legend-port"></span> Portfolio <span class="mfperf-legend-sep">·</span> <span id="mfperf-port-return" class="mfperf-legend-value mfperf-legend-value-port">—</span></span>
+            <span class="mfperf-legend-item"><span class="mfperf-legend-line mfperf-legend-idx"></span> Nifty 50 <span class="mfperf-legend-sep">·</span> <span id="mfperf-idx-return" class="mfperf-legend-value mfperf-legend-value-idx">—</span></span>
           </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Return %</span>
-            <span class="cat-stat-value" id="equity-return-pct">—</span>
+        </div>
+
+        <div class="mfmid-card mfalloc-card" id="mfalloc-card">
+          <div class="mfmid-eyebrow-row">
+            <div class="mfmid-eyebrow">ALLOCATION &middot; <span id="mfalloc-mode-label">SEGMENT</span></div>
+            <button type="button" class="mfalloc-toggle" id="mfalloc-toggle">Segment</button>
           </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Realized P&amp;L</span>
-            <span class="cat-stat-value" id="equity-realized-return">—</span>
-          </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">XIRR</span>
-            <span class="cat-stat-value" id="equity-xirr">—</span>
-          </div>
+          <h3 class="mfmid-title">Where the corpus sits</h3>
+          <div class="mfalloc-list" id="mfalloc-list"></div>
         </div>
       </div>
 
-      <p class="muted small" style="margin-top:24px;">Connect your mutual fund transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
-
-      <div class="holdings-card">
-        <div class="holdings-card-header">
-          <h3>Holdings</h3>
-          <div class="holdings-toggle-group">
-            <label class="holdings-toggle">
-              <input type="checkbox" id="equity-holdings-show-closed-only" />
-              View Closed Position
-            </label>
+      <!-- Phase 3: Holdings card list -->
+      <div class="mfh-card" id="mfh-card">
+        <div class="mfh-header">
+          <div class="mfh-header-left">
+            <span class="mfh-eyebrow" id="mfh-eyebrow">HOLDINGS &middot; — OPEN</span>
+            <h3 class="mfh-title">Mutual fund positions</h3>
+          </div>
+          <div class="mfh-header-right">
+            <button type="button" class="mfh-btn" id="mfh-open-toggle" data-mfh-state="open">Open</button>
+            <button type="button" class="mfh-btn" id="mfh-sort-toggle" data-mfh-sort="pnl-desc">Sort P&amp;L &darr;</button>
           </div>
         </div>
         <p class="muted small" id="equity-holdings-status">Loading holdings…</p>
-        <div id="equity-holdings-table-wrap" class="holdings-table-wrap" hidden>
-          <table id="equity-holdings-table" class="holdings-table">
-            <colgroup>
-              <col id="equity-holdings-instrument-col" style="width: 280px;" />
-              <col span="9" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th data-sort="instrument" class="fund-name-col">Instrument<span class="col-resizer" id="equity-holdings-instrument-resizer"></span></th>
-                <th class="num col-desktop-only" data-sort="units">Qty.</th>
-                <th class="num col-desktop-only" data-sort="avgNav">Avg. cost</th>
-                <th class="num col-desktop-only" data-sort="currNav">LTP</th>
-                <th class="num col-desktop-only" data-sort="invested">Invested</th>
-                <th class="num" data-sort="current">Cur. val</th>
-                <th class="num" data-sort="pnl">P&amp;L</th>
-                <th class="num col-desktop-only" data-sort="pnlPct">Net chg.</th>
-                <th class="num col-desktop-only" data-sort="dayChgPct">Day chg.</th>
-                <th class="num" data-sort="xirrPct">XIRR</th>
-              </tr>
-            </thead>
-            <tbody id="equity-holdings-tbody"></tbody>
-          </table>
+        <div class="mfh-list" id="mfh-list"></div>
+        <!-- Legacy table kept hidden for backward-compat JS wiring -->
+        <div id="equity-holdings-table-wrap" hidden>
+          <table id="equity-holdings-table"><colgroup><col id="equity-holdings-instrument-col" /></colgroup><thead><tr><th data-sort="instrument" class="fund-name-col">Instrument<span class="col-resizer" id="equity-holdings-instrument-resizer"></span></th></tr></thead><tbody id="equity-holdings-tbody"></tbody></table>
         </div>
+        <label class="holdings-toggle" style="display:none;"><input type="checkbox" id="equity-holdings-show-closed-only" /></label>
       </div>
 
-      <div class="charts-row">
-        <div class="value-chart-card">
-          <div class="value-chart-header">
-            <h3>Split by Market Segment</h3>
-          </div>
-          <p class="muted small" id="market-segment-status">Loading market segment split…</p>
-          <div class="pie-chart-resize" id="market-segment-resize">
-            <canvas id="market-segment-chart"></canvas>
-          </div>
-        </div>
-
-        <div class="value-chart-card">
-          <div class="value-chart-header">
-            <h3>Split by Portfolio</h3>
-          </div>
-          <p class="muted small" id="mf-portfolio-split-status">Loading portfolio split…</p>
-          <div class="pie-chart-resize" id="mf-portfolio-split-resize">
-            <canvas id="mf-portfolio-split-chart"></canvas>
-          </div>
-        </div>
-      </div>
+      <!-- Legacy hidden fields — kept so existing code paths still work -->
+      <span id="equity-total-investment" hidden></span>
+      <span id="equity-total-current-value" hidden></span>
+      <span id="equity-day-change" hidden></span>
+      <span id="equity-unrealized-return" hidden></span>
+      <span id="equity-return-pct" hidden></span>
+      <span id="equity-realized-return" hidden></span>
+      <span id="equity-xirr" hidden></span>
+      <p id="market-segment-status" hidden></p>
+      <div id="market-segment-resize" hidden><canvas id="market-segment-chart"></canvas></div>
+      <p id="mf-portfolio-split-status" hidden></p>
+      <div id="mf-portfolio-split-resize" hidden><canvas id="mf-portfolio-split-chart"></canvas></div>
 
       </section>
       </div>
@@ -2930,7 +2904,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat64"></script>
+  <script src="script.js?v=micat65"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

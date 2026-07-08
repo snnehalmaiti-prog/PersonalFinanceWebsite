@@ -7574,8 +7574,12 @@
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
           attachInstrumentColumnResizer();
+          try { renderMfHoldingsCardList(rowsData); } catch (e) {}
+          try { renderMfPortfolioCards(); } catch (e) {}
+          try { renderMfAllocation(rowsData); } catch (e) {}
+          try { renderMfPerformanceChart(); } catch (e) {}
 
-          statusEl.textContent = resolvable.length + " holding(s) with unsold units" + (skipped ? " (" + skipped + " unmapped holding(s) skipped)" : "") + ".";
+          statusEl.textContent = "";
           tableWrap.hidden = false;
           updateNavAsOf(navHistories);
         });
@@ -7587,6 +7591,343 @@
   }
 
   renderEquityHoldingsTable();
+
+  // ── MF tab redesign — helpers ────────────────────────────────────────────
+  var MFH_STATE = { showClosed: false, sort: "pnl-desc" };
+  var MFALLOC_STATE = { mode: "Segment" };
+  var MFPERF_STATE = { range: "All" };
+
+  function _initials(name) {
+    var parts = String(name || "").trim().split(/\s+/);
+    var out = parts[0] ? parts[0].charAt(0).toUpperCase() : "?";
+    if (parts.length > 1) out += parts[parts.length - 1].charAt(0).toUpperCase();
+    return out;
+  }
+  function _shortCode(name) {
+    if (!name) return "MF";
+    var words = String(name).replace(/[^\w\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 3) return (words[0].charAt(0) + words[1].charAt(0) + words[2].charAt(0)).toUpperCase();
+    if (words.length === 2) return (words[0].substring(0, 2) + words[1].charAt(0)).toUpperCase();
+    return words[0].substring(0, 3).toUpperCase();
+  }
+  var MFH_AVATAR_PALETTE = [
+    { bg: "#D1FAE5", fg: "#065F46", accent: "green" },
+    { bg: "#FEF3C7", fg: "#B45309", accent: "amber" },
+    { bg: "#DBEAFE", fg: "#1E40AF", accent: "blue" },
+    { bg: "#FED7AA", fg: "#B45309", accent: "amber" },
+    { bg: "#EDE9FE", fg: "#5B21B6", accent: "purple" },
+    { bg: "#CFFAFE", fg: "#0E7490", accent: "teal" },
+    { bg: "#FCE7F3", fg: "#9D174D", accent: "red" }
+  ];
+  function _avatarFor(name, idx) { return MFH_AVATAR_PALETTE[idx % MFH_AVATAR_PALETTE.length]; }
+
+  function _isSipInstrument(instrument) {
+    // Heuristic: an instrument is treated as SIP if the equity sheet has ≥3
+    // buy transactions for it — matches how most SIPs show up in the data.
+    var rows = getSheetRows("equity");
+    if (!rows) return false;
+    var byInst = groupUnitTransactionsByInstrument(rows, "all");
+    if (!byInst) return false;
+    var txns = byInst[instrument] || [];
+    var buys = 0;
+    txns.forEach(function (t) { if (t.type === "buy" && !t.isCorporateAction) buys++; });
+    return buys >= 3;
+  }
+
+  // Phase 3: card list rendering
+  function renderMfHoldingsCardList(rowsData) {
+    var list = document.getElementById("mfh-list");
+    var eyebrow = document.getElementById("mfh-eyebrow");
+    if (!list) return;
+    var filtered = rowsData.filter(function (r) {
+      var closed = r.units < 1;
+      return MFH_STATE.showClosed ? closed : !closed;
+    });
+    var sortKey = MFH_STATE.sort;
+    filtered.sort(function (a, b) {
+      if (sortKey === "pnl-desc") return (b.pnl || 0) - (a.pnl || 0);
+      if (sortKey === "pnl-asc") return (a.pnl || 0) - (b.pnl || 0);
+      if (sortKey === "current-desc") return (b.current || 0) - (a.current || 0);
+      return 0;
+    });
+    var segmentMap = buildInstrumentSegmentMap();
+    if (eyebrow) eyebrow.textContent = "HOLDINGS · " + filtered.length + (MFH_STATE.showClosed ? " CLOSED" : " OPEN");
+    if (!filtered.length) {
+      list.innerHTML = '<p class="muted small" style="padding:20px;text-align:center;">No holdings to show.</p>';
+      return;
+    }
+    var header = '<div class="mfh-list-header"><span>Instrument</span><span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">P&amp;L · Return</span><span class="mfh-col-num">XIRR</span></div>';
+    var body = filtered.map(function (r, i) {
+      var pal = _avatarFor(r.instrument, i);
+      var code = _shortCode(r.instrument);
+      var seg = lookupSegment(segmentMap, r.instrument);
+      var sub = seg + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
+      var isSip = _isSipInstrument(r.instrument);
+      var pnlPos = r.pnl >= 0;
+      var xirrCls = r.xirrPct == null ? "mfh-muted" : (r.xirrPct >= 0 ? "" : "mfh-negative");
+      var xirrText = r.xirrPct == null ? "—" : ((r.xirrPct >= 0 ? "+" : "") + r.xirrPct.toFixed(2) + "%");
+      return '<div class="mfh-row mfh-color-' + pal.accent + '">' +
+        '<div class="mfh-inst">' +
+          '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
+          '<div class="mfh-inst-body">' +
+            '<div class="mfh-inst-name">' + r.instrument + (isSip ? '<span class="mfh-sip-badge">SIP</span>' : '') + '</div>' +
+            '<div class="mfh-inst-sub">' + sub + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.invested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-pnl">' +
+          '<span class="mfh-num-pnl-value ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + formatCurrency(r.pnl) + '</span>' +
+          '<span class="mfh-num-pnl-pct ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + r.pnlPct.toFixed(2) + '%</span>' +
+        '</div>' +
+        '<div class="mfh-col-num mfh-num-xirr ' + xirrCls + '">' + xirrText + '</div>' +
+      '</div>';
+    }).join("");
+    list.innerHTML = header + body;
+  }
+
+  // Phase 1: portfolio cards (per-portfolio MF invested/current/xirr)
+  function renderMfPortfolioCards() {
+    var row = document.getElementById("mfpc-row");
+    if (!row) return;
+    var rows = getSheetRows("equity");
+    if (!rows) { row.innerHTML = ""; return; }
+    var names = collectPortfolioNamesFromSheets(["equity"]);
+    if (!names.length) { row.innerHTML = ""; return; }
+
+    var cards = [];
+    var combinedInv = 0, combinedCur = 0, combinedFlows = [];
+    Promise.all(names.map(function (name) {
+      var invested = computeTotalInvestment(name, ["equity"]);
+      return _computeMfCurrentValueForPortfolio(name).then(function (current) {
+        var flows = buildXirrCashFlows(rows, name);
+        if (current > 0) flows = flows.concat([{ date: new Date(), amount: current }]);
+        var xirr = calculateXIRR(flows);
+        combinedInv += invested; combinedCur += current;
+        return { name: name, invested: invested, current: current, xirr: xirr, flows: flows };
+      });
+    })).then(function (perPortfolio) {
+      perPortfolio.sort(function (a, b) { return b.current - a.current; });
+      // Combined card
+      var equityRows = getSheetRows("equity");
+      var comboFlows = buildXirrCashFlows(equityRows, "all");
+      if (combinedCur > 0) comboFlows.push({ date: new Date(), amount: combinedCur });
+      var comboXirr = calculateXIRR(comboFlows);
+      var all = perPortfolio.concat([{ name: "Combined", invested: combinedInv, current: combinedCur, xirr: comboXirr, isCombined: true }]);
+      row.innerHTML = all.map(function (p, i) {
+        var pnl = p.current - p.invested;
+        var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
+        var isNeg = pnl < 0;
+        var xirrPct = p.xirr == null || !isFinite(p.xirr) ? null : p.xirr * 100;
+        var pal = p.isCombined
+          ? { bg: "#23211D", fg: "#fff" }
+          : { bg: MFH_AVATAR_PALETTE[i % 3].bg, fg: MFH_AVATAR_PALETTE[i % 3].fg };
+        var initial = p.isCombined ? "Σ" : _initials(p.name).charAt(0);
+        var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
+        var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4)); // rough scaled fill
+        return '<div class="mfpc-card ' + (p.isCombined ? "mfpc-combined" : "") + '">' +
+          '<div class="mfpc-head">' +
+            '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
+            '<div class="mfpc-name-block">' +
+              '<div class="mfpc-name">' + p.name + '</div>' +
+              '<div class="mfpc-subtitle">' + subtitle + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mfpc-current-label">CURRENT VALUE</div>' +
+          '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+          '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
+          '<div class="mfpc-return-row">' +
+            '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
+            '<span class="mfpc-gain">' + (isNeg ? "" : "+") + formatCurrency(pnl) + ' gain</span>' +
+          '</div>' +
+          '<div class="mfpc-footer">' +
+            '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
+            '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    });
+  }
+
+  function _computeMfCurrentValueForPortfolio(portfolio) {
+    var rows = getSheetRows("equity");
+    if (!rows) return Promise.resolve(0);
+    var byInst = groupUnitTransactionsByInstrument(rows, portfolio);
+    if (!byInst) return Promise.resolve(0);
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var names = Object.keys(byInst).filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+      return Promise.all(names.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
+        .then(function (histories) {
+          var total = 0;
+          names.forEach(function (n, i) {
+            var lots = fifoRemainingLots(byInst[n]);
+            var units = lots.reduce(function (s, l) { return s + l.units; }, 0);
+            var hist = histories[i];
+            var nav = hist && hist.length ? hist[hist.length - 1].nav : 0;
+            if (units > UNITS_EPSILON && nav) total += units * nav;
+          });
+          return total;
+        });
+    });
+  }
+
+  // Phase 2: allocation by segment
+  function renderMfAllocation(rowsData) {
+    var listEl = document.getElementById("mfalloc-list");
+    if (!listEl) return;
+    var segmentMap = buildInstrumentSegmentMap();
+    var bySeg = {};
+    rowsData.forEach(function (r) {
+      if (r.units < 1) return;
+      var seg = lookupSegment(segmentMap, r.instrument);
+      bySeg[seg] = (bySeg[seg] || 0) + (r.current || 0);
+    });
+    var entries = Object.keys(bySeg).map(function (k) { return { name: k, value: bySeg[k] }; })
+      .sort(function (a, b) { return b.value - a.value; });
+    var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+    if (!entries.length) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
+    var PAL = ["#10B981", "#D4A017", "#3B82F6", "#E8623A", "#8B5CF6", "#64748B", "#06B6D4", "#EC4899"];
+    listEl.innerHTML = entries.map(function (e, i) {
+      var pct = total > 0 ? (e.value / total) * 100 : 0;
+      var col = PAL[i % PAL.length];
+      return '<div class="mfalloc-item">' +
+        '<div class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</div>' +
+        '<div class="mfalloc-nums">' +
+          '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
+          '<span class="mfalloc-pct">' + pct.toFixed(1) + '%</span>' +
+        '</div>' +
+        '<div class="mfalloc-bar"><div class="mfalloc-bar-fill" style="width:' + pct + '%;background:' + col + ';"></div></div>' +
+      '</div>';
+    }).join("");
+  }
+
+  // Phase 2: Portfolio vs Nifty performance chart
+  function renderMfPerformanceChart() {
+    var canvas = document.getElementById("mfperf-chart");
+    if (!canvas || typeof Chart === "undefined") return;
+    var rows = getSheetRows("equity");
+    if (!rows) return;
+    var flows = buildXirrCashFlows(rows, "all");
+    if (!flows || !flows.length) return;
+    // Build monthly buckets of cumulative invested vs current portfolio value
+    // by replaying flows and applying latest NAV.
+    var range = MFPERF_STATE.range;
+    fetchIndexHistory().then(function (indexHistory) {
+      var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
+      var indexPrices = indexHistory && indexHistory[indexKey] && indexHistory[indexKey].prices;
+      _computeMfCurrentValueForPortfolio("all").then(function (currentVal) {
+        // Simple return series from first flow to today, normalized to 0
+        flows.sort(function (a, b) { return a.date - b.date; });
+        var firstDate = flows[0].date;
+        var today = new Date();
+        // Filter by range
+        var startDate = firstDate;
+        if (range !== "All") {
+          var months = range === "1M" ? 1 : range === "6M" ? 6 : range === "1Y" ? 12 : 36;
+          var candidate = new Date(today.getTime() - months * 30 * 86400000);
+          if (candidate > firstDate) startDate = candidate;
+        }
+        // Sample monthly points from startDate → today
+        var samples = [];
+        var d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        var end = new Date(today.getFullYear(), today.getMonth(), 1);
+        while (d <= end) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
+        samples.push(today);
+        // Compute cumulative invested at each sample
+        var portData = [], idxData = [];
+        var invested = 0, flowIdx = 0;
+        // Base index price at startDate
+        var baseIdx = indexPrices ? lookupIndexPrice(indexPrices, formatDateISO(startDate)) : null;
+        var totalInvestedAll = flows.reduce(function (s, f) { return s + (f.amount < 0 ? -f.amount : 0); }, 0);
+        samples.forEach(function (dt) {
+          while (flowIdx < flows.length && flows[flowIdx].date <= dt) {
+            invested += (flows[flowIdx].amount < 0 ? -flows[flowIdx].amount : 0);
+            flowIdx++;
+          }
+          // Portfolio return at time dt = (current * investedRatio - invested) / invested
+          var estCurrent = totalInvestedAll > 0 ? currentVal * (invested / totalInvestedAll) : 0;
+          var portRet = invested > 0 ? ((estCurrent - invested) / invested) * 100 : 0;
+          portData.push({ x: dt, y: portRet });
+          if (baseIdx && indexPrices) {
+            var p = lookupIndexPrice(indexPrices, formatDateISO(dt));
+            idxData.push({ x: dt, y: p ? ((p / baseIdx) - 1) * 100 : null });
+          }
+        });
+        _drawMfPerfChart(canvas, portData, idxData);
+        // Update legend + alpha
+        var lastPort = portData[portData.length - 1] ? portData[portData.length - 1].y : 0;
+        var lastIdx = idxData.length ? (idxData[idxData.length - 1] || {}).y : null;
+        var portEl = document.getElementById("mfperf-port-return");
+        var idxEl = document.getElementById("mfperf-idx-return");
+        if (portEl) portEl.textContent = (lastPort >= 0 ? "+" : "") + lastPort.toFixed(1) + "%";
+        if (idxEl) idxEl.textContent = lastIdx == null ? "—" : (lastIdx >= 0 ? "+" : "") + lastIdx.toFixed(1) + "%";
+        var alphaEl = document.getElementById("mfperf-alpha");
+        if (alphaEl) {
+          if (lastIdx != null) {
+            var alpha = lastPort - lastIdx;
+            alphaEl.textContent = (alpha >= 0 ? "+" : "") + alpha.toFixed(1) + "%";
+            alphaEl.classList.toggle("mfperf-negative", alpha < 0);
+          } else alphaEl.textContent = "—";
+        }
+      });
+    });
+  }
+
+  function _drawMfPerfChart(canvas, portData, idxData) {
+    if (window.__wfMfPerfChart) window.__wfMfPerfChart.destroy();
+    var wrap = canvas.parentNode;
+    if (wrap) { wrap.innerHTML = ""; canvas = document.createElement("canvas"); canvas.id = "mfperf-chart"; canvas.height = 260; wrap.appendChild(canvas); }
+    var ctx = canvas.getContext("2d");
+    var grad = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 260);
+    grad.addColorStop(0, "rgba(16,185,129,0.20)"); grad.addColorStop(1, "rgba(16,185,129,0)");
+    var datasets = [{
+      label: "Portfolio", data: portData,
+      borderColor: "#10B981", backgroundColor: grad,
+      fill: true, borderWidth: 2.5, pointRadius: 0, tension: 0.25
+    }];
+    if (idxData.length) datasets.push({
+      label: "Nifty 50", data: idxData,
+      borderColor: "#94A3B8", borderDash: [6, 4], borderWidth: 2, pointRadius: 0, tension: 0.25, fill: false
+    });
+    window.__wfMfPerfChart = new Chart(ctx, {
+      type: "line", data: { datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: function (c) { return c.dataset.label + ": " + (c.parsed.y >= 0 ? "+" : "") + c.parsed.y.toFixed(2) + "%"; } }
+        } },
+        scales: {
+          x: { type: "time", time: { unit: "month" }, grid: { display: false } },
+          y: { ticks: { callback: function (v) { return (v >= 0 ? "+" : "") + v + "%"; } }, grid: { color: "rgba(0,0,0,0.05)" } }
+        }
+      }
+    });
+  }
+
+  // Wire toggles
+  (function wireMfControls() {
+    var openBtn = document.getElementById("mfh-open-toggle");
+    var sortBtn = document.getElementById("mfh-sort-toggle");
+    if (openBtn) openBtn.addEventListener("click", function () {
+      MFH_STATE.showClosed = !MFH_STATE.showClosed;
+      openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
+      renderEquityHoldingsTable();
+    });
+    if (sortBtn) sortBtn.addEventListener("click", function () {
+      MFH_STATE.sort = MFH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
+      sortBtn.innerHTML = "Sort P&amp;L " + (MFH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;");
+      renderEquityHoldingsTable();
+    });
+    var pills = document.querySelectorAll("[data-mfperf-range]");
+    pills.forEach(function (p) {
+      p.addEventListener("click", function () {
+        pills.forEach(function (x) { x.classList.remove("active"); });
+        p.classList.add("active");
+        MFPERF_STATE.range = p.dataset.mfperfRange;
+        renderMfPerformanceChart();
+      });
+    });
+  })();
 
   function renderMarketSegmentChart() {
     var canvas = document.getElementById("market-segment-chart");
