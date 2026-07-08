@@ -3645,11 +3645,53 @@
 
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
     var open = rowsData.filter(function (r) { return (r.units || 0) > 0 && !r.isClosed; });
+    // Enrich each holding with its portfolio (first-seen in the transactions).
+    var seRows = getSheetRows("stocksetf");
+    if (seRows && seRows.length) {
+      var hdr = seRows[0].map(normalizeText);
+      var pI = hdr.indexOf("portfolio name");
+      var iI = hdr.indexOf("instrument name");
+      if (pI !== -1 && iI !== -1) {
+        var pByI = {};
+        seRows.slice(1).forEach(function (row) {
+          var name = (row[iI] || "").trim();
+          if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
+        });
+        open.forEach(function (h) { h._portfolio = pByI[h.instrument] || ""; });
+      }
+    }
     renderSePortfolioCards(open);
     renderSeAllocation(open);
     renderSeMarketCapSplit(open);
+    _wireSeHoldingsPortfolioToggle(open, usdInrToday);
     renderSeHoldingsCardList(open, "india");
     renderSeHoldingsCardList(open, "us", usdInrToday);
+  }
+
+  function _wireSeHoldingsPortfolioToggle(open, usdInrToday) {
+    var seRows = getSheetRows("stocksetf");
+    if (!seRows) return;
+    var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["stocksetf"]) || []);
+    var toggleIds = ["seh-portfolio-toggle", "seh-us-portfolio-toggle"];
+    toggleIds.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = portfolios.map(function (p) {
+        var label = p === "all" ? "All" : p;
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === SEH_STATE.portfolio ? "active" : "") + '" data-seh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+      }).join("");
+      el.querySelectorAll("[data-seh-portfolio]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          SEH_STATE.portfolio = btn.dataset.sehPortfolio;
+          toggleIds.forEach(function (tid) {
+            var t = document.getElementById(tid);
+            if (t) t.querySelectorAll("[data-seh-portfolio]").forEach(function (b) { b.classList.toggle("active", b.dataset.sehPortfolio === SEH_STATE.portfolio); });
+          });
+          renderSeHoldingsCardList(open, "india");
+          renderSeHoldingsCardList(open, "us", usdInrToday);
+        });
+      });
+    });
   }
 
   function renderSePortfolioCards(rowsData) {
@@ -3787,6 +3829,9 @@
       var isUS = h.region === "US";
       if (region === "us" && !isUS) return false;
       if (region === "india" && isUS) return false;
+      if (SEH_STATE.portfolio && SEH_STATE.portfolio !== "all") {
+        if (normalizeText(h._portfolio || "") !== normalizeText(SEH_STATE.portfolio)) return false;
+      }
       return true;
     });
     filtered.sort(function (a, b) {
