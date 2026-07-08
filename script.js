@@ -7675,9 +7675,12 @@
         '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.invested) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.current) + '</div>' +
-        '<div class="mfh-col-num mfh-num-day ' + (r.dayChgPct == null ? "mfh-muted" : (r.dayChgPct >= 0 ? "mfh-positive" : "mfh-negative")) + '">' +
-          (r.dayChgPct == null ? "—" : ((r.dayChgPct >= 0 ? "+" : "") + r.dayChgPct.toFixed(2) + "%")) +
-        '</div>' +
+        (function () {
+          var dayVal = (r.dayChgPct == null || r.current == null) ? null : (r.current * r.dayChgPct / 100);
+          var cls = dayVal == null ? "mfh-muted" : (dayVal >= 0 ? "mfh-positive" : "mfh-negative");
+          var text = dayVal == null ? "—" : ((dayVal >= 0 ? "+" : "") + formatCurrency(dayVal));
+          return '<div class="mfh-col-num mfh-num-day ' + cls + '">' + text + '</div>';
+        })() +
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + formatCurrency(r.pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + r.pnlPct.toFixed(2) + '%</span>' +
