@@ -2070,18 +2070,36 @@
       var fiPct = totalCur > 0 ? (p.fi / totalCur) * 100 : 0;
       var goldPct = totalCur > 0 ? (p.gold / totalCur) * 100 : 0;
       var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
-      // Compute XIRR via existing FD/EPF flows for this portfolio
+      // Compute XIRR using the same builders as Overview: matured FD flows +
+      // PF flows + EPF flows, with terminal = corresponding current values.
       var xirrPct = null;
       try {
+        var pName = p.isCombined ? "all" : p.name;
         var fdRows = getSheetRows("fd");
         var fiRows = getSheetRows("fixedincome");
         var flows = [];
-        if (fdRows) flows = flows.concat(buildFdMaturedXirrCashFlows(fdRows, p.isCombined ? "all" : p.name) || []);
-        if (fiRows) flows = flows.concat(buildEpfXirrCashFlows ? (buildEpfXirrCashFlows(fiRows, p.isCombined ? "all" : p.name) || []) : []);
-        if (p.current > 0) flows.push({ date: new Date(), amount: p.current });
+        var terminal = 0;
+        if (fdRows) {
+          flows = flows.concat(buildFdMaturedXirrCashFlows(fdRows, pName) || []);
+          flows = flows.concat(buildProvidentFundXirrCashFlows(fdRows, pName) || []);
+          terminal += (sumFdMaturedCurrentValue(fdRows, pName) || 0);
+          terminal += (sumProvidentFundCurrentValue(fdRows, pName) || 0);
+        }
+        if (fiRows && typeof buildEpfXirrCashFlows === "function") {
+          flows = flows.concat(buildEpfXirrCashFlows(fiRows, pName) || []);
+          // EPF terminal = cumulative deposits + interest for this portfolio
+          holdings.forEach(function (h) {
+            var s = (h.subCategory || "").toLowerCase();
+            if ((s === "provident fund" || s.indexOf("epf") !== -1 || s.indexOf("public provident") !== -1)
+              && (p.isCombined || normalizeText(h.portfolio) === normalizeText(p.name))) {
+              terminal += (h.current || 0);
+            }
+          });
+        }
+        if (terminal > 0) flows.push({ date: new Date(), amount: terminal });
         var x = calculateXIRR(flows);
         if (x != null && isFinite(x)) xirrPct = x * 100;
-      } catch (e) {}
+      } catch (e) { console.warn("FI XIRR failed for", p.name, e); }
       var goldStr = p.gold > 0 ? goldPct.toFixed(0) + "%" : "—";
       var fiStr = fiPct.toFixed(0) + "%";
       return '<div class="mfpc-card ' + (p.isCombined ? "mfpc-combined" : "") + '">' +
