@@ -1023,6 +1023,84 @@
     });
   }
 
+  // ── Recurring payments processor ────────────────────────────────────────────
+  // Runs after data is loaded. For each recurring item due today or earlier,
+  // inserts an expense_record and advances next_due by its frequency.
+  // Stops after num_payments installments (or at end_date). Idempotent: safe
+  // to run on every page load — next_due always moves past today.
+  function advanceDate(iso, freq) {
+    var d = new Date(iso + "T00:00:00");
+    switch (freq) {
+      case "daily":     d.setDate(d.getDate() + 1); break;
+      case "weekly":    d.setDate(d.getDate() + 7); break;
+      case "monthly":   d.setMonth(d.getMonth() + 1); break;
+      case "quarterly": d.setMonth(d.getMonth() + 3); break;
+      case "yearly":    d.setFullYear(d.getFullYear() + 1); break;
+      default:          d.setMonth(d.getMonth() + 1);
+    }
+    return d.toISOString().slice(0, 10);
+  }
+  function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+  function processRecurringPayments() {
+    var raw;
+    try { raw = JSON.parse(localStorage.getItem("wf-recurring-payments")) || []; }
+    catch (e) { return Promise.resolve(); }
+    if (!raw.length) return Promise.resolve();
+
+    var today = todayIso();
+    var chain = Promise.resolve();
+    var changed = false;
+
+    raw.forEach(function (item) {
+      var row = item.row || {};
+      var freq = row.frequency || "monthly";
+      var end = row.end_date || null;
+      var maxN = row.num_payments || null;
+      var done = row.installments_done || 0;
+      var nextDue = row.next_due;
+      if (!nextDue) return;
+
+      function doOne() {
+        if (nextDue > today) return null;
+        if (end && nextDue > end) return null;
+        if (maxN && done >= maxN) return null;
+        var dueIso = nextDue;
+        // Build the record row
+        var rec = {
+          txn_date: dueIso,
+          txn_at: new Date(dueIso + "T09:00:00").toISOString(),
+          amount: Number(row.amount) || 0,
+          type: row.type || "expense",
+          account_id: (row.type === "income") ? null : (row.account_id || null),
+          category_id: row.category_id || null,
+          subcategory_id: row.subcategory_id || null,
+          payment_method_id: (row.type === "expense") ? (row.payment_method_id || null) : null,
+          note: (item.name || "") + (row.note ? " — " + row.note : "") + " [recurring]",
+          labels: ["recurring", item.id]
+        };
+        return WfDb.insert("expense_records", rec).then(function () {
+          done += 1;
+          nextDue = advanceDate(nextDue, freq);
+          row.installments_done = done;
+          row.next_due = nextDue;
+          changed = true;
+          return doOne(); // keep posting until caught up
+        });
+      }
+      chain = chain.then(doOne).catch(function () {});
+    });
+
+    return chain.then(function () {
+      if (changed) {
+        localStorage.setItem("wf-recurring-payments", JSON.stringify(raw));
+        if (window.WfAuth && WfAuth.saveSettingsToCloud) {
+          return WfAuth.saveSettingsToCloud().catch(function () {});
+        }
+      }
+    });
+  }
+
   // ── Entry point (called by script.js when the Expense tab is shown) ─────────
   function onShow() {
     var gate = el("exp-signin-gate");
@@ -1037,6 +1115,7 @@
     if (content) content.hidden = false;
     wireOnce();
     if (!state.loaded) loadData();
+    processRecurringPayments();
   }
 
   window.WfExpense = { onShow: onShow };
