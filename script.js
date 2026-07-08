@@ -7824,26 +7824,9 @@
         barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
         return;
       }
-      // Reconcile to Overview's total. Commodity already reflects live current
-      // value (physical gold + MF/ETF), so leave it alone and scale only Equity
-      // and Fixed Income to fit the remaining slice.
-      var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
-      var overviewTotal = getOverviewCurrentTotal();
-      if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
-        var commEntry = entries.filter(function (e) { return e.name === "Commodity"; })[0];
-        var commVal = commEntry ? commEntry.value : 0;
-        var others = entries.filter(function (e) { return e.name !== "Commodity"; });
-        var othersRaw = others.reduce(function (s, e) { return s + e.value; }, 0);
-        var target = overviewTotal - commVal;
-        if (othersRaw > 0 && target > 0) {
-          var scl = target / othersRaw;
-          others.forEach(function (e) { e.value *= scl; });
-        } else {
-          // Fallback to previous behavior if we can't isolate commodity
-          var _scl2 = overviewTotal / rawSum;
-          entries.forEach(function (e) { e.value *= _scl2; });
-        }
-      }
+      // All three categories now reflect live current values, so no scaling.
+      // Any residual gap vs Overview is small (rounding/EPF proxy) and lands
+      // as "Other".
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
       if (eyebrowEl) {
@@ -7914,6 +7897,85 @@
         });
       }
     }
+    // Replace Equity + FI invested basis with current value (per portfolio),
+    // so all three categories reflect live values (like Commodity now does).
+    (function replaceEquityFiWithCurrent() {
+      // Equity current = MF current + SE current (SE in INR).
+      var seRowsE = getSheetRows("stocksetf");
+      var seMapE = {};
+      try { seMapE = buildStockMappingTable(); } catch (e) {}
+      var seJob = seRowsE && Object.keys(seMapE).length
+        ? fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; })
+        : Promise.resolve(null);
+
+      Promise.all(portfolioNames.map(function (n) {
+        var mfInvested = computeTotalInvestment(n, ["equity"]);
+        var seInvested = computeTotalInvestment(n, ["stocksetf"]);
+        var mfCurrentP = _computeMfCurrentValueForPortfolio(n)
+          .then(function (r) { return r && r.current || 0; })
+          .catch(function () { return 0; });
+        var seCurrentP = seJob.then(function (data) {
+          if (!data) return 0;
+          var prices = data.prices || {};
+          var usdInrToday = prices["__USD_INR__"] ? prices["__USD_INR__"].price : 84;
+          return buildStockHoldings(seRowsE, seMapE, n, false, { categoryMode: "non-commodity" })
+            .then(function (holdings) {
+              var tot = 0;
+              (holdings || []).forEach(function (h) {
+                var pe = prices[h.ticker];
+                var ltp = pe ? pe.price : null;
+                if (ltp == null || h.units < UNITS_EPSILON) return;
+                var val = h.units * ltp;
+                if (h.region === "US") val *= usdInrToday;
+                tot += val;
+              });
+              return tot;
+            });
+        }).catch(function () { return 0; });
+        return Promise.all([mfCurrentP, seCurrentP]).then(function (vals) {
+          var eqCurrent = vals[0] + vals[1];
+          var eqInvested = mfInvested + seInvested - (_commByPortfolio[n] || 0);
+          return { name: n, delta: eqCurrent - (mfInvested + seInvested) };
+        }).catch(function () { return null; });
+      })).then(function (deltas) {
+        var totalDelta = 0, changed = false;
+        deltas.forEach(function (r) {
+          if (r && Math.abs(r.delta) > 0.01) {
+            perCat["Equity"][r.name] = (perCat["Equity"][r.name] || 0) + r.delta;
+            totalDelta += r.delta;
+            changed = true;
+          }
+        });
+        if (changed) { investedByCat["Equity"] += totalDelta; try { draw(); } catch (e) {} }
+      }).catch(function () {});
+    })();
+
+    // Fixed Income: replace invested with current (physical FI holdings + EPF)
+    (function replaceFiWithCurrent() {
+      if (fiExcluded) return;
+      var fdRowsFi = getSheetRows("fd");
+      if (!fdRowsFi) return;
+      try {
+        var totalDelta = 0, changed = false;
+        portfolioNames.forEach(function (n) {
+          var invested = computeTotalInvestment(n, ["fixedincome", "fd"]);
+          var fdList = buildFdFixedIncomeHoldingsList(fdRowsFi, n) || [];
+          var fdCurrent = 0;
+          fdList.forEach(function (h) { fdCurrent += (h.current || 0); });
+          // EPF (fixedincome sheet): current ~ invested (no live pricing here). Skip delta.
+          var epfInvested = computeTotalInvestment(n, ["fixedincome"]);
+          var fdInvested = invested - epfInvested;
+          var delta = fdCurrent - fdInvested;
+          if (Math.abs(delta) > 0.01) {
+            perCat["Fixed Income"][n] = (perCat["Fixed Income"][n] || 0) + delta;
+            totalDelta += delta;
+            changed = true;
+          }
+        });
+        if (changed) { investedByCat["Fixed Income"] += totalDelta; try { draw(); } catch (e) {} }
+      } catch (e) {}
+    })();
+
     // Replace commodity MF/ETF invested basis with current value (per portfolio).
     (function replaceMfEtfCommodityWithCurrent() {
       var rowsSE = getSheetRows("stocksetf");
