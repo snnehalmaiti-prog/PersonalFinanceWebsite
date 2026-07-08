@@ -1804,15 +1804,29 @@
                 var acct = dashExpState.accounts.find(function (a) { return a.id === r.account_id; });
                 var amtCls = r.type === "income" ? "ana-pos" : (r.type === "expense" ? "ana-neg" : "");
                 var sign = r.type === "expense" ? "-" : (r.type === "income" ? "+" : "");
-                return '<div class="ana-txn-row">' +
+                return '<div class="ana-txn-row" data-ana-txn-id="' + esc(r.id) + '">' +
                   '<div class="ana-txn-info">' +
                     '<div class="ana-txn-date">' + esc(r.txn_date || "") + '</div>' +
                     '<div class="ana-txn-note">' + esc(r.note || "—") + '</div>' +
                     '<div class="ana-txn-meta muted small">' + (acct ? esc(acct.name) : "") + (r.type ? " · " + esc(r.type) : "") + '</div>' +
                   '</div>' +
-                  '<div class="ana-txn-amt ' + amtCls + '">' + sign + fmtMoney(Number(r.amount) || 0) + '</div>' +
+                  '<div class="ana-txn-right" style="display:flex;align-items:center;gap:10px;">' +
+                    '<div class="ana-txn-amt ' + amtCls + '">' + sign + fmtMoney(Number(r.amount) || 0) + '</div>' +
+                    '<button type="button" class="btn btn-ghost btn-sm" data-ana-txn-edit="' + esc(r.id) + '" title="Edit">✎</button>' +
+                  '</div>' +
                 '</div>';
               }).join("");
+              // Wire Edit buttons.
+              listEl.querySelectorAll("[data-ana-txn-edit]").forEach(function (btn) {
+                btn.addEventListener("click", function (ev) {
+                  ev.stopPropagation();
+                  var id = btn.getAttribute("data-ana-txn-edit");
+                  var rec = (dashExpState.records || []).find(function (r) { return r.id === id; });
+                  if (!rec) return;
+                  modal.hidden = true;
+                  if (typeof openRecModal === "function") openRecModal(rec);
+                });
+              });
             }
           }
           modal.hidden = false;
