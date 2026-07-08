@@ -1001,7 +1001,8 @@
             if (p) p.hidden = (k !== key);
           });
           var inlinePicker = document.getElementById("rec-period-picker-inline");
-          if (inlinePicker) inlinePicker.style.display = (key === "records") ? "" : "none";
+          if (inlinePicker) inlinePicker.style.display = (key === "records" || key === "analytics") ? "" : "none";
+          if (key === "analytics" && typeof syncAnaFromRec === "function") syncAnaFromRec();
         });
       });
 
@@ -1985,6 +1986,17 @@
         if (lbl) lbl.textContent = periodRange().label;
       }
 
+      // Sync the analytics period from the shared record picker so the inline
+      // "July 2026" picker drives both Records and Analytics views.
+      function syncAnaFromRec() {
+        try {
+          if (recPeriod && recPeriod.kind === "months" && typeof anaPeriod !== "undefined") {
+            anaPeriod.year = recPeriod.year;
+            anaPeriod.month = recPeriod.month;
+            if (typeof renderAnalyticsTable === "function") renderAnalyticsTable();
+          }
+        } catch (e) {}
+      }
       function nudgePeriod(dir) {
         if (recPeriod.kind === "years") { recPeriod.year += dir; }
         else if (recPeriod.kind === "weeks") {
@@ -2006,6 +2018,7 @@
         }
         updatePeriodLabel();
         renderDashRecords();
+        syncAnaFromRec();
       }
 
       // Popover rendering
@@ -2121,19 +2134,19 @@
           recPeriod.kind = "months";
           recPeriod.year = recPeriodView.year;
           recPeriod.month = Number(mBtn.getAttribute("data-pp-m"));
-          renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
+          renderPeriodPopover(); renderDashRecords(); syncAnaFromRec(); closePeriodPopover(); return;
         }
         var yBtn = e.target.closest("[data-pp-y]");
         if (yBtn) {
           recPeriod.kind = "years";
           recPeriod.year = Number(yBtn.getAttribute("data-pp-y"));
-          renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
+          renderPeriodPopover(); renderDashRecords(); syncAnaFromRec(); closePeriodPopover(); return;
         }
         var wBtn = e.target.closest("[data-pp-w]");
         if (wBtn) {
           recPeriod.kind = "weeks";
           recPeriod.weekStart = wBtn.getAttribute("data-pp-w");
-          renderPeriodPopover(); renderDashRecords(); closePeriodPopover(); return;
+          renderPeriodPopover(); renderDashRecords(); syncAnaFromRec(); closePeriodPopover(); return;
         }
         var cmBtn = e.target.closest("[data-pp-cm]");
         if (cmBtn) {
