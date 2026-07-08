@@ -1159,7 +1159,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 32px;
+  padding: 16px 32px 32px;
   width: 100%;
 }
 
