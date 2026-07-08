@@ -7913,6 +7913,8 @@
     if (openBtn) openBtn.addEventListener("click", function () {
       MFH_STATE.showClosed = !MFH_STATE.showClosed;
       openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
+      var cb = document.getElementById("equity-holdings-show-closed-only");
+      if (cb) cb.checked = MFH_STATE.showClosed;
       renderEquityHoldingsTable();
     });
     if (sortBtn) sortBtn.addEventListener("click", function () {
