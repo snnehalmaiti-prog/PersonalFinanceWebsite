@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdesign27" />
+<link rel="stylesheet" href="styles.css?v=recdesign28" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -429,6 +429,7 @@
             <h3 class="mfh-title">Mutual fund positions</h3>
           </div>
           <div class="mfh-header-right">
+            <div class="mfh-portfolio-toggle" id="mfh-portfolio-toggle" role="group" aria-label="Portfolio filter"></div>
             <button type="button" class="mfh-btn" id="mfh-open-toggle" data-mfh-state="open">Open</button>
             <button type="button" class="mfh-btn" id="mfh-sort-toggle" data-mfh-sort="pnl-desc">Sort P&amp;L &darr;</button>
           </div>
@@ -2904,7 +2905,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat70"></script>
+  <script src="script.js?v=micat71"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

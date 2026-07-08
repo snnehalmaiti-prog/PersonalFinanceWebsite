@@ -7477,7 +7477,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = window.__mfHoldingsPortfolioOverride || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, selectedPortfolio);
     if (!transactionsByInstrument) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -7934,6 +7934,24 @@
         renderMfPerformanceChart();
       });
     });
+
+    // Portfolio filter for the Holdings list (All / <each portfolio>).
+    var pfToggle = document.getElementById("mfh-portfolio-toggle");
+    if (pfToggle) {
+      var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["equity"]) || []);
+      var current = window.__mfHoldingsPortfolioOverride || "all";
+      pfToggle.innerHTML = portfolios.map(function (p) {
+        var label = p === "all" ? "All" : p;
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === current ? "active" : "") + '" data-mfh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+      }).join("");
+      pfToggle.querySelectorAll("[data-mfh-portfolio]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          window.__mfHoldingsPortfolioOverride = btn.dataset.mfhPortfolio;
+          pfToggle.querySelectorAll("[data-mfh-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          renderEquityHoldingsTable();
+        });
+      });
+    }
   })();
 
   function renderMarketSegmentChart() {
