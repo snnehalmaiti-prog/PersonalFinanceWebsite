@@ -7908,12 +7908,63 @@
         ? fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; })
         : Promise.resolve(null);
 
+      var mfCatMapE = {};
+      try { mfCatMapE = buildMfCategoryMap(); } catch (e) {}
+
+      // MF current value per portfolio, EXCLUDING commodity-category funds.
+      function mfCurrentExclCommodity(portfolio) {
+        var rowsMF = getSheetRows("equity");
+        if (!rowsMF) return Promise.resolve(0);
+        var byInst = groupUnitTransactionsByInstrument(rowsMF, portfolio);
+        if (!byInst) return Promise.resolve(0);
+        var nonCommNames = Object.keys(byInst).filter(function (nm) {
+          return mfCatMapE[normalizeText(nm)] !== "commodity";
+        });
+        if (!nonCommNames.length) return Promise.resolve(0);
+        return buildInstrumentSchemeMap().then(function (schemeMap) {
+          var resolvable = nonCommNames.filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+          return Promise.all(resolvable.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
+            .then(function (histories) {
+              var total = 0;
+              resolvable.forEach(function (n, i) {
+                var lots = fifoRemainingLots(byInst[n]);
+                var units = lots.reduce(function (s, l) { return s + l.units; }, 0);
+                var hist = histories[i];
+                var nav = hist && hist.length ? hist[hist.length - 1].nav : 0;
+                if (units > UNITS_EPSILON && nav) total += units * nav;
+              });
+              return total;
+            });
+        }).catch(function () { return 0; });
+      }
+
+      // Invested value per portfolio EXCLUDING commodity-category MF/ETF,
+      // to align with the current-value computation above.
+      function nonCommodityEquityInvested(portfolio) {
+        var total = 0;
+        var rowsMF = getSheetRows("equity");
+        if (rowsMF) {
+          var tx = groupUnitTransactionsByInstrument(rowsMF, portfolio) || {};
+          Object.keys(tx).forEach(function (nm) {
+            if (mfCatMapE[normalizeText(nm)] === "commodity") return;
+            var remaining = fifoRemainingLots(tx[nm]);
+            remaining.forEach(function (l) { total += l.units * l.price; });
+          });
+        }
+        if (seRowsE) {
+          var tx2 = groupUnitTransactionsByInstrument(seRowsE, portfolio) || {};
+          Object.keys(tx2).forEach(function (nm) {
+            var m = seMapE[normalizeText(nm)];
+            if (m && m.category && normalizeText(m.category) === "commodity") return;
+            var remaining = fifoRemainingLots(tx2[nm]);
+            remaining.forEach(function (l) { total += l.units * l.price; });
+          });
+        }
+        return total;
+      }
+
       Promise.all(portfolioNames.map(function (n) {
-        var mfInvested = computeTotalInvestment(n, ["equity"]);
-        var seInvested = computeTotalInvestment(n, ["stocksetf"]);
-        var mfCurrentP = _computeMfCurrentValueForPortfolio(n)
-          .then(function (r) { return r && r.current || 0; })
-          .catch(function () { return 0; });
+        var mfCurrentP = mfCurrentExclCommodity(n);
         var seCurrentP = seJob.then(function (data) {
           if (!data) return 0;
           var prices = data.prices || {};
@@ -7934,8 +7985,8 @@
         }).catch(function () { return 0; });
         return Promise.all([mfCurrentP, seCurrentP]).then(function (vals) {
           var eqCurrent = vals[0] + vals[1];
-          var eqInvested = mfInvested + seInvested - (_commByPortfolio[n] || 0);
-          return { name: n, delta: eqCurrent - (mfInvested + seInvested) };
+          var eqInvestedNonComm = nonCommodityEquityInvested(n);
+          return { name: n, delta: eqCurrent - eqInvestedNonComm };
         }).catch(function () { return null; });
       })).then(function (deltas) {
         var totalDelta = 0, changed = false;
