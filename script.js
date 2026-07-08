@@ -1265,11 +1265,8 @@
     var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
     // Use seCurrent if prices have loaded; fall back to seInvested so overview is never blank
     var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
-    // Stocksetf-mapped commodities are held in _ov.seComm* — add to commodity bucket.
-    var seCommInv = isFixedIncomeExcluded() ? 0 : (_ov.seCommInvested || 0);
-    var seCommCur = isFixedIncomeExcluded() ? 0 : (_ov.seCommCurrent || 0);
-    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + _ov.commInvested + seCommInv;
-    var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + _ov.commCurrent + seCommCur;
+    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + _ov.commInvested;
+    var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + _ov.commCurrent;
     var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + _ov.commRealized;
     if (overviewInvestedEl) overviewInvestedEl.textContent = formatCurrency(totalInvested);
     if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
@@ -2031,20 +2028,6 @@
   }
 
   function renderFiPortfolioCards(holdings) {
-    var row = document.getElementById("fipc-row");
-    if (!row) return;
-    // Kick off stocksetf-commodity fetch and re-render once resolved.
-    _buildStocksEtfCommodityHoldings("all").then(function (extra) {
-      if (extra && extra.length) {
-        var combined = holdings.slice();
-        extra.forEach(function (e) { combined.push(e); });
-        _renderFiPortfolioCardsInner(combined);
-      }
-    }).catch(function () {});
-    _renderFiPortfolioCardsInner(holdings);
-  }
-
-  function _renderFiPortfolioCardsInner(holdings) {
     var row = document.getElementById("fipc-row");
     if (!row) return;
     // Local palette copy — MFH_AVATAR_PALETTE is defined later in the file and
@@ -6772,15 +6755,16 @@
     if (typeof _ov === "undefined" || !_ov) return null;
     var fiEx = isFixedIncomeExcluded();
     var fi = fiEx ? 0 : (_ov.fiInvested || 0);
-    var comm = fiEx ? 0 : ((_ov.commInvested || 0) + (_ov.seCommInvested || 0));
+    var comm = fiEx ? 0 : (_ov.commInvested || 0);
     var total = (_ov.mfInvested || 0) + (_ov.seInvested || 0) + fi + comm;
     return total > 0 ? total : null;
   }
+  // Overview's authoritative "Current" total (live prices + interest accrual).
   function getOverviewCurrentTotal() {
     if (typeof _ov === "undefined" || !_ov) return null;
     var fiEx = isFixedIncomeExcluded();
     var fi = fiEx ? 0 : (_ov.fiCurrent || 0);
-    var comm = fiEx ? 0 : ((_ov.commCurrent || 0) + (_ov.seCommCurrent || 0));
+    var comm = fiEx ? 0 : (_ov.commCurrent || 0);
     var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : (_ov.seInvested || 0);
     var total = (_ov.mfCurrent || 0) + seCurrent + fi + comm;
     return total > 0 ? total : null;
@@ -9133,12 +9117,8 @@
           });
         });
 
-          // Compute header stats always from open positions only.
-          // Also split out stocksetf commodity holdings so they can flow into
-          // the FI/Commodity buckets of the Overview instead of Equity.
+          // Compute header stats always from open positions only
           var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
-          var commCurrentINR = 0, commInvestedINR = 0, commDayChangeINR = 0;
-          var seMappingTable = buildStockMappingTable();
           openHoldings.forEach(function (h) {
             var priceEntry = allPrices[h.ticker] || null;
             var eodRaw = priceEntry ? priceEntry.price : null;
@@ -9146,32 +9126,14 @@
             if (eodRaw === null) return;
             var ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
             var cur = h.units * ltpINR;
-            var dayChg = 0;
+            totalCurrentINR += cur;
+            totalInvestedINR += h.investedINR;
+            totalPnlINR += cur - h.investedINR;
             if (prevRaw !== null) {
               var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
-              dayChg = (ltpINR - prevINR) * h.units;
-            }
-            var m = seMappingTable[normalizeText(h.instrument)];
-            var isComm = m && normalizeText(m.category) === "commodity";
-            if (isComm) {
-              commCurrentINR += cur;
-              commInvestedINR += h.investedINR;
-              commDayChangeINR += dayChg;
-            } else {
-              totalCurrentINR += cur;
-              totalInvestedINR += h.investedINR;
-              totalPnlINR += cur - h.investedINR;
-              totalDayChangeINR += dayChg;
+              totalDayChangeINR += (ltpINR - prevINR) * h.units;
             }
           });
-          // Fold stocksetf commodity into Overview's commodity bucket.
-          _ov.seCommInvested = commInvestedINR;
-          _ov.seCommCurrent = commCurrentINR;
-          _ov.seCommDayChange = commDayChangeINR;
-          _ov.commInvested = (_ov.commInvested || 0);
-          _ov.commCurrent = (_ov.commCurrent || 0);
-          // Keep _ov base commodity untouched; consumers add seCommInvested on read.
-          if (typeof refreshCategoryCards === "function") refreshCategoryCards();
 
           var indiaRowsData = rowsData.filter(function(r) { return r.region !== "US"; });
           var usRowsData = rowsData.filter(function(r) { return r.region === "US"; });
