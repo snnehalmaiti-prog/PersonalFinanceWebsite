@@ -7700,25 +7700,24 @@
     var names = collectPortfolioNamesFromSheets(["equity"]);
     if (!names.length) { row.innerHTML = ""; return; }
 
-    var cards = [];
-    var combinedInv = 0, combinedCur = 0, combinedFlows = [];
+    var combinedInv = 0, combinedCur = 0, combinedDay = 0;
     Promise.all(names.map(function (name) {
       var invested = computeTotalInvestment(name, ["equity"]);
-      return _computeMfCurrentValueForPortfolio(name).then(function (current) {
+      return _computeMfCurrentValueForPortfolio(name).then(function (res) {
+        var current = res.current, dayChange = res.dayChange;
         var flows = buildXirrCashFlows(rows, name);
         if (current > 0) flows = flows.concat([{ date: new Date(), amount: current }]);
         var xirr = calculateXIRR(flows);
-        combinedInv += invested; combinedCur += current;
-        return { name: name, invested: invested, current: current, xirr: xirr, flows: flows };
+        combinedInv += invested; combinedCur += current; combinedDay += dayChange;
+        return { name: name, invested: invested, current: current, xirr: xirr, dayChange: dayChange };
       });
     })).then(function (perPortfolio) {
       perPortfolio.sort(function (a, b) { return b.current - a.current; });
-      // Combined card
       var equityRows = getSheetRows("equity");
       var comboFlows = buildXirrCashFlows(equityRows, "all");
       if (combinedCur > 0) comboFlows.push({ date: new Date(), amount: combinedCur });
       var comboXirr = calculateXIRR(comboFlows);
-      var all = perPortfolio.concat([{ name: "Combined", invested: combinedInv, current: combinedCur, xirr: comboXirr, isCombined: true }]);
+      var all = perPortfolio.concat([{ name: "Combined", invested: combinedInv, current: combinedCur, xirr: comboXirr, dayChange: combinedDay, isCombined: true }]);
       row.innerHTML = all.map(function (p, i) {
         var pnl = p.current - p.invested;
         var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
@@ -7748,6 +7747,7 @@
           '<div class="mfpc-footer">' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
+            '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Day Chg</span><span class="mfpc-foot-value mfpc-xirr ' + (p.dayChange != null && p.dayChange < 0 ? "mfpc-negative" : "") + '">' + (p.dayChange == null ? "—" : (p.dayChange >= 0 ? "+" : "") + formatCurrency(p.dayChange)) + '</span></div>' +
           '</div>' +
         '</div>';
       }).join("");
@@ -7756,22 +7756,24 @@
 
   function _computeMfCurrentValueForPortfolio(portfolio) {
     var rows = getSheetRows("equity");
-    if (!rows) return Promise.resolve(0);
+    if (!rows) return Promise.resolve({ current: 0, dayChange: 0 });
     var byInst = groupUnitTransactionsByInstrument(rows, portfolio);
-    if (!byInst) return Promise.resolve(0);
+    if (!byInst) return Promise.resolve({ current: 0, dayChange: 0 });
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var names = Object.keys(byInst).filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
       return Promise.all(names.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
         .then(function (histories) {
-          var total = 0;
+          var total = 0, prevTotal = 0;
           names.forEach(function (n, i) {
             var lots = fifoRemainingLots(byInst[n]);
             var units = lots.reduce(function (s, l) { return s + l.units; }, 0);
             var hist = histories[i];
             var nav = hist && hist.length ? hist[hist.length - 1].nav : 0;
+            var prevNav = previous_nav_for(hist);
             if (units > UNITS_EPSILON && nav) total += units * nav;
+            if (units > UNITS_EPSILON && prevNav) prevTotal += units * prevNav;
           });
-          return total;
+          return { current: total, dayChange: total - prevTotal };
         });
     });
   }
