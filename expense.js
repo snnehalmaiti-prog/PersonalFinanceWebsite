@@ -1028,6 +1028,13 @@
   // inserts an expense_record and advances next_due by its frequency.
   // Stops after num_payments installments (or at end_date). Idempotent: safe
   // to run on every page load — next_due always moves past today.
+  // Format a Date as YYYY-MM-DD in LOCAL time (not UTC). Using toISOString()
+  // would shift the date backward for positive-offset zones like IST (UTC+5:30),
+  // so a due date could look "not reached" until 5:30 AM local.
+  function localIso(d) {
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
   function advanceDate(iso, freq) {
     var d = new Date(iso + "T00:00:00");
     switch (freq) {
@@ -1038,9 +1045,9 @@
       case "yearly":    d.setFullYear(d.getFullYear() + 1); break;
       default:          d.setMonth(d.getMonth() + 1);
     }
-    return d.toISOString().slice(0, 10);
+    return localIso(d);
   }
-  function todayIso() { return new Date().toISOString().slice(0, 10); }
+  function todayIso() { return localIso(new Date()); }
 
   function processRecurringPayments() {
     var raw;
@@ -1118,7 +1125,19 @@
     processRecurringPayments();
   }
 
-  window.WfExpense = { onShow: onShow };
+  window.WfExpense = { onShow: onShow, processRecurring: processRecurringPayments };
+
+  // Run the recurring-payment catch-up on page load too (not only when the
+  // Expense tab's onShow fires). Guarded on auth + WfDb availability.
+  function initRecurringOnLoad() {
+    if (!window.WfAuth || !window.WfDb || !WfAuth.isLoggedIn()) return;
+    try { processRecurringPayments(); } catch (e) {}
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initRecurringOnLoad);
+  } else {
+    initRecurringOnLoad();
+  }
 })();
 
 // build: redeploy trigger
