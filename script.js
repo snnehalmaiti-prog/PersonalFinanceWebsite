@@ -1920,8 +1920,235 @@
       tbody.appendChild(tr);
     });
 
-    statusEl.textContent = holdings.length + " holding(s).";
-    tableWrap.hidden = false;
+    statusEl.textContent = "";
+    tableWrap.hidden = true;
+    try { renderFiRedesign(holdings); } catch (e) {}
+  }
+
+  function renderFiRedesign(holdings) {
+    renderFiPortfolioCards(holdings);
+    renderFiAllocation(holdings);
+    renderFiInterestSplit(holdings);
+    renderFiHoldingsCardList(holdings);
+  }
+
+  function _fiIsInterestBearing(sub) {
+    var s = (sub || "").toLowerCase();
+    return s.indexOf("corpus") === -1 && s.indexOf("saving") === -1;
+  }
+  function _fiIsGold(sub) {
+    var s = (sub || "").toLowerCase();
+    return s.indexOf("gold") !== -1 || s.indexOf("silver") !== -1 || s.indexOf("commodity") !== -1;
+  }
+
+  function renderFiPortfolioCards(holdings) {
+    var row = document.getElementById("fipc-row");
+    if (!row) return;
+    // Group by portfolio
+    var byPort = {};
+    holdings.forEach(function (h) {
+      var p = (h.portfolio || "").trim() || "Unassigned";
+      if (!byPort[p]) byPort[p] = { invested: 0, current: 0, fi: 0, gold: 0 };
+      byPort[p].invested += h.invested;
+      byPort[p].current += h.current;
+      if (_fiIsGold(h.subCategory)) byPort[p].gold += h.current;
+      else byPort[p].fi += h.current;
+    });
+    var names = Object.keys(byPort).sort(function (a, b) { return byPort[b].current - byPort[a].current; });
+    var combined = { invested: 0, current: 0, fi: 0, gold: 0 };
+    names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.fi += byPort[n].fi; combined.gold += byPort[n].gold; });
+    var all = names.map(function (n, i) { var p = byPort[n]; p.name = n; p.paletteIdx = i; return p; })
+      .concat([{ name: "Joint", invested: combined.invested, current: combined.current, fi: combined.fi, gold: combined.gold, isCombined: true }]);
+
+    row.innerHTML = all.map(function (p, i) {
+      var pnl = p.current - p.invested;
+      var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
+      var isNeg = pnl < 0;
+      var pal = p.isCombined ? { bg: "#23211D", fg: "#fff" } : MFH_AVATAR_PALETTE[i % 3];
+      var initial = p.isCombined ? "Σ" : _initials(p.name).charAt(0);
+      var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
+      var totalCur = p.fi + p.gold;
+      var fiPct = totalCur > 0 ? (p.fi / totalCur) * 100 : 0;
+      var goldPct = totalCur > 0 ? (p.gold / totalCur) * 100 : 0;
+      var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
+      // Compute XIRR via existing FD/EPF flows for this portfolio
+      var xirrPct = null;
+      try {
+        var fdRows = getSheetRows("fd");
+        var fiRows = getSheetRows("fixedincome");
+        var flows = [];
+        if (fdRows) flows = flows.concat(buildFdMaturedXirrCashFlows(fdRows, p.isCombined ? "all" : p.name) || []);
+        if (fiRows) flows = flows.concat(buildEpfXirrCashFlows ? (buildEpfXirrCashFlows(fiRows, p.isCombined ? "all" : p.name) || []) : []);
+        if (p.current > 0) flows.push({ date: new Date(), amount: p.current });
+        var x = calculateXIRR(flows);
+        if (x != null && isFinite(x)) xirrPct = x * 100;
+      } catch (e) {}
+      var goldStr = p.gold > 0 ? goldPct.toFixed(0) + "%" : "—";
+      var fiStr = fiPct.toFixed(0) + "%";
+      return '<div class="mfpc-card ' + (p.isCombined ? "mfpc-combined" : "") + '">' +
+        '<div class="mfpc-head">' +
+          '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
+          '<div class="mfpc-name-block">' +
+            '<div class="mfpc-name">' + p.name + '</div>' +
+            '<div class="mfpc-subtitle">' + subtitle + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mfpc-current-label">CURRENT VALUE</div>' +
+        '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+        '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
+        '<div class="mfpc-return-row">' +
+          '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
+          '<span class="mfpc-gain">' + (isNeg ? "" : "+") + formatCurrency(pnl) + ' gain</span>' +
+        '</div>' +
+        '<div class="mfpc-footer">' +
+          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
+          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
+          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">FI · Gold</span><span class="mfpc-foot-value">' + fiStr + ' · ' + goldStr + '</span></div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  function renderFiAllocation(holdings) {
+    var listEl = document.getElementById("fialloc-list");
+    if (!listEl) return;
+    var bySub = {};
+    var countSub = {};
+    holdings.forEach(function (h) {
+      var s = h.subCategory || "Unclassified";
+      bySub[s] = (bySub[s] || 0) + h.current;
+      countSub[s] = (countSub[s] || 0) + 1;
+    });
+    var entries = Object.keys(bySub).map(function (k) { return { name: k, value: bySub[k], count: countSub[k] }; })
+      .sort(function (a, b) { return b.value - a.value; });
+    var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+    if (!entries.length) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
+    var PAL = ["#10B981", "#E8623A", "#8B5CF6", "#3B82F6", "#D4A017", "#64748B", "#06B6D4", "#EC4899"];
+    var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
+      var pct = total > 0 ? (e.value / total) * 100 : 0;
+      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
+    }).join("") + '</div>';
+    var rows = entries.map(function (e, i) {
+      var pct = total > 0 ? (e.value / total) * 100 : 0;
+      var col = PAL[i % PAL.length];
+      return '<div class="mfalloc-row">' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + ' <span class="muted" style="font-weight:500;">· ' + e.count + ' holdings</span></span>' +
+        '<span class="mfalloc-nums">' +
+          '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
+          '<span class="mfalloc-pct" style="color:' + col + ';">' + (pct < 1 ? "<1%" : pct.toFixed(0) + "%") + '</span>' +
+        '</span>' +
+      '</div>';
+    }).join("");
+    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
+  }
+
+  function renderFiInterestSplit(holdings) {
+    var bar = document.getElementById("fisplit-bar");
+    var rows = document.getElementById("fisplit-rows");
+    var summary = document.getElementById("fisplit-summary");
+    if (!bar || !rows) return;
+    var interest = 0, nonInterest = 0;
+    holdings.forEach(function (h) {
+      if (_fiIsInterestBearing(h.subCategory)) interest += h.current;
+      else nonInterest += h.current;
+    });
+    var total = interest + nonInterest;
+    if (total <= 0) { bar.innerHTML = ""; rows.innerHTML = ""; if (summary) summary.textContent = ""; return; }
+    var iPct = (interest / total) * 100;
+    var nPct = (nonInterest / total) * 100;
+    bar.innerHTML =
+      '<span class="mfalloc-seg" style="flex:' + iPct + ' 0 0;background:#10B981;"></span>' +
+      '<span class="mfalloc-seg" style="flex:' + nPct + ' 0 0;background:#8B7E6B;"></span>';
+    rows.innerHTML =
+      '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#10B981;"></span>Interest-bearing</span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(interest) + '</span><span class="mfalloc-pct" style="color:#10B981;">' + iPct.toFixed(0) + '%</span></span></div>' +
+      '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#8B7E6B;"></span>Non-interest bearing</span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(nonInterest) + '</span><span class="mfalloc-pct" style="color:#8B7E6B;">' + nPct.toFixed(0) + '%</span></span></div>';
+    if (summary) summary.innerHTML = '<strong>' + iPct.toFixed(0) + '%</strong> is earning interest &middot; Corpus and Savings sit idle at ' + formatCurrency(nonInterest) + '.';
+  }
+
+  var FIH_STATE = { sort: "pnl-desc", portfolio: "all" };
+  function renderFiHoldingsCardList(holdings) {
+    var list = document.getElementById("fih-list");
+    var eyebrow = document.getElementById("fih-eyebrow");
+    if (!list) return;
+    var filtered = holdings.filter(function (h) {
+      if (FIH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(FIH_STATE.portfolio)) return false;
+      if (_fiIsGold(h.subCategory)) return false; // gold shown in commodity card
+      return true;
+    });
+    filtered.sort(function (a, b) {
+      var pnlA = a.current - a.invested;
+      var pnlB = b.current - b.invested;
+      return FIH_STATE.sort === "pnl-asc" ? pnlA - pnlB : pnlB - pnlA;
+    });
+    if (eyebrow) eyebrow.textContent = "FIXED INCOME · " + filtered.length + " HOLDINGS";
+    if (!filtered.length) {
+      list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No fixed income holdings.</p>';
+      return;
+    }
+    var subtotalInv = 0, subtotalCur = 0;
+    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
+      '<span>Instrument</span><span>Sub-Cat</span>' +
+      '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span>' +
+      '<span class="mfh-col-num">Unrealized</span><span class="mfh-col-num">Return %</span></div>';
+    var body = filtered.map(function (h, i) {
+      var pal = MFH_AVATAR_PALETTE[i % MFH_AVATAR_PALETTE.length];
+      var initial = (h.portfolio || "?").charAt(0).toUpperCase();
+      var pnl = h.current - h.invested;
+      var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
+      var isIdle = !_fiIsInterestBearing(h.subCategory);
+      var idleBadge = isIdle ? '<span class="mfh-sip-badge" style="background:#F1EBDD;color:#8B7E6B;">IDLE</span>' : '';
+      subtotalInv += h.invested; subtotalCur += h.current;
+      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
+        '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
+          '<div class="mfh-inst-body">' +
+            '<div class="mfh-inst-name">' + h.instrument + idleBadge + '</div>' +
+            '<div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + h.subCategory + '</span></div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary ' + (pnl >= 0 ? "" : "mfh-negative") + '" style="color:' + (pnl > 0 ? "var(--emerald)" : pnl < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (pnl > 0 ? "+" : "") + (pnl === 0 ? "₹0" : formatCurrency(pnl)) + '</div>' +
+        '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : (pnlPct < 0 ? "mfh-negative" : "mfh-muted")) + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
+      '</div>';
+    }).join("");
+    var subSum = subtotalCur - subtotalInv;
+    var subPct = subtotalInv > 0 ? (subSum / subtotalInv) * 100 : 0;
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 12px;">' +
+      '<div style="grid-column:span 2;font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);">SUB-TOTAL · ' + filtered.length + ' HOLDINGS</div>' +
+      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subtotalInv) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subtotalCur) + '</div>' +
+      '<div class="mfh-col-num" style="color:' + (subSum > 0 ? "var(--emerald)" : subSum < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subSum > 0 ? "+" : "") + formatCurrency(subSum) + '</div>' +
+      '<div class="mfh-col-num" style="color:' + (subPct > 0 ? "var(--emerald)" : subPct < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subPct > 0 ? "+" : "") + subPct.toFixed(2) + '%</div>' +
+      '</div>';
+    list.innerHTML = header + body + footer;
+
+    // Wire portfolio pill toggle
+    var pf = document.getElementById("fih-portfolio-toggle");
+    if (pf && !pf.dataset.bound) {
+      pf.dataset.bound = "1";
+      var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["fd", "fixedincome"]) || []);
+      pf.innerHTML = portfolios.map(function (p) {
+        var label = p === "all" ? "All" : p;
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === FIH_STATE.portfolio ? "active" : "") + '" data-fih-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+      }).join("");
+      pf.querySelectorAll("[data-fih-portfolio]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          FIH_STATE.portfolio = btn.dataset.fihPortfolio;
+          pf.querySelectorAll("[data-fih-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          renderAllFixedIncomeHoldingsTable();
+        });
+      });
+    }
+    var sortBtn = document.getElementById("fih-sort-toggle");
+    if (sortBtn && !sortBtn.dataset.bound) {
+      sortBtn.dataset.bound = "1";
+      sortBtn.addEventListener("click", function () {
+        FIH_STATE.sort = FIH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
+        sortBtn.innerHTML = "Sort P&amp;L " + (FIH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;");
+        renderAllFixedIncomeHoldingsTable();
+      });
+    }
   }
 
   function renderFdHoldingsTableInto(statusEl, tableWrap, tbody, holdings, emptyMessage, showReturn) {
@@ -3208,9 +3435,44 @@
         } catch (e) {}
         return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
       })() : null;
-      statusEl.textContent = holdings.length + " holding(s)." + (rateDate ? " Gold rate as of " + rateDate + "." : "");
-      tableWrap.hidden = false;
+      statusEl.textContent = "";
+      tableWrap.hidden = true;
+      try { renderCmHoldingsCardList(holdings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
     });
+  }
+
+  function renderCmHoldingsCardList(holdings, goldPrice, dayChangePerGram, rateDate) {
+    var list = document.getElementById("cmh-list");
+    var eyebrow = document.getElementById("cmh-eyebrow");
+    var asof = document.getElementById("cmh-gold-asof");
+    var goldTop = document.getElementById("fi-gold-asof");
+    if (!list) return;
+    if (eyebrow) eyebrow.textContent = "PHYSICAL COMMODITY · " + holdings.length + " HOLDING" + (holdings.length === 1 ? "" : "S");
+    var asofText = rateDate ? "Gold rate as of " + rateDate + " · ₹" + Math.round(goldPrice).toLocaleString("en-IN") + "/g" : "";
+    if (asof) asof.textContent = asofText;
+    if (goldTop) goldTop.innerHTML = asofText ? "&#128337; " + asofText : "";
+    if (!holdings.length) { list.innerHTML = ""; return; }
+    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
+      '<span>Instrument</span><span>Sub-Cat</span><span class="mfh-col-num">Rate</span><span class="mfh-col-num">Gms</span>' +
+      '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
+    var body = holdings.map(function (h, i) {
+      var pal = { bg: "#FEF3C7", fg: "#B45309", accent: "amber" };
+      var pnl = h.current - h.invested;
+      var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
+      var dayChg = (dayChangePerGram || 0) * (h.grams || 0);
+      return '<div class="mfh-row mfh-color-amber" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
+        '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">Au</div>' +
+          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + (h.instrument || "Gold") + '</div><div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div></div></div>' +
+        '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + (h.subCategory || "Gold") + '</span></div>' +
+        '<div class="mfh-col-num mfh-num-primary">₹' + Math.round(goldPrice || 0).toLocaleString("en-IN") + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + (h.grams || 0).toFixed(2) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-day ' + (Math.abs(dayChg) < 0.01 ? "mfh-muted" : (dayChg >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(dayChg) < 0.01 ? "—" : ((dayChg >= 0 ? "+" : "") + formatCurrency(dayChg))) + '</div>' +
+        '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : pnlPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
+      '</div>';
+    }).join("");
+    list.innerHTML = header + body;
   }
 
   // Cash flows for EPF XIRR: each Deposit is money out (negative). Interest rows are

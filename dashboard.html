@@ -557,57 +557,46 @@
 
       <div id="subpanel-fixedincome" hidden>
       <section id="panel-fixedincome" class="invest-sub-panel" role="tabpanel" aria-labelledby="subtab-fixedincome">
-      <div class="panel-title-row">
-        <h2>Fixed Income/Commodity</h2>
-        <button type="button" id="fixedincome-refresh" class="theme-toggle refresh-btn" aria-label="Refresh Fixed Income/Commodity data" title="Refresh Fixed Income/Commodity data">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
-        </button>
+      <div class="panel-title-row" style="justify-content:flex-end;align-items:center;gap:12px;margin:0 0 8px;">
+        <span class="muted small" id="fi-gold-asof" style="font-size:0.72rem;"></span>
+        <button type="button" id="fixedincome-refresh" hidden></button>
       </div>
-      <p class="muted">A breakdown of your fixed income holdings.</p>
 
-      <div class="cat-overview-card" style="margin-bottom:16px;">
-        <div class="cat-stats-row">
-          <div class="cat-stat">
-            <span class="cat-stat-label">Invested</span>
-            <span class="cat-stat-value" id="fixedincome-total-investment">—</span>
-          </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Current</span>
-            <span class="cat-stat-value" id="fixedincome-current-value">—</span>
-          </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Unrealized P&amp;L</span>
-            <span class="cat-stat-value" id="fixedincome-unrealized-profit">—</span>
-          </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Return %</span>
-            <span class="cat-stat-value" id="fixedincome-return-pct">—</span>
-          </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">Realized P&amp;L</span>
-            <span class="cat-stat-value" id="fixedincome-realized-profit">—</span>
-          </div>
-          <div class="cat-stat-divider"></div>
-          <div class="cat-stat">
-            <span class="cat-stat-label">XIRR</span>
-            <span class="cat-stat-value" id="fixedincome-xirr">—</span>
-          </div>
+      <!-- Portfolio cards -->
+      <div class="mfpc-row" id="fipc-row"></div>
+
+      <!-- Allocation + Interest split -->
+      <div class="mfmid-row">
+        <div class="mfmid-card" id="fialloc-card">
+          <div class="mfmid-eyebrow">ALLOCATION &middot; SUB-CATEGORY</div>
+          <h3 class="mfmid-title">Where your fixed income sits</h3>
+          <div class="mfalloc-list" id="fialloc-list"></div>
+        </div>
+        <div class="mfmid-card" id="fisplit-card">
+          <div class="mfmid-eyebrow">INTEREST-BEARING SPLIT</div>
+          <div class="mfalloc-single-bar" id="fisplit-bar" style="margin-top:10px;"></div>
+          <div class="mfalloc-rows" id="fisplit-rows" style="margin-top:12px;"></div>
+          <p class="muted small" id="fisplit-summary" style="margin:12px 0 0;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:0.72rem;"></p>
         </div>
       </div>
 
-      <p class="muted small" id="fixedincome-connect-hint" style="margin-top:24px;">Connect your fixed income transaction sheet in <a href="settings.html">Settings</a> to populate this view.</p>
-
-      <div class="holdings-card">
-        <div class="holdings-card-header">
-          <h3>Fixed Income/Commodity Holding</h3>
+      <!-- Fixed Income holdings card list -->
+      <div class="mfh-card" id="fih-card">
+        <div class="mfh-header">
+          <div class="mfh-header-left">
+            <span class="mfh-eyebrow" id="fih-eyebrow">FIXED INCOME &middot; — HOLDINGS</span>
+            <h3 class="mfh-title">Fixed Income / Commodity Holding</h3>
+            <p class="muted small" style="margin:2px 0 0;font-size:0.7rem;">* Investment Corpus &amp; Savings Account are non-interest bearing and show no Unrealized Profit.</p>
+          </div>
+          <div class="mfh-header-right">
+            <div class="mfh-portfolio-toggle" id="fih-portfolio-toggle" role="group"></div>
+            <button type="button" class="mfh-btn" id="fih-sort-toggle" data-fih-sort="pnl-desc">Sort P&amp;L &darr;</button>
+          </div>
         </div>
         <p class="muted small" id="fixedincome-holding-status">Loading holdings…</p>
-        <p class="muted small" style="margin-top:0;margin-bottom:6px;">* Investment Corpus and Savings Account are considered non-interest bearing and show no Unrealized Profit.</p>
-        <div id="fixedincome-holding-table-wrap" class="holdings-table-wrap" hidden>
+        <div class="mfh-list" id="fih-list"></div>
+        <!-- Legacy hidden -->
+        <div id="fixedincome-holding-table-wrap" hidden>
           <table id="fixedincome-holding-table" class="holdings-table">
             <thead>
               <tr>
@@ -625,12 +614,18 @@
         </div>
       </div>
 
-      <div class="holdings-card">
-        <div class="holdings-card-header">
-          <h3>Physical Commodity Holding</h3>
+      <!-- Physical Commodity card list -->
+      <div class="mfh-card" id="cmh-card" style="margin-top:16px;">
+        <div class="mfh-header">
+          <div class="mfh-header-left">
+            <span class="mfh-eyebrow" id="cmh-eyebrow">PHYSICAL COMMODITY &middot; — HOLDINGS</span>
+            <h3 class="mfh-title">Physical Commodity Holding</h3>
+            <p class="muted small" id="cmh-gold-asof" style="margin:2px 0 0;font-size:0.7rem;"></p>
+          </div>
         </div>
         <p class="muted small" id="commodity-holdings-status">Loading holdings…</p>
-        <div id="commodity-holdings-table-wrap" class="holdings-table-wrap" hidden>
+        <div class="mfh-list" id="cmh-list"></div>
+        <div id="commodity-holdings-table-wrap" hidden>
           <table id="commodity-holdings-table" class="holdings-table">
             <thead>
               <tr>
@@ -2875,7 +2870,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micat75"></script>
+  <script src="script.js?v=micat76"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
