@@ -3584,77 +3584,10 @@
         } catch (e) {}
         return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
       })() : null;
-      // Also fold in stocksetf instruments mapped as "Commodity" (Gold/Silver
-      // ETFs, etc.). They resolve async because they need historical USD/INR
-      // for US-listed ETFs.
-      _buildStocksEtfCommodityHoldings(selectedPortfolio).then(function (etfCommodities) {
-        var combined = holdings.slice();
-        etfCommodities.forEach(function (h) { combined.push(h); });
-        statusEl.textContent = "";
-        tableWrap.hidden = true;
-        try { renderCmHoldingsCardList(combined, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
-      }).catch(function () {
-        statusEl.textContent = "";
-        tableWrap.hidden = true;
-        try { renderCmHoldingsCardList(holdings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
-      });
+      statusEl.textContent = "";
+      tableWrap.hidden = true;
+      try { renderCmHoldingsCardList(holdings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
     });
-  }
-
-  // Collect stocksetf holdings mapped to Commodity (e.g. Gold ETF).
-  function _buildStocksEtfCommodityHoldings(portfolioFilter) {
-    var rows = getSheetRows("stocksetf");
-    if (!rows || !rows.length) return Promise.resolve([]);
-    var mapping = buildStockMappingTable();
-    // Look up the first portfolio each instrument appears under (rows).
-    var portfolioByInstrument = {};
-    var header = rows[0].map(normalizeText);
-    var pIdx = header.indexOf("portfolio name");
-    var iIdx = header.indexOf("instrument name");
-    if (pIdx !== -1 && iIdx !== -1) {
-      rows.slice(1).forEach(function (row) {
-        var inst = (row[iIdx] || "").trim();
-        if (!inst) return;
-        if (!portfolioByInstrument[inst]) portfolioByInstrument[inst] = (row[pIdx] || "").trim();
-      });
-    }
-    return buildStockHoldings(rows, mapping, portfolioFilter, false).then(function (holdings) {
-      return fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; }).then(function (spd) {
-        var allPrices = (spd && spd.prices) || {};
-        var usdRateHist = (spd && spd.usd_inr_history) || {};
-        var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
-        var out = [];
-        holdings.forEach(function (h) {
-          var m = mapping[normalizeText(h.instrument)];
-          if (!m || normalizeText(m.category) !== "commodity") return;
-          var invested = 0;
-          h.lots.forEach(function (lot) {
-            if (h.region === "US") {
-              var rate = usdRateHist[formatDateISO(lot.date)] || usdInrToday;
-              invested += lot.units * lot.price * rate;
-            } else {
-              invested += lot.units * lot.price;
-            }
-          });
-          var pInfo = allPrices[h.ticker];
-          var price = pInfo ? pInfo.price : 0;
-          var current = h.remainingUnits * price;
-          if (h.region === "US") current *= usdInrToday;
-          out.push({
-            portfolio: portfolioByInstrument[h.instrument] || "",
-            instrument: h.instrument,
-            subCategory: m.subCat || "Commodity ETF",
-            grams: 0,
-            invested: invested,
-            current: current,
-            isEtf: true,
-            region: h.region,
-            ticker: h.ticker
-          });
-        });
-        return out;
-      });
-    }).catch(function () { return []; });
   }
 
   function renderCmHoldingsCardList(holdings, goldPrice, dayChangePerGram, rateDate) {
@@ -3672,27 +3605,19 @@
       '<span>Instrument</span><span>Sub-Cat</span><span class="mfh-col-num">Rate</span><span class="mfh-col-num">Gms</span>' +
       '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
     var body = holdings.map(function (h, i) {
-      var isEtf = !!h.isEtf;
       var pal = { bg: "#FEF3C7", fg: "#B45309", accent: "amber" };
       var pnl = h.current - h.invested;
       var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
       var dayChg = (dayChangePerGram || 0) * (h.grams || 0);
-      var avatarLabel = isEtf ? (h.ticker ? h.ticker.substring(0, 3).toUpperCase() : "ETF") : "Au";
-      var rateCell = isEtf ? '—' : '₹' + Math.round(goldPrice || 0).toLocaleString("en-IN");
-      var gmsCell = isEtf ? '—' : (h.grams || 0).toFixed(2);
-      var dayCell = isEtf
-        ? '—'
-        : (Math.abs(dayChg) < 0.01 ? "—" : ((dayChg >= 0 ? "+" : "") + formatCurrency(dayChg)));
-      var dayCls = isEtf ? "mfh-muted" : (Math.abs(dayChg) < 0.01 ? "mfh-muted" : (dayChg >= 0 ? "mfh-positive" : "mfh-negative"));
       return '<div class="mfh-row mfh-color-amber" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
-        '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + avatarLabel + '</div>' +
-          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + (h.instrument || "Gold") + (isEtf ? ' <span class="mfh-sip-badge" style="background:#DBEAFE;color:#1E40AF;">ETF</span>' : '') + '</div><div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div></div></div>' +
+        '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">Au</div>' +
+          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + (h.instrument || "Gold") + '</div><div class="mfh-inst-sub">' + (h.portfolio || "—") + '</div></div></div>' +
         '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + (h.subCategory || "Gold") + '</span></div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + rateCell + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + gmsCell + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">₹' + Math.round(goldPrice || 0).toLocaleString("en-IN") + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + (h.grams || 0).toFixed(2) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.current) + '</div>' +
-        '<div class="mfh-col-num mfh-num-day ' + dayCls + '">' + dayCell + '</div>' +
+        '<div class="mfh-col-num mfh-num-day ' + (Math.abs(dayChg) < 0.01 ? "mfh-muted" : (dayChg >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(dayChg) < 0.01 ? "—" : ((dayChg >= 0 ? "+" : "") + formatCurrency(dayChg))) + '</div>' +
         '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : pnlPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
       '</div>';
     }).join("");
