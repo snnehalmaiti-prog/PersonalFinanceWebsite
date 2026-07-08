@@ -2656,11 +2656,11 @@
   }
 
   function fetchXauInrForDate(dateStr) {
-    // Historical prices never change — cache indefinitely
+    // Historical prices never change — cache indefinitely (raw international spot).
     var cacheKey = "wf-gold-hist-" + dateStr;
     try {
       var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && cached.price) return Promise.resolve(cached.price);
+      if (cached && cached.price) return Promise.resolve(cached.price * getGoldPremiumMultiplier());
     } catch (e) {}
 
     // Fetch from one currency-api CDN URL
@@ -2701,7 +2701,7 @@
       return tryDateAllSources(dStr)
         .then(function (pricePerGram) {
           try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
-          return pricePerGram;
+          return pricePerGram * getGoldPremiumMultiplier();
         })
         .catch(function () {
           if (attemptsLeft <= 0) throw new Error("No XAU/INR found near " + dateStr);
@@ -2713,11 +2713,19 @@
     return tryDate(dateStr, 3);
   }
 
+  // Reads the user-configured India-retail premium % (0 = raw international spot).
+  function getGoldPremiumMultiplier() {
+    var raw = localStorage.getItem("wf-gold-premium-pct");
+    var pct = raw == null || raw === "" ? 0 : parseFloat(raw);
+    if (!isFinite(pct)) pct = 0;
+    return 1 + pct / 100;
+  }
+
   function fetchGoldPriceINRPerGram() {
     try {
       var cached = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
       if (cached && Date.now() - cached.fetchedAt < GOLD_PRICE_CACHE_MAX_AGE_MS) {
-        return Promise.resolve(cached.price);
+        return Promise.resolve(cached.price * getGoldPremiumMultiplier());
       }
     } catch (e) {}
 
@@ -2730,9 +2738,10 @@
         if (!xauInr) throw new Error("Invalid currency-api response");
         var priceInrPerGram = xauInr / TROY_OZ_TO_GRAM;
         try {
+          // Cache the raw international spot price; premium applied on read.
           localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), price: priceInrPerGram }));
         } catch (e) {}
-        return priceInrPerGram;
+        return priceInrPerGram * getGoldPremiumMultiplier();
       });
   }
 

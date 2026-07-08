@@ -91,6 +91,24 @@
           <button type="submit" class="btn btn-primary" id="profile-save" style="align-self:flex-start;">Save changes</button>
         </form>
       </div>
+
+      <h3 style="margin-top:32px;">Preferences</h3>
+      <div class="equity-card" style="max-width:520px;">
+        <div>
+          <label for="gold-premium-input" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">
+            Gold premium % <span class="muted" style="font-weight:400;">— added on top of international spot price to approximate the Indian retail rate</span>
+          </label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="number" id="gold-premium-input" step="0.1" min="0" max="30"
+              placeholder="e.g. 15"
+              style="width:120px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+            <span class="muted small">%</span>
+            <button type="button" class="btn btn-outline btn-sm" id="gold-premium-save">Save</button>
+            <span id="gold-premium-status" class="muted small" style="margin-left:8px;"></span>
+          </div>
+          <p class="muted small" style="margin:8px 0 0;">Typical range: 15–18% (import duty ≈15% + GST 3%). Set 0 to use the raw international spot price.</p>
+        </div>
+      </div>
     </section>
 
     <section id="panel-transactions" class="settings-panel" role="tabpanel" aria-labelledby="tab-transactions" hidden>
@@ -449,6 +467,25 @@
           profileSave.disabled = false;
           profileSave.textContent = origText;
         });
+      });
+    })();
+
+    // Gold premium % — persisted in localStorage; consumed by script.js gold fetchers.
+    (function wireGoldPremium() {
+      var input = document.getElementById("gold-premium-input");
+      var saveBtn = document.getElementById("gold-premium-save");
+      var status = document.getElementById("gold-premium-status");
+      if (!input || !saveBtn) return;
+      var stored = localStorage.getItem("wf-gold-premium-pct");
+      input.value = stored == null || stored === "" ? "15" : stored;
+      saveBtn.addEventListener("click", function () {
+        var v = parseFloat(input.value);
+        if (!isFinite(v) || v < 0) v = 0;
+        localStorage.setItem("wf-gold-premium-pct", String(v));
+        // Bust the cached "today" gold price so the new premium takes effect
+        // immediately instead of waiting for cache TTL.
+        try { localStorage.removeItem("wf-gold-price-inr-per-gram"); } catch (e) {}
+        if (status) { status.style.color = "#059669"; status.textContent = "Saved (" + v + "%)"; setTimeout(function () { status.textContent = ""; }, 2500); }
       });
     })();
 
