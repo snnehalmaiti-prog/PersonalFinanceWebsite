@@ -1049,12 +1049,21 @@
   }
   function todayIso() { return localIso(new Date()); }
 
+  // Re-entrancy guard: this can be triggered from both page-load and the
+  // Expense tab's onShow(). Without a guard, two concurrent runs read the same
+  // next_due (localStorage is only rewritten at the very end) and insert the
+  // SAME installment twice — duplicate expense records.
+  var _recurringRunning = false;
+
   function processRecurringPayments() {
+    if (_recurringRunning) return Promise.resolve();
+    if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) return Promise.resolve();
     var raw;
     try { raw = JSON.parse(localStorage.getItem("wf-recurring-payments")) || []; }
     catch (e) { return Promise.resolve(); }
     if (!raw.length) return Promise.resolve();
 
+    _recurringRunning = true;
     var today = todayIso();
     var chain = Promise.resolve();
     var changed = false;
@@ -1066,7 +1075,8 @@
       var maxN = row.num_payments || null;
       var done = row.installments_done || 0;
       var nextDue = row.next_due;
-      if (!nextDue) return;
+      var amt = Number(row.amount) || 0;
+      if (!nextDue || amt <= 0) return;
 
       function doOne() {
         if (nextDue > today) return null;
@@ -1077,7 +1087,7 @@
         var rec = {
           txn_date: dueIso,
           txn_at: new Date(dueIso + "T09:00:00").toISOString(),
-          amount: Number(row.amount) || 0,
+          amount: amt,
           type: row.type || "expense",
           account_id: (row.type === "income") ? null : (row.account_id || null),
           category_id: row.category_id || null,
@@ -1105,6 +1115,10 @@
           return WfAuth.saveSettingsToCloud().catch(function () {});
         }
       }
+    }).then(function () {
+      _recurringRunning = false;
+    }, function () {
+      _recurringRunning = false;
     });
   }
 
@@ -1131,7 +1145,12 @@
   // Expense tab's onShow fires). Guarded on auth + WfDb availability.
   function initRecurringOnLoad() {
     if (!window.WfAuth || !window.WfDb || !WfAuth.isLoggedIn()) return;
-    try { processRecurringPayments(); } catch (e) {}
+    // Pull the latest recurring state from cloud first so a second device
+    // doesn't re-post an installment another device already advanced.
+    var load = (WfAuth.loadSettingsFromCloud)
+      ? WfAuth.loadSettingsFromCloud().catch(function () {})
+      : Promise.resolve();
+    load.then(function () { try { processRecurringPayments(); } catch (e) {} });
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initRecurringOnLoad);
