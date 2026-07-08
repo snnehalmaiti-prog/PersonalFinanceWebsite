@@ -1939,9 +1939,27 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .benchmark-divider { width: 100%; min-height: 1px; margin: 4px 0; }
 }
 .bench-period-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px;
+}
+.bench-period-row .range-pill {
+  padding: 3px 9px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.bench-period-row .range-pill.active {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 .bench-mode-toggle {
   display: inline-flex;
