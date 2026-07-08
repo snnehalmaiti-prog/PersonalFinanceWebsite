@@ -3145,13 +3145,12 @@
           function openIt() {
             if (addFlag) {
               openRecModal(null, { template: true });
-              // Re-apply for 1s if a stray record-mode open resets the title.
-              var deadline = Date.now() + 1000;
-              var enforcer = setInterval(function () {
+              // Single deferred re-check (not a 100ms poll, which could wipe
+              // in-progress input) in case a stray record-mode open raced ahead.
+              setTimeout(function () {
                 var titleEl = document.getElementById("rec-modal-title");
                 if (titleEl && titleEl.textContent !== "Add Template") openRecModal(null, { template: true });
-                if (Date.now() > deadline) clearInterval(enforcer);
-              }, 100);
+              }, 250);
             } else if (editId) {
               var tpls = loadTemplates();
               var t = tpls.find(function (x) { return x.id === editId; });
@@ -3194,7 +3193,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=review1"></script>
+  <script src="script.js?v=review2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

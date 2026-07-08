@@ -509,6 +509,11 @@
     });
   }
 
+  // Debug logger — off by default so holdings/scheme codes/emails aren't dumped
+  // to the browser console in production. Enable with localStorage wf-debug=1.
+  var WF_DEBUG = (function () { try { return localStorage.getItem("wf-debug") === "1"; } catch (e) { return false; } })();
+  function dbg() { if (WF_DEBUG && window.console) console.log.apply(console, arguments); }
+
   function sumInvestmentForRows(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
@@ -902,15 +907,20 @@
         }
         var unitsToMatch = txn.units;
         var costOfSoldUnits = 0;
+        var matchedUnits = 0;
         while (unitsToMatch > 0 && buyLots.length) {
           var lot = buyLots[0];
           var matched = Math.min(unitsToMatch, lot.units);
           costOfSoldUnits += matched * lot.price;
+          matchedUnits += matched;
           lot.units -= matched;
           unitsToMatch -= matched;
           if (lot.units <= 0) buyLots.shift();
         }
-        var saleProceeds = txn.units * txn.price;
+        // Clamp proceeds to units actually matched against buy lots. Selling more
+        // than was ever bought (data-entry error / missed split) would otherwise
+        // credit the unmatched units full proceeds at zero cost → phantom profit.
+        var saleProceeds = matchedUnits * txn.price;
         total += saleProceeds - costOfSoldUnits;
       });
     });
@@ -2765,7 +2775,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var xauInr = data && data.xau && data.xau.inr;
-        console.log("[Gold] XAU/INR from currency-api:", xauInr);
+        dbg("[Gold] XAU/INR from currency-api:", xauInr);
         if (!xauInr) throw new Error("Invalid currency-api response");
         var priceInrPerGram = xauInr / TROY_OZ_TO_GRAM;
         try {
@@ -3607,7 +3617,7 @@
       results[2].forEach(function (r) { if (r.price) historicalPrices[r.dateStr] = r.price; });
 
       var allHoldings = buildCommodityHoldingsList(rows, selectedPortfolio, goldPrice, historicalPrices);
-      console.log("[Commodity] holdings:", allHoldings);
+      dbg("[Commodity] holdings:", allHoldings);
       if (allHoldings === null) {
         statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
         tableWrap.hidden = true;
@@ -4430,7 +4440,7 @@
       var commodityFlows = commodityData.flows;
 
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
-      console.log("[NAV] instruments held:", Object.keys(unitEvents), "resolved scheme codes:", instruments.map(function (name) { return name + " -> " + lookupSchemeCode(schemeMap, name); }));
+      dbg("[NAV] instruments held:", Object.keys(unitEvents), "resolved scheme codes:", instruments.map(function (name) { return name + " -> " + lookupSchemeCode(schemeMap, name); }));
       if (!instruments.length) {
         var reason = !Object.keys(unitEvents).length
           ? "No equity holdings found in the synced Mutual Fund Transactions sheet" + (lastUnitEventsDiagnostic ? " (" + lastUnitEventsDiagnostic + ")" : "") + "."
@@ -5857,7 +5867,7 @@
       })
       .then(function (r) {
         if (r && (r.status === 200 || r.status === 201)) {
-          console.log("stocksetf_mapping.json pushed to GitHub successfully.");
+          dbg("stocksetf_mapping.json pushed to GitHub successfully.");
         } else {
           console.warn("GitHub push returned status", r && r.status);
         }
@@ -5915,31 +5925,37 @@
       if (!amfiDate || !amfiNav) return data;
       var latest = data.length ? data[data.length - 1] : null;
       if (latest && latest.date.getTime() >= amfiDate.getTime()) return data;
-      console.log("[NAV] scheme " + schemeCode + ": applying newer AMFI NAV", { date: amfiDate, nav: amfiNav });
+      dbg("[NAV] scheme " + schemeCode + ": applying newer AMFI NAV", { date: amfiDate, nav: amfiNav });
       return data.concat([{ date: amfiDate, nav: amfiNav }]);
     });
   }
 
-  function fetchNavHistory(schemeCode) {
+  // In-flight dedup: on a cold cache the same scheme is requested by several
+  // render paths simultaneously (value chart, benchmark, overview). Without
+  // this, each fires an identical api.mfapi.in request. Keyed by schemeCode;
+  // cleared when the fetch settles.
+  var _navHistoryPromises = {};
+
+  // Resolve the base NAV history (cache-or-fetch), deduped across concurrent callers.
+  function fetchNavHistoryBase(schemeCode) {
     var cacheKey = NAV_CACHE_PREFIX + schemeCode;
     try {
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && Date.now() - cached.fetchedAt < NAV_CACHE_MAX_AGE_MS) {
         var revived = (cached.data || []).map(function (entry) { return { date: new Date(entry.date), nav: entry.nav }; });
-        console.log("[NAV] scheme " + schemeCode + ": using cached data, latest =", revived.length ? revived[revived.length - 1] : null, "fetched at", new Date(cached.fetchedAt));
-        return withAmfiNavOverride(schemeCode, revived);
+        return Promise.resolve(revived);
       }
     } catch (e) {}
 
-    console.log("[NAV] scheme " + schemeCode + ": fetching fresh from api.mfapi.in");
-    return fetch("https://api.mfapi.in/mf/" + schemeCode)
+    if (_navHistoryPromises[schemeCode]) return _navHistoryPromises[schemeCode];
+
+    var p = fetch("https://api.mfapi.in/mf/" + schemeCode)
       .then(function (res) { return res.json(); })
       .then(function (json) {
         var data = (json.data || [])
           .map(function (entry) { return { date: parseMfApiDate(entry.date), nav: parseNumber(entry.nav) }; })
           .filter(function (entry) { return entry.date; })
           .sort(function (a, b) { return a.date - b.date; });
-        console.log("[NAV] scheme " + schemeCode + ": fetched, latest =", data.length ? data[data.length - 1] : null);
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), data: data }));
         } catch (e) {}
@@ -5949,7 +5965,16 @@
         console.error("Failed to fetch NAV history for scheme " + schemeCode + ":", err);
         return [];
       })
-      .then(function (data) { return withAmfiNavOverride(schemeCode, data); });
+      .then(function (data) { delete _navHistoryPromises[schemeCode]; return data; }, function (e) { delete _navHistoryPromises[schemeCode]; throw e; });
+
+    _navHistoryPromises[schemeCode] = p;
+    return p;
+  }
+
+  function fetchNavHistory(schemeCode) {
+    return fetchNavHistoryBase(schemeCode).then(function (data) {
+      return withAmfiNavOverride(schemeCode, data);
+    });
   }
 
   function buildInstrumentIsinMap() {
@@ -8377,7 +8402,7 @@
       }
       // Bind unconditionally so the handler can never be lost
       yearSel.onchange = function () {
-        console.log("[MIC v12] year changed to", yearSel.value);
+        dbg("[MIC v12] year changed to", yearSel.value);
         __monthlyInvestCatYear = yearSel.value;
         drawMonthlyInvestCatChart(__monthlyInvestCatYear);
       };
@@ -9221,7 +9246,7 @@
       openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
       var cb = document.getElementById("equity-holdings-show-closed-only");
       if (cb) cb.checked = MFH_STATE.showClosed;
-      console.log("MF Open toggle → showClosed:", MFH_STATE.showClosed, "checkbox.checked:", cb && cb.checked);
+      dbg("MF Open toggle → showClosed:", MFH_STATE.showClosed, "checkbox.checked:", cb && cb.checked);
       renderEquityHoldingsTable();
     });
     if (sortBtn) sortBtn.addEventListener("click", function () {
@@ -10026,7 +10051,7 @@
         button.disabled = false;
         form.reset();
       }, 3000);
-      console.log("Signup requested for:", email);
+      dbg("Signup requested for:", email);
     });
   }
 })();
