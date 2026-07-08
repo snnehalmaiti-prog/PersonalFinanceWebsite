@@ -332,9 +332,10 @@
           <!-- Template -->
           <div class="exp-detail-panel" id="exp-detail-template" hidden>
             <div class="exp-detail-header">
-              <h3>Template</h3>
+              <h3>Templates</h3>
+              <button type="button" class="btn btn-primary btn-sm" id="exp-add-template-btn">+ Add Template</button>
             </div>
-            <p class="muted small equity-desc">Reusable transaction templates. Coming soon.</p>
+            <p class="muted small equity-desc">Reusable record shortcuts. Pick one from "Select template" while adding a new record.</p>
             <p class="muted small" id="exp-template-status">No templates yet.</p>
             <div id="exp-template-list" class="exp-list"></div>
           </div>
@@ -411,9 +412,60 @@
           document.querySelectorAll(".exp-detail-panel").forEach(function (p) {
             p.hidden = p.id !== "exp-detail-" + panel;
           });
+          if (panel === "template") renderExpenseTemplates();
         });
       });
     })();
+
+    // Expense templates (stored in localStorage; edited via dashboard Add Record modal).
+    var TEMPLATE_KEY = "wf-expense-templates";
+    function loadTemplates() {
+      try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || []; } catch (e) { return []; }
+    }
+    function saveTemplates(list) { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list)); }
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    function renderExpenseTemplates() {
+      var list = document.getElementById("exp-template-list");
+      var status = document.getElementById("exp-template-status");
+      if (!list) return;
+      var tpls = loadTemplates();
+      if (!tpls.length) {
+        if (status) { status.hidden = false; status.textContent = "No templates yet."; }
+        list.innerHTML = "";
+        return;
+      }
+      if (status) status.hidden = true;
+      list.innerHTML = tpls.map(function (t) {
+        var r = t.row || {};
+        var meta = [];
+        if (r.type) meta.push(r.type);
+        if (r.amount) meta.push("₹" + r.amount);
+        return '<div class="exp-list-item"><div style="flex:1;"><div style="font-weight:600;">' + esc(t.name) + '</div>' +
+          '<div class="muted small" style="font-size:0.72rem;">' + esc(meta.join(" · ")) + '</div></div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-tpl-edit="' + esc(t.id) + '">Edit</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-tpl-del="' + esc(t.id) + '" style="color:#dc2626;">Delete</button>' +
+          '</div></div>';
+      }).join("");
+      list.querySelectorAll("[data-tpl-del]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (!confirm("Delete this template?")) return;
+          var id = btn.getAttribute("data-tpl-del");
+          saveTemplates(loadTemplates().filter(function (t) { return t.id !== id; }));
+          renderExpenseTemplates();
+        });
+      });
+      list.querySelectorAll("[data-tpl-edit]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-tpl-edit");
+          location.href = "dashboard.html?tab=expense&editTemplate=" + encodeURIComponent(id);
+        });
+      });
+    }
+    var addTemplateBtn = document.getElementById("exp-add-template-btn");
+    if (addTemplateBtn) addTemplateBtn.addEventListener("click", function () {
+      location.href = "dashboard.html?tab=expense&addTemplate=1";
+    });
   </script>
   <script>
     (function () {

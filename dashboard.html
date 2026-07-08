@@ -820,7 +820,12 @@
           </div>
           <div class="rec-modal-body">
             <div class="rec-col">
-              <label class="rec-field">
+              <label class="rec-field" id="rec-template-name-field" style="display:none;">
+                <span>Template name <span style="color:#EF4444;">*</span></span>
+                <input type="text" id="rec-template-name" placeholder="e.g. Monthly rent" />
+              </label>
+
+              <label class="rec-field" id="rec-template-select-field">
                 <span>Select template</span>
                 <select id="rec-template"><option value="">— none —</option></select>
               </label>
@@ -2659,12 +2664,44 @@
 
       // ── Record modal ──────────────────────────────────────────────────────
       var editingRecId = null;
+      var editingTemplateMode = false;
+      var editingTemplateId = null;
 
-      function openRecModal(record) {
-        editingRecId = record ? record.id : null;
+      // Template storage helpers (localStorage keyed by user).
+      var TEMPLATE_KEY = "wf-expense-templates";
+      function loadTemplates() {
+        try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || []; } catch (e) { return []; }
+      }
+      function saveTemplates(list) {
+        localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
+      }
+      function refreshTemplateSelect() {
+        var sel = document.getElementById("rec-template");
+        if (!sel) return;
+        var tpls = loadTemplates();
+        sel.innerHTML = '<option value="">— none —</option>' +
+          tpls.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>'; }).join("");
+      }
+
+      function openRecModal(record, opts) {
+        opts = opts || {};
+        editingTemplateMode = !!opts.template;
+        editingTemplateId = opts.templateId || null;
+        editingRecId = (record && !editingTemplateMode) ? record.id : null;
         document.getElementById("rec-modal-error").textContent = "";
-        document.getElementById("rec-modal-title").textContent = record ? "Edit Record" : "Add Record";
-        document.getElementById("rec-modal-save").textContent = record ? "Save Changes" : "Add Record";
+        var isEdit = !!record && !editingTemplateMode;
+        var title = editingTemplateMode ? (editingTemplateId ? "Edit Template" : "Add Template") : (isEdit ? "Edit Record" : "Add Record");
+        var saveLbl = editingTemplateMode ? (editingTemplateId ? "Save Template" : "Add Template") : (isEdit ? "Save Changes" : "Add Record");
+        document.getElementById("rec-modal-title").textContent = title;
+        document.getElementById("rec-modal-save").textContent = saveLbl;
+        // Show/hide Name and Template-select fields based on mode.
+        var nameField = document.getElementById("rec-template-name-field");
+        var selField = document.getElementById("rec-template-select-field");
+        if (nameField) nameField.style.display = editingTemplateMode ? "" : "none";
+        if (selField) selField.style.display = editingTemplateMode ? "none" : "";
+        var nameInput = document.getElementById("rec-template-name");
+        if (nameInput) nameInput.value = (record && record.name) ? record.name : "";
+        refreshTemplateSelect();
         fillRecDropdowns();
         function nowLocalDT() {
           var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -3019,6 +3056,27 @@
           labels: splitData ? JSON.stringify({ budget_split: splitData }) : null
         };
         var btn = document.getElementById("rec-modal-save");
+        // Template mode: save/update in localStorage instead of Supabase.
+        if (editingTemplateMode) {
+          var nm = (document.getElementById("rec-template-name").value || "").trim();
+          if (!nm) { document.getElementById("rec-modal-error").textContent = "Template name is required."; return; }
+          var tpls = loadTemplates();
+          var tplRow = {
+            id: editingTemplateId || ("tpl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7)),
+            name: nm,
+            row: row
+          };
+          if (editingTemplateId) {
+            tpls = tpls.map(function (t) { return t.id === editingTemplateId ? tplRow : t; });
+          } else {
+            tpls.push(tplRow);
+          }
+          saveTemplates(tpls);
+          editingTemplateMode = false; editingTemplateId = null;
+          closeRecModal();
+          if (typeof renderExpenseTemplates === "function") renderExpenseTemplates();
+          return;
+        }
         var origLabel = editingRecId ? "Save Changes" : "Add Record";
         btn.disabled = true; btn.textContent = "Saving…";
         console.log("Saving record", editingRecId, "labels:", row.labels, "splitData:", splitData);
@@ -3033,7 +3091,46 @@
           document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
         });
       }
+      // Expose openRecModal so the settings page (same window) can call it.
+      window.openRecModalAsTemplate = function (existingTpl) {
+        var record = null;
+        if (existingTpl && existingTpl.row) {
+          record = Object.assign({}, existingTpl.row, { name: existingTpl.name });
+        }
+        openRecModal(record, { template: true, templateId: existingTpl ? existingTpl.id : null });
+      };
+      // Template pick fills the modal with saved values.
+      var tplSel = document.getElementById("rec-template");
+      if (tplSel) tplSel.addEventListener("change", function () {
+        var tpls = loadTemplates();
+        var t = tpls.find(function (x) { return x.id === tplSel.value; });
+        if (!t || !t.row) return;
+        var r = t.row;
+        setRecType(r.type || "expense");
+        document.getElementById("rec-amount").value = r.amount || "";
+        document.getElementById("rec-note").value = r.note || "";
+        document.getElementById("rec-account").value = r.account_id || "";
+        document.getElementById("rec-category").value = r.category_id || "";
+        fillRecSubcategories(r.category_id || "");
+        document.getElementById("rec-subcategory").value = r.subcategory_id || "";
+        document.getElementById("rec-payment-method").value = r.payment_method_id || "";
+      });
       document.getElementById("rec-open-btn").addEventListener("click", function () { openRecModal(null); });
+
+      // Auto-open template modal from settings link.
+      (function () {
+        try {
+          var params = new URLSearchParams(location.search);
+          if (params.get("addTemplate") === "1") {
+            setTimeout(function () { openRecModal(null, { template: true }); }, 300);
+          } else if (params.get("editTemplate")) {
+            var id = params.get("editTemplate");
+            var tpls = loadTemplates();
+            var t = tpls.find(function (x) { return x.id === id; });
+            if (t) setTimeout(function () { openRecModal(Object.assign({}, t.row, { name: t.name }), { template: true, templateId: t.id }); }, 300);
+          }
+        } catch (e) {}
+      })();
       document.getElementById("rec-modal-close").addEventListener("click", closeRecModal);
       document.getElementById("rec-modal-cancel").addEventListener("click", closeRecModal);
       document.getElementById("rec-modal-save").addEventListener("click", saveRec);
