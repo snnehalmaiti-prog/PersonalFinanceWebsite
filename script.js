@@ -3755,14 +3755,16 @@
       if (!m) return;
       var cat = normalizeText(m.category || "");
       if (cat.indexOf("etf") !== -1) return; // direct equity only
-      var seg = String(m.subCat || m.segment || "").toLowerCase();
+      // Market cap can live in 'Market Segment', 'Instrument Sub Category', or
+      // sometimes 'Instrument Category'. Check them all.
+      var seg = String((m.segment || "") + " " + (m.subCat || "") + " " + (m.category || "")).toLowerCase();
       var key = seg.indexOf("large") !== -1 ? "Large-cap"
         : seg.indexOf("mid") !== -1 ? "Mid-cap"
         : seg.indexOf("small") !== -1 ? "Small-cap" : null;
       if (key) byCap[key] += h.currentINR || 0;
     });
     var total = byCap["Large-cap"] + byCap["Mid-cap"] + byCap["Small-cap"];
-    if (total <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No market-cap data (add sub-category to stocksetfmapping).</p>'; return; }
+    if (total <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No market-cap data. Expected values like "Large Cap" / "Mid Cap" / "Small Cap" in the Market Segment column of the Stocks/ETF mapping sheet.</p>'; return; }
     var COL = { "Large-cap": "#E8623A", "Mid-cap": "#D4A017", "Small-cap": "#10B981" };
     bar.innerHTML = ["Large-cap", "Mid-cap", "Small-cap"].map(function (k) {
       var pct = byCap[k] / total * 100;
