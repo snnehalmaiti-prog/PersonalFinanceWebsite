@@ -7439,7 +7439,7 @@
       if (sum <= 0) return "";
       return parts.map(function (p) {
         var pc = (p.value / sum) * 100;
-        var pcStr = Math.round(pc) + "%";
+        var pcStr = (pc < 1 ? pc.toFixed(1) : String(Math.round(pc))) + "%";
         return '<span class="isc-cat-chip" title="' + p.label + ' ₹' + Math.round(p.value).toLocaleString("en-IN") + '"><span class="isc-cat-dot" style="background:' + p.color + '"></span>' +
           p.label + ' ' + pcStr + '</span>';
       }).join("");
