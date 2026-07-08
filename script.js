@@ -974,13 +974,12 @@
     if (!list) return;
     var rows = list.querySelectorAll(".mfh-row");
     if (rows.length <= threshold + 1) return;
-    var subtotal = rows[rows.length - 1];
     var details = Array.prototype.slice.call(rows, 0, rows.length - 1);
     var state = WF_FOLD_STATE[listId] || (WF_FOLD_STATE[listId] = { folded: true });
     var toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "wf-fold-toggle";
-    toggle.style.cssText = "background:transparent;border:1px dashed var(--border,#d1d5db);color:var(--muted,#6b7280);font-size:0.75rem;font-weight:600;cursor:pointer;padding:8px 12px;margin:6px 0;border-radius:6px;width:100%;text-align:center;";
+    toggle.style.cssText = "background:#111827;color:#fff;border:0;font-size:0.78rem;font-weight:600;cursor:pointer;padding:8px 14px;margin:6px 0;border-radius:999px;align-self:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);";
     function apply() {
       details.forEach(function (d) { d.style.display = state.folded ? "none" : ""; });
       toggle.textContent = state.folded
@@ -988,7 +987,10 @@
         : ("▾ Hide instruments");
     }
     toggle.addEventListener("click", function () { state.folded = !state.folded; apply(); });
-    list.insertBefore(toggle, subtotal);
+    // Insert at the top of the list (after the header) so it's always visible.
+    var header = list.querySelector(".mfh-list-header");
+    if (header && header.nextSibling) list.insertBefore(toggle, header.nextSibling);
+    else list.appendChild(toggle);
     apply();
   }
 
