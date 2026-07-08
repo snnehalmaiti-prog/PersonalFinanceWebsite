@@ -7892,15 +7892,77 @@
           var commHoldings = buildCommodityHoldingsList(fdRows, selected, goldPrice, histPrices) || [];
           var commTotal = 0;
           commHoldings.forEach(function (h) {
-            if (!(h.invested > UNITS_EPSILON)) return;
-            commTotal += h.invested;
+            if (!(h.current > UNITS_EPSILON)) return;
+            commTotal += h.current;
             var name = (h.portfolio || "").trim() || "Unassigned";
-            perCat["Commodity"][name] = (perCat["Commodity"][name] || 0) + h.invested;
+            perCat["Commodity"][name] = (perCat["Commodity"][name] || 0) + h.current;
           });
           if (commTotal > UNITS_EPSILON) { investedByCat["Commodity"] += commTotal; draw(); }
         });
       }
     }
+    // Replace commodity MF/ETF invested basis with current value (per portfolio).
+    (function replaceMfEtfCommodityWithCurrent() {
+      var rowsSE = getSheetRows("stocksetf");
+      var rowsMF = getSheetRows("equity");
+      var _seMap2 = {}, _mfCatMap2 = {};
+      try { _seMap2 = buildStockMappingTable(); } catch (e) {}
+      try { _mfCatMap2 = buildMfCategoryMap(); } catch (e) {}
+      var work = [];
+      if (rowsSE && Object.keys(_seMap2).length) {
+        work.push(fetchAllStockPrices().catch(function () { return { prices: {} }; }).then(function (data) {
+          var prices = data.prices || {};
+          portfolioNames.forEach(function (p) {
+            var tx = groupUnitTransactionsByInstrument(rowsSE, p);
+            if (!tx) return;
+            Object.keys(tx).forEach(function (nm) {
+              var m = _seMap2[normalizeText(nm)];
+              if (!m || normalizeText(m.category) !== "commodity") return;
+              var remaining = fifoRemainingLots(tx[nm]);
+              var units = 0, invested = 0;
+              remaining.forEach(function (l) { units += l.units; invested += l.units * l.price; });
+              var pe = prices[m.ticker];
+              var ltp = pe ? pe.price : null;
+              if (ltp == null || units < UNITS_EPSILON) return;
+              var curr = units * ltp;
+              var delta = curr - invested;
+              if (Math.abs(delta) < 0.01) return;
+              perCat["Commodity"][p] = (perCat["Commodity"][p] || 0) + delta;
+              investedByCat["Commodity"] += delta;
+            });
+          });
+        }));
+      }
+      if (rowsMF) {
+        work.push(buildInstrumentSchemeMap().then(function (schemeMap) {
+          var jobs = [];
+          portfolioNames.forEach(function (p) {
+            var tx = groupUnitTransactionsByInstrument(rowsMF, p);
+            if (!tx) return;
+            Object.keys(tx).forEach(function (nm) {
+              if (_mfCatMap2[normalizeText(nm)] !== "commodity") return;
+              var remaining = fifoRemainingLots(tx[nm]);
+              var units = 0, invested = 0;
+              remaining.forEach(function (l) { units += l.units; invested += l.units * l.price; });
+              if (units < 1) return;
+              var code = lookupSchemeCode(schemeMap, nm);
+              if (!code) return;
+              jobs.push(fetchNavHistory(code).catch(function () { return []; }).then(function (nh) {
+                var latest = nh.length ? nh[nh.length - 1] : null;
+                if (!latest) return;
+                var curr = units * latest.nav;
+                var delta = curr - invested;
+                if (Math.abs(delta) < 0.01) return;
+                perCat["Commodity"][p] = (perCat["Commodity"][p] || 0) + delta;
+                investedByCat["Commodity"] += delta;
+              }));
+            });
+          });
+          return Promise.all(jobs);
+        }));
+      }
+      Promise.all(work).then(function () { try { draw(); } catch (e) {} }).catch(function () {});
+    })();
   }
 
   // No initializers: renderMonthlyInvestmentByCategory() runs earlier in this
