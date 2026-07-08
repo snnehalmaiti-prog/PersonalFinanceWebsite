@@ -3126,6 +3126,11 @@
           var addFlag = params.get("addTemplate") === "1";
           var editId = params.get("editTemplate");
           if (!addFlag && !editId) return;
+          // Strip the param immediately so a reload doesn't re-open the modal.
+          try {
+            var cleanUrl = location.pathname + location.hash;
+            history.replaceState({}, "", cleanUrl);
+          } catch (e) {}
           function openIt() {
             if (addFlag) {
               openRecModal(null, { template: true });
