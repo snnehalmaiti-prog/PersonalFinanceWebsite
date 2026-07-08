@@ -3884,31 +3884,57 @@
     var eyebrow = document.getElementById("secap-eyebrow");
     if (!bar || !rows) return;
     if (SECAP_STATE.mode === "portfolio") {
-      if (eyebrow) eyebrow.textContent = "PORTFOLIO SPLIT · STOCKS & ETF";
-      var byPort = {};
+      if (eyebrow) eyebrow.textContent = "PORTFOLIO SPLIT · MARKET-CAP";
+      var mappingP = buildStockMappingTable();
+      function _capOf(h) {
+        var m = mappingP[normalizeText(h.instrument)];
+        if (!m) return null;
+        var cat = normalizeText(m.category || "");
+        if (cat.indexOf("etf") !== -1) return null;
+        var seg = String((m.segment || "") + " " + (m.subCat || "") + " " + (m.category || "")).toLowerCase();
+        if (seg.indexOf("large") !== -1) return "Large-cap";
+        if (seg.indexOf("mid") !== -1) return "Mid-cap";
+        if (seg.indexOf("small") !== -1) return "Small-cap";
+        return null;
+      }
+      var CAP_COL = { "Large-cap": "#E8623A", "Mid-cap": "#D4A017", "Small-cap": "#10B981" };
+      var byPort = {}; // { portfolio: { total, caps: {Large-cap, Mid-cap, Small-cap} } }
       rowsData.forEach(function (h) {
         var p = h._portfolio || "Unassigned";
-        byPort[p] = (byPort[p] || 0) + (h.currentINR || 0);
+        var cap = _capOf(h);
+        if (!cap) return; // ETFs / unclassified skipped for market-cap breakdown
+        if (!byPort[p]) byPort[p] = { total: 0, caps: { "Large-cap": 0, "Mid-cap": 0, "Small-cap": 0 } };
+        byPort[p].caps[cap] += h.currentINR || 0;
+        byPort[p].total += h.currentINR || 0;
       });
-      var entries = Object.keys(byPort).map(function (k) { return { name: k, value: byPort[k] }; })
-        .filter(function (e) { return e.value > 0.01; })
-        .sort(function (a, b) { return b.value - a.value; });
-      var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
-      if (!entries.length || total <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No portfolio data.</p>'; return; }
-      var PAL = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
+      var entries = Object.keys(byPort).map(function (k) { return { name: k, total: byPort[k].total, caps: byPort[k].caps }; })
+        .filter(function (e) { return e.total > 0.01; })
+        .sort(function (a, b) { return b.total - a.total; });
+      var grand = entries.reduce(function (s, e) { return s + e.total; }, 0);
+      if (!entries.length || grand <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No portfolio-level market-cap data.</p>'; return; }
+      var PORT_PAL = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
       bar.innerHTML = entries.map(function (e, i) {
-        var pct = (e.value / total) * 100;
-        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
+        var pct = (e.total / grand) * 100;
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + e.name + '"></span>';
       }).join("");
       rows.innerHTML = entries.map(function (e, i) {
-        var pct = (e.value / total) * 100;
-        var col = PAL[i % PAL.length];
-        return '<div class="mfalloc-row">' +
-          '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
-          '<span class="mfalloc-nums">' +
-            '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
-            '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
-          '</span>' +
+        var pct = (e.total / grand) * 100;
+        var col = PORT_PAL[i % PORT_PAL.length];
+        // Per-portfolio market-cap chips underneath the row.
+        var chips = ["Large-cap", "Mid-cap", "Small-cap"].filter(function (k) { return e.caps[k] > 0.01; })
+          .map(function (k) {
+            var kpct = (e.caps[k] / e.total) * 100;
+            return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + CAP_COL[k] + '"></span>' + k + ' ' + Math.round(kpct) + '%</span>';
+          }).join("");
+        return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
+          '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
+            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+            '<span class="mfalloc-nums">' +
+              '<span class="mfalloc-amount">' + formatCurrency(e.total) + '</span>' +
+              '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
+            '</span>' +
+          '</div>' +
+          (chips ? '<div class="isc-cat-sub">' + chips + '</div>' : '') +
         '</div>';
       }).join("");
       return;
