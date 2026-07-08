@@ -979,7 +979,7 @@
     var toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "wf-fold-toggle";
-    toggle.style.cssText = "background:#111827;color:#fff;border:0;font-size:0.78rem;font-weight:600;cursor:pointer;padding:8px 14px;margin:6px 0;border-radius:999px;align-self:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);";
+    toggle.style.cssText = "background:#111827;color:#fff;border:0;font-size:0.66rem;font-weight:600;cursor:pointer;padding:3px 9px;margin:3px 0;border-radius:999px;align-self:center;box-shadow:0 1px 2px rgba(0,0,0,0.08);";
     function apply() {
       details.forEach(function (d) { d.style.display = state.folded ? "none" : ""; });
       toggle.textContent = state.folded
