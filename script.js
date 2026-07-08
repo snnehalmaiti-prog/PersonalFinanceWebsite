@@ -7805,7 +7805,7 @@
             var name = (h.portfolio || "").trim() || "Unassigned";
             perCat["Commodity"][name] = (perCat["Commodity"][name] || 0) + h.invested;
           });
-          if (commTotal > UNITS_EPSILON) { investedByCat["Commodity"] = commTotal; draw(); }
+          if (commTotal > UNITS_EPSILON) { investedByCat["Commodity"] += commTotal; draw(); }
         });
       }
     }
