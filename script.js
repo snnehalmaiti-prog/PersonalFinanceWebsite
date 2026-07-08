@@ -3949,14 +3949,20 @@
   // Wire the Market-cap / Portfolio toggle on the Stocks/ETF split card.
   (function wireSecapToggle() {
     var card = document.getElementById("secap-card");
-    if (!card) return;
+    if (!card) { console.warn("SECAP wire: card element not found"); return; }
     var buttons = card.querySelectorAll("[data-secap-mode]");
+    if (!buttons.length) { console.warn("SECAP wire: no toggle buttons found"); return; }
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
         SECAP_STATE.mode = btn.dataset.secapMode;
+        console.log("SECAP toggle clicked → mode:", SECAP_STATE.mode);
         buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
-        // Re-render using the last-cached rowsData (openOnly subset).
-        if (window.__seLastOpenRowsData) renderSeMarketCapSplit(window.__seLastOpenRowsData);
+        if (window.__seLastOpenRowsData) {
+          renderSeMarketCapSplit(window.__seLastOpenRowsData);
+        } else {
+          console.warn("SECAP: no cached rowsData; forcing full re-render");
+          if (typeof renderStockEtfHoldingsTable === "function") renderStockEtfHoldingsTable();
+        }
       });
     });
   })();
