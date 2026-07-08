@@ -7655,7 +7655,7 @@
       list.innerHTML = '<p class="muted small" style="padding:20px;text-align:center;">No holdings to show.</p>';
       return;
     }
-    var header = '<div class="mfh-list-header"><span>Instrument</span><span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">P&amp;L · Return</span><span class="mfh-col-num">XIRR</span></div>';
+    var header = '<div class="mfh-list-header"><span>Instrument</span><span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">P&amp;L · Return</span><span class="mfh-col-num">XIRR</span></div>';
     var body = filtered.map(function (r, i) {
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
@@ -7675,6 +7675,9 @@
         '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.invested) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-day ' + (r.dayChgPct == null ? "mfh-muted" : (r.dayChgPct >= 0 ? "mfh-positive" : "mfh-negative")) + '">' +
+          (r.dayChgPct == null ? "—" : ((r.dayChgPct >= 0 ? "+" : "") + r.dayChgPct.toFixed(2) + "%")) +
+        '</div>' +
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + formatCurrency(r.pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + r.pnlPct.toFixed(2) + '%</span>' +
