@@ -3625,7 +3625,13 @@
   }
 
   // ── Stocks/ETF tab redesign ────────────────────────────────────────────
-  var SEH_STATE = { sort: "pnl-desc", portfolio: "all", showClosed: false };
+  // State is now per-region so India and US holdings tables filter/sort/toggle
+  // independently of each other.
+  var SEH_STATE = {
+    sort: { india: "pnl-desc", us: "pnl-desc" },
+    portfolio: { india: "all", us: "all" },
+    showClosed: { india: false, us: false }
+  };
   var SE_AVATAR_PALETTE = [
     { bg: "#D1FAE5", fg: "#065F46", accent: "green" },
     { bg: "#FEF3C7", fg: "#B45309", accent: "amber" },
@@ -3719,14 +3725,9 @@
 
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
     // Portfolio Cards / Geography / Market-cap panels ALWAYS reflect the
-    // OPEN positions regardless of the Open/Closed toggle. Only the holdings
-    // card list flips between open and closed views.
+    // OPEN positions regardless of the Open/Closed toggle. Holdings lists
+    // filter independently per region below.
     var openOnly = rowsData.filter(function (r) { return !((r.units || 0) < 1 || r.isClosed); });
-    var visible = rowsData.filter(function (r) {
-      var isClosed = (r.units || 0) < 1 || r.isClosed;
-      return SEH_STATE.showClosed ? isClosed : !isClosed;
-    });
-    var open = openOnly; // legacy variable name — used below for summary cards
     // Enrich each holding with its portfolio ONLY if it wasn't already tagged
     // upstream (e.g. by _buildPerPortfolioSeRowsData). This preserves proper
     // per-(portfolio × instrument) attribution.
@@ -3747,32 +3748,32 @@
     renderSePortfolioCards(openOnly);
     renderSeAllocation(openOnly);
     renderSeMarketCapSplit(openOnly);
-    _wireSeHoldingsPortfolioToggle(visible, usdInrToday);
-    renderSeHoldingsCardList(visible, "india");
-    renderSeHoldingsCardList(visible, "us", usdInrToday);
+    _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday);
+    renderSeHoldingsCardList(rowsData, "india");
+    renderSeHoldingsCardList(rowsData, "us", usdInrToday);
   }
 
-  function _wireSeHoldingsPortfolioToggle(open, usdInrToday) {
+  function _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday) {
     var seRows = getSheetRows("stocksetf");
     if (!seRows) return;
     var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["stocksetf"]) || []);
-    var toggleIds = ["seh-portfolio-toggle", "seh-us-portfolio-toggle"];
-    toggleIds.forEach(function (id) {
-      var el = document.getElementById(id);
+    // Each region's toggle updates only its own state and re-renders only its list.
+    [
+      { id: "seh-portfolio-toggle", region: "india" },
+      { id: "seh-us-portfolio-toggle", region: "us" }
+    ].forEach(function (spec) {
+      var el = document.getElementById(spec.id);
       if (!el) return;
+      var currentPortfolio = SEH_STATE.portfolio[spec.region] || "all";
       el.innerHTML = portfolios.map(function (p) {
         var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === SEH_STATE.portfolio ? "active" : "") + '" data-seh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === currentPortfolio ? "active" : "") + '" data-seh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
       }).join("");
       el.querySelectorAll("[data-seh-portfolio]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          SEH_STATE.portfolio = btn.dataset.sehPortfolio;
-          toggleIds.forEach(function (tid) {
-            var t = document.getElementById(tid);
-            if (t) t.querySelectorAll("[data-seh-portfolio]").forEach(function (b) { b.classList.toggle("active", b.dataset.sehPortfolio === SEH_STATE.portfolio); });
-          });
-          renderSeHoldingsCardList(open, "india");
-          renderSeHoldingsCardList(open, "us", usdInrToday);
+          SEH_STATE.portfolio[spec.region] = btn.dataset.sehPortfolio;
+          el.querySelectorAll("[data-seh-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          renderSeHoldingsCardList(rowsData, spec.region, usdInrToday);
         });
       });
     });
@@ -3925,26 +3926,32 @@
     var eyebrow = document.getElementById(eyebrowId);
     if (!list) return;
     var mapping = buildStockMappingTable();
+    var regionShowClosed = !!SEH_STATE.showClosed[region];
+    var regionPortfolio = SEH_STATE.portfolio[region] || "all";
+    var regionSort = SEH_STATE.sort[region] || "pnl-desc";
     var filtered = rowsData.filter(function (h) {
       var isUS = h.region === "US";
       if (region === "us" && !isUS) return false;
       if (region === "india" && isUS) return false;
-      if (SEH_STATE.portfolio && SEH_STATE.portfolio !== "all") {
-        if (normalizeText(h._portfolio || "") !== normalizeText(SEH_STATE.portfolio)) return false;
+      var isClosed = (h.units || 0) < 1 || h.isClosed;
+      if (regionShowClosed ? !isClosed : isClosed) return false;
+      if (regionPortfolio && regionPortfolio !== "all") {
+        if (normalizeText(h._portfolio || "") !== normalizeText(regionPortfolio)) return false;
       }
       return true;
     });
-    var sParts = String(SEH_STATE.sort || "pnl-desc").split("-");
+    var sParts = String(regionSort).split("-");
     var sortKey = sParts[0];
     var sortDir = sParts[1] === "asc" ? 1 : -1;
     filtered.sort(function (a, b) { return sortDir * _sehSortCompare(a, b, sortKey); });
     var label = region === "us" ? "US" : "INDIA";
     var count = filtered.length;
+    var suffix = regionShowClosed ? " CLOSED" : " OPEN";
     if (eyebrow) {
       if (region === "us") {
-        eyebrow.innerHTML = 'US · ' + count + ' OPEN <span id="seh-us-usdinr" class="mfh-sip-badge" style="margin-left:6px;">USD/INR · ' + (usdInrToday ? Number(usdInrToday).toFixed(2) : "—") + '</span>';
+        eyebrow.innerHTML = 'US · ' + count + suffix + ' <span id="seh-us-usdinr" class="mfh-sip-badge" style="margin-left:6px;">USD/INR · ' + (usdInrToday ? Number(usdInrToday).toFixed(2) : "—") + '</span>';
       } else {
-        eyebrow.textContent = label + " · " + count + " OPEN";
+        eyebrow.textContent = label + " · " + count + suffix;
       }
     }
     if (!filtered.length) { list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + label.toLowerCase() + ' holdings.</p>'; return; }
@@ -4001,41 +4008,31 @@
     list.querySelectorAll("[data-seh-sort-col]").forEach(function (el) {
       el.addEventListener("click", function () {
         var col = el.dataset.sehSortCol;
-        var cur = String(SEH_STATE.sort || "").split("-");
-        SEH_STATE.sort = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
-        renderSeHoldingsCardList(rowsData, "india");
-        renderSeHoldingsCardList(rowsData, "us", usdInrToday);
+        var cur = String(SEH_STATE.sort[region] || "").split("-");
+        SEH_STATE.sort[region] = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
+        renderSeHoldingsCardList(rowsData, region, usdInrToday);
       });
     });
   }
 
-  // Wire Stocks/ETF controls — both India and US card headers share state.
+  // Wire Stocks/ETF controls — India and US Open toggles operate independently.
   (function wireSeControls() {
-    var openIds = ["seh-open-toggle", "seh-us-open-toggle"];
-    var sortIds = ["seh-sort-toggle", "seh-us-sort-toggle"];
-    function _syncOpenBtns() {
-      openIds.forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = SEH_STATE.showClosed ? "Closed" : "Open"; });
-    }
-    function _syncSortBtns() {
-      sortIds.forEach(function (id) { var el = document.getElementById(id); if (el) el.innerHTML = "Sort P&amp;L " + (SEH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;"); });
-    }
-    openIds.forEach(function (id) {
-      var btn = document.getElementById(id);
+    [
+      { id: "seh-open-toggle", region: "india" },
+      { id: "seh-us-open-toggle", region: "us" }
+    ].forEach(function (spec) {
+      var btn = document.getElementById(spec.id);
       if (!btn) return;
       btn.addEventListener("click", function () {
-        SEH_STATE.showClosed = !SEH_STATE.showClosed;
-        _syncOpenBtns();
-        var cb = document.getElementById("stocksetf-show-closed"); if (cb) cb.checked = SEH_STATE.showClosed;
-        var cb2 = document.getElementById("stocksetf-us-show-closed"); if (cb2) cb2.checked = SEH_STATE.showClosed;
-        renderStockEtfHoldingsTable();
-      });
-    });
-    sortIds.forEach(function (id) {
-      var btn = document.getElementById(id);
-      if (!btn) return;
-      btn.addEventListener("click", function () {
-        SEH_STATE.sort = SEH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
-        _syncSortBtns();
+        SEH_STATE.showClosed[spec.region] = !SEH_STATE.showClosed[spec.region];
+        btn.textContent = SEH_STATE.showClosed[spec.region] ? "Closed" : "Open";
+        // Sync legacy checkboxes so the outer buildStockHoldings call can
+        // fetch closed positions when either region needs them. When either
+        // region is Closed we must re-fetch; otherwise re-render is enough.
+        var cb = document.getElementById("stocksetf-show-closed");
+        var cb2 = document.getElementById("stocksetf-us-show-closed");
+        if (cb) cb.checked = SEH_STATE.showClosed.india;
+        if (cb2) cb2.checked = SEH_STATE.showClosed.us;
         renderStockEtfHoldingsTable();
       });
     });
