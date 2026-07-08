@@ -3006,7 +3006,9 @@
       function saveRec() {
         var t = dashExpState.recType;
         var amt = Number(document.getElementById("rec-amount").value);
-        if (!amt || amt <= 0) { document.getElementById("rec-modal-error").textContent = "Enter an amount."; return; }
+        // Amount is optional for templates; a stored template with amount = 0
+        // simply leaves the field blank when applied.
+        if (!editingTemplateMode && (!amt || amt <= 0)) { document.getElementById("rec-modal-error").textContent = "Enter an amount."; return; }
         var acctId = document.getElementById("rec-account").value;
         if (t !== "income" && !acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
         if (t === "income") acctId = null;
