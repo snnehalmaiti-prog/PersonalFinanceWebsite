@@ -6273,6 +6273,16 @@
     var total = (_ov.mfInvested || 0) + (_ov.seInvested || 0) + fi + comm;
     return total > 0 ? total : null;
   }
+  // Overview's authoritative "Current" total (live prices + interest accrual).
+  function getOverviewCurrentTotal() {
+    if (typeof _ov === "undefined" || !_ov) return null;
+    var fiEx = isFixedIncomeExcluded();
+    var fi = fiEx ? 0 : (_ov.fiCurrent || 0);
+    var comm = fiEx ? 0 : (_ov.commCurrent || 0);
+    var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : (_ov.seInvested || 0);
+    var total = (_ov.mfCurrent || 0) + seCurrent + fi + comm;
+    return total > 0 ? total : null;
+  }
 
   var ISC_MODE_KEY = "wf-isc-mode";
   function getIscMode() { return localStorage.getItem(ISC_MODE_KEY) === "region" ? "region" : "portfolio"; }
@@ -6410,7 +6420,7 @@
       // Reconcile to Overview's authoritative Invested total (single source of
       // truth). Scale per-portfolio slices proportionally so the sum matches.
       var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
-      var overviewTotal = getOverviewInvestedTotal();
+      var overviewTotal = getOverviewCurrentTotal();
       if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
         var s = overviewTotal / rawSum;
         entries.forEach(function (e) { e.value *= s; });
@@ -6707,7 +6717,7 @@
       }
       // Reconcile to Overview's Invested total.
       var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
-      var overviewTotal = getOverviewInvestedTotal();
+      var overviewTotal = getOverviewCurrentTotal();
       if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
         var scl = overviewTotal / rawSum;
         entries.forEach(function (e) { e.value *= scl; });
