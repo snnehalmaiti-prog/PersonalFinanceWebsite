@@ -753,16 +753,15 @@
 
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="rec-filter-account">ACCOUNT</label>
-              <select id="rec-filter-account" class="rec-filter-select"><option value="">All accounts</option></select>
+              <select id="rec-filter-account" class="rec-filter-select" multiple size="4"></select>
             </div>
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="rec-filter-category">CATEGORY</label>
-              <select id="rec-filter-category" class="rec-filter-select"><option value="">All categories</option></select>
+              <select id="rec-filter-category" class="rec-filter-select" multiple size="4"></select>
             </div>
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="rec-filter-type">TYPE</label>
-              <select id="rec-filter-type" class="rec-filter-select">
-                <option value="">All types</option>
+              <select id="rec-filter-type" class="rec-filter-select" multiple size="3">
                 <option value="expense">Expense</option>
                 <option value="budget">Budget</option>
                 <option value="income">Income</option>
@@ -770,7 +769,7 @@
             </div>
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="rec-filter-payment">PAYMENT TYPE</label>
-              <select id="rec-filter-payment" class="rec-filter-select"><option value="">All payments</option></select>
+              <select id="rec-filter-payment" class="rec-filter-select" multiple size="4"></select>
             </div>
             <select id="rec-filter-person" hidden><option value="">Everyone</option></select>
 
@@ -932,16 +931,15 @@
 
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="ana-filter-account">ACCOUNT</label>
-              <select id="ana-filter-account" class="rec-filter-select"><option value="">All accounts</option></select>
+              <select id="ana-filter-account" class="rec-filter-select" multiple size="4"></select>
             </div>
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="ana-filter-category">CATEGORY</label>
-              <select id="ana-filter-category" class="rec-filter-select"><option value="">All categories</option></select>
+              <select id="ana-filter-category" class="rec-filter-select" multiple size="4"></select>
             </div>
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="ana-filter-type">TYPE</label>
-              <select id="ana-filter-type" class="rec-filter-select">
-                <option value="">All types</option>
+              <select id="ana-filter-type" class="rec-filter-select" multiple size="3">
                 <option value="expense">Expense</option>
                 <option value="budget">Budget</option>
                 <option value="income">Income</option>
@@ -949,7 +947,7 @@
             </div>
             <div class="rec-filter-section">
               <label class="rec-filter-label" for="ana-filter-payment">PAYMENT TYPE</label>
-              <select id="ana-filter-payment" class="rec-filter-select"><option value="">All payments</option></select>
+              <select id="ana-filter-payment" class="rec-filter-select" multiple size="4"></select>
             </div>
             <select id="ana-filter-person" hidden><option value="">Everyone</option></select>
 
@@ -999,6 +997,24 @@
     </section><!-- /panel-expense -->
 
     <style>
+      /* Multi-select filter dropdowns: compact scrollable list */
+      .rec-filter-select[multiple] {
+        padding: 4px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        font-size: 0.82rem;
+      }
+      .rec-filter-select[multiple] option {
+        padding: 4px 8px; border-radius: 4px;
+      }
+      .rec-filter-select[multiple] option:checked {
+        background: var(--text) linear-gradient(0deg, var(--text), var(--text));
+        color: var(--bg);
+      }
+      .rec-filter-hint {
+        font-size: 0.62rem; color: var(--muted); margin-top: 3px; font-style: italic;
+      }
       .ana-txn-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border); }
       .ana-txn-row:last-child { border-bottom:none; }
       .ana-txn-info { display:flex; flex-direction:column; min-width:0; }
@@ -1591,13 +1607,18 @@
         return sign + fmtMoney(Math.abs(v));
       }
       function getAnaFilters() {
+        function multiVals(id) {
+          var el = document.getElementById(id);
+          if (!el) return [];
+          return Array.prototype.map.call(el.selectedOptions || [], function (o) { return o.value; }).filter(Boolean);
+        }
         return {
           search: (document.getElementById("ana-filter-search") || {}).value || "",
           sort: (document.getElementById("ana-filter-sort") || {}).value || "date-desc",
-          account: (document.getElementById("ana-filter-account") || {}).value || "",
-          category: (document.getElementById("ana-filter-category") || {}).value || "",
-          type: (document.getElementById("ana-filter-type") || {}).value || "",
-          payment: (document.getElementById("ana-filter-payment") || {}).value || "",
+          account: multiVals("ana-filter-account"),
+          category: multiVals("ana-filter-category"),
+          type: multiVals("ana-filter-type"),
+          payment: multiVals("ana-filter-payment"),
           person: (document.getElementById("ana-filter-person") || {}).value || "",
           min: parseFloat((document.getElementById("ana-filter-min") || {}).value) || null,
           max: parseFloat((document.getElementById("ana-filter-max") || {}).value) || null
@@ -1607,14 +1628,14 @@
         var f = getAnaFilters();
         var q = f.search.trim().toLowerCase();
         return records.filter(function (r) {
-          if (f.account && r.account_id !== f.account) return false;
-          if (f.payment && r.payment_method_id !== f.payment) return false;
-          if (f.type && r.type !== f.type) return false;
+          if (f.account.length && f.account.indexOf(r.account_id) === -1) return false;
+          if (f.payment.length && f.payment.indexOf(r.payment_method_id) === -1) return false;
+          if (f.type.length && f.type.indexOf(r.type) === -1) return false;
           if (f.person && r.person_id !== f.person) return false;
-          if (f.category) {
+          if (f.category.length) {
             var cat = dashExpState.categories.find(function (c) { return c.id === r.category_id; });
             var parentId = cat ? (cat.parent_id || cat.id) : r.category_id;
-            if (parentId !== f.category) return false;
+            if (f.category.indexOf(parentId) === -1 && f.category.indexOf(r.category_id) === -1) return false;
           }
           var amt = Number(r.amount) || 0;
           if (f.min != null && amt < f.min) return false;
@@ -2013,12 +2034,12 @@
         var acctSel = document.getElementById("rec-filter-account");
         var catSel = document.getElementById("rec-filter-category");
         var pmSel = document.getElementById("rec-filter-payment");
-        if (acctSel) acctSel.innerHTML = '<option value="">All accounts</option>' +
+        if (acctSel) acctSel.innerHTML =
           dashExpState.accounts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join("");
-        if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
+        if (catSel) catSel.innerHTML =
           dashExpState.categories.filter(function (c) { return !c.parent_id; })
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
-        if (pmSel) pmSel.innerHTML = '<option value="">All payments</option>' +
+        if (pmSel) pmSel.innerHTML =
           dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
         var personSel = document.getElementById("rec-filter-person");
         if (personSel) {
@@ -2032,12 +2053,12 @@
         var acctSel = document.getElementById("ana-filter-account");
         var catSel = document.getElementById("ana-filter-category");
         var pmSel = document.getElementById("ana-filter-payment");
-        if (acctSel) acctSel.innerHTML = '<option value="">All accounts</option>' +
+        if (acctSel) acctSel.innerHTML =
           dashExpState.accounts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join("");
-        if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
+        if (catSel) catSel.innerHTML =
           dashExpState.categories.filter(function (c) { return !c.parent_id; })
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
-        if (pmSel) pmSel.innerHTML = '<option value="">All payments</option>' +
+        if (pmSel) pmSel.innerHTML =
           dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
         var personSel = document.getElementById("ana-filter-person");
         if (personSel) {
@@ -2306,13 +2327,18 @@
 
       function currentFilters() {
         var range = periodRange();
+        function multiVals(id) {
+          var el = document.getElementById(id);
+          if (!el) return [];
+          return Array.prototype.map.call(el.selectedOptions || [], function (o) { return o.value; }).filter(Boolean);
+        }
         return {
           q: (document.getElementById("rec-filter-search").value || "").toLowerCase(),
           sort: document.getElementById("rec-filter-sort").value,
-          account: document.getElementById("rec-filter-account").value,
-          category: document.getElementById("rec-filter-category").value,
-          type: document.getElementById("rec-filter-type").value,
-          payment: document.getElementById("rec-filter-payment").value,
+          account: multiVals("rec-filter-account"),
+          category: multiVals("rec-filter-category"),
+          type: multiVals("rec-filter-type"),
+          payment: multiVals("rec-filter-payment"),
           label: "",
           person: document.getElementById("rec-filter-person") ? document.getElementById("rec-filter-person").value : "",
           minAmt: parseFloat(document.getElementById("rec-filter-min") ? document.getElementById("rec-filter-min").value : "") || null,
@@ -2341,13 +2367,14 @@
             var d = new Date(r.txn_date);
             if (d < f.range.start || d > new Date(f.range.end.getTime() + 86399999)) return false;
           }
-          if (f.account && r.account_id !== f.account) return false;
-          if (f.type && r.type !== f.type) return false;
-          if (f.payment && r.payment_method_id !== f.payment) return false;
-          if (f.category) {
+          if (f.account.length && f.account.indexOf(r.account_id) === -1) return false;
+          if (f.type.length && f.type.indexOf(r.type) === -1) return false;
+          if (f.payment.length && f.payment.indexOf(r.payment_method_id) === -1) return false;
+          if (f.category.length) {
             var cat = findById(dashExpState.categories, r.category_id);
             if (!cat) return false;
-            if (r.category_id !== f.category && cat.parent_id !== f.category) return false;
+            var parentOrSelf = cat.parent_id || r.category_id;
+            if (f.category.indexOf(r.category_id) === -1 && f.category.indexOf(parentOrSelf) === -1) return false;
           }
           if (f.q) {
             var cat2 = findById(dashExpState.categories, r.category_id) || {};
