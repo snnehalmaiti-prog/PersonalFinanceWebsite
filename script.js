@@ -2033,11 +2033,15 @@
   function renderFiPortfolioCards(holdings) {
     var row = document.getElementById("fipc-row");
     if (!row) return;
-    // Kick off stocksetf-commodity fetch and re-render once resolved.
-    _buildStocksEtfCommodityHoldings("all").then(function (extra) {
-      if (extra && extra.length) {
+    // Kick off both commodity-source fetches and re-render once resolved.
+    Promise.all([
+      _buildStocksEtfCommodityHoldings("all"),
+      _buildMfCommodityHoldings("all")
+    ]).then(function (extras) {
+      var flat = [].concat(extras[0] || [], extras[1] || []);
+      if (flat.length) {
         var combined = holdings.slice();
-        extra.forEach(function (e) { combined.push(e); });
+        flat.forEach(function (e) { combined.push(e); });
         _renderFiPortfolioCardsInner(combined);
       }
     }).catch(function () {});
@@ -3601,12 +3605,14 @@
         } catch (e) {}
         return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
       })() : null;
-      // Also fold in stocksetf instruments mapped as "Commodity" (Gold/Silver
-      // ETFs, etc.). They resolve async because they need historical USD/INR
-      // for US-listed ETFs.
-      _buildStocksEtfCommodityHoldings(selectedPortfolio).then(function (etfCommodities) {
+      // Also fold in commodity-mapped instruments from both the stocksetf
+      // sheet (via stocksetfmapping) and the equity/MF sheet (via mfmapping).
+      Promise.all([
+        _buildStocksEtfCommodityHoldings(selectedPortfolio),
+        _buildMfCommodityHoldings(selectedPortfolio)
+      ]).then(function (extras) {
         var combined = holdings.slice();
-        etfCommodities.forEach(function (h) { combined.push(h); });
+        extras.forEach(function (arr) { (arr || []).forEach(function (h) { combined.push(h); }); });
         statusEl.textContent = "";
         tableWrap.hidden = true;
         try { renderCmHoldingsCardList(combined, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
@@ -3616,6 +3622,63 @@
         try { renderCmHoldingsCardList(holdings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
       });
     });
+  }
+
+  // Collect MF-sheet holdings mapped to Commodity (e.g. GOLDBEES tracked
+  // via the equity sheet + mfmapping with Instrument Category = Commodity).
+  function _buildMfCommodityHoldings(portfolioFilter) {
+    var rows = getSheetRows("equity");
+    if (!rows || !rows.length) return Promise.resolve([]);
+    var catMap = buildMfInstrumentCategoryMap();
+    var segMap = buildInstrumentSegmentMap();
+    // Look up portfolio per instrument (first occurrence).
+    var header = rows[0].map(normalizeText);
+    var pIdx = header.indexOf("portfolio name");
+    var iIdx = header.indexOf("instrument name");
+    var portfolioByInstrument = {};
+    if (pIdx !== -1 && iIdx !== -1) {
+      rows.slice(1).forEach(function (row) {
+        var inst = (row[iIdx] || "").trim();
+        if (!inst || portfolioByInstrument[inst]) return;
+        portfolioByInstrument[inst] = (row[pIdx] || "").trim();
+      });
+    }
+    var byInst = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+    if (!byInst) return Promise.resolve([]);
+    // Filter to commodity-mapped instruments only.
+    var commInstruments = Object.keys(byInst).filter(function (n) {
+      return normalizeText(catMap[normalizeText(n)] || "") === "commodity";
+    });
+    if (!commInstruments.length) return Promise.resolve([]);
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var resolvable = commInstruments.filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+      return Promise.all(resolvable.map(function (n) {
+        return fetchNavHistory(lookupSchemeCode(schemeMap, n));
+      })).then(function (histories) {
+        var out = [];
+        resolvable.forEach(function (n, i) {
+          var lots = fifoRemainingLots(byInst[n]);
+          var units = 0, invested = 0;
+          lots.forEach(function (lot) { units += lot.units; invested += lot.units * lot.price; });
+          if (units < UNITS_EPSILON) return;
+          var hist = histories[i];
+          var nav = hist && hist.length ? hist[hist.length - 1].nav : 0;
+          var current = units * nav;
+          out.push({
+            portfolio: portfolioByInstrument[n] || "",
+            instrument: n,
+            subCategory: segMap[normalizeText(n)] || "Commodity",
+            grams: 0,
+            invested: invested,
+            current: current,
+            isEtf: true,
+            source: "mf",
+            ticker: n.split(/\s+/)[0]
+          });
+        });
+        return out;
+      });
+    }).catch(function () { return []; });
   }
 
   // Collect stocksetf holdings mapped to Commodity (e.g. Gold ETF).
@@ -3940,23 +4003,38 @@
 
       return Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         .then(function (navHistories) {
+          var mfCatMap = buildMfInstrumentCategoryMap();
           var total = 0;
           var yesterdayTotal = 0;
+          var commTotal = 0, commYesterdayTotal = 0;
           var heldInstruments = [];
+          var heldCommInstruments = [];
           instruments.forEach(function (name, i) {
             var navHistory = navHistories[i];
             var events = unitEvents[name];
             var units = events.length ? events[events.length - 1].cumulativeUnits : 0;
             var nav = latest_nav_for(navHistory);
             var prevNav = previous_nav_for(navHistory);
-            if (units > UNITS_EPSILON && nav) { total += units * nav; heldInstruments.push(name); }
-            if (units > UNITS_EPSILON && prevNav) yesterdayTotal += units * prevNav;
+            var isComm = normalizeText(mfCatMap[normalizeText(name)] || "") === "commodity";
+            if (units > UNITS_EPSILON && nav) {
+              if (isComm) { commTotal += units * nav; heldCommInstruments.push(name); }
+              else { total += units * nav; heldInstruments.push(name); }
+            }
+            if (units > UNITS_EPSILON && prevNav) {
+              if (isComm) commYesterdayTotal += units * prevNav;
+              else yesterdayTotal += units * prevNav;
+            }
           });
           var investment = investedCostFor(heldInstruments);
+          var commInvestment = investedCostFor(heldCommInstruments);
           var unrealizedProfit = total - investment;
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
           _ov.mfCurrent = total; _ov.mfUnrealized = unrealizedProfit;
+          // Fold MF-sheet commodity holdings into commodity bucket.
+          _ov.mfCommInvested = commInvestment;
+          _ov.mfCommCurrent = commTotal;
+          _ov.mfCommDayChange = commTotal - commYesterdayTotal;
           refreshOverviewStats(); refreshCategoryCards();
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
@@ -5482,6 +5560,23 @@
 
   function lookupSegment(segmentMap, instrumentName) {
     return segmentMap[instrumentName] || segmentMap[normalizeText(instrumentName)] || "Unclassified";
+  }
+
+  // Instrument → "Instrument Category" from the mf-mapping sheet.
+  function buildMfInstrumentCategoryMap() {
+    var rows = getSheetRows("mfmapping");
+    var map = {};
+    if (!rows || !rows.length) return map;
+    var header = rows[0].map(normalizeText);
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx = header.indexOf("instrument category");
+    if (instrumentIdx === -1 || categoryIdx === -1) return map;
+    rows.slice(1).forEach(function (row) {
+      var instrument = (row[instrumentIdx] || "").trim();
+      var category = (row[categoryIdx] || "").trim();
+      if (instrument && category) map[normalizeText(instrument)] = category;
+    });
+    return map;
   }
 
   // The browser can't fetch AMFI's NAVAll.txt directly or via public CORS
