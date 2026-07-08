@@ -8398,10 +8398,17 @@
 
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
+          window.__mfLastRowsData = rowsData;
           try { renderMfHoldingsCardList(rowsData); } catch (e) {}
-          try { renderMfPortfolioCards(); } catch (e) {}
-          try { renderMfAllocation(rowsData); } catch (e) {}
-          try { renderMfPerformanceChart(); } catch (e) {}
+          // Portfolio cards + allocation + performance are top-level summaries
+          // and must NOT shift when the user filters the Holdings list to a
+          // specific portfolio via the holdings pill toggle.
+          var _mfOverride = window.__mfHoldingsPortfolioOverride;
+          if (!_mfOverride || _mfOverride === "all") {
+            try { renderMfPortfolioCards(); } catch (e) {}
+            try { renderMfAllocation(rowsData); } catch (e) {}
+            try { renderMfPerformanceChart(); } catch (e) {}
+          }
 
           statusEl.textContent = "";
           tableWrap.hidden = true;
