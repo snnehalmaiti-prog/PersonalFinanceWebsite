@@ -8716,11 +8716,82 @@
     });
   }
 
-  // Phase 2: allocation by segment — single segmented bar + compact rows
+  var MFALLOC_MODE = { mode: "segment" };
+  // Phase 2: allocation — segment (market cap) OR portfolio breakdown
   function renderMfAllocation(rowsData) {
     var listEl = document.getElementById("mfalloc-list");
+    var eyebrow = document.getElementById("mfalloc-mode-label");
     if (!listEl) return;
     var segmentMap = buildInstrumentSegmentMap();
+    var PAL = ["#10B981", "#D4A017", "#3B82F6", "#E8623A", "#8B5CF6", "#64748B", "#06B6D4", "#EC4899"];
+    var PORT_PAL = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1"];
+
+    // Look up which portfolio each MF instrument belongs to.
+    var eqRows = getSheetRows("equity") || [];
+    var portfolioByInst = {};
+    if (eqRows.length) {
+      var hdr = eqRows[0].map(normalizeText);
+      var pI = hdr.indexOf("portfolio name");
+      var iI = hdr.indexOf("instrument name");
+      if (pI !== -1 && iI !== -1) {
+        eqRows.slice(1).forEach(function (row) {
+          var name = (row[iI] || "").trim();
+          if (name && !portfolioByInst[name]) portfolioByInst[name] = (row[pI] || "").trim();
+        });
+      }
+    }
+
+    if (MFALLOC_MODE.mode === "portfolio") {
+      if (eyebrow) eyebrow.textContent = "PORTFOLIO";
+      // Group by portfolio; each portfolio breaks down by market-cap/segment.
+      var byPort = {}; // { p: { total, bySeg: {seg: value} } }
+      rowsData.forEach(function (r) {
+        if (r.units < 1) return;
+        var p = portfolioByInst[r.instrument] || "Unassigned";
+        var seg = lookupSegment(segmentMap, r.instrument);
+        if (!byPort[p]) byPort[p] = { total: 0, bySeg: {} };
+        byPort[p].total += r.current || 0;
+        byPort[p].bySeg[seg] = (byPort[p].bySeg[seg] || 0) + (r.current || 0);
+      });
+      var entries = Object.keys(byPort).map(function (k) { return { name: k, total: byPort[k].total, bySeg: byPort[k].bySeg }; })
+        .filter(function (e) { return e.total > 0.01; })
+        .sort(function (a, b) { return b.total - a.total; });
+      var grand = entries.reduce(function (s, e) { return s + e.total; }, 0);
+      if (!entries.length || grand <= 0) { listEl.innerHTML = '<p class="muted small">No portfolio allocation data.</p>'; return; }
+      // Build a stable segment→color map from segments seen anywhere.
+      var allSegs = {};
+      entries.forEach(function (e) { Object.keys(e.bySeg).forEach(function (k) { allSegs[k] = true; }); });
+      var segList = Object.keys(allSegs);
+      var segColor = {};
+      segList.forEach(function (s, i) { segColor[s] = PAL[i % PAL.length]; });
+      var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
+        var pct = (e.total / grand) * 100;
+        return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PORT_PAL[i % PORT_PAL.length] + ';" title="' + e.name + '"></span>';
+      }).join("") + '</div>';
+      var rowsHtml = entries.map(function (e, i) {
+        var pct = (e.total / grand) * 100;
+        var col = PORT_PAL[i % PORT_PAL.length];
+        var chipSegs = Object.keys(e.bySeg).sort(function (a, b) { return e.bySeg[b] - e.bySeg[a]; });
+        var chips = chipSegs.filter(function (s) { return e.bySeg[s] > 0.01; }).map(function (s) {
+          var sp = (e.bySeg[s] / e.total) * 100;
+          return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + segColor[s] + '"></span>' + s + ' ' + Math.round(sp) + '%</span>';
+        }).join("");
+        return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
+          '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
+            '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+            '<span class="mfalloc-nums">' +
+              '<span class="mfalloc-amount">' + formatCurrency(e.total) + '</span>' +
+              '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span>' +
+            '</span>' +
+          '</div>' +
+          (chips ? '<div class="isc-cat-sub">' + chips + '</div>' : '') +
+        '</div>';
+      }).join("");
+      listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rowsHtml + '</div>';
+      return;
+    }
+
+    if (eyebrow) eyebrow.textContent = "MARKET CAP/SEGMENT";
     var bySeg = {};
     rowsData.forEach(function (r) {
       if (r.units < 1) return;
@@ -8879,6 +8950,19 @@
   }
 
   // Wire toggles
+  // Wire the MF Allocation Market Cap/Segment ⇄ Portfolio toggle.
+  (function wireMfAllocToggle() {
+    var buttons = document.querySelectorAll("[data-mfalloc-mode]");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        MFALLOC_MODE.mode = btn.dataset.mfallocMode;
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        if (window.__mfLastRowsData) renderMfAllocation(window.__mfLastRowsData);
+        else renderEquityHoldingsTable();
+      });
+    });
+  })();
+
   (function wireMfControls() {
     var openBtn = document.getElementById("mfh-open-toggle");
     var sortBtn = document.getElementById("mfh-sort-toggle");
