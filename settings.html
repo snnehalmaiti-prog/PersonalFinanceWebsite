@@ -287,6 +287,7 @@
           <button type="button" class="exp-nav-item" data-exp-panel="payment-methods">Payment methods</button>
           <button type="button" class="exp-nav-item" data-exp-panel="categories">Categories</button>
           <button type="button" class="exp-nav-item" data-exp-panel="template">Template</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="recurring">Recurring payments</button>
           <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
         </nav>
 
@@ -338,6 +339,17 @@
             <p class="muted small equity-desc">Reusable record shortcuts. Pick one from "Select template" while adding a new record.</p>
             <p class="muted small" id="exp-template-status">No templates yet.</p>
             <div id="exp-template-list" class="exp-list"></div>
+          </div>
+
+          <!-- Recurring payments -->
+          <div class="exp-detail-panel" id="exp-detail-recurring" hidden>
+            <div class="exp-detail-header">
+              <h3>Recurring payments</h3>
+              <button type="button" class="btn btn-primary btn-sm" id="exp-add-recurring-btn">+ Add Recurring</button>
+            </div>
+            <p class="muted small equity-desc">Scheduled expenses (rent, subscriptions, EMIs). Auto-created on their due date based on frequency.</p>
+            <p class="muted small" id="exp-recurring-status">No recurring payments yet.</p>
+            <div id="exp-recurring-list" class="exp-list"></div>
           </div>
 
           <!-- Bulk import -->
