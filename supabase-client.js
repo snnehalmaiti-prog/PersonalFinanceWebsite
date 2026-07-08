@@ -14,7 +14,8 @@
     "wf-gh-owner",
     "wf-gh-repo",
     "wf-gh-branch",
-    "wf-expense-templates"
+    "wf-expense-templates",
+    "wf-recurring-payments"
   ];
 
   // DB column name for each localStorage key
@@ -27,7 +28,8 @@
     "wf-gh-owner":               "gh_owner",
     "wf-gh-repo":                "gh_repo",
     "wf-gh-branch":              "gh_branch",
-    "wf-expense-templates":      "expense_templates"
+    "wf-expense-templates":      "expense_templates",
+    "wf-recurring-payments":     "recurring_payments"
   };
 
   // ── Minimal Supabase REST client (no npm, no bundler) ─────────────────────

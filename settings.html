@@ -394,6 +394,48 @@
       </div><!-- /#exp-content -->
     </section>
 
+    <!-- Recurring payment add/edit modal (settings-local) -->
+    <div id="rp-modal-overlay" class="exp-modal-overlay" hidden>
+      <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="rp-modal-title">
+        <div class="exp-modal-header">
+          <h3 id="rp-modal-title">Add Recurring Payment</h3>
+          <button type="button" class="exp-modal-close" id="rp-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="exp-modal-body">
+          <label class="exp-field"><span>Name</span><input type="text" id="rp-name" placeholder="e.g. Netflix, Rent" /></label>
+          <div class="exp-field"><span>Type</span>
+            <div class="exp-type-toggle" id="rp-type-toggle">
+              <button type="button" data-type="expense" class="active">Expense</button>
+              <button type="button" data-type="income">Income</button>
+              <button type="button" data-type="budget">Budget</button>
+            </div>
+          </div>
+          <label class="exp-field"><span>Amount</span><input type="number" id="rp-amount" step="0.01" placeholder="Amount charged each cycle" /></label>
+          <label class="exp-field"><span>Frequency</span>
+            <select id="rp-frequency">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly" selected>Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </label>
+          <label class="exp-field"><span>Next due date</span><input type="date" id="rp-next-due" /></label>
+          <label class="exp-field"><span>End date (optional)</span><input type="date" id="rp-end-date" /></label>
+          <label class="exp-field"><span>Account</span><select id="rp-account"></select></label>
+          <label class="exp-field"><span>Category</span><select id="rp-category"></select></label>
+          <label class="exp-field"><span>Sub-category</span><select id="rp-subcategory"></select></label>
+          <label class="exp-field"><span>Payment method</span><select id="rp-payment-method"></select></label>
+          <label class="exp-field"><span>Note</span><input type="text" id="rp-note" placeholder="Optional" /></label>
+          <p class="muted small" id="rp-modal-error" style="color:#dc2626; margin:4px 0 0;"></p>
+        </div>
+        <div class="exp-modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" id="rp-modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="rp-modal-save">Add Recurring</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Template add/edit modal (settings-local) -->
     <div id="tpl-modal-overlay" class="exp-modal-overlay" hidden>
       <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="tpl-modal-title">
@@ -460,6 +502,13 @@
               WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderExpenseTemplates(); });
             } else {
               renderExpenseTemplates();
+            }
+          }
+          if (panel === "recurring") {
+            if (window.WfAuth && WfAuth.isLoggedIn()) {
+              WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderRecurringPayments(); });
+            } else {
+              renderRecurringPayments();
             }
           }
         });
@@ -628,6 +677,155 @@
         saveTemplates(tpls);
         closeTemplateModal();
         renderExpenseTemplates();
+      });
+    })();
+
+    // ── Recurring payments ────────────────────────────────────────────────
+    var RECURRING_KEY = "wf-recurring-payments";
+    function loadRecurring() {
+      try { return JSON.parse(localStorage.getItem(RECURRING_KEY)) || []; } catch (e) { return []; }
+    }
+    function saveRecurring(list) {
+      localStorage.setItem(RECURRING_KEY, JSON.stringify(list));
+      if (window.WfAuth && WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
+    }
+    function renderRecurringPayments() {
+      var list = document.getElementById("exp-recurring-list");
+      var status = document.getElementById("exp-recurring-status");
+      if (!list) return;
+      var items = loadRecurring();
+      if (!items.length) {
+        if (status) { status.hidden = false; status.textContent = "No recurring payments yet."; }
+        list.innerHTML = "";
+        return;
+      }
+      if (status) status.hidden = true;
+      list.innerHTML = items.map(function (r) {
+        var row = r.row || {};
+        var meta = [];
+        if (row.type) meta.push(row.type);
+        if (row.amount) meta.push("₹" + row.amount);
+        if (row.frequency) meta.push(row.frequency);
+        if (row.next_due) meta.push("next: " + row.next_due);
+        return '<div class="exp-list-item"><div style="flex:1;"><div style="font-weight:600;">' + esc(r.name) + '</div>' +
+          '<div class="muted small" style="font-size:0.72rem;">' + esc(meta.join(" · ")) + '</div></div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-rp-edit="' + esc(r.id) + '">Edit</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-rp-del="' + esc(r.id) + '" style="color:#dc2626;">Delete</button>' +
+          '</div></div>';
+      }).join("");
+      list.querySelectorAll("[data-rp-del]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (!confirm("Delete this recurring payment?")) return;
+          var id = btn.getAttribute("data-rp-del");
+          saveRecurring(loadRecurring().filter(function (r) { return r.id !== id; }));
+          renderRecurringPayments();
+        });
+      });
+      list.querySelectorAll("[data-rp-edit]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-rp-edit");
+          var r = loadRecurring().find(function (x) { return x.id === id; });
+          if (r) openRecurringModal(r);
+        });
+      });
+    }
+    var addRecurringBtn = document.getElementById("exp-add-recurring-btn");
+    if (addRecurringBtn) addRecurringBtn.addEventListener("click", function () { openRecurringModal(null); });
+
+    var rpRefs = { editingId: null, type: "expense" };
+
+    function rpFillCategoryDropdowns(type, selectedCatId, selectedSubId) {
+      var catSel = document.getElementById("rp-category");
+      var subSel = document.getElementById("rp-subcategory");
+      var tops = tplRefs.categories.filter(function (c) { return c.type === type && !c.parent_id; });
+      tplFillSelect(catSel, tops, selectedCatId, "— none —");
+      var subs = selectedCatId ? tplRefs.categories.filter(function (c) { return c.parent_id === selectedCatId; }) : [];
+      tplFillSelect(subSel, subs, selectedSubId, "— none —");
+    }
+
+    function rpSetType(type) {
+      rpRefs.type = type;
+      var toggle = document.getElementById("rp-type-toggle");
+      toggle.querySelectorAll("[data-type]").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-type") === type);
+      });
+      var acctField = document.getElementById("rp-account").parentElement;
+      var pmField = document.getElementById("rp-payment-method").parentElement;
+      acctField.style.display = (type === "income") ? "none" : "";
+      pmField.style.display = (type === "expense") ? "" : "none";
+      rpFillCategoryDropdowns(type, "", "");
+    }
+
+    function openRecurringModal(existing) {
+      tplLoadRefs().then(function () {
+        rpRefs.editingId = existing ? existing.id : null;
+        document.getElementById("rp-modal-title").textContent = existing ? "Edit Recurring Payment" : "Add Recurring Payment";
+        document.getElementById("rp-modal-save").textContent = existing ? "Save" : "Add Recurring";
+        document.getElementById("rp-modal-error").textContent = "";
+        var row = (existing && existing.row) || {};
+        var type = row.type || "expense";
+        document.getElementById("rp-name").value = existing ? (existing.name || "") : "";
+        document.getElementById("rp-amount").value = row.amount || "";
+        document.getElementById("rp-frequency").value = row.frequency || "monthly";
+        document.getElementById("rp-next-due").value = row.next_due || new Date().toISOString().slice(0, 10);
+        document.getElementById("rp-end-date").value = row.end_date || "";
+        document.getElementById("rp-note").value = row.note || "";
+        tplFillSelect(document.getElementById("rp-account"), tplRefs.accounts, row.account_id || "", "— none —");
+        tplFillSelect(document.getElementById("rp-payment-method"), tplRefs.paymentMethods, row.payment_method_id || "", "— none —");
+        rpSetType(type);
+        rpFillCategoryDropdowns(type, row.category_id || "", row.subcategory_id || "");
+        document.getElementById("rp-modal-overlay").hidden = false;
+      });
+    }
+
+    function closeRecurringModal() { document.getElementById("rp-modal-overlay").hidden = true; }
+
+    (function wireRpModal() {
+      var toggle = document.getElementById("rp-type-toggle");
+      if (toggle) toggle.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-type]"); if (!b) return;
+        rpSetType(b.getAttribute("data-type"));
+      });
+      var catSel = document.getElementById("rp-category");
+      if (catSel) catSel.addEventListener("change", function () {
+        var subs = tplRefs.categories.filter(function (c) { return c.parent_id === catSel.value; });
+        tplFillSelect(document.getElementById("rp-subcategory"), subs, "", "— none —");
+      });
+      document.getElementById("rp-modal-close").addEventListener("click", closeRecurringModal);
+      document.getElementById("rp-modal-cancel").addEventListener("click", closeRecurringModal);
+      document.getElementById("rp-modal-overlay").addEventListener("click", function (e) {
+        if (e.target === document.getElementById("rp-modal-overlay")) closeRecurringModal();
+      });
+      document.getElementById("rp-modal-save").addEventListener("click", function () {
+        var name = document.getElementById("rp-name").value.trim();
+        if (!name) { document.getElementById("rp-modal-error").textContent = "Enter a name."; return; }
+        var amtStr = document.getElementById("rp-amount").value;
+        var amt = amtStr === "" ? null : Number(amtStr);
+        if (!amt || amt <= 0) { document.getElementById("rp-modal-error").textContent = "Enter an amount."; return; }
+        var nextDue = document.getElementById("rp-next-due").value;
+        if (!nextDue) { document.getElementById("rp-modal-error").textContent = "Pick next due date."; return; }
+        var row = {
+          type: rpRefs.type,
+          amount: amt,
+          frequency: document.getElementById("rp-frequency").value,
+          next_due: nextDue,
+          end_date: document.getElementById("rp-end-date").value || null,
+          account_id: document.getElementById("rp-account").value || null,
+          category_id: document.getElementById("rp-category").value || null,
+          subcategory_id: document.getElementById("rp-subcategory").value || null,
+          payment_method_id: document.getElementById("rp-payment-method").value || null,
+          note: document.getElementById("rp-note").value || ""
+        };
+        var items = loadRecurring();
+        if (rpRefs.editingId) {
+          items = items.map(function (t) { return t.id === rpRefs.editingId ? { id: t.id, name: name, row: row } : t; });
+        } else {
+          items.push({ id: "rp-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row });
+        }
+        saveRecurring(items);
+        closeRecurringModal();
+        renderRecurringPayments();
       });
     })();
   </script>
