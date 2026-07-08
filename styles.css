@@ -3371,19 +3371,19 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 0.78rem; font-weight: 600; color: var(--text); cursor: pointer; box-shadow: var(--shadow-sm); }
 .mfh-btn:hover { background: var(--bg); }
 .mfh-list-header {
-  display: grid; grid-template-columns: minmax(230px, 2.4fr) 1fr 1fr 1fr 0.9fr; gap: 12px;
-  padding: 14px 8px 8px; border-bottom: 1px solid var(--border);
-  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted);
+  display: grid; grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr; gap: 12px;
+  padding: 10px 8px 6px; border-bottom: 1px solid var(--border);
+  font-size: 0.55rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted);
 }
 .mfh-list-header .mfh-col-num { text-align: right; }
 .mfh-list { display: flex; flex-direction: column; }
 .mfh-row {
-  display: grid; grid-template-columns: minmax(230px, 2.4fr) 1fr 1fr 1fr 0.9fr; gap: 12px;
-  padding: 14px 8px; border-bottom: 1px solid var(--border); align-items: center;
+  display: grid; grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr; gap: 12px;
+  padding: 10px 8px; border-bottom: 1px solid var(--border); align-items: center;
   position: relative;
 }
 .mfh-row::before {
-  content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 999px;
+  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 999px;
 }
 .mfh-row.mfh-color-green::before { background: var(--emerald); }
 .mfh-row.mfh-color-amber::before { background: #D4A017; }
@@ -3393,21 +3393,21 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-row.mfh-color-teal::before { background: #06B6D4; }
 .mfh-inst { display: flex; align-items: center; gap: 12px; min-width: 0; padding-left: 12px; }
 .mfh-avatar {
-  width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.02em;
 }
 .mfh-inst-body { min-width: 0; }
-.mfh-inst-name { font-size: 0.98rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mfh-sip-badge { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.09em; padding: 2px 6px; border-radius: 4px; background: var(--surface-alt); color: var(--muted); }
-.mfh-inst-sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.mfh-inst-name { font-size: 0.82rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mfh-sip-badge { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em; padding: 1px 5px; border-radius: 3px; background: var(--surface-alt); color: var(--muted); }
+.mfh-inst-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .mfh-col-num { text-align: right; font-variant-numeric: tabular-nums; }
-.mfh-num-primary { font-size: 0.98rem; font-weight: 600; color: var(--text); }
-.mfh-num-pnl { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.mfh-num-pnl-value { font-size: 0.98rem; font-weight: 700; color: var(--emerald); }
+.mfh-num-primary { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.mfh-num-pnl { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.mfh-num-pnl-value { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-pnl-value.mfh-negative { color: var(--negative); }
-.mfh-num-pnl-pct { font-size: 0.75rem; font-weight: 600; color: var(--emerald); }
+.mfh-num-pnl-pct { font-size: 0.68rem; font-weight: 600; color: var(--emerald); }
 .mfh-num-pnl-pct.mfh-negative { color: var(--negative); }
-.mfh-num-xirr { font-size: 0.98rem; font-weight: 700; color: var(--emerald); }
+.mfh-num-xirr { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-xirr.mfh-negative { color: var(--negative); }
 .mfh-num-xirr.mfh-muted { color: var(--muted); }
