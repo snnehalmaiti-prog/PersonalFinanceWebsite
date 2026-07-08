@@ -2102,7 +2102,6 @@
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
-          '<div class="mfpc-foot-item"><span class="mfpc-foot-label">FI · Gold</span><span class="mfpc-foot-value">' + fiStr + ' · ' + goldStr + '</span></div>' +
         '</div>' +
       '</div>';
     }).join("");
