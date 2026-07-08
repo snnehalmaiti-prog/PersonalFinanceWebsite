@@ -962,22 +962,12 @@
           </aside>
 
           <div class="rec-main">
-            <div class="rec-period-header" style="display:flex; justify-content:center; margin-bottom:12px;">
-              <div class="rec-period-picker" style="max-width:340px; width:100%;">
-                <button type="button" id="ana-period-prev" class="rec-period-nav" aria-label="Previous">‹</button>
-                <button type="button" id="ana-period-btn" class="rec-period-main">
-                  <span id="ana-period-label">This month</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                </button>
-                <button type="button" id="ana-period-next" class="rec-period-nav" aria-label="Next">›</button>
-                <div class="pp-popover" id="ana-period-popover" hidden>
-                  <div class="pp-tabs">
-                    <button type="button" data-ana-tab="months" class="active">Months</button>
-                    <button type="button" data-ana-tab="years">Years</button>
-                  </div>
-                  <div class="pp-body" id="ana-period-body"></div>
-                </div>
-              </div>
+            <!-- Analytics-specific period picker hidden — shared inline picker (rec-period-picker-inline) drives both tabs. Legacy elements kept for JS wiring. -->
+            <div class="rec-period-header" hidden>
+              <button type="button" id="ana-period-prev" hidden></button>
+              <button type="button" id="ana-period-btn" hidden><span id="ana-period-label"></span></button>
+              <button type="button" id="ana-period-next" hidden></button>
+              <div id="ana-period-popover" hidden><div id="ana-period-body"></div></div>
             </div>
             <div class="equity-card" style="padding:0;">
               <table class="ana-table" id="ana-table"><tbody></tbody></table>
