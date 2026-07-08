@@ -367,16 +367,14 @@
 
       <div id="subpanel-equity">
       <section id="panel-equity" class="invest-sub-panel" role="tabpanel" aria-labelledby="subtab-equity">
-      <div class="panel-title-row" style="justify-content:flex-end;">
-        <div class="panel-title-actions">
-          <button type="button" id="equity-refresh-nav" class="btn btn-outline btn-sm">Refresh NAV data</button>
-          <button type="button" id="equity-refresh" hidden aria-label="Refresh Mutual Fund data"></button>
-        </div>
+      <div class="panel-title-row" style="justify-content:flex-end;align-items:center;gap:12px;margin:0 0 8px;">
+        <p class="muted small nav-asof" id="equity-nav-asof" hidden style="margin:0;display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span id="equity-nav-asof-text">—</span>
+        </p>
+        <button type="button" id="equity-refresh-nav" class="btn btn-outline btn-sm">Refresh NAV data</button>
+        <button type="button" id="equity-refresh" hidden aria-label="Refresh Mutual Fund data"></button>
       </div>
-      <p class="muted small nav-asof" id="equity-nav-asof" hidden>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span id="equity-nav-asof-text">—</span>
-      </p>
 
       <!-- Phase 1: Per-portfolio cards row -->
       <div class="mfpc-row" id="mfpc-row"></div>
