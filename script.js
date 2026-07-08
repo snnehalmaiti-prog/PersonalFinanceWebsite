@@ -3643,6 +3643,80 @@
     return w[0].substring(0, 3).toUpperCase();
   }
 
+  // Build one rowsData row per (portfolio × instrument) by running the same
+  // pricing math as the outer overview flow, but with buildStockHoldings
+  // called PER portfolio (so FIFO doesn't mix Snnehal's SILVERBEES with
+  // Trisha's SILVERBEES).
+  function _buildPerPortfolioSeRowsData(rows, mappingTable, allPrices, usdInrHistMap, usdInrToday) {
+    if (!rows) return Promise.resolve([]);
+    var portfolios = collectPortfolioNamesFromSheets(["stocksetf"]) || [];
+    if (!portfolios.length) return Promise.resolve([]);
+    return Promise.all(portfolios.map(function (p) {
+      return Promise.all([
+        buildStockHoldings(rows, mappingTable, p, false), // open
+        buildStockHoldings(rows, mappingTable, p, true)   // closed
+      ]).then(function (results) {
+        var open = results[0] || [], closed = results[1] || [];
+        var all = open.concat(closed);
+        return all.map(function (h) {
+          var isClosed = (h.units || 0) < UNITS_EPSILON;
+          var priceEntry = allPrices[h.ticker] || null;
+          var eodRaw = priceEntry ? priceEntry.price : null;
+          var prevRaw = priceEntry ? priceEntry.prev_close : null;
+          var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
+          var investedForDisplay = h.investedINR;
+          var avgCostForDisplay = h.avgCostINR;
+          if (isClosed) {
+            var detail = computeInstrumentRealizedDetail(h.txns || []);
+            if (h.region === "US") {
+              var sellDateStr = detail.lastSellDate ? formatDateISO(detail.lastSellDate) : null;
+              var sellRate = (sellDateStr && usdInrHistMap[sellDateStr]) ? usdInrHistMap[sellDateStr] : usdInrToday;
+              ltpINR = detail.lastSellPrice * sellRate;
+              currentINR = detail.saleProceeds * sellRate;
+              investedForDisplay = detail.costOfSoldUnits * sellRate;
+              avgCostForDisplay = detail.avgBuyCost * sellRate;
+            } else {
+              ltpINR = detail.lastSellPrice;
+              currentINR = detail.saleProceeds;
+              investedForDisplay = detail.costOfSoldUnits;
+              avgCostForDisplay = detail.avgBuyCost;
+            }
+            pnl = currentINR - investedForDisplay;
+            pnlPct = investedForDisplay > 0 ? (pnl / investedForDisplay) * 100 : null;
+          } else if (eodRaw !== null) {
+            ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
+            currentINR = h.units * ltpINR;
+            pnl = currentINR - h.investedINR;
+            pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
+            if (prevRaw !== null) {
+              var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
+              dayChangeINR = (ltpINR - prevINR) * h.units;
+            }
+          }
+          return {
+            instrument: h.instrument,
+            region: h.region,
+            units: h.units,
+            avgCostINR: avgCostForDisplay,
+            ltpINR: ltpINR,
+            investedINR: investedForDisplay,
+            currentINR: currentINR,
+            dayChangeINR: dayChangeINR,
+            pnl: pnl,
+            pnlPct: pnlPct,
+            xirrPct: null,
+            isClosed: isClosed,
+            _portfolio: p
+          };
+        });
+      });
+    })).then(function (perPortfolioArrays) {
+      var flat = [];
+      perPortfolioArrays.forEach(function (arr) { arr.forEach(function (r) { flat.push(r); }); });
+      return flat;
+    });
+  }
+
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
     // Respect the Open/Closed toggle: when Closed, show sold-out positions;
     // otherwise show open positions only.
@@ -3650,7 +3724,9 @@
       var isClosed = (r.units || 0) < 1 || r.isClosed;
       return SEH_STATE.showClosed ? isClosed : !isClosed;
     });
-    // Enrich each holding with its portfolio (first-seen in the transactions).
+    // Enrich each holding with its portfolio ONLY if it wasn't already tagged
+    // upstream (e.g. by _buildPerPortfolioSeRowsData). This preserves proper
+    // per-(portfolio × instrument) attribution.
     var seRows = getSheetRows("stocksetf");
     if (seRows && seRows.length) {
       var hdr = seRows[0].map(normalizeText);
@@ -3662,7 +3738,7 @@
           var name = (row[iI] || "").trim();
           if (name && !pByI[name]) pByI[name] = (row[pI] || "").trim();
         });
-        open.forEach(function (h) { h._portfolio = pByI[h.instrument] || ""; });
+        open.forEach(function (h) { if (!h._portfolio) h._portfolio = pByI[h.instrument] || ""; });
       }
     }
     renderSePortfolioCards(open);
@@ -9415,7 +9491,14 @@
             usStatusEl.textContent = "No US holdings found.";
             if (usTableWrap) usTableWrap.hidden = true;
           }
-          try { renderStocksEtfRedesign(rowsData, usdInrToday); } catch (e) { console.error("Se redesign failed:", e); }
+          try {
+            _buildPerPortfolioSeRowsData(rows, mappingTable, allPrices, usdInrHistMap, usdInrToday)
+              .then(function (perPortRows) {
+                var expanded = perPortRows && perPortRows.length ? perPortRows : rowsData;
+                renderStocksEtfRedesign(expanded, usdInrToday);
+              })
+              .catch(function (err) { console.error("per-portfolio SE build failed:", err); renderStocksEtfRedesign(rowsData, usdInrToday); });
+          } catch (e) { console.error("Se redesign failed:", e); }
 
           // Feed live totals back into overview accumulator and refresh dashboard
           // Use FIFO-adjusted invested (remaining lots only), not all-time buy total
