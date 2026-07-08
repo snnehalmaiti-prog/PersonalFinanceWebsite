@@ -7806,75 +7806,100 @@
     }).join("");
   }
 
-  // Phase 2: Portfolio vs Nifty performance chart
+  // Phase 2: Portfolio vs Nifty performance chart (proper cumulative return)
   function renderMfPerformanceChart() {
     var canvas = document.getElementById("mfperf-chart");
     if (!canvas || typeof Chart === "undefined") return;
     var rows = getSheetRows("equity");
     if (!rows) return;
-    var flows = buildXirrCashFlows(rows, "all");
-    if (!flows || !flows.length) return;
-    // Build monthly buckets of cumulative invested vs current portfolio value
-    // by replaying flows and applying latest NAV.
     var range = MFPERF_STATE.range;
-    fetchIndexHistory().then(function (indexHistory) {
+    var portfolio = window.__mfHoldingsPortfolioOverride || "all";
+
+    Promise.all([
+      buildInstrumentSchemeMap(),
+      fetchIndexHistory().catch(function () { return {}; })
+    ]).then(function (results) {
+      var schemeMap = results[0];
+      var indexHistory = results[1];
       var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
       var indexPrices = indexHistory && indexHistory[indexKey] && indexHistory[indexKey].prices;
-      _computeMfCurrentValueForPortfolio("all").then(function (currentVal) {
-        // Simple return series from first flow to today, normalized to 0
-        flows.sort(function (a, b) { return a.date - b.date; });
-        var firstDate = flows[0].date;
-        var today = new Date();
-        // Filter by range
-        var startDate = firstDate;
-        if (range !== "All") {
-          var months = range === "1M" ? 1 : range === "6M" ? 6 : range === "1Y" ? 12 : 36;
-          var candidate = new Date(today.getTime() - months * 30 * 86400000);
-          if (candidate > firstDate) startDate = candidate;
-        }
-        // Sample monthly points from startDate → today
-        var samples = [];
-        var d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-        var end = new Date(today.getFullYear(), today.getMonth(), 1);
-        while (d <= end) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
-        samples.push(today);
-        // Compute cumulative invested at each sample
-        var portData = [], idxData = [];
-        var invested = 0, flowIdx = 0;
-        // Base index price at startDate
-        var baseIdx = indexPrices ? lookupIndexPrice(indexPrices, formatDateISO(startDate)) : null;
-        var totalInvestedAll = flows.reduce(function (s, f) { return s + (f.amount < 0 ? -f.amount : 0); }, 0);
-        samples.forEach(function (dt) {
-          while (flowIdx < flows.length && flows[flowIdx].date <= dt) {
-            invested += (flows[flowIdx].amount < 0 ? -flows[flowIdx].amount : 0);
-            flowIdx++;
+
+      var unitEvents = buildInstrumentUnitEvents(portfolio);
+      var instruments = Object.keys(unitEvents).filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+      if (!instruments.length) return;
+
+      Promise.all(instruments.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
+        .then(function (histories) {
+          var navByInst = {};
+          instruments.forEach(function (n, i) { navByInst[n] = histories[i]; });
+
+          // Build MF cash-flow list (positive amount = buy → invested, negative = sell → withdrawn)
+          var flows = [];
+          instruments.forEach(function (name) {
+            (unitEvents[name] || []).forEach(function (ev) {
+              // Track invested at first-touch of each unit-event date using buy-side amount
+            });
+          });
+          // Use existing buildXirrCashFlows for MF cash flows.
+          var xflows = buildXirrCashFlows(rows, portfolio);
+          xflows.sort(function (a, b) { return a.date - b.date; });
+
+          var today = new Date();
+          var firstDate = xflows.length ? xflows[0].date : new Date();
+          var startDate = firstDate;
+          if (range !== "All") {
+            var months = range === "1M" ? 1 : range === "6M" ? 6 : range === "1Y" ? 12 : 36;
+            var candidate = new Date(today.getTime() - months * 30 * 86400000);
+            if (candidate > firstDate) startDate = candidate;
           }
-          // Portfolio return at time dt = (current * investedRatio - invested) / invested
-          var estCurrent = totalInvestedAll > 0 ? currentVal * (invested / totalInvestedAll) : 0;
-          var portRet = invested > 0 ? ((estCurrent - invested) / invested) * 100 : 0;
-          portData.push({ x: dt, y: portRet });
-          if (baseIdx && indexPrices) {
-            var p = lookupIndexPrice(indexPrices, formatDateISO(dt));
-            idxData.push({ x: dt, y: p ? ((p / baseIdx) - 1) * 100 : null });
+
+          // Monthly samples from startDate → today
+          var samples = [];
+          var d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+          var end = new Date(today.getFullYear(), today.getMonth(), 1);
+          while (d <= end) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
+          samples.push(today);
+
+          // For each sample date, compute cumulative net invested and portfolio value
+          var portData = [], idxData = [];
+          var baseIdx = indexPrices ? lookupIndexPrice(indexPrices, formatDateISO(startDate)) : null;
+          samples.forEach(function (dt) {
+            // Net invested (buys - sells) up to dt
+            var invested = 0;
+            xflows.forEach(function (f) {
+              if (f.date <= dt) invested += (-f.amount); // f.amount negative for buys
+            });
+            // Portfolio value = sum(units×NAV) at dt
+            var value = 0;
+            instruments.forEach(function (name) {
+              var units = lastAtOrBefore(unitEvents[name] || [], dt, "cumulativeUnits") || 0;
+              var nav = lastAtOrBefore(navByInst[name] || [], dt, "nav");
+              if (units > UNITS_EPSILON && nav) value += units * nav;
+            });
+            var portRet = invested > 0 ? ((value - invested) / invested) * 100 : 0;
+            portData.push({ x: dt, y: portRet });
+            if (baseIdx && indexPrices) {
+              var p = lookupIndexPrice(indexPrices, formatDateISO(dt));
+              idxData.push({ x: dt, y: p ? ((p / baseIdx) - 1) * 100 : null });
+            }
+          });
+
+          _drawMfPerfChart(canvas, portData, idxData);
+          var lastPort = portData.length ? portData[portData.length - 1].y : 0;
+          var lastIdx = idxData.length ? (idxData[idxData.length - 1] || {}).y : null;
+          var portEl = document.getElementById("mfperf-port-return");
+          var idxEl = document.getElementById("mfperf-idx-return");
+          if (portEl) portEl.textContent = (lastPort >= 0 ? "+" : "") + lastPort.toFixed(1) + "%";
+          if (idxEl) idxEl.textContent = lastIdx == null ? "—" : (lastIdx >= 0 ? "+" : "") + lastIdx.toFixed(1) + "%";
+          var alphaEl = document.getElementById("mfperf-alpha");
+          if (alphaEl) {
+            if (lastIdx != null) {
+              var alpha = lastPort - lastIdx;
+              alphaEl.textContent = (alpha >= 0 ? "+" : "") + alpha.toFixed(1) + "%";
+              alphaEl.classList.toggle("mfperf-negative", alpha < 0);
+            } else alphaEl.textContent = "—";
           }
         });
-        _drawMfPerfChart(canvas, portData, idxData);
-        // Update legend + alpha
-        var lastPort = portData[portData.length - 1] ? portData[portData.length - 1].y : 0;
-        var lastIdx = idxData.length ? (idxData[idxData.length - 1] || {}).y : null;
-        var portEl = document.getElementById("mfperf-port-return");
-        var idxEl = document.getElementById("mfperf-idx-return");
-        if (portEl) portEl.textContent = (lastPort >= 0 ? "+" : "") + lastPort.toFixed(1) + "%";
-        if (idxEl) idxEl.textContent = lastIdx == null ? "—" : (lastIdx >= 0 ? "+" : "") + lastIdx.toFixed(1) + "%";
-        var alphaEl = document.getElementById("mfperf-alpha");
-        if (alphaEl) {
-          if (lastIdx != null) {
-            var alpha = lastPort - lastIdx;
-            alphaEl.textContent = (alpha >= 0 ? "+" : "") + alpha.toFixed(1) + "%";
-            alphaEl.classList.toggle("mfperf-negative", alpha < 0);
-          } else alphaEl.textContent = "—";
-        }
-      });
     });
   }
 
