@@ -3117,19 +3117,27 @@
       });
       document.getElementById("rec-open-btn").addEventListener("click", function () { openRecModal(null); });
 
-      // Auto-open template modal from settings link.
+      // Auto-open template modal from settings link — switch to Expense tab first.
       (function () {
         try {
           var params = new URLSearchParams(location.search);
-          if (params.get("addTemplate") === "1") {
-            setTimeout(function () { openRecModal(null, { template: true }); }, 300);
-          } else if (params.get("editTemplate")) {
-            var id = params.get("editTemplate");
-            var tpls = loadTemplates();
-            var t = tpls.find(function (x) { return x.id === id; });
-            if (t) setTimeout(function () { openRecModal(Object.assign({}, t.row, { name: t.name }), { template: true, templateId: t.id }); }, 300);
-          }
-        } catch (e) {}
+          var wantsTemplate = params.get("addTemplate") === "1" || params.get("editTemplate");
+          if (!wantsTemplate) return;
+          setTimeout(function () {
+            var expTab = document.getElementById("tab-expense");
+            if (expTab) expTab.click();
+            setTimeout(function () {
+              if (params.get("addTemplate") === "1") {
+                openRecModal(null, { template: true });
+              } else if (params.get("editTemplate")) {
+                var id = params.get("editTemplate");
+                var tpls = loadTemplates();
+                var t = tpls.find(function (x) { return x.id === id; });
+                if (t) openRecModal(Object.assign({}, t.row, { name: t.name }), { template: true, templateId: t.id });
+              }
+            }, 400);
+          }, 300);
+        } catch (e) { console.warn("Template auto-open failed:", e); }
       })();
       document.getElementById("rec-modal-close").addEventListener("click", closeRecModal);
       document.getElementById("rec-modal-cancel").addEventListener("click", closeRecModal);
