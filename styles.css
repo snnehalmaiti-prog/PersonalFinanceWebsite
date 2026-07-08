@@ -1816,8 +1816,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .range-pill:hover { background: color-mix(in srgb, var(--surface-alt) 70%, transparent); }
 .range-pill.active {
-  background: #3B82F6;
-  color: #fff;
+  background: var(--text);
+  color: var(--bg);
 }
 
 .pie-chart-resize {
