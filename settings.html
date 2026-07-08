@@ -382,6 +382,37 @@
       </div><!-- /#exp-content -->
     </section>
 
+    <!-- Template add/edit modal (settings-local) -->
+    <div id="tpl-modal-overlay" class="exp-modal-overlay" hidden>
+      <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="tpl-modal-title">
+        <div class="exp-modal-header">
+          <h3 id="tpl-modal-title">Add Template</h3>
+          <button type="button" class="exp-modal-close" id="tpl-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="exp-modal-body">
+          <label class="exp-field"><span>Template name</span><input type="text" id="tpl-name" placeholder="e.g. Monthly rent" /></label>
+          <div class="exp-field"><span>Type</span>
+            <div class="exp-type-toggle" id="tpl-type-toggle">
+              <button type="button" data-type="expense" class="active">Expense</button>
+              <button type="button" data-type="income">Income</button>
+              <button type="button" data-type="budget">Budget</button>
+            </div>
+          </div>
+          <label class="exp-field"><span>Amount (optional)</span><input type="number" id="tpl-amount" step="0.01" placeholder="Leave blank if variable" /></label>
+          <label class="exp-field"><span>Account</span><select id="tpl-account"></select></label>
+          <label class="exp-field"><span>Category</span><select id="tpl-category"></select></label>
+          <label class="exp-field"><span>Sub-category</span><select id="tpl-subcategory"></select></label>
+          <label class="exp-field"><span>Payment method</span><select id="tpl-payment-method"></select></label>
+          <label class="exp-field"><span>Note</span><input type="text" id="tpl-note" placeholder="Optional" /></label>
+          <p class="muted small" id="tpl-modal-error" style="color:#dc2626; margin:4px 0 0;"></p>
+        </div>
+        <div class="exp-modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" id="tpl-modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="tpl-modal-save">Add Template</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Expense add/edit modal (shared by accounts & categories) -->
     <div id="exp-modal-overlay" class="exp-modal-overlay" hidden>
       <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="exp-modal-title">
@@ -458,17 +489,126 @@
       list.querySelectorAll("[data-tpl-edit]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var id = btn.getAttribute("data-tpl-edit");
-          // Use sessionStorage so browser reload does NOT re-trigger the modal.
-          sessionStorage.setItem("wf-open-edit-template", id);
-          location.href = "dashboard.html";
+          var tpl = loadTemplates().find(function (t) { return t.id === id; });
+          if (tpl) openTemplateModal(tpl);
         });
       });
     }
     var addTemplateBtn = document.getElementById("exp-add-template-btn");
     if (addTemplateBtn) addTemplateBtn.addEventListener("click", function () {
-      sessionStorage.setItem("wf-open-add-template", "1");
-      location.href = "dashboard.html";
+      openTemplateModal(null);
     });
+
+    // ── Local Template modal (accounts/categories/PMs loaded from Supabase) ──
+    var tplRefs = { accounts: [], categories: [], paymentMethods: [], loaded: false, editingId: null, type: "expense" };
+
+    function tplLoadRefs() {
+      if (tplRefs.loaded) return Promise.resolve();
+      if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) return Promise.resolve();
+      return Promise.all([
+        WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc"),
+        WfDb.select("expense_categories", "select=*&order=sort_order.asc,created_at.asc"),
+        WfDb.select("expense_payment_methods", "select=*&order=sort_order.asc,created_at.asc")
+      ]).then(function (res) {
+        tplRefs.accounts = res[0] || [];
+        tplRefs.categories = res[1] || [];
+        tplRefs.paymentMethods = res[2] || [];
+        tplRefs.loaded = true;
+      }).catch(function () {});
+    }
+
+    function tplFillSelect(sel, items, selectedId, placeholder) {
+      var html = '<option value="">' + (placeholder || "— select —") + '</option>';
+      html += items.map(function (it) {
+        var s = (it.id === selectedId) ? " selected" : "";
+        return '<option value="' + esc(it.id) + '"' + s + '>' + esc(it.name) + '</option>';
+      }).join("");
+      sel.innerHTML = html;
+    }
+
+    function tplFillCategoryDropdowns(type, selectedCatId, selectedSubId) {
+      var catSel = document.getElementById("tpl-category");
+      var subSel = document.getElementById("tpl-subcategory");
+      var tops = tplRefs.categories.filter(function (c) { return c.type === type && !c.parent_id; });
+      tplFillSelect(catSel, tops, selectedCatId, "— none —");
+      var subs = selectedCatId ? tplRefs.categories.filter(function (c) { return c.parent_id === selectedCatId; }) : [];
+      tplFillSelect(subSel, subs, selectedSubId, "— none —");
+    }
+
+    function tplSetType(type) {
+      tplRefs.type = type;
+      var toggle = document.getElementById("tpl-type-toggle");
+      toggle.querySelectorAll("[data-type]").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-type") === type);
+      });
+      var acctField = document.getElementById("tpl-account").parentElement;
+      var pmField = document.getElementById("tpl-payment-method").parentElement;
+      acctField.style.display = (type === "income") ? "none" : "";
+      pmField.style.display = (type === "expense") ? "" : "none";
+      tplFillCategoryDropdowns(type, "", "");
+    }
+
+    function openTemplateModal(existingTpl) {
+      tplLoadRefs().then(function () {
+        tplRefs.editingId = existingTpl ? existingTpl.id : null;
+        document.getElementById("tpl-modal-title").textContent = existingTpl ? "Edit Template" : "Add Template";
+        document.getElementById("tpl-modal-save").textContent = existingTpl ? "Save Template" : "Add Template";
+        document.getElementById("tpl-modal-error").textContent = "";
+        var row = (existingTpl && existingTpl.row) || {};
+        var type = row.type || "expense";
+        document.getElementById("tpl-name").value = existingTpl ? (existingTpl.name || "") : "";
+        document.getElementById("tpl-amount").value = row.amount || "";
+        document.getElementById("tpl-note").value = row.note || "";
+        tplFillSelect(document.getElementById("tpl-account"), tplRefs.accounts, row.account_id || "", "— none —");
+        tplFillSelect(document.getElementById("tpl-payment-method"), tplRefs.paymentMethods, row.payment_method_id || "", "— none —");
+        tplSetType(type);
+        tplFillCategoryDropdowns(type, row.category_id || "", row.subcategory_id || "");
+        document.getElementById("tpl-modal-overlay").hidden = false;
+      });
+    }
+
+    function closeTemplateModal() { document.getElementById("tpl-modal-overlay").hidden = true; }
+
+    (function wireTplModal() {
+      var toggle = document.getElementById("tpl-type-toggle");
+      if (toggle) toggle.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-type]"); if (!b) return;
+        tplSetType(b.getAttribute("data-type"));
+      });
+      var catSel = document.getElementById("tpl-category");
+      if (catSel) catSel.addEventListener("change", function () {
+        var subs = tplRefs.categories.filter(function (c) { return c.parent_id === catSel.value; });
+        tplFillSelect(document.getElementById("tpl-subcategory"), subs, "", "— none —");
+      });
+      document.getElementById("tpl-modal-close").addEventListener("click", closeTemplateModal);
+      document.getElementById("tpl-modal-cancel").addEventListener("click", closeTemplateModal);
+      document.getElementById("tpl-modal-overlay").addEventListener("click", function (e) {
+        if (e.target === document.getElementById("tpl-modal-overlay")) closeTemplateModal();
+      });
+      document.getElementById("tpl-modal-save").addEventListener("click", function () {
+        var name = document.getElementById("tpl-name").value.trim();
+        if (!name) { document.getElementById("tpl-modal-error").textContent = "Enter a template name."; return; }
+        var amtStr = document.getElementById("tpl-amount").value;
+        var row = {
+          type: tplRefs.type,
+          amount: amtStr === "" ? null : Number(amtStr),
+          account_id: document.getElementById("tpl-account").value || null,
+          category_id: document.getElementById("tpl-category").value || null,
+          subcategory_id: document.getElementById("tpl-subcategory").value || null,
+          payment_method_id: document.getElementById("tpl-payment-method").value || null,
+          note: document.getElementById("tpl-note").value || ""
+        };
+        var tpls = loadTemplates();
+        if (tplRefs.editingId) {
+          tpls = tpls.map(function (t) { return t.id === tplRefs.editingId ? { id: t.id, name: name, row: row } : t; });
+        } else {
+          tpls.push({ id: "tpl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row });
+        }
+        saveTemplates(tpls);
+        closeTemplateModal();
+        renderExpenseTemplates();
+      });
+    })();
   </script>
   <script>
     (function () {
