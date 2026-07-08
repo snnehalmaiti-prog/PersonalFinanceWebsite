@@ -7776,7 +7776,7 @@
     });
   }
 
-  // Phase 2: allocation by segment
+  // Phase 2: allocation by segment — single segmented bar + compact rows
   function renderMfAllocation(rowsData) {
     var listEl = document.getElementById("mfalloc-list");
     if (!listEl) return;
@@ -7792,18 +7792,22 @@
     var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
     if (!entries.length) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
     var PAL = ["#10B981", "#D4A017", "#3B82F6", "#E8623A", "#8B5CF6", "#64748B", "#06B6D4", "#EC4899"];
-    listEl.innerHTML = entries.map(function (e, i) {
+    var bar = '<div class="mfalloc-single-bar">' + entries.map(function (e, i) {
+      var pct = total > 0 ? (e.value / total) * 100 : 0;
+      return '<span class="mfalloc-seg" style="flex:' + pct + ' 0 0;background:' + PAL[i % PAL.length] + ';" title="' + e.name + '"></span>';
+    }).join("") + '</div>';
+    var rows = entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
       var col = PAL[i % PAL.length];
-      return '<div class="mfalloc-item">' +
-        '<div class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</div>' +
-        '<div class="mfalloc-nums">' +
+      return '<div class="mfalloc-row">' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + e.name + '</span>' +
+        '<span class="mfalloc-nums">' +
           '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
-          '<span class="mfalloc-pct">' + pct.toFixed(1) + '%</span>' +
-        '</div>' +
-        '<div class="mfalloc-bar"><div class="mfalloc-bar-fill" style="width:' + pct + '%;background:' + col + ';"></div></div>' +
+          '<span class="mfalloc-pct" style="color:' + col + ';">' + pct.toFixed(1) + '%</span>' +
+        '</span>' +
       '</div>';
     }).join("");
+    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
   }
 
   // Phase 2: Portfolio vs Nifty performance chart (proper cumulative return)
