@@ -8586,7 +8586,12 @@
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="pnl">P&amp;L · Return' + _arrow("pnl") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="xirr">XIRR' + _arrow("xirr") + '</span>' +
       '</div>';
+    var subInv = 0, subCur = 0, subDay = 0, subPnl = 0;
     var body = filtered.map(function (r, i) {
+      subInv += r.invested || 0;
+      subCur += r.current || 0;
+      subPnl += r.pnl || 0;
+      if (r.dayChgPct != null && r.current != null) subDay += r.current * r.dayChgPct / 100;
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
       var seg = lookupSegment(segmentMap, r.instrument);
@@ -8618,7 +8623,18 @@
         '<div class="mfh-col-num mfh-num-xirr ' + xirrCls + '">' + xirrText + '</div>' +
       '</div>';
     }).join("");
-    list.innerHTML = header + body;
+    var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
+    var subDayCls = Math.abs(subDay) < 0.01 ? "mfh-muted" : (subDay >= 0 ? "mfh-positive" : "mfh-negative");
+    var subDayTxt = Math.abs(subDay) < 0.01 ? "—" : ((subDay >= 0 ? "+" : "") + formatCurrency(subDay));
+    var footer = '<div class="mfh-row" style="background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
+      '<div style="font-size:0.72rem;">' + (MFH_STATE.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
+      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subInv) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subCur) + '</div>' +
+      '<div class="mfh-col-num mfh-num-day ' + subDayCls + '">' + subDayTxt + '</div>' +
+      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '">' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
+      '<div class="mfh-col-num mfh-num-xirr mfh-muted">—</div>' +
+      '</div>';
+    list.innerHTML = header + body + footer;
     list.querySelectorAll("[data-mfh-sort-col]").forEach(function (el) {
       el.addEventListener("click", function () {
         var col = el.dataset.mfhSortCol;
