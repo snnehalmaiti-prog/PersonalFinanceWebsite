@@ -1844,7 +1844,13 @@
     var statusEl = document.getElementById("fixedincome-holding-status");
     var tableWrap = document.getElementById("fixedincome-holding-table-wrap");
     var tbody = document.getElementById("fixedincome-holding-tbody");
-    if (!statusEl || !tableWrap || !tbody) return;
+    // Guard the legacy-table path but still let the new redesign render even if
+    // one of the hidden legacy nodes is missing.
+    if (!tbody) {
+      try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) { console.error("FI redesign failed:", e); }
+      return;
+    }
+    if (!statusEl || !tableWrap) return;
 
     var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var fdRows = getSheetRows("fd");
@@ -1853,7 +1859,7 @@
     if ((!fdRows || !fdRows.length) && (!fiRows || !fiRows.length)) {
       statusEl.textContent = "Connect your Fixed Income/Commodity sheet in Settings to populate this view.";
       tableWrap.hidden = true;
-      try { renderFiRedesign([]); } catch (e) {}
+      try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) { console.error("FI redesign failed:", e); }
       return;
     }
 
@@ -1901,13 +1907,13 @@
     if (headerError && !holdings.length) {
       statusEl.textContent = "Header row number is incorrect.";
       tableWrap.hidden = true;
-      try { renderFiRedesign([]); } catch (e) {}
+      try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) { console.error("FI redesign failed:", e); }
       return;
     }
     if (!holdings.length) {
       statusEl.textContent = "No Fixed Income holdings found.";
       tableWrap.hidden = true;
-      try { renderFiRedesign([]); } catch (e) {}
+      try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) { console.error("FI redesign failed:", e); }
       return;
     }
 
@@ -1958,7 +1964,7 @@
 
     statusEl.textContent = "";
     tableWrap.hidden = true;
-    try { renderFiRedesign(holdings); } catch (e) {}
+    try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) { console.error("FI redesign failed:", e); }
   }
 
   function renderFiRedesign(holdings) {
@@ -1966,6 +1972,50 @@
     renderFiAllocation(holdings);
     renderFiInterestSplit(holdings);
     renderFiHoldingsCardList(holdings);
+  }
+
+  // Collects Fixed Income holdings from BOTH the fd sheet (FD/Corpus/Savings/PF)
+  // AND the fixedincome sheet (EPF/PPF deposits + interest).
+  function _buildAllFixedIncomeHoldingsList() {
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var out = [];
+    var fdRows = getSheetRows("fd");
+    if (fdRows && fdRows.length) {
+      var fd = buildFdFixedIncomeHoldingsList(fdRows, selectedPortfolio);
+      if (fd && fd.length) out = out.concat(fd);
+    }
+    var fiRows = getSheetRows("fixedincome");
+    if (fiRows && fiRows.length) {
+      var fiHeader = fiRows[0].map(normalizeText);
+      var pI = fiHeader.indexOf("portfolio name");
+      var iI = fiHeader.indexOf("instrument name");
+      var tI = fiHeader.indexOf("transaction type");
+      var aI = fiHeader.indexOf("amount");
+      var cI = fiHeader.indexOf("instrument category");
+      var sI = fiHeader.indexOf("instrument sub category");
+      if (pI !== -1 && iI !== -1 && tI !== -1 && aI !== -1) {
+        var byKey = {};
+        fiRows.slice(1).forEach(function (row) {
+          var portfolio = (row[pI] || "").trim();
+          if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
+          if (cI !== -1 && normalizeText(row[cI]) !== "fixed income") return;
+          var inst = (row[iI] || "").trim();
+          if (!inst) return;
+          var sub = sI !== -1 ? (row[sI] || "").trim() : "";
+          var type = normalizeText(row[tI]);
+          var isDeposit = type.indexOf("deposit") !== -1;
+          var isInterest = type.indexOf("interest") !== -1;
+          if (!isDeposit && !isInterest) return;
+          var key = portfolio + "||" + inst + "||" + sub;
+          var amt = parseNumber(row[aI]);
+          if (!byKey[key]) byKey[key] = { portfolio: portfolio, instrument: inst, subCategory: sub || "Provident Fund", invested: 0, current: 0 };
+          if (isDeposit) { byKey[key].invested += amt; byKey[key].current += amt; }
+          else byKey[key].current += amt;
+        });
+        Object.keys(byKey).forEach(function (k) { out.push(byKey[k]); });
+      }
+    }
+    return out;
   }
 
   function _fiIsInterestBearing(sub) {
