@@ -3651,29 +3651,19 @@
     });
     if (!commInstruments.length) return Promise.resolve([]);
     return buildInstrumentSchemeMap().then(function (schemeMap) {
-      // Build promise list: fetch NAV history for instruments with AMFI codes,
-      // fall back to null for the rest (will use last buy price as current).
-      var navPromises = commInstruments.map(function (n) {
-        var code = lookupSchemeCode(schemeMap, n);
-        return code ? fetchNavHistory(code).catch(function () { return null; }) : Promise.resolve(null);
-      });
-      return Promise.all(navPromises).then(function (histories) {
+      var resolvable = commInstruments.filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+      return Promise.all(resolvable.map(function (n) {
+        return fetchNavHistory(lookupSchemeCode(schemeMap, n));
+      })).then(function (histories) {
         var out = [];
-        commInstruments.forEach(function (n, i) {
+        resolvable.forEach(function (n, i) {
           var lots = fifoRemainingLots(byInst[n]);
-          var units = 0, invested = 0, lastPrice = 0;
-          lots.forEach(function (lot) {
-            units += lot.units;
-            invested += lot.units * lot.price;
-            lastPrice = lot.price;
-          });
+          var units = 0, invested = 0;
+          lots.forEach(function (lot) { units += lot.units; invested += lot.units * lot.price; });
           if (units < UNITS_EPSILON) return;
           var hist = histories[i];
           var nav = hist && hist.length ? hist[hist.length - 1].nav : 0;
-          // Fallback: if no AMFI NAV, use average buy price so the row still
-          // appears with correct invested (current will just equal invested).
-          var pricePerUnit = nav > 0 ? nav : (units > 0 ? invested / units : lastPrice);
-          var current = units * pricePerUnit;
+          var current = units * nav;
           out.push({
             portfolio: portfolioByInstrument[n] || "",
             instrument: n,
@@ -3688,7 +3678,7 @@
         });
         return out;
       });
-    }).catch(function (err) { console.warn("MF commodity build failed:", err); return []; });
+    }).catch(function () { return []; });
   }
 
   // Collect stocksetf holdings mapped to Commodity (e.g. Gold ETF).
@@ -5579,10 +5569,7 @@
     if (!rows || !rows.length) return map;
     var header = rows[0].map(normalizeText);
     var instrumentIdx = header.indexOf("instrument name");
-    // Try exact then fuzzy so mapping sheets with just "Category" still work.
     var categoryIdx = header.indexOf("instrument category");
-    if (categoryIdx === -1) categoryIdx = header.findIndex(function (h) { return h === "category"; });
-    if (categoryIdx === -1) categoryIdx = header.findIndex(function (h) { return h.indexOf("instrument cat") !== -1; });
     if (instrumentIdx === -1 || categoryIdx === -1) return map;
     rows.slice(1).forEach(function (row) {
       var instrument = (row[instrumentIdx] || "").trim();
