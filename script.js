@@ -3904,7 +3904,13 @@
     }).join("");
     rows.innerHTML = ["Large-cap", "Mid-cap", "Small-cap"].map(function (k) {
       var pct = byCap[k] / total * 100;
-      return '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + COL[k] + ';"></span>' + k + '</span><span class="mfalloc-nums"><span class="mfalloc-pct" style="color:' + COL[k] + ';">' + Math.round(pct) + '%</span></span></div>';
+      return '<div class="mfalloc-row">' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + COL[k] + ';"></span>' + k + '</span>' +
+        '<span class="mfalloc-nums">' +
+          '<span class="mfalloc-amount">' + formatCurrency(byCap[k]) + '</span>' +
+          '<span class="mfalloc-pct" style="color:' + COL[k] + ';">' + Math.round(pct) + '%</span>' +
+        '</span>' +
+      '</div>';
     }).join("");
   }
 
