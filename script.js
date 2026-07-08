@@ -2560,6 +2560,8 @@
 
       var mapping = mappingTable[normalizeText(instrument)];
       if (!mapping) return; // skip instruments not found in mapping sheet
+      // Commodity-category instruments show up under Commodity Holdings only.
+      if (mapping.category && normalizeText(mapping.category) === "commodity") return;
       var ticker = mapping.ticker;
       var region = mapping.region;
       var exchange = mapping.exchange || null;
@@ -5933,6 +5935,26 @@
   }
   var lastIsinMapDiagnostic = null;
 
+  function buildMfCategoryMap() {
+    var rows = getSheetRows("mfmapping");
+    var map = {};
+    if (!rows || !rows.length) return map;
+    var header = rows[0].map(normalizeText);
+    var instrumentIdx = header.indexOf("instrument name");
+    var categoryIdx = header.indexOf("instrument category");
+    if (instrumentIdx === -1 || categoryIdx === -1) return map;
+    rows.slice(1).forEach(function (row) {
+      var instrument = (row[instrumentIdx] || "").trim();
+      var category = (row[categoryIdx] || "").trim();
+      if (instrument && category) map[normalizeText(instrument)] = normalizeText(category);
+    });
+    return map;
+  }
+  function isMfCommodity(instrumentName) {
+    var m = buildMfCategoryMap();
+    return m[normalizeText(instrumentName)] === "commodity";
+  }
+
   function buildInstrumentSegmentMap() {
     var rows = getSheetRows("mfmapping");
     var map = {};
@@ -8465,8 +8487,11 @@
     var showClosedOnlyCheckbox = document.getElementById("equity-holdings-show-closed-only");
     var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
 
+    var mfCatMap = buildMfCategoryMap();
     var holdings = [];
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
+      // Commodity-category MFs show up under Commodity Holdings only.
+      if (mfCatMap[normalizeText(instrument)] === "commodity") return;
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
