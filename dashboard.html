@@ -928,37 +928,59 @@
 
       <div id="dash-exp-subpanel-analytics" class="exp-subpanel" hidden>
         <div class="rec-page" style="margin-top:20px;">
-          <aside class="rec-sidebar equity-card">
-            <h3 style="margin:0 0 16px;">Filter Options</h3>
-            <label class="rec-field"><span>Search</span>
-              <input type="search" id="ana-filter-search" placeholder="Search notes, categories…" />
-            </label>
-            <label class="rec-field"><span>Sort by</span>
-              <select id="ana-filter-sort">
-                <option value="date-desc">Time (newest first)</option>
-                <option value="date-asc">Time (oldest first)</option>
-                <option value="amount-desc">Amount (high → low)</option>
-                <option value="amount-asc">Amount (low → high)</option>
-              </select>
-            </label>
-            <label class="rec-field"><span>Account</span>
-              <select id="ana-filter-account"><option value="">All accounts</option></select>
-            </label>
-            <label class="rec-field"><span>Category</span>
-              <select id="ana-filter-category"><option value="">All categories</option></select>
-            </label>
-            <label class="rec-field"><span>Type</span>
-              <select id="ana-filter-type">
-                <option value="">All</option>
+          <aside class="rec-sidebar rec-filter-panel">
+            <div class="rec-filter-header">
+              <span class="rec-filter-title">Filters</span>
+              <button type="button" id="ana-filter-reset" class="rec-filter-clear-btn">Clear</button>
+            </div>
+
+            <div class="rec-filter-search-wrap">
+              <svg class="rec-filter-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="search" id="ana-filter-search" class="rec-filter-search-input" placeholder="Search notes, categories..." />
+            </div>
+
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="ana-filter-account">ACCOUNT</label>
+              <select id="ana-filter-account" class="rec-filter-select"><option value="">All accounts</option></select>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="ana-filter-category">CATEGORY</label>
+              <select id="ana-filter-category" class="rec-filter-select"><option value="">All categories</option></select>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="ana-filter-type">TYPE</label>
+              <select id="ana-filter-type" class="rec-filter-select">
+                <option value="">All types</option>
                 <option value="expense">Expense</option>
                 <option value="budget">Budget</option>
                 <option value="income">Income</option>
               </select>
-            </label>
-            <label class="rec-field"><span>Payment type</span>
-              <select id="ana-filter-payment"><option value="">All</option></select>
-            </label>
-            <button type="button" class="btn btn-outline btn-block" id="ana-filter-reset" style="margin-top:10px;">Reset filter</button>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="ana-filter-payment">PAYMENT TYPE</label>
+              <select id="ana-filter-payment" class="rec-filter-select"><option value="">All payments</option></select>
+            </div>
+            <div class="rec-filter-section">
+              <label class="rec-filter-label" for="ana-filter-person">PERSON</label>
+              <select id="ana-filter-person" class="rec-filter-select"><option value="">Everyone</option></select>
+            </div>
+
+            <div class="rec-filter-section">
+              <label class="rec-filter-label">AMOUNT RANGE</label>
+              <div class="rec-filter-amount-row">
+                <input type="number" id="ana-filter-min" class="rec-filter-amount-input" placeholder="Min" />
+                <span class="rec-filter-amount-dash">—</span>
+                <input type="number" id="ana-filter-max" class="rec-filter-amount-input" placeholder="Max" />
+              </div>
+            </div>
+
+            <!-- Sort kept hidden for compatibility with existing analytics code -->
+            <select id="ana-filter-sort" style="display:none;">
+              <option value="date-desc">Time (newest first)</option>
+              <option value="date-asc">Time (oldest first)</option>
+              <option value="amount-desc">Amount (high → low)</option>
+              <option value="amount-asc">Amount (low → high)</option>
+            </select>
           </aside>
 
           <div class="rec-main">
@@ -1563,7 +1585,10 @@
           account: (document.getElementById("ana-filter-account") || {}).value || "",
           category: (document.getElementById("ana-filter-category") || {}).value || "",
           type: (document.getElementById("ana-filter-type") || {}).value || "",
-          payment: (document.getElementById("ana-filter-payment") || {}).value || ""
+          payment: (document.getElementById("ana-filter-payment") || {}).value || "",
+          person: (document.getElementById("ana-filter-person") || {}).value || "",
+          min: parseFloat((document.getElementById("ana-filter-min") || {}).value) || null,
+          max: parseFloat((document.getElementById("ana-filter-max") || {}).value) || null
         };
       }
       function applyAnaFilters(records) {
@@ -1573,11 +1598,15 @@
           if (f.account && r.account_id !== f.account) return false;
           if (f.payment && r.payment_method_id !== f.payment) return false;
           if (f.type && r.type !== f.type) return false;
+          if (f.person && r.person_id !== f.person) return false;
           if (f.category) {
             var cat = dashExpState.categories.find(function (c) { return c.id === r.category_id; });
             var parentId = cat ? (cat.parent_id || cat.id) : r.category_id;
             if (parentId !== f.category) return false;
           }
+          var amt = Number(r.amount) || 0;
+          if (f.min != null && amt < f.min) return false;
+          if (f.max != null && amt > f.max) return false;
           if (q) {
             var note = (r.note || "").toLowerCase();
             var cat2 = dashExpState.categories.find(function (c) { return c.id === r.category_id; });
@@ -1736,14 +1765,15 @@
         });
 
         // Wire filter inputs
-        ["ana-filter-search","ana-filter-sort","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment"].forEach(function (id) {
+        ["ana-filter-search","ana-filter-sort","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment","ana-filter-person","ana-filter-min","ana-filter-max"].forEach(function (id) {
           var el = document.getElementById(id);
-          if (el) el.addEventListener("change", renderAnalyticsTable);
-          if (el && el.type === "search") el.addEventListener("input", renderAnalyticsTable);
+          if (!el) return;
+          el.addEventListener("change", renderAnalyticsTable);
+          if (el.type === "search" || el.type === "number") el.addEventListener("input", renderAnalyticsTable);
         });
         var resetBtn = document.getElementById("ana-filter-reset");
         if (resetBtn) resetBtn.addEventListener("click", function () {
-          ["ana-filter-search","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment"].forEach(function (id) {
+          ["ana-filter-search","ana-filter-account","ana-filter-category","ana-filter-type","ana-filter-payment","ana-filter-person","ana-filter-min","ana-filter-max"].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.value = "";
           });
@@ -1924,8 +1954,14 @@
         if (catSel) catSel.innerHTML = '<option value="">All categories</option>' +
           dashExpState.categories.filter(function (c) { return !c.parent_id; })
             .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join("");
-        if (pmSel) pmSel.innerHTML = '<option value="">All</option>' +
+        if (pmSel) pmSel.innerHTML = '<option value="">All payments</option>' +
           dashExpState.paymentMethods.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("");
+        var personSel = document.getElementById("ana-filter-person");
+        if (personSel) {
+          personSel.innerHTML = '<option value="">Everyone</option>' +
+            (dashExpState.accounts || []).filter(function (a) { return a.contributing_account; })
+              .map(function (a) { return '<option value="' + esc(a.id) + '">' + esc(a.name) + '</option>'; }).join("");
+        }
       }
 
       var recSelected = {}; // id → true
