@@ -548,7 +548,7 @@
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="script.js?v=review2"></script>
-  <script src="expense.js?v=recdup1"></script>
+  <script src="expense.js?v=qa1"></script>
   <script>
     // Expense left-nav panel switching
     (function () {
@@ -887,7 +887,12 @@
         document.getElementById("rp-name").value = existing ? (existing.name || "") : "";
         document.getElementById("rp-amount").value = row.amount || "";
         document.getElementById("rp-frequency").value = row.frequency || "monthly";
-        document.getElementById("rp-next-due").value = row.next_due || new Date().toISOString().slice(0, 10);
+        document.getElementById("rp-next-due").value = row.next_due || (function () {
+          // Local date (not toISOString/UTC) so IST early-morning doesn't default
+          // the Start Date to yesterday.
+          var d = new Date(), p = function (n) { return String(n).padStart(2, "0"); };
+          return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+        })();
         document.getElementById("rp-end-date").value = row.end_date || "";
         document.getElementById("rp-num-payments").value = row.num_payments || "";
         document.getElementById("rp-note").value = row.note || "";
@@ -925,22 +930,42 @@
         if (!amt || amt <= 0) { document.getElementById("rp-modal-error").textContent = "Enter an amount."; return; }
         var nextDue = document.getElementById("rp-next-due").value;
         if (!nextDue) { document.getElementById("rp-modal-error").textContent = "Pick next due date."; return; }
+        var endDate = document.getElementById("rp-end-date").value || null;
+        if (endDate && endDate < nextDue) { document.getElementById("rp-modal-error").textContent = "End date can't be before the start date."; return; }
+        // num_payments: whole number >= 1, else treat as unlimited (null).
+        var npStr = document.getElementById("rp-num-payments").value;
+        var numPayments = null;
+        if (npStr !== "") {
+          var np = Math.floor(Number(npStr));
+          if (!isFinite(np) || np < 1) { document.getElementById("rp-modal-error").textContent = "Installments must be a whole number of 1 or more."; return; }
+          numPayments = np;
+        }
+        var isIncome = rpRefs.type === "income";
+        var isExpense = rpRefs.type === "expense";
         var row = {
           type: rpRefs.type,
           amount: amt,
           frequency: document.getElementById("rp-frequency").value,
           next_due: nextDue,
-          end_date: document.getElementById("rp-end-date").value || null,
-          num_payments: (function () { var v = document.getElementById("rp-num-payments").value; return v === "" ? null : Number(v); })(),
-          account_id: document.getElementById("rp-account").value || null,
+          end_date: endDate,
+          num_payments: numPayments,
+          account_id: isIncome ? null : (document.getElementById("rp-account").value || null),
           category_id: document.getElementById("rp-category").value || null,
           subcategory_id: document.getElementById("rp-subcategory").value || null,
-          payment_method_id: document.getElementById("rp-payment-method").value || null,
+          payment_method_id: isExpense ? (document.getElementById("rp-payment-method").value || null) : null,
           note: document.getElementById("rp-note").value || ""
         };
         var items = loadRecurring();
         if (rpRefs.editingId) {
-          items = items.map(function (t) { return t.id === rpRefs.editingId ? { id: t.id, name: name, row: row } : t; });
+          items = items.map(function (t) {
+            if (t.id !== rpRefs.editingId) return t;
+            // Preserve the posted-installment counter across edits — rebuilding
+            // the row from the form would otherwise reset it to 0 and let the
+            // processor re-post already-charged installments (over-posting).
+            var prevDone = (t.row && t.row.installments_done) || 0;
+            row.installments_done = prevDone;
+            return { id: t.id, name: name, row: row };
+          });
         } else {
           items.push({ id: "rp-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row });
         }
