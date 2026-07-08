@@ -2674,16 +2674,21 @@
       var cached = JSON.parse(localStorage.getItem(GOLD_DAY_CHANGE_CACHE_KEY));
       if (cached && Date.now() - cached.fetchedAt < GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS) return Promise.resolve(cached.change);
     } catch (e) {}
-    return fetch("https://www.goldapi.io/api/XAU/INR", {
-      headers: { "x-access-token": GOLD_API_KEY, "Content-Type": "application/json" }
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || data.ch === undefined || data.ch === null) throw new Error("No ch in goldapi response");
-        var changePerGram = data.ch / TROY_OZ_TO_GRAM;
-        try { localStorage.setItem(GOLD_DAY_CHANGE_CACHE_KEY, JSON.stringify({ change: changePerGram, fetchedAt: Date.now() })); } catch (e) {}
-        return changePerGram;
-      });
+    // Keyless day change: today's spot per gram minus yesterday's, both via the
+    // free currency-api. (goldapi.io is no longer used — its key 403s.)
+    var yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    var yStr = formatDateISO(yest);
+    return Promise.all([
+      fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      fetchXauInrForDate(yStr).catch(function () { return null; })
+    ]).then(function (r) {
+      var today = r[0], prev = r[1];
+      if (today == null || prev == null) throw new Error("gold day change unavailable");
+      var changePerGram = today - prev;
+      try { localStorage.setItem(GOLD_DAY_CHANGE_CACHE_KEY, JSON.stringify({ change: changePerGram, fetchedAt: Date.now() })); } catch (e) {}
+      return changePerGram;
+    });
   }
 
   function fetchXauInrForDate(dateStr) {
@@ -2705,25 +2710,11 @@
         });
     }
 
-    // Fallback: goldapi.io — historical XAU/INR per gram, CORS-friendly
-    function fetchFromGoldApi(dStr) {
-      var datePart = dStr.replace(/-/g, "");
-      var url = "https://www.goldapi.io/api/XAU/INR/" + datePart;
-      return fetch(url, { headers: { "x-access-token": GOLD_API_KEY, "Content-Type": "application/json" } })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          // goldapi.io returns price_gram_24k directly; fall back to price (per troy oz) / 31.1035
-          var pricePerGram = data && (data.price_gram_24k || (data.price && data.price / TROY_OZ_TO_GRAM));
-          if (!pricePerGram) throw new Error("No goldapi price for " + dStr);
-          return pricePerGram;
-        });
-    }
-
-    // Try jsDelivr npm CDN → goldapi.io for a given date
+    // Keyless: jsDelivr npm CDN dated snapshot for a given date. Weekend/holiday
+    // gaps are handled by the caller stepping back a few days.
     function tryDateAllSources(dStr) {
       var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
-      return fetchFromCurrencyApi(urlA)
-        .catch(function () { return fetchFromGoldApi(dStr); });
+      return fetchFromCurrencyApi(urlA);
     }
 
     // Step back up to 3 days (handles weekends/holidays for currency-api dates)
