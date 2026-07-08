@@ -8414,8 +8414,12 @@
     });
 
     if (!holdings.length) {
-      statusEl.textContent = "No mutual fund holdings with unsold units found.";
+      statusEl.textContent = MFH_STATE.showClosed
+        ? "No closed mutual fund holdings for this filter."
+        : "No mutual fund holdings with unsold units found.";
       tableWrap.hidden = true;
+      // Clear the new card-list view too so stale rows don't linger.
+      try { renderMfHoldingsCardList([]); } catch (e) {}
       return;
     }
 
