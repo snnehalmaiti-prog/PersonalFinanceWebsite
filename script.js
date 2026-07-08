@@ -7573,14 +7573,13 @@
 
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
-          attachInstrumentColumnResizer();
           try { renderMfHoldingsCardList(rowsData); } catch (e) {}
           try { renderMfPortfolioCards(); } catch (e) {}
           try { renderMfAllocation(rowsData); } catch (e) {}
           try { renderMfPerformanceChart(); } catch (e) {}
 
           statusEl.textContent = "";
-          tableWrap.hidden = false;
+          tableWrap.hidden = true;
           updateNavAsOf(navHistories);
         });
     }).catch(function (err) {
