@@ -1105,34 +1105,59 @@
       var amt = Number(row.amount) || 0;
       if (!nextDue || amt <= 0) return;
 
-      function doOne() {
-        if (nextDue > today) return null;
-        if (end && nextDue > end) return null;
-        if (maxN && done >= maxN) return null;
-        var dueIso = nextDue;
-        // Build the record row
-        var rec = {
-          txn_date: dueIso,
-          txn_at: new Date(dueIso + "T09:00:00").toISOString(),
-          amount: amt,
-          type: row.type || "expense",
-          account_id: (row.type === "income") ? null : (row.account_id || null),
-          category_id: row.category_id || null,
-          subcategory_id: row.subcategory_id || null,
-          payment_method_id: (row.type === "expense") ? (row.payment_method_id || null) : null,
-          note: (item.name || "") + (row.note ? " — " + row.note : "") + " [recurring]",
-          labels: ["recurring", item.id]
-        };
-        return WfDb.insert("expense_records", rec).then(function () {
-          done += 1;
-          nextDue = advanceDate(nextDue, freq);
-          row.installments_done = done;
-          row.next_due = nextDue;
-          changed = true;
-          return doOne(); // keep posting until caught up
-        });
-      }
-      chain = chain.then(doOne).catch(function () {});
+      // Idempotency: fetch the due-dates already posted for THIS recurring item
+      // (its records carry item.id in labels). Lets us skip re-inserting an
+      // installment whose local counter was lost because a prior run's cloud
+      // save failed, or that another device already posted. Best-effort: if the
+      // containment query isn't supported, fall back to no dedup (prior behavior).
+      chain = chain.then(function () {
+        return WfDb.select("expense_records",
+            "labels=cs." + encodeURIComponent(JSON.stringify([item.id])) + "&select=txn_date")
+          .then(function (rows) {
+            var posted = {};
+            (rows || []).forEach(function (r) { if (r && r.txn_date) posted[String(r.txn_date).slice(0, 10)] = true; });
+            return posted;
+          })
+          .catch(function () { return {}; });
+      }).then(function (posted) {
+        function doOne() {
+          if (nextDue > today) return null;
+          if (end && nextDue > end) return null;
+          if (maxN && done >= maxN) return null;
+          var dueIso = nextDue;
+          function advance() {
+            done += 1;
+            nextDue = advanceDate(nextDue, freq);
+            row.installments_done = done;
+            row.next_due = nextDue;
+            item.updated_at = Date.now(); // so merge-on-save treats this as latest
+            changed = true;
+          }
+          if (posted[dueIso]) {
+            // Already in the DB — advance the schedule without a duplicate insert.
+            advance();
+            return doOne();
+          }
+          var rec = {
+            txn_date: dueIso,
+            txn_at: new Date(dueIso + "T09:00:00").toISOString(),
+            amount: amt,
+            type: row.type || "expense",
+            account_id: (row.type === "income") ? null : (row.account_id || null),
+            category_id: row.category_id || null,
+            subcategory_id: row.subcategory_id || null,
+            payment_method_id: (row.type === "expense") ? (row.payment_method_id || null) : null,
+            note: (item.name || "") + (row.note ? " — " + row.note : "") + " [recurring]",
+            labels: ["recurring", item.id, dueIso]
+          };
+          return WfDb.insert("expense_records", rec).then(function () {
+            posted[dueIso] = true;
+            advance();
+            return doOne(); // keep posting until caught up
+          });
+        }
+        return doOne();
+      }).catch(function () {});
     });
 
     return chain.then(function () {

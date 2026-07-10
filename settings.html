@@ -548,7 +548,7 @@
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="script.js?v=review2"></script>
-  <script src="expense.js?v=qa3"></script>
+  <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching
     (function () {
@@ -578,15 +578,46 @@
       });
     })();
 
+    // ── Mergeable synced list (templates / recurring) ──────────────────────
+    // Items carry `updated_at`; deletes become tombstones ({_deleted:true}). On
+    // save we merge with the freshest cloud copy by id (last-writer-wins) so a
+    // stale device can't clobber another device's concurrent adds/edits, and
+    // deletes still propagate.
+    function _wfLoadListRaw(key) {
+      try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; }
+    }
+    function _wfMergeById(localList, cloudList) {
+      var byId = {};
+      (cloudList || []).forEach(function (it) { if (it && it.id) byId[it.id] = it; });
+      (localList || []).forEach(function (it) {
+        if (!it || !it.id) return;
+        var ex = byId[it.id];
+        if (!ex || (it.updated_at || 0) >= (ex.updated_at || 0)) byId[it.id] = it;
+      });
+      var cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000; // prune old tombstones
+      return Object.keys(byId).map(function (k) { return byId[k]; })
+        .filter(function (it) { return !(it._deleted && (it.updated_at || 0) < cutoff); });
+    }
+    function _wfPersistList(key, list) {
+      var now = Date.now();
+      list.forEach(function (it) { if (it && it.updated_at == null) it.updated_at = now; });
+      localStorage.setItem(key, JSON.stringify(list));
+      if (!(window.WfAuth && WfAuth.isLoggedIn())) return Promise.resolve();
+      return WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () {
+        var merged = _wfMergeById(list, _wfLoadListRaw(key));
+        localStorage.setItem(key, JSON.stringify(merged));
+        return WfAuth.saveSettingsToCloud().catch(function () {});
+      });
+    }
+    function _wfTombstone(list, id) {
+      return list.map(function (it) { return it.id === id ? { id: it.id, _deleted: true, updated_at: Date.now() } : it; });
+    }
+
     // Expense templates (stored in localStorage; edited via dashboard Add Record modal).
     var TEMPLATE_KEY = "wf-expense-templates";
-    function loadTemplates() {
-      try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || []; } catch (e) { return []; }
-    }
-    function saveTemplates(list) {
-      localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
-      if (window.WfAuth && WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
-    }
+    function loadTemplatesRaw() { return _wfLoadListRaw(TEMPLATE_KEY); }
+    function loadTemplates() { return loadTemplatesRaw().filter(function (t) { return t && !t._deleted; }); }
+    function saveTemplates(list) { return _wfPersistList(TEMPLATE_KEY, list); }
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
     function tplTypeStyle(type) {
       if (type === "income")  return { bg: "#ecfdf5", fg: "#047857", icon: "↓" };
@@ -646,7 +677,7 @@
         btn.addEventListener("click", function () {
           if (!confirm("Delete this template?")) return;
           var id = btn.getAttribute("data-tpl-del");
-          saveTemplates(loadTemplates().filter(function (t) { return t.id !== id; }));
+          saveTemplates(_wfTombstone(loadTemplatesRaw(), id));
           renderExpenseTemplates();
         });
       });
@@ -767,11 +798,11 @@
           payment_method_id: document.getElementById("tpl-payment-method").value || null,
           note: document.getElementById("tpl-note").value || ""
         };
-        var tpls = loadTemplates();
+        var tpls = loadTemplatesRaw();
         if (tplRefs.editingId) {
-          tpls = tpls.map(function (t) { return t.id === tplRefs.editingId ? { id: t.id, name: name, row: row } : t; });
+          tpls = tpls.map(function (t) { return t.id === tplRefs.editingId ? { id: t.id, name: name, row: row, updated_at: Date.now() } : t; });
         } else {
-          tpls.push({ id: "tpl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row });
+          tpls.push({ id: "tpl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row, updated_at: Date.now() });
         }
         saveTemplates(tpls);
         closeTemplateModal();
@@ -781,13 +812,9 @@
 
     // ── Recurring payments ────────────────────────────────────────────────
     var RECURRING_KEY = "wf-recurring-payments";
-    function loadRecurring() {
-      try { return JSON.parse(localStorage.getItem(RECURRING_KEY)) || []; } catch (e) { return []; }
-    }
-    function saveRecurring(list) {
-      localStorage.setItem(RECURRING_KEY, JSON.stringify(list));
-      if (window.WfAuth && WfAuth.isLoggedIn()) WfAuth.saveSettingsToCloud().catch(function () {});
-    }
+    function loadRecurringRaw() { return _wfLoadListRaw(RECURRING_KEY); }
+    function loadRecurring() { return loadRecurringRaw().filter(function (r) { return r && !r._deleted; }); }
+    function saveRecurring(list) { return _wfPersistList(RECURRING_KEY, list); }
     function renderRecurringPayments() {
       var list = document.getElementById("exp-recurring-list");
       var status = document.getElementById("exp-recurring-status");
@@ -837,7 +864,7 @@
         btn.addEventListener("click", function () {
           if (!confirm("Delete this recurring payment?")) return;
           var id = btn.getAttribute("data-rp-del");
-          saveRecurring(loadRecurring().filter(function (r) { return r.id !== id; }));
+          saveRecurring(_wfTombstone(loadRecurringRaw(), id));
           renderRecurringPayments();
         });
       });
@@ -955,7 +982,7 @@
           payment_method_id: isExpense ? (document.getElementById("rp-payment-method").value || null) : null,
           note: document.getElementById("rp-note").value || ""
         };
-        var items = loadRecurring();
+        var items = loadRecurringRaw();
         if (rpRefs.editingId) {
           items = items.map(function (t) {
             if (t.id !== rpRefs.editingId) return t;
@@ -964,10 +991,10 @@
             // processor re-post already-charged installments (over-posting).
             var prevDone = (t.row && t.row.installments_done) || 0;
             row.installments_done = prevDone;
-            return { id: t.id, name: name, row: row };
+            return { id: t.id, name: name, row: row, updated_at: Date.now() };
           });
         } else {
-          items.push({ id: "rp-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row });
+          items.push({ id: "rp-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row, updated_at: Date.now() });
         }
         saveRecurring(items);
         closeRecurringModal();

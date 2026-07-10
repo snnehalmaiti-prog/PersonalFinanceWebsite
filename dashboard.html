@@ -2687,18 +2687,37 @@
       var editingTemplateMode = false;
       var editingTemplateId = null;
 
-      // Template storage helpers (localStorage keyed by user).
+      // Template storage helpers (localStorage keyed by user). Uses the same
+      // id-merge + tombstone scheme as settings.html so concurrent dashboard/
+      // settings/multi-device edits don't clobber each other.
       var TEMPLATE_KEY = "wf-expense-templates";
-      function loadTemplates() {
+      function _wfMergeById(localList, cloudList) {
+        var byId = {};
+        (cloudList || []).forEach(function (it) { if (it && it.id) byId[it.id] = it; });
+        (localList || []).forEach(function (it) {
+          if (!it || !it.id) return;
+          var ex = byId[it.id];
+          if (!ex || (it.updated_at || 0) >= (ex.updated_at || 0)) byId[it.id] = it;
+        });
+        var cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
+        return Object.keys(byId).map(function (k) { return byId[k]; })
+          .filter(function (it) { return !(it._deleted && (it.updated_at || 0) < cutoff); });
+      }
+      function loadTemplatesRaw() {
         try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || []; } catch (e) { return []; }
       }
+      function loadTemplates() { return loadTemplatesRaw().filter(function (t) { return t && !t._deleted; }); }
       function saveTemplates(list) {
+        var now = Date.now();
+        list.forEach(function (it) { if (it && it.updated_at == null) it.updated_at = now; });
         localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
-        // Push to cloud so a subsequent loadSettingsFromCloud() (settings visit /
-        // page load) doesn't clobber dashboard-created templates. Mirrors settings.html.
-        if (window.WfAuth && WfAuth.isLoggedIn() && WfAuth.saveSettingsToCloud) {
-          WfAuth.saveSettingsToCloud().catch(function () {});
-        }
+        if (!(window.WfAuth && WfAuth.isLoggedIn() && WfAuth.saveSettingsToCloud)) return;
+        // Merge with the freshest cloud copy so we don't clobber other-surface edits.
+        WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () {
+          var merged = _wfMergeById(list, loadTemplatesRaw());
+          localStorage.setItem(TEMPLATE_KEY, JSON.stringify(merged));
+          return WfAuth.saveSettingsToCloud().catch(function () {});
+        });
       }
       function refreshTemplateSelect() {
         var sel = document.getElementById("rec-template");
@@ -3103,11 +3122,12 @@
         if (editingTemplateMode) {
           var nm = (document.getElementById("rec-template-name").value || "").trim();
           if (!nm) { document.getElementById("rec-modal-error").textContent = "Template name is required."; return; }
-          var tpls = loadTemplates();
+          var tpls = loadTemplatesRaw();
           var tplRow = {
             id: editingTemplateId || ("tpl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7)),
             name: nm,
-            row: row
+            row: row,
+            updated_at: Date.now()
           };
           if (editingTemplateId) {
             tpls = tpls.map(function (t) { return t.id === editingTemplateId ? tplRow : t; });
