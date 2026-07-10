@@ -1569,6 +1569,19 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   white-space: nowrap;
 }
 .ca-action b { color: var(--text); font-weight: 700; }
+.ca-action-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  white-space: normal;
+}
+.ca-portfolio-line { white-space: nowrap; }
+.ca-portfolio-name {
+  display: inline-block;
+  min-width: 68px;
+  font-weight: 700;
+  color: var(--text);
+}
 .ca-hint {
   margin: 8px 2px 0;
   font-size: 0.7rem;

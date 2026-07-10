@@ -9828,103 +9828,136 @@
     var warnEl = document.getElementById("stocksetf-corporate-actions-warning");
     if (!warnEl) return;
 
-    // Build map: ticker/identifier.toLowerCase() → { firstTxnDate (ISO), txns }
-    // Keyed by ticker (NSE symbol / identifier) to match corporate_actions keys in stock_prices.json
-    var heldInstruments = {};
-    (holdings || []).forEach(function (h) {
-      var earliest = null;
-      (h.txns || []).forEach(function (txn) {
-        if (txn.date && (!earliest || txn.date < earliest)) earliest = txn.date;
-      });
-      heldInstruments[h.ticker.toLowerCase()] = {
-        firstTxnDate: earliest ? formatDateISO(earliest) : null,
-        txns: h.txns || []
-      };
-    });
-
-    // Build a set of (instrument, date-window) pairs from existing split/bonus rows in the user's sheet
-    var recordedKeys = {};
-    if (seRows && seRows.length > 1) {
-      var header = seRows[0].map(normalizeText);
-      var typeIdx = header.indexOf("transaction type");
-      var instrumentIdx = header.indexOf("instrument name");
-      var dateIdx = header.indexOf("transaction date");
-      if (typeIdx !== -1 && instrumentIdx !== -1 && dateIdx !== -1) {
-        seRows.slice(1).forEach(function (row) {
-          var type = normalizeText(row[typeIdx] || "");
-          if (type !== "split" && type !== "bonus") return;
-          var instrument = (row[instrumentIdx] || "").trim().toLowerCase();
-          var date = parseFlexibleDate(row[dateIdx]);
-          if (!date) return;
-          // Allow ±14 day window around the recorded date
-          for (var d = -14; d <= 14; d++) {
-            var shifted = new Date(date.getTime() + d * 86400000);
-            recordedKeys[instrument + "|" + formatDateISO(shifted)] = true;
-          }
-        });
-      }
+    if (!seRows || seRows.length < 2) { warnEl.hidden = true; return; }
+    var header = seRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var typeIdx = header.indexOf("transaction type");
+    var instrumentIdx = header.indexOf("instrument name");
+    var unitsIdx = header.indexOf("units");
+    var dateIdx = header.indexOf("transaction date");
+    if (typeIdx === -1 || instrumentIdx === -1 || dateIdx === -1 || unitsIdx === -1) {
+      warnEl.hidden = true; return;
     }
 
-    var unmatched = [];
-    Object.keys(corporateActions).forEach(function (instrument) {
-      var instrumentKey = instrument.toLowerCase();
-      // Only warn for instruments the user currently holds
-      if (!heldInstruments.hasOwnProperty(instrumentKey)) return;
-      var held = heldInstruments[instrumentKey];
-      var firstTxnDate = held.firstTxnDate;
-      var txns = held.txns;
-      var actions = corporateActions[instrument];
+    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var mappingTable = buildStockMappingTable();
+
+    // Build per-(portfolio × ticker) transaction lists directly from the sheet,
+    // so that when two portfolios hold the same stock each is tracked separately.
+    // Also collect the set of already-recorded split/bonus rows keyed per portfolio.
+    var byPortfolioTicker = {}; // "portfolio|ticker" → { portfolio, ticker, firstTxnDate, txns }
+    var recordedKeys = {};      // "portfolio|ticker|dateISO" → true (±14d window)
+    seRows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] !== undefined ? row[portfolioIdx] : "").toString().trim();
+      var type = normalizeText(row[typeIdx] || "");
+      var isBuy = type.indexOf("buy") !== -1;
+      var isSell = type.indexOf("sell") !== -1;
+      var isCorpAction = type === "split" || type === "bonus";
+      if (!isBuy && !isSell && !isCorpAction) return;
+
+      var instrument = (row[instrumentIdx] || "").trim();
+      var mapping = mappingTable[normalizeText(instrument)];
+      if (!mapping || !mapping.ticker) return;
+      var tickerKey = mapping.ticker.toLowerCase();
+      var date = parseFlexibleDate(row[dateIdx]);
+      if (!date) return;
+      var comboKey = normalizeText(portfolio) + "|" + tickerKey;
+
+      if (isCorpAction) {
+        for (var d = -14; d <= 14; d++) {
+          var shifted = new Date(date.getTime() + d * 86400000);
+          recordedKeys[comboKey + "|" + formatDateISO(shifted)] = true;
+        }
+      }
+
+      if (!byPortfolioTicker[comboKey]) {
+        byPortfolioTicker[comboKey] = { portfolio: portfolio, ticker: mapping.ticker, firstTxnDate: null, txns: [] };
+      }
+      var bucket = byPortfolioTicker[comboKey];
+      var iso = formatDateISO(date);
+      if (!bucket.firstTxnDate || iso < bucket.firstTxnDate) bucket.firstTxnDate = iso;
+      bucket.txns.push({ type: (isBuy || isCorpAction) ? "buy" : "sell", units: parseNumber(row[unitsIdx]), date: date });
+    });
+
+    // For each corporate action ticker, find every portfolio that holds it and
+    // compute the per-portfolio units to add. Group results by ticker so a stock
+    // held in two portfolios shows a sub-line per portfolio.
+    var grouped = {}; // tickerKey → { instrument, actions: [ {date, ratio, type, lines:[{portfolio, units}]} ] }
+    Object.keys(corporateActions).forEach(function (tickerName) {
+      var tickerKey = tickerName.toLowerCase();
+      var actions = corporateActions[tickerName];
       actions.forEach(function (action) {
-        // Skip corporate actions that happened before the user's first transaction
-        if (firstTxnDate && action.date < firstTxnDate) return;
-        var key = instrumentKey + "|" + action.date;
-        if (!recordedKeys[key]) {
-          // Calculate units held just before the corporate action date
+        var lines = [];
+        Object.keys(byPortfolioTicker).forEach(function (comboKey) {
+          var bucket = byPortfolioTicker[comboKey];
+          if (bucket.ticker.toLowerCase() !== tickerKey) return;
+          if (selectedPortfolio !== "all" && normalizeText(bucket.portfolio) !== normalizeText(selectedPortfolio)) return;
+          if (bucket.firstTxnDate && action.date < bucket.firstTxnDate) return;
+          if (recordedKeys[normalizeText(bucket.portfolio) + "|" + tickerKey + "|" + action.date]) return;
           var unitsAtAction = 0;
-          txns.forEach(function (txn) {
+          bucket.txns.forEach(function (txn) {
             if (!txn.date || formatDateISO(txn.date) >= action.date) return;
             unitsAtAction += txn.type === "buy" ? txn.units : -txn.units;
           });
           unitsAtAction = Math.max(0, Math.round(unitsAtAction * 1000) / 1000);
-          if (unitsAtAction <= 0) return; // no units held at time of action — skip
+          if (unitsAtAction <= 0) return;
           var extraUnits = Math.round(unitsAtAction * (action.ratio - 1) * 1000) / 1000;
-          var dateParts = action.date.split("-");
-          var displayDate = dateParts[2] + "/" + dateParts[1] + "/" + dateParts[0];
-          var ratioDisplay = (action.ratio % 1 === 0) ? action.ratio.toFixed(0) : action.ratio;
-          unmatched.push({
-            instrument: instrument,
-            date: displayDate,
-            ratio: ratioDisplay,
-            type: action.type === "split" ? "Split" : "Bonus",
-            units: extraUnits
-          });
-        }
+          lines.push({ portfolio: bucket.portfolio, units: extraUnits });
+        });
+        if (!lines.length) return;
+        var dateParts = action.date.split("-");
+        var displayDate = dateParts[2] + "/" + dateParts[1] + "/" + dateParts[0];
+        var ratioDisplay = (action.ratio % 1 === 0) ? action.ratio.toFixed(0) : action.ratio;
+        if (!grouped[tickerKey]) grouped[tickerKey] = { instrument: tickerName, actions: [] };
+        grouped[tickerKey].actions.push({
+          date: displayDate,
+          ratio: ratioDisplay,
+          type: action.type === "split" ? "Split" : "Bonus",
+          lines: lines
+        });
       });
     });
 
-    if (!unmatched.length) {
-      warnEl.hidden = true;
-      return;
-    }
+    var groupKeys = Object.keys(grouped);
+    if (!groupKeys.length) { warnEl.hidden = true; return; }
+
+    var pendingCount = 0;
+    groupKeys.forEach(function (k) { grouped[k].actions.forEach(function (a) { pendingCount += a.lines.length; }); });
 
     warnEl.hidden = false;
     var warnSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>";
-    var items = unmatched.map(function (a) {
-      var initials = escapeHtml(String(a.instrument).replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "?");
-      var badgeClass = a.type.toLowerCase() === "bonus" ? "ca-badge-bonus" : "ca-badge-split";
-      var unitsStr = (Math.round(a.units * 1000) / 1000).toLocaleString("en-IN");
-      return "<div class='ca-item'>" +
-        "<span class='ca-avatar'>" + initials + "</span>" +
-        "<span class='ca-item-name'>" + escapeHtml(a.instrument) +
-          "<span class='ca-badge " + badgeClass + "'>" + escapeHtml(a.ratio) + ":1 " + escapeHtml(a.type) + "</span></span>" +
-        "<span class='ca-action'>Add <b>" + unitsStr + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>" +
-      "</div>";
+
+    var items = groupKeys.map(function (tickerKey) {
+      var g = grouped[tickerKey];
+      var initials = escapeHtml(String(g.instrument).replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "?");
+      return g.actions.map(function (a) {
+        var badgeClass = a.type.toLowerCase() === "bonus" ? "ca-badge-bonus" : "ca-badge-split";
+        var multiPortfolio = a.lines.length > 1;
+        var actionHtml;
+        if (multiPortfolio) {
+          actionHtml = "<span class='ca-action ca-action-multi'>" + a.lines.map(function (ln) {
+            var us = (Math.round(ln.units * 1000) / 1000).toLocaleString("en-IN");
+            return "<span class='ca-portfolio-line'><span class='ca-portfolio-name'>" + escapeHtml(ln.portfolio || "—") +
+              "</span> Add <b>" + us + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>";
+          }).join("") + "</span>";
+        } else {
+          var us = (Math.round(a.lines[0].units * 1000) / 1000).toLocaleString("en-IN");
+          actionHtml = "<span class='ca-action'>Add <b>" + us + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>";
+        }
+        return "<div class='ca-item'>" +
+          "<span class='ca-avatar'>" + initials + "</span>" +
+          "<span class='ca-item-name'>" + escapeHtml(g.instrument) +
+            "<span class='ca-badge " + badgeClass + "'>" + escapeHtml(a.ratio) + ":1 " + escapeHtml(a.type) + "</span></span>" +
+          actionHtml +
+        "</div>";
+      }).join("");
     }).join("");
+
     warnEl.innerHTML =
       "<div class='ca-warning-head'>" +
         "<span class='ca-warning-icon'>" + warnSvg + "</span>" +
         "<span class='ca-warning-title'>Corporate actions not recorded</span>" +
-        "<span class='ca-warning-count'>" + unmatched.length + " pending</span>" +
+        "<span class='ca-warning-count'>" + pendingCount + " pending</span>" +
       "</div>" +
       "<div class='ca-list'>" + items + "</div>" +
       "<p class='ca-hint'>Add each as a <b>Split</b>/<b>Bonus</b> row (Price 0) in your Stocks/ETF sheet. Clears once recorded.</p>";
