@@ -1432,9 +1432,21 @@
   }
 
   function updateDashboardStats() {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
-    _ov.seInvested = 0; _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seRealized = 0; _ov.seXirrFlows = []; _ov._overviewBaseFlows = null; _ov._mfCommDayChange = null;
+    _ov.seInvested = 0; _ov.seRealized = 0; _ov._overviewBaseFlows = null; _ov._mfCommDayChange = null;
+    // The live Stocks/ETF current value (seCurrent/Unrealized/DayChange/XirrFlows)
+    // is populated ASYNCHRONOUSLY by renderStockEtfHoldingsTable, which
+    // updateDashboardStats does NOT trigger. Zeroing them here on every call
+    // (e.g. an exclusion toggle or a late data event) would drop the Overview
+    // Current to the seInvested fallback until the user forces an SE re-render.
+    // Only clear them when the portfolio actually changes — then
+    // renderStockEtfHoldingsTable will repopulate them.
+    if (_ov._seComputedPortfolio !== selected) {
+      _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seXirrFlows = [];
+    }
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
     _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
 
@@ -1443,8 +1455,6 @@
     var stocksEtfEl = document.getElementById("stocksetf-total-investment");
     var equityRealizedEl = document.getElementById("equity-realized-return");
     var stocksEtfRealizedEl = document.getElementById("stocksetf-realized-return");
-
-    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
 
     // Invested amounts (synchronous)
     var mfInvested = computeTotalInvestment(selected, ["equity"]);
@@ -10343,6 +10353,7 @@
           _ov.seCurrent    = totalCurrentINR;
           _ov.seUnrealized = totalPnlINR;
           _ov.seDayChange  = totalDayChangeINR;
+          _ov._seComputedPortfolio = selectedPortfolio;
           var seInvestedEl = document.getElementById("stocksetf-total-investment");
           if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
           refreshOverviewStats(); refreshCategoryCards();
