@@ -4497,17 +4497,18 @@
           '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '">' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
         '</div>' +
-        '<div class="mfh-col-num mfh-num-day ' + (Math.abs(day) < 0.01 ? "mfh-muted" : (day >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(day) < 0.01 ? "—" : ((day >= 0 ? "+" : "") + formatCurrency(day))) + '</div>' +
+        _mfhDayCell(Math.abs(day) < 0.01 ? null : day, (h.currentINR - day) > 0 ? (day / (h.currentINR - day)) * 100 : null) +
       '</div>';
     }).join("");
     var subPnl = subCur - subInv;
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
+    var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
     var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
       '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · IN INR" : "") + '</div></div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subCur) + '</div>' +
       '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '">' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
-      '<div class="mfh-col-num mfh-num-day ' + (Math.abs(subDay) < 0.01 ? "mfh-muted" : (subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(subDay) < 0.01 ? "—" : ((subDay >= 0 ? "+" : "") + formatCurrency(subDay))) + '</div>' +
+      _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
       '</div>';
     list.innerHTML = header + body + footer;
     try { applyHoldingsFold(listId); } catch (e) {}
@@ -8830,6 +8831,19 @@
     return span;
   }
 
+  // Renders a holdings-list Day Chg cell as stacked ₹ amount + % (like the P&L
+  // column). dayAmt in ₹, dayPct the day-change percent (null → no % line).
+  function _mfhDayCell(dayAmt, dayPct) {
+    if (dayAmt == null || Math.abs(dayAmt) < 0.01) {
+      return '<div class="mfh-col-num mfh-num-day mfh-muted">—</div>';
+    }
+    var cls = dayAmt >= 0 ? "mfh-positive" : "mfh-negative";
+    var valTxt = (dayAmt >= 0 ? "+" : "") + formatCurrency(dayAmt);
+    var pctTxt = (dayPct == null || !isFinite(dayPct)) ? ""
+      : '<span class="mfh-num-day-pct">' + (dayPct >= 0 ? "+" : "") + dayPct.toFixed(2) + '%</span>';
+    return '<div class="mfh-col-num mfh-num-day ' + cls + '"><span class="mfh-num-day-value">' + valTxt + '</span>' + pctTxt + '</div>';
+  }
+
   function truncateInstrumentNameToFund(name) {
     if (!name) return name;
     var match = /^(.*?\bfund\b)/i.exec(name);
@@ -9244,9 +9258,7 @@
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.current) + '</div>' +
         (function () {
           var dayVal = (r.dayChgPct == null || r.current == null) ? null : (r.current * r.dayChgPct / 100);
-          var cls = dayVal == null ? "mfh-muted" : (dayVal >= 0 ? "mfh-positive" : "mfh-negative");
-          var text = dayVal == null ? "—" : ((dayVal >= 0 ? "+" : "") + formatCurrency(dayVal));
-          return '<div class="mfh-col-num mfh-num-day ' + cls + '">' + text + '</div>';
+          return _mfhDayCell(dayVal, r.dayChgPct);
         })() +
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + formatCurrency(r.pnl) + '</span>' +
@@ -9256,13 +9268,12 @@
       '</div>';
     }).join("");
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
-    var subDayCls = Math.abs(subDay) < 0.01 ? "mfh-muted" : (subDay >= 0 ? "mfh-positive" : "mfh-negative");
-    var subDayTxt = Math.abs(subDay) < 0.01 ? "—" : ((subDay >= 0 ? "+" : "") + formatCurrency(subDay));
+    var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
     var footer = '<div class="mfh-row" style="background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
       '<div style="font-size:0.72rem;">' + (MFH_STATE.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subCur) + '</div>' +
-      '<div class="mfh-col-num mfh-num-day ' + subDayCls + '">' + subDayTxt + '</div>' +
+      _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
       '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '">' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       '<div class="mfh-col-num mfh-num-xirr mfh-muted">—</div>' +
       '</div>';

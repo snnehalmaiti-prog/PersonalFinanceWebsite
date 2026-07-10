@@ -3524,10 +3524,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-inst-sub { font-size: 0.62rem !important; }
 .mfh-num-primary, .mfh-num-pnl-value, .mfh-num-xirr { font-size: 0.72rem !important; }
 .mfh-num-pnl-pct { font-size: 0.6rem !important; }
-.mfh-num-day { font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mfh-num-day { font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
 .mfh-num-day.mfh-negative { color: var(--negative); }
 .mfh-num-day.mfh-positive { color: var(--emerald); }
 .mfh-num-day.mfh-muted { color: var(--muted); }
+.mfh-num-day-pct { font-size: 0.6rem; font-weight: 600; opacity: 0.9; }
 .mfh-row.mfh-color-green::before { background: var(--emerald); }
 .mfh-row.mfh-color-amber::before { background: #D4A017; }
 .mfh-row.mfh-color-blue::before { background: #3B82F6; }
