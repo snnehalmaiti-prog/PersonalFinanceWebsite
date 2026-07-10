@@ -3789,15 +3789,21 @@
     // wf-overview-flows-ready (fired once _ov._overviewBaseFlows is populated)
     // before re-running the benchmark so it has a valid terminal value.
     var _pendingBenchmarkRefresh = false;
+    var _benchmarkInitialRefreshDone = false;
     document.addEventListener("wf-exclusion-changed", function () {
       _pendingBenchmarkRefresh = true;
     });
     document.addEventListener("wf-overview-flows-ready", function () {
       var currentKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
       if (!currentKey) return;
-      // Refresh if exclusion changed, or if Portfolio XIRR is still blank (initial load).
+      // The initial applyBenchmark() at load time can run before the Overview's
+      // terminal flows and live prices are ready, yielding a stale/wrong figure
+      // (e.g. a negative XIRR that later corrects). Force exactly one refresh on
+      // the first flows-ready event so the numbers settle immediately on hard
+      // refresh. Afterwards, only refresh when the exclusion filter changes.
       var portfolioBlank = portfolioXirrEl && portfolioXirrEl.textContent === "—";
-      if (!_pendingBenchmarkRefresh && !portfolioBlank) return;
+      if (_benchmarkInitialRefreshDone && !_pendingBenchmarkRefresh && !portfolioBlank) return;
+      _benchmarkInitialRefreshDone = true;
       _pendingBenchmarkRefresh = false;
       applyBenchmark(currentKey);
     });
