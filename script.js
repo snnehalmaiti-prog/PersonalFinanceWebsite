@@ -4225,7 +4225,7 @@
     var combined = { invested: 0, current: 0, india: 0, us: 0 };
     names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.india += byPort[n].india; combined.us += byPort[n].us; });
     var namedList = names.map(function (n) { var p = byPort[n]; p.name = n; return p; });
-    var all = [{ name: "Joint", invested: combined.invested, current: combined.current, india: combined.india, us: combined.us, isCombined: true }].concat(namedList);
+    var all = [{ name: "Combined", invested: combined.invested, current: combined.current, india: combined.india, us: combined.us, isCombined: true }].concat(namedList);
 
     row.innerHTML = all.map(function (p, i) {
       var pnl = p.current - p.invested;
