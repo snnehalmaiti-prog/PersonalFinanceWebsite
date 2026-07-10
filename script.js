@@ -9932,18 +9932,12 @@
       var initials = escapeHtml(String(g.instrument).replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "?");
       return g.actions.map(function (a) {
         var badgeClass = a.type.toLowerCase() === "bonus" ? "ca-badge-bonus" : "ca-badge-split";
-        var multiPortfolio = a.lines.length > 1;
-        var actionHtml;
-        if (multiPortfolio) {
-          actionHtml = "<span class='ca-action ca-action-multi'>" + a.lines.map(function (ln) {
-            var us = (Math.round(ln.units * 1000) / 1000).toLocaleString("en-IN");
-            return "<span class='ca-portfolio-line'><span class='ca-portfolio-name'>" + escapeHtml(ln.portfolio || "—") +
-              "</span> Add <b>" + us + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>";
-          }).join("") + "</span>";
-        } else {
-          var us = (Math.round(a.lines[0].units * 1000) / 1000).toLocaleString("en-IN");
-          actionHtml = "<span class='ca-action'>Add <b>" + us + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>";
-        }
+        var multiClass = a.lines.length > 1 ? " ca-action-multi" : "";
+        var actionHtml = "<span class='ca-action" + multiClass + "'>" + a.lines.map(function (ln) {
+          var us = (Math.round(ln.units * 1000) / 1000).toLocaleString("en-IN");
+          return "<span class='ca-portfolio-line'><span class='ca-portfolio-name'>" + escapeHtml(ln.portfolio || "—") +
+            "</span> Add <b>" + us + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>";
+        }).join("") + "</span>";
         return "<div class='ca-item'>" +
           "<span class='ca-avatar'>" + initials + "</span>" +
           "<span class='ca-item-name'>" + escapeHtml(g.instrument) +
