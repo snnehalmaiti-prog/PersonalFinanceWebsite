@@ -3070,22 +3070,31 @@
         var today = new Date();
         Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
           var entry = seUnitEventsByTicker[ticker];
-          var units = lastAtOrBefore(entry.events, targetDate, "cumulativeUnits") || 0;
-          if (units <= UNITS_EPSILON) return;
           var hist = stockHistory[ticker];
-          // Only use actual historical price — never fall back to current LTP (would distort XIRR)
-          var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
-          if (!price) return;
           var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
-          seTotal += units * price * (isUsd ? (usdInrHistMap[dateStr] || usdInrToday) : 1);
-          includedStockTickers.push(ticker);
-          // Current value of this same ticker (today's units × LTP) so callers can build
-          // a terminal value with the exact same stock scope as the historical value.
+          var unitsAtCutoff = lastAtOrBefore(entry.events, targetDate, "cumulativeUnits") || 0;
           var unitsToday = lastAtOrBefore(entry.events, today, "cumulativeUnits") || 0;
           var cur = allPrices[ticker];
-          if (unitsToday > UNITS_EPSILON && cur && cur.price) {
-            seCurrentIncluded += unitsToday * cur.price * (isUsd ? usdInrToday : 1);
+          var curVal = (unitsToday > UNITS_EPSILON && cur && cur.price)
+            ? unitsToday * cur.price * (isUsd ? usdInrToday : 1) : 0;
+          // Historical price at the cutoff (never fall back to current LTP — would distort XIRR).
+          var priceAtCutoff = (unitsAtCutoff > UNITS_EPSILON && hist) ? lookupIndexPrice(hist.prices, dateStr) : null;
+
+          if (unitsAtCutoff > UNITS_EPSILON && priceAtCutoff) {
+            // Held & priced at the cutoff → contributes to the opening value AND its
+            // current value to the terminal (same scope).
+            seTotal += unitsAtCutoff * priceAtCutoff * (isUsd ? (usdInrHistMap[dateStr] || usdInrToday) : 1);
+            includedStockTickers.push(ticker);
+            seCurrentIncluded += curVal;
+          } else if (unitsAtCutoff <= UNITS_EPSILON && unitsToday > UNITS_EPSILON) {
+            // Bought entirely AFTER the cutoff → no opening value, but its buy cash flows
+            // fall inside the period, so its current value must be in the terminal.
+            // Omitting it made in-period purchases look like vanished money and dragged
+            // the period (e.g. 5Y) portfolio XIRR down, sometimes negative.
+            seCurrentIncluded += curVal;
           }
+          // Held at cutoff but UNPRICED then → excluded from both opening and terminal
+          // (its pre-cutoff buys are likewise outside the period flows).
         });
         return { value: mfTotal + seTotal, mfValue: mfTotal, seValue: seTotal, seCurrentIncluded: seCurrentIncluded, includedStockTickers: includedStockTickers };
       });
