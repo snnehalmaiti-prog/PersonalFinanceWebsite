@@ -9915,12 +9915,9 @@
       var unitsStr = (Math.round(a.units * 1000) / 1000).toLocaleString("en-IN");
       return "<div class='ca-item'>" +
         "<span class='ca-avatar'>" + initials + "</span>" +
-        "<div class='ca-item-main'>" +
-          "<div class='ca-item-name'>" + escapeHtml(a.instrument) +
-            "<span class='ca-badge " + badgeClass + "'>" + escapeHtml(a.ratio) + ":1 " + escapeHtml(a.type) + "</span></div>" +
-          "<div class='ca-item-sub'>Effective " + escapeHtml(a.date) + "</div>" +
-        "</div>" +
-        "<span class='ca-action'>+" + unitsStr + " units <span class='ca-action-sub'>@ ₹0</span></span>" +
+        "<span class='ca-item-name'>" + escapeHtml(a.instrument) +
+          "<span class='ca-badge " + badgeClass + "'>" + escapeHtml(a.ratio) + ":1 " + escapeHtml(a.type) + "</span></span>" +
+        "<span class='ca-action'>Add <b>" + unitsStr + " units</b> @ ₹0 on <b>" + escapeHtml(a.date) + "</b></span>" +
       "</div>";
     }).join("");
     warnEl.innerHTML =
@@ -9930,7 +9927,7 @@
         "<span class='ca-warning-count'>" + unmatched.length + " pending</span>" +
       "</div>" +
       "<div class='ca-list'>" + items + "</div>" +
-      "<p class='ca-hint'>Add a row in your <b>Stocks/ETF</b> sheet with Transaction Type <b>Split</b> or <b>Bonus</b>, the units shown, <b>Price 0</b>, and the exact date. Each item clears automatically once recorded.</p>";
+      "<p class='ca-hint'>Add each as a <b>Split</b>/<b>Bonus</b> row (Price 0) in your Stocks/ETF sheet. Clears once recorded.</p>";
   }
 
   function renderStockEtfHoldingsTable() {
