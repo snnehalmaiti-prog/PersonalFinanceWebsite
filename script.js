@@ -3029,6 +3029,156 @@
     });
   }
 
+  // Builds a synthetic time-weighted-return NAV series (starting at 100) for the
+  // portfolio's MF + Stocks/ETF holdings, sampled monthly from inception to today.
+  // This is the same construction used by computeRollingReturns — external cash
+  // flows (buys/sells) are netted out each month so contributions don't masquerade
+  // as return. Returns Promise<[{date, nav}]> (null if insufficient data).
+  function computePortfolioTwrNavSeries(selected) {
+    return buildInstrumentSchemeMap().then(function (schemeMap) {
+      var unitEvents = buildInstrumentUnitEvents(selected);
+      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+
+      var seRows = getSheetRows("stocksetf");
+      var seMappingTable = buildStockMappingTable();
+      var seUnitEventsByTicker = {};
+      if (seRows && seRows.length && Object.keys(seMappingTable).length) {
+        var seTxns = groupUnitTransactionsByInstrument(seRows, selected);
+        if (seTxns) {
+          Object.keys(seTxns).forEach(function (instrument) {
+            var mapping = seMappingTable[normalizeText(instrument)];
+            if (!mapping) return;
+            var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
+            if (!sorted.length) return;
+            var running = 0;
+            seUnitEventsByTicker[mapping.ticker] = { region: mapping.region, instrument: instrument, events: sorted.map(function (txn) {
+              running += txn.type === "buy" ? txn.units : -txn.units;
+              return { date: txn.date, cumulativeUnits: Math.max(0, running) };
+            }) };
+          });
+        }
+      }
+
+      var navHistoriesPromise = instruments.length
+        ? Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
+        : Promise.resolve([]);
+      var stockPricesPromise = fetchAllStockPrices().catch(function () { return {}; });
+
+      return Promise.all([navHistoriesPromise, stockPricesPromise]).then(function (res) {
+        var navHistories = res[0];
+        var spData = res[1];
+        var stockHistory = spData.stock_history || {};
+        var usdInrHistMap = spData.usd_inr_history || {};
+        var allPrices = spData.prices || {};
+        var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
+
+        var navByInstrument = {};
+        instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
+
+        var firstDate = null;
+        instruments.forEach(function (name) {
+          var evs = unitEvents[name];
+          if (evs && evs.length && (!firstDate || evs[0].date < firstDate)) firstDate = evs[0].date;
+        });
+        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+          var evs = seUnitEventsByTicker[ticker].events;
+          if (evs.length && (!firstDate || evs[0].date < firstDate)) firstDate = evs[0].date;
+        });
+        if (!firstDate) return null;
+
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var samples = [];
+        var d = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+        while (d <= today) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
+        if (!samples.length || samples[samples.length - 1] < today) samples.push(today);
+
+        var portfolioValues = [];
+        samples.forEach(function (date) {
+          var dateStr = formatDateISO(date);
+          var total = 0;
+          instruments.forEach(function (name) {
+            var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
+            var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
+            if (units > UNITS_EPSILON && nav) total += units * nav;
+          });
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            var entry = seUnitEventsByTicker[ticker];
+            var units = lastAtOrBefore(entry.events, date, "cumulativeUnits") || 0;
+            if (units <= UNITS_EPSILON) return;
+            var hist = stockHistory[ticker];
+            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+            if (!price) return;
+            if (entry.region === "US" || (hist && hist.currency === "USD")) {
+              total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
+            } else {
+              total += units * price;
+            }
+          });
+          if (total > 0) portfolioValues.push({ date: date, value: total });
+        });
+
+        if (portfolioValues.length < 2) return null;
+
+        var equityRows = getSheetRows("equity");
+        var extFlows = [];
+        instruments.forEach(function (name) {
+          extFlows = extFlows.concat(buildXirrCashFlows(equityRows, selected, name));
+        });
+        if (seRows) {
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            if (!stockHistory[ticker]) return;
+            extFlows = extFlows.concat(buildXirrCashFlows(seRows, selected, seUnitEventsByTicker[ticker].instrument));
+          });
+        }
+        extFlows.sort(function (a, b) { return a.date - b.date; });
+
+        var navSeries = [{ date: portfolioValues[0].date, nav: 100 }];
+        for (var m = 1; m < portfolioValues.length; m++) {
+          var prevPt = portfolioValues[m - 1], curPt = portfolioValues[m];
+          var netFlow = 0;
+          for (var q = 0; q < extFlows.length; q++) {
+            var ef = extFlows[q];
+            if (ef.date <= prevPt.date) continue;
+            if (ef.date > curPt.date) break;
+            netFlow += -ef.amount;
+          }
+          var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
+          if (!isFinite(g) || g <= 0) g = 1;
+          navSeries.push({ date: curPt.date, nav: navSeries[m - 1].nav * g });
+        }
+        return navSeries;
+      });
+    });
+  }
+
+  // Point-to-point time-weighted CAGR of the portfolio over the selected period
+  // (periodYears ago → today, or inception → today when no period is selected).
+  // Returns Promise<number|null>.
+  function computePortfolioCagr(periodYears) {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    return computePortfolioTwrNavSeries(selected).then(function (navSeries) {
+      if (!navSeries || navSeries.length < 2) return null;
+      var startPt;
+      if (periodYears) {
+        var startDate = new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000);
+        // First NAV sample at/after the period start; if the portfolio is younger
+        // than the period, fall back to inception (first sample).
+        startPt = null;
+        for (var i = 0; i < navSeries.length; i++) {
+          if (navSeries[i].date >= startDate) { startPt = navSeries[i]; break; }
+        }
+        if (!startPt) return null; // period start is after the last sample
+      } else {
+        startPt = navSeries[0];
+      }
+      var endPt = navSeries[navSeries.length - 1];
+      var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
+      if (actualYears < 0.05 || startPt.nav <= 0) return null;
+      var cagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
+      return (isFinite(cagr) && cagr > -1) ? cagr : null;
+    }).catch(function () { return null; });
+  }
+
   function computeBenchmarkCagr(indexKey, periodYears) {
     // Index CAGR = point-to-point from startDate to today.
     // startDate = periodYears ago if a period is selected, else first investment date.
@@ -3503,8 +3653,10 @@
 
       var portVal, idxVal;
       if (mode === "cagr") {
-        // Portfolio CAGR = Portfolio XIRR (correct money-weighted return for SIP portfolios)
-        portVal = xirrResult ? xirrResult.portfolioXirr : null;
+        // Portfolio CAGR = true time-weighted CAGR over the period, so it compares
+        // like-for-like with the index's point-to-point CAGR (and with the
+        // Growth-of-₹100 chart). XIRR (money-weighted) is shown in XIRR mode.
+        portVal = (cagrResult && cagrResult.portfolioCagr != null) ? cagrResult.portfolioCagr : null;
         idxVal = cagrResult ? cagrResult.indexCagr : null;
       } else {
         portVal = xirrResult ? xirrResult.portfolioXirr : null;
@@ -3560,11 +3712,13 @@
       var periodYears = (_period && _period !== "all") ? parseFloat(_period) : null;
       Promise.all([
         computeBenchmarkXirr(indexKey, periodYears),
-        computeBenchmarkCagr(indexKey, periodYears)
+        computeBenchmarkCagr(indexKey, periodYears),
+        computePortfolioCagr(periodYears)
       ]).then(function (results) {
         if (gen !== _benchmarkGeneration) return;
         _lastXirrResult = results[0];
-        _lastCagrResult = results[1];
+        _lastCagrResult = results[1] || {};
+        _lastCagrResult.portfolioCagr = results[2];
         statusEl.hidden = true;
         resultEl.hidden = false;
         renderResult(_mode, _lastXirrResult, _lastCagrResult);
