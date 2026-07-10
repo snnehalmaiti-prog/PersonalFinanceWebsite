@@ -2223,7 +2223,7 @@
         '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
         '<div class="mfpc-return-row">' +
           '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-          '<span class="mfpc-gain">' + (isNeg ? "" : "+") + formatCurrency(pnl) + ' gain</span>' +
+          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '">' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
         '</div>' +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
@@ -4270,7 +4270,7 @@
         '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
         '<div class="mfpc-return-row">' +
           '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-          '<span class="mfpc-gain">' + (isNeg ? "" : "+") + formatCurrency(pnl) + '</span>' +
+          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '">' + (isNeg ? "" : "+") + formatCurrency(pnl) + '</span>' +
         '</div>' +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
@@ -9342,7 +9342,7 @@
           '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
           '<div class="mfpc-return-row">' +
             '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-            '<span class="mfpc-gain">' + (isNeg ? "" : "+") + formatCurrency(pnl) + ' gain</span>' +
+            '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '">' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
           '</div>' +
           '<div class="mfpc-footer">' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +

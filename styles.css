@@ -3437,7 +3437,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfpc-return-row { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .mfpc-return-pct { font-size: 0.75rem; font-weight: 700; color: var(--emerald); font-variant-numeric: tabular-nums; }
 .mfpc-return-pct.mfpc-negative { color: var(--negative); }
-.mfpc-gain { font-size: 0.65rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mfpc-gain { font-size: 0.65rem; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+.mfpc-gain.mfpc-positive { color: #10B981; }
+.mfpc-gain.mfpc-negative { color: #E8623A; }
 .mfpc-footer { display: flex; gap: 18px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
 .mfpc-foot-item { display: flex; flex-direction: column; gap: 1px; }
 .mfpc-foot-label { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
