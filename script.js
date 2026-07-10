@@ -1466,8 +1466,9 @@
     var xirrEl = document.getElementById("fixedincome-xirr");
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var fdRows = getSheetRows("fd");
+    var fixedIncomeRowsPresent = getSheetRows("fixedincome");
     var connectHintEl = document.getElementById("fixedincome-connect-hint");
-    if (connectHintEl) connectHintEl.hidden = !!(fdRows && fdRows.length);
+    if (connectHintEl) connectHintEl.hidden = !!((fdRows && fdRows.length) || (fixedIncomeRowsPresent && fixedIncomeRowsPresent.length));
 
     // Fetch current gold price + all historical prices (buy and sell dates) for commodity rows
     var uniqueCommodityDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
@@ -1491,9 +1492,18 @@
         commodityRealizedProfit += h.realizedProfit;
       });
 
-      var fiInvestment = fdRows ? sumFdInvestment(fdRows, selected) : 0;
+      // Fold in the separate `fixedincome` sheet (EPF/PPF, "Amount" column). Its
+      // deposits already reach _ov.fiInvested via sumEpfAmount, but its CURRENT
+      // value (deposits + interest) was never added — so those holdings showed a
+      // phantom loss. Add both sides here so invested/current stay in lockstep.
+      var epfRows = getSheetRows("fixedincome");
+      var epfHoldings = (epfRows && epfRows.length) ? (buildEpfFixedIncomeHoldingsList(epfRows, selected) || []) : [];
+      var epfInvested = 0, epfCurrent = 0;
+      epfHoldings.forEach(function (h) { epfInvested += (h.invested || 0); epfCurrent += (h.current || 0); });
+
+      var fiInvestment = (fdRows ? sumFdInvestment(fdRows, selected) : 0) + epfInvested;
       var investment = fiInvestment + commodityInvested;
-      var fiCurrentValue = (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0);
+      var fiCurrentValue = (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0) + epfCurrent;
       var currentValue = fiCurrentValue + commodityCurrent;
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
