@@ -1338,6 +1338,28 @@
     if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
     if (overviewRealizedEl) setSignedCurrency(overviewRealizedEl, totalRealized);
+    // Keep the Account Value chart's tail in lockstep with this card. _ov is
+    // updated by several async callbacks; the card refreshes on each, so push
+    // the exact same total into the chart's last point instead of letting the
+    // chart snap once (and lag when FI/commodity arrive later).
+    syncAccountValueTail(totalCurrent);
+  }
+
+  // Update only the Account Value chart's last data point + "Current Value"
+  // label to match the Overview Current card, without a full re-render.
+  function syncAccountValueTail(total) {
+    if (!(total > 0)) return;
+    var lbl = document.getElementById("pvc-current-value");
+    if (lbl) lbl.textContent = "₹" + Math.round(total).toLocaleString("en-IN");
+    var ch = window.__wfPortfolioValueChart;
+    if (ch && ch.data && ch.data.datasets && ch.data.datasets[0]) {
+      var d = ch.data.datasets[0].data;
+      if (d && d.length) {
+        var last = d[d.length - 1];
+        d[d.length - 1] = { x: (last && last.x) || last, y: total };
+        try { ch.update("none"); } catch (e) {}
+      }
+    }
   }
 
   function refreshCategoryCards() {
