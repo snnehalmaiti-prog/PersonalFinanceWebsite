@@ -6716,12 +6716,15 @@
           return;
         }
 
+        var commodityValueAt = [];
         var points = timeline.map(function (date) {
           var activeGrams = lastAtOrBefore(commodityGramEvents, date, "cumulativeGrams") || 0;
           var goldPriceAtDate = lastAtOrBefore(goldPriceHistory, date, "price") || currentGoldPrice || 0;
+          var commVal = activeGrams > 0 ? activeGrams * goldPriceAtDate : 0;
+          commodityValueAt.push(commVal);
           var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0)
             + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0)
-            + (activeGrams > 0 ? activeGrams * goldPriceAtDate : 0);
+            + commVal;
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
@@ -6887,6 +6890,16 @@
 
         contribEvents.sort(function (a, b) { return a.date - b.date; });
 
+        // Growth-of-₹100 value series = portfolio value with commodity (physical
+        // gold/silver from the fd sheet) stripped out. Physical-gold purchases are
+        // not tracked as contributions, so leaving their value in would make each
+        // purchase look like instant growth. The ₹100 line is therefore a pure
+        // MF + Stocks/ETF vs equity-index comparison (Fixed Income is already
+        // excluded above). Commodity is still shown on the Account Value chart.
+        var growthPoints = points.map(function (p, i) {
+          return { x: p.x, y: p.y - (commodityValueAt[i] || 0) };
+        });
+
         // Cumulative contributions at each timeline date (running sum through time)
         var cumContribAt = new Array(points.length).fill(0);
         var evIdx = 0, runningContrib = 0;
@@ -6903,28 +6916,28 @@
         // date t, units grow by Δcontrib / NAV(previous). Between contributions,
         // NAV moves purely with portfolio value.
         var basePortIdx = 0;
-        while (basePortIdx < points.length && !(points[basePortIdx].y > 0)) basePortIdx++;
-        var normPortPoints = points.map(function () { return { x: null, y: null }; });
+        while (basePortIdx < growthPoints.length && !(growthPoints[basePortIdx].y > 0)) basePortIdx++;
+        var normPortPoints = growthPoints.map(function () { return { x: null, y: null }; });
         var lastPortNorm = null;
-        if (basePortIdx < points.length && points[basePortIdx].y > 0) {
-          var units = points[basePortIdx].y / 100;
-          normPortPoints[basePortIdx] = { x: points[basePortIdx].x, y: 100 };
+        if (basePortIdx < growthPoints.length && growthPoints[basePortIdx].y > 0) {
+          var units = growthPoints[basePortIdx].y / 100;
+          normPortPoints[basePortIdx] = { x: growthPoints[basePortIdx].x, y: 100 };
           var prevNav = 100;
           var prevContrib = cumContribAt[basePortIdx];
-          for (var i = basePortIdx + 1; i < points.length; i++) {
+          for (var i = basePortIdx + 1; i < growthPoints.length; i++) {
             var dContrib = cumContribAt[i] - prevContrib;
             if (Math.abs(dContrib) > 0.01 && prevNav > 0) {
               // Units adjust for cash flow at the prevailing NAV
               units += dContrib / prevNav;
             }
-            var nav = units > 0 && points[i].y > 0 ? (points[i].y / units) : prevNav;
-            normPortPoints[i] = { x: points[i].x, y: nav };
+            var nav = units > 0 && growthPoints[i].y > 0 ? (growthPoints[i].y / units) : prevNav;
+            normPortPoints[i] = { x: growthPoints[i].x, y: nav };
             prevNav = nav;
             prevContrib = cumContribAt[i];
           }
           lastPortNorm = prevNav;
         } else {
-          normPortPoints = points.map(function (p) { return { x: p.x, y: null }; });
+          normPortPoints = growthPoints.map(function (p) { return { x: p.x, y: null }; });
         }
 
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
