@@ -4489,10 +4489,35 @@
             var navHistory = navHistories[i];
             var events = unitEvents[name];
             var units = events.length ? events[events.length - 1].cumulativeUnits : 0;
+            if (units <= UNITS_EPSILON) return;
             var nav = latest_nav_for(navHistory);
             var prevNav = previous_nav_for(navHistory);
-            if (units > UNITS_EPSILON && nav) { total += units * nav; heldInstruments.push(name); }
-            if (units > UNITS_EPSILON && prevNav) yesterdayTotal += units * prevNav;
+            if (nav) {
+              total += units * nav;
+              heldInstruments.push(name);
+              yesterdayTotal += units * (prevNav || nav);
+            } else {
+              // NAV couldn't be resolved for a still-held fund: value it at COST so
+              // it nets to ₹0 P&L instead of appearing as a phantom loss (its cost
+              // is in mfInvested; excluding it from current understated net worth).
+              var cost = investedCostFor([name]);
+              total += cost;
+              heldInstruments.push(name);
+              yesterdayTotal += cost; // unpriced → no day change
+            }
+          });
+          // Held funds whose Scheme Code couldn't be resolved at all are filtered
+          // out of `instruments` above but still count in mfInvested — value them
+          // at cost too so they don't surface as a phantom loss.
+          Object.keys(unitEvents).forEach(function (name) {
+            if (lookupSchemeCode(schemeMap, name)) return; // priced/handled above
+            var evs = unitEvents[name];
+            var u = evs.length ? evs[evs.length - 1].cumulativeUnits : 0;
+            if (u <= UNITS_EPSILON) return;
+            var c = investedCostFor([name]);
+            total += c;
+            yesterdayTotal += c;
+            heldInstruments.push(name);
           });
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
