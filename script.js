@@ -9316,6 +9316,16 @@
         var initial = p.isCombined ? "Σ" : _initials(p.name).charAt(0);
         var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
         var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4)); // rough scaled fill
+        // Day change + day change % (vs previous close). prevVal = current − dayChange.
+        var dayChg = p.dayChange || 0;
+        var prevVal = p.current - dayChg;
+        var dayPct = prevVal > 0 ? (dayChg / prevVal) * 100 : 0;
+        var dayNeg = dayChg < 0;
+        var dayChgHtml = '<div class="mfpc-daychange ' + (dayNeg ? "mfpc-negative" : "") + '">' +
+          '<span class="mfpc-daychange-label">DAY CHANGE</span>' +
+          '<span class="mfpc-daychange-value">' + (dayNeg ? "" : "+") + formatCurrency(dayChg) +
+            ' <span class="mfpc-daychange-pct">(' + (dayNeg ? "" : "+") + dayPct.toFixed(2) + '%)</span></span>' +
+        '</div>';
         return '<div class="mfpc-card ' + (p.isCombined ? "mfpc-combined" : "") + '">' +
           '<div class="mfpc-head">' +
             '<div class="mfpc-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
@@ -9325,7 +9335,10 @@
             '</div>' +
           '</div>' +
           '<div class="mfpc-current-label">CURRENT VALUE</div>' +
-          '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+          '<div class="mfpc-current-row">' +
+            '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+            dayChgHtml +
+          '</div>' +
           '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
           '<div class="mfpc-return-row">' +
             '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
@@ -9334,7 +9347,6 @@
           '<div class="mfpc-footer">' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
-            '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Day Chg</span><span class="mfpc-foot-value mfpc-xirr ' + (p.dayChange != null && p.dayChange < 0 ? "mfpc-negative" : "") + '">' + (p.dayChange == null ? "—" : (p.dayChange >= 0 ? "+" : "") + formatCurrency(p.dayChange)) + '</span></div>' +
           '</div>' +
         '</div>';
       }).join("");
