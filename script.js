@@ -509,6 +509,14 @@
     });
   }
 
+  // Provident-fund family sub-categories — all valued with the same
+  // deposit + interest + FIFO-withdrawal logic. Accepts common spellings.
+  function isProvidentFundSub(sub) {
+    var s = normalizeText(sub);
+    return s === "provident fund" || s === "provident pension" || s === "public provident fund" ||
+           s === "employee provident fund" || s === "epf" || s === "employee pension fund";
+  }
+
   // Debug logger — off by default so holdings/scheme codes/emails aren't dumped
   // to the browser console in production. Enable with localStorage wf-debug=1.
   var WF_DEBUG = (function () { try { return localStorage.getItem("wf-debug") === "1"; } catch (e) { return false; } })();
@@ -667,7 +675,7 @@
     var total = 0;
     holdings.forEach(function (h) {
       var normSub = normalizeText(h.subCategory || "");
-      if (normSub === "provident fund" || normSub === "provident pension" || normSub === "public provident fund") total += h.current;
+      if (isProvidentFundSub(normSub)) total += h.current;
     });
     return total;
   }
@@ -679,7 +687,7 @@
     var total = 0;
     holdings.forEach(function (h) {
       var normSub = normalizeText(h.subCategory || "");
-      if (normSub === "provident fund" || normSub === "provident pension" || normSub === "public provident fund") total += (h.realizedProfit || 0);
+      if (isProvidentFundSub(normSub)) total += (h.realizedProfit || 0);
     });
     return total;
   }
@@ -739,7 +747,7 @@
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var normSub = normalizeText(row[subCategoryIdx] || "");
-      if (normSub !== "provident fund" && normSub !== "provident pension" && normSub !== "public provident fund") return;
+      if (!isProvidentFundSub(normSub)) return;
       var normTxType = txTypeIdx !== -1 ? normalizeText(row[txTypeIdx] || "") : "";
       if (normTxType === "interest") return; // interest is part of terminal value, not a cash flow
       var amount = parseNumber(row[amountIdx]);
@@ -1116,7 +1124,7 @@
         var normSubCategory = normalizeText(subCategory);
         var isFixedDeposit = normCategory === "fixed income" && normSubCategory === "fixed deposit";
         var isCommodity = normCategory === "commodity";
-        var isProvidentFund = normCategory === "fixed income" && (normSubCategory === "provident fund" || normSubCategory === "provident pension" || normSubCategory === "public provident fund");
+        var isProvidentFund = normCategory === "fixed income" && isProvidentFundSub(normSubCategory);
 
         var issues = [];
         if (!portfolio) issues.push("Portfolio is blank");
@@ -1784,7 +1792,7 @@
         return;
       }
 
-      if (normSubCategory === "provident fund" || normSubCategory === "provident pension" || normSubCategory === "public provident fund") {
+      if (isProvidentFundSub(normSubCategory)) {
         var pfKey = normalizeText(portfolio) + "||" + normalizeText(instrument) + "||" + normalizeText(subCategory);
         if (!providentFundByKey[pfKey]) {
           providentFundByKey[pfKey] = { portfolio: portfolio, instrument: instrument, subCategory: subCategory, txns: [] };
@@ -2158,7 +2166,7 @@
           // EPF terminal = cumulative deposits + interest for this portfolio
           holdings.forEach(function (h) {
             var s = (h.subCategory || "").toLowerCase();
-            if ((s === "provident fund" || s.indexOf("epf") !== -1 || s.indexOf("public provident") !== -1)
+            if (isProvidentFundSub(s)
               && (p.isCombined || normalizeText(h.portfolio) === normalizeText(p.name))) {
               terminal += (h.current || 0);
             }
@@ -6342,7 +6350,7 @@
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
       var subCategory = normalizeText(row[subCategoryIdx]);
       var isBalance = (subCategory === "investment corpus" || subCategory === "savings account");
-      var isPf = (subCategory === "provident fund");
+      var isPf = isProvidentFundSub(subCategory);
       if (!isBalance && !isPf) return;
 
       var date = parseFlexibleDate(row[dateIdx]);
