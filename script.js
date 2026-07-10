@@ -2886,6 +2886,35 @@
     return flows;
   }
 
+  // Fixed-income value (PF/EPF principal+interest, plus active Fixed Deposits at
+  // par) as of a date — the opening mark for a period XIRR. Investment Corpus /
+  // Savings Account are excluded (never part of XIRR), matching the Overview.
+  function fixedIncomeValueAtDate(fdRows, portfolioFilter, asOf) {
+    if (!fdRows || !fdRows.length) return 0;
+    // PF/EPF: principal + accrued interest up to asOf (from the value timeline,
+    // with the parked-cash "balance" rows excluded).
+    var pfEvents = buildFdValueEvents(portfolioFilter, true);
+    var pf = lastAtOrBefore(pfEvents, asOf, "cumulativeValue") || 0;
+    // Fixed Deposits open at asOf → par value (bought on/before asOf, not yet matured).
+    var header = fdRows[0].map(normalizeText);
+    var pIdx = header.indexOf("portfolio name"), cIdx = header.indexOf("instrument category"),
+        sIdx = header.indexOf("instrument sub category"), aIdx = header.indexOf("invested amount"),
+        dIdx = header.indexOf("transaction date");
+    var mIdx = header.indexOf("maturity date/sell date");
+    if (mIdx === -1) mIdx = header.indexOf("maturity date");
+    var fd = 0;
+    fdRows.slice(1).forEach(function (row) {
+      if (pIdx !== -1 && portfolioFilter !== "all" && normalizeText(row[pIdx]) !== normalizeText(portfolioFilter)) return;
+      if (cIdx !== -1 && normalizeText(row[cIdx]) !== "fixed income") return;
+      if (sIdx === -1 || normalizeText(row[sIdx]) !== "fixed deposit") return;
+      var buy = parseFlexibleDate(row[dIdx]); if (!buy || buy > asOf) return;
+      var mat = mIdx !== -1 ? parseFlexibleDate(row[mIdx]) : null;
+      if (mat && mat <= asOf) return; // matured before asOf → already realized
+      fd += parseNumber(row[aIdx]);
+    });
+    return pf + fd;
+  }
+
   // periodYears: number of years to look back (null = all time)
   function computeBenchmarkXirr(indexKey, periodYears) {
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
@@ -2904,10 +2933,12 @@
     var cutoff = periodYears ? new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000) : null;
     function afterCutoff(f) { return !cutoff || f.date >= cutoff; }
 
-    // Index XIRR: buy-only flows filtered to the selected period.
+    // Index XIRR: buy-only flows filtered to the selected period. Fixed Income
+    // flows are included/excluded with the same toggle as the portfolio side so
+    // the comparison stays apples-to-apples.
     var allFlowsForIndex = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
     if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
-    if (fdRows) {
+    if (fdRows && !isFixedIncomeExcluded()) {
       allFlowsForIndex = allFlowsForIndex
         .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
@@ -2929,17 +2960,31 @@
     var portfolioXirrPromise;
     if (periodYears && cutoff) {
       portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (result) {
+        // Opening mark (MF + stocks priced at the cutoff).
         var startVal = result.value;
-        if (!startVal || startVal <= 0) return allTimePortfolioXirr;
-        // Terminal value must use the exact same scope as startVal: MF + only the stock
-        // tickers that had historical prices at the cutoff (seCurrentIncluded).
+        // Terminal value in the same scope: MF current + stocks' current value
+        // (post-cutoff purchases now included via computePortfolioValueAtDate).
         var periodCurrentVal = _ov.mfCurrent + result.seCurrentIncluded;
-        // Period flows: MF + stocks only — FD/PF value isn't part of startVal/terminal,
-        // so including its contributions would make money vanish and drag XIRR down.
+        // Period cash flows for MF + stocks (buys/sells after the cutoff).
+        var periodFlows = [];
         var mfSeFlows = buildXirrCashFlows(equityRows, selected);
         if (seRows) mfSeFlows = mfSeFlows.concat(buildXirrCashFlows(seRows, selected));
-        var periodFlows = [{ date: cutoff, amount: -startVal }];
         mfSeFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
+
+        // Fixed Income follows the exclusion toggle: with "No Exclusion" it is
+        // part of the portfolio return; with "Exclude Fixed Income" it is left
+        // out. (Matches the Overview / all-time treatment.)
+        if (!isFixedIncomeExcluded() && fdRows) {
+          startVal += fixedIncomeValueAtDate(fdRows, selected, cutoff);
+          periodCurrentVal += (sumFdMaturedCurrentValue(fdRows, selected) || 0)
+                            + (sumProvidentFundCurrentValue(fdRows, selected) || 0);
+          buildFdMaturedXirrCashFlows(fdRows, selected)
+            .concat(buildProvidentFundXirrCashFlows(fdRows, selected))
+            .forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
+        }
+
+        if (!startVal || startVal <= 0) return allTimePortfolioXirr;
+        periodFlows.unshift({ date: cutoff, amount: -startVal });
         if (periodCurrentVal > 0) periodFlows.push({ date: new Date(), amount: periodCurrentVal });
         return calculateXIRR(periodFlows) || allTimePortfolioXirr;
       });
