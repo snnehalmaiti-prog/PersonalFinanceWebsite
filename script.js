@@ -4211,21 +4211,22 @@
     // still render for portfolios whose positions are all closed.
     var byPort = {};
     (collectPortfolioNamesFromSheets(["stocksetf"]) || []).forEach(function (p) {
-      byPort[p] = { invested: 0, current: 0, india: 0, us: 0 };
+      byPort[p] = { invested: 0, current: 0, india: 0, us: 0, day: 0 };
     });
     rowsData.forEach(function (h) {
       var p = h._portfolio || portfolioByInst[h.instrument] || "Unassigned";
-      if (!byPort[p]) byPort[p] = { invested: 0, current: 0, india: 0, us: 0 };
+      if (!byPort[p]) byPort[p] = { invested: 0, current: 0, india: 0, us: 0, day: 0 };
       byPort[p].invested += h.investedINR || 0;
       byPort[p].current += h.currentINR || 0;
+      byPort[p].day += h.dayChangeINR || 0;
       if (h.region === "US") byPort[p].us += h.currentINR || 0;
       else byPort[p].india += h.currentINR || 0;
     });
     var names = Object.keys(byPort).sort(function (a, b) { return byPort[b].current - byPort[a].current; });
-    var combined = { invested: 0, current: 0, india: 0, us: 0 };
-    names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.india += byPort[n].india; combined.us += byPort[n].us; });
+    var combined = { invested: 0, current: 0, india: 0, us: 0, day: 0 };
+    names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.india += byPort[n].india; combined.us += byPort[n].us; combined.day += byPort[n].day; });
     var namedList = names.map(function (n) { var p = byPort[n]; p.name = n; return p; });
-    var all = [{ name: "Combined", invested: combined.invested, current: combined.current, india: combined.india, us: combined.us, isCombined: true }].concat(namedList);
+    var all = [{ name: "Combined", invested: combined.invested, current: combined.current, india: combined.india, us: combined.us, day: combined.day, isCombined: true }].concat(namedList);
 
     row.innerHTML = all.map(function (p, i) {
       var pnl = p.current - p.invested;
@@ -4238,6 +4239,16 @@
       var iPct = totalCur > 0 ? Math.round(p.india / totalCur * 100) : 0;
       var uPct = totalCur > 0 ? Math.round(p.us / totalCur * 100) : 0;
       var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
+      // Day change + day change % (vs previous close). prevVal = current − dayChange.
+      var dayChg = p.day || 0;
+      var prevVal = p.current - dayChg;
+      var dayPct = prevVal > 0 ? (dayChg / prevVal) * 100 : 0;
+      var dayNeg = dayChg < 0;
+      var dayChgHtml = '<div class="mfpc-daychange ' + (dayNeg ? "mfpc-negative" : "") + '">' +
+        '<span class="mfpc-daychange-label">DAY CHANGE</span>' +
+        '<span class="mfpc-daychange-value">' + (dayNeg ? "" : "+") + formatCurrency(dayChg) +
+          ' <span class="mfpc-daychange-pct">(' + (dayNeg ? "" : "+") + dayPct.toFixed(2) + '%)</span></span>' +
+      '</div>';
       // XIRR
       var xirrPct = null;
       try {
@@ -4252,7 +4263,10 @@
           '<div class="mfpc-name-block"><div class="mfpc-name">' + escapeHtml(p.name) + '</div><div class="mfpc-subtitle">' + subtitle + '</div></div>' +
         '</div>' +
         '<div class="mfpc-current-label">CURRENT VALUE</div>' +
-        '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+        '<div class="mfpc-current-row">' +
+          '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+          dayChgHtml +
+        '</div>' +
         '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
         '<div class="mfpc-return-row">' +
           '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +

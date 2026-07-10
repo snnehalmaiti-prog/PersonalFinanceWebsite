@@ -3425,6 +3425,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfpc-subtitle { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin-top: 1px; }
 .mfpc-current-label { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin: 6px 0 1px; }
 .mfpc-current-value { font-size: 1.05rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1.15; }
+.mfpc-current-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mfpc-daychange { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; color: #10B981; }
+.mfpc-daychange.mfpc-negative { color: #E8623A; }
+.mfpc-daychange-label { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.mfpc-daychange-value { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mfpc-daychange-pct { font-size: 0.72rem; font-weight: 600; opacity: 0.9; }
 .mfpc-bar { height: 3px; border-radius: 999px; background: var(--border); overflow: hidden; margin: 6px 0 4px; }
 .mfpc-bar-fill { height: 100%; background: var(--emerald); border-radius: 999px; transition: width 0.4s ease; }
 .mfpc-card.mfpc-combined .mfpc-bar-fill { background: #23211D; }
