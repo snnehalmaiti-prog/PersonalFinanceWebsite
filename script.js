@@ -6263,7 +6263,11 @@
       if (!date) { unparseableDateCount++; return; }
       var type = normalizeText(row[typeIdx]);
       var units = parseNumber(row[unitsIdx]);
-      var delta = type.indexOf("buy") !== -1 ? units : (type.indexOf("sell") !== -1 ? -units : 0);
+      // split/bonus add units at zero cost — count them like buys so the unit
+      // timeline (Overview MF current value, growth/benchmark charts) matches the
+      // holdings tables, which already treat corporate actions as buys.
+      var isCorpAction = (type === "split" || type === "bonus");
+      var delta = (type.indexOf("buy") !== -1 || isCorpAction) ? units : (type.indexOf("sell") !== -1 ? -units : 0);
       if (!events[instrument]) events[instrument] = [];
       events[instrument].push({ date: date, delta: delta });
     });
