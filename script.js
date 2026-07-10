@@ -9891,10 +9891,13 @@
           var dateParts = action.date.split("-");
           var displayDate = dateParts[2] + "/" + dateParts[1] + "/" + dateParts[0];
           var ratioDisplay = (action.ratio % 1 === 0) ? action.ratio.toFixed(0) : action.ratio;
-          var label = instrument + " (" + displayDate + "): " + ratioDisplay + ":1 "
-            + (action.type === "split" ? "split" : "bonus")
-            + " — add " + extraUnits + " units at ₹0";
-          unmatched.push(label);
+          unmatched.push({
+            instrument: instrument,
+            date: displayDate,
+            ratio: ratioDisplay,
+            type: action.type === "split" ? "Split" : "Bonus",
+            units: extraUnits
+          });
         }
       });
     });
@@ -9905,22 +9908,29 @@
     }
 
     warnEl.hidden = false;
-    warnEl.innerHTML = "";
-    var title = document.createElement("div");
-    title.className = "ca-warning-title";
-    title.innerHTML = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg> Corporate actions not recorded";
-    warnEl.appendChild(title);
-    var ul = document.createElement("ul");
-    unmatched.forEach(function (msg) {
-      var li = document.createElement("li");
-      li.textContent = msg;
-      ul.appendChild(li);
-    });
-    warnEl.appendChild(ul);
-    var hint = document.createElement("p");
-    hint.className = "ca-hint";
-    hint.textContent = "For each item above, add a row with Transaction Type \"Split\" or \"Bonus\", the indicated units, price 0, and exactly the date shown. The banner clears once a matching row is recorded.";
-    warnEl.appendChild(hint);
+    var warnSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>";
+    var items = unmatched.map(function (a) {
+      var initials = escapeHtml(String(a.instrument).replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "?");
+      var badgeClass = a.type.toLowerCase() === "bonus" ? "ca-badge-bonus" : "ca-badge-split";
+      var unitsStr = (Math.round(a.units * 1000) / 1000).toLocaleString("en-IN");
+      return "<div class='ca-item'>" +
+        "<span class='ca-avatar'>" + initials + "</span>" +
+        "<div class='ca-item-main'>" +
+          "<div class='ca-item-name'>" + escapeHtml(a.instrument) +
+            "<span class='ca-badge " + badgeClass + "'>" + escapeHtml(a.ratio) + ":1 " + escapeHtml(a.type) + "</span></div>" +
+          "<div class='ca-item-sub'>Effective " + escapeHtml(a.date) + "</div>" +
+        "</div>" +
+        "<span class='ca-action'>+" + unitsStr + " units <span class='ca-action-sub'>@ ₹0</span></span>" +
+      "</div>";
+    }).join("");
+    warnEl.innerHTML =
+      "<div class='ca-warning-head'>" +
+        "<span class='ca-warning-icon'>" + warnSvg + "</span>" +
+        "<span class='ca-warning-title'>Corporate actions not recorded</span>" +
+        "<span class='ca-warning-count'>" + unmatched.length + " pending</span>" +
+      "</div>" +
+      "<div class='ca-list'>" + items + "</div>" +
+      "<p class='ca-hint'>Add a row in your <b>Stocks/ETF</b> sheet with Transaction Type <b>Split</b> or <b>Bonus</b>, the units shown, <b>Price 0</b>, and the exact date. Each item clears automatically once recorded.</p>";
   }
 
   function renderStockEtfHoldingsTable() {
