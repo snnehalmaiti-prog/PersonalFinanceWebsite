@@ -577,18 +577,21 @@
     return fiTotal;
   }
 
+  // Add n months to a date, clamping the day to the target month's last day so
+  // month-end starts don't overflow (Jan 31 + 1mo → Feb 28, not Mar 3).
+  function _addMonthsClamped(base, n) {
+    var y = base.getFullYear(), m = base.getMonth() + n, day = base.getDate();
+    var lastDay = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(day, lastDay));
+  }
+
   // Counts full 1-month periods completed between start and asOf — used for monthly
-  // compounding on Investment Corpus/Savings Account rows.
+  // compounding on Investment Corpus/Savings Account rows. Each boundary is measured
+  // from the ORIGINAL start (clamped) so month-end dates neither overflow nor drift.
   function countElapsedMonths(start, asOf) {
     if (!start || !asOf || asOf <= start) return 0;
     var months = 0;
-    var cursor = start;
-    while (true) {
-      var next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
-      if (next > asOf) break;
-      cursor = next;
-      months++;
-    }
+    while (_addMonthsClamped(start, months + 1) <= asOf) months++;
     return months;
   }
 
@@ -638,13 +641,7 @@
   function countElapsedQuarters(start, asOf) {
     if (!start || !asOf || asOf <= start) return 0;
     var quarters = 0;
-    var cursor = start;
-    while (true) {
-      var next = new Date(cursor.getFullYear(), cursor.getMonth() + 3, cursor.getDate());
-      if (next > asOf) break;
-      cursor = next;
-      quarters++;
-    }
+    while (_addMonthsClamped(start, (quarters + 1) * 3) <= asOf) quarters++;
     return quarters;
   }
 
@@ -1318,11 +1315,17 @@
     var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
     var fiCurrent = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
     var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
+    // Commodity lives in the Fixed Income/Commodity sheet and follows the FI
+    // toggle — gate it the same way the category cards and getOverviewCurrentTotal
+    // do, so the header total == Σ category cards == the split charts' total.
+    var commInvested = isFixedIncomeExcluded() ? 0 : _ov.commInvested;
+    var commCurrent = isFixedIncomeExcluded() ? 0 : _ov.commCurrent;
+    var commRealized = isFixedIncomeExcluded() ? 0 : _ov.commRealized;
     // Use seCurrent if prices have loaded; fall back to seInvested so overview is never blank
     var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
-    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + _ov.commInvested;
-    var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + _ov.commCurrent;
-    var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + _ov.commRealized;
+    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + commInvested;
+    var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + commCurrent;
+    var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + commRealized;
     if (overviewInvestedEl) overviewInvestedEl.textContent = formatCurrency(totalInvested);
     if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
@@ -3230,7 +3233,10 @@
           if (actualYears < windowYears * 0.85) return;
 
           var cagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
-          if (isFinite(cagr) && cagr > -1 && cagr < 20) portRolling.push(cagr);
+          // Keep any finite, economically-valid CAGR (> -100%). The old cagr<20
+          // (2000%) upper cutoff silently dropped genuine extreme windows,
+          // biasing min/median/max/count.
+          if (isFinite(cagr) && cagr > -1) portRolling.push(cagr);
 
           if (indexPrices) {
             var sp = lookupIndexPrice(indexPrices, formatDateISO(startPt.date));
@@ -3246,7 +3252,9 @@
 
         function stats(arr) {
           arr.sort(function (a, b) { return a - b; });
-          return { min: arr[0], median: arr[Math.floor(arr.length / 2)], max: arr[arr.length - 1], count: arr.length };
+          var _n = arr.length, _mid = Math.floor(_n / 2);
+          var _median = _n % 2 ? arr[_mid] : (arr[_mid - 1] + arr[_mid]) / 2;
+          return { min: arr[0], median: _median, max: arr[arr.length - 1], count: arr.length };
         }
         return { portfolio: stats(portRolling), index: idxRolling.length ? stats(idxRolling) : null };
       });
@@ -4603,7 +4611,9 @@
     }, cashflows[0].date.getTime());
 
     function yearsFromStart(date) {
-      return (date.getTime() - t0) / (1000 * 60 * 60 * 24 * 365);
+      // 365.25 to match the day-count used by the CAGR/benchmark figures XIRR is
+      // displayed alongside.
+      return (date.getTime() - t0) / (1000 * 60 * 60 * 24 * 365.25);
     }
 
     function npv(rate) {
