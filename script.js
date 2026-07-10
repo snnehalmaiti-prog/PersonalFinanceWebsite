@@ -6339,7 +6339,10 @@
   // Portfolio/Bank/Instrument. For the Account Value chart we convert consecutive balances
   // into month-on-month deltas and accumulate them into a single timeline, mirroring how
   // EPF deposit/interest events build a running cumulative value.
-  function buildFdValueEvents(portfolioFilter) {
+  // excludeBalance: when true, drop Investment Corpus / Savings Account ("balance")
+  // rows but keep Provident Fund — used by the Account Value chart under the
+  // "Exclude Savings/Investment" filter so it matches the Overview cards.
+  function buildFdValueEvents(portfolioFilter, excludeBalance) {
     var rows = getSheetRows("fd");
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -6361,6 +6364,7 @@
       var isBalance = (subCategory === "investment corpus" || subCategory === "savings account");
       var isPf = isProvidentFundSub(subCategory);
       if (!isBalance && !isPf) return;
+      if (excludeBalance && isBalance) return; // keep PF, drop parked cash
 
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date) return;
@@ -6476,7 +6480,12 @@
       // For the raw Account Value chart, honour the user's exclusion filters
       // — include fixed-income + savings when the user hasn't excluded them.
       var epfEventsAll = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
-      var fdValueEventsAll = (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) ? [] : buildFdValueEvents(selectedPortfolio);
+      // FI excluded → drop the whole FD series. Savings/Investment excluded →
+      // drop only Investment Corpus + Savings Account (parked cash), keep PF,
+      // matching the Overview cards.
+      var fdValueEventsAll = isFixedIncomeExcluded()
+        ? []
+        : buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded());
 
       // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
