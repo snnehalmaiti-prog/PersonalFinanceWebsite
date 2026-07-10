@@ -4918,6 +4918,17 @@
 
   updateDashboardStats();
   renderValueChart();
+  // Re-render the Account Value chart once the Overview's live values finish
+  // loading, so its snapped last point matches the Overview Current card even
+  // if the chart rendered first (e.g. before Stocks/ETF prices arrived).
+  if (!window.__wfValueChartOverviewBound) {
+    window.__wfValueChartOverviewBound = true;
+    var _vcRefreshT = null;
+    document.addEventListener("wf-overview-flows-ready", function () {
+      clearTimeout(_vcRefreshT);
+      _vcRefreshT = setTimeout(function () { try { renderValueChart(); } catch (e) {} }, 150);
+    });
+  }
   renderEquityHoldingsTable();
   renderAllFixedIncomeHoldingsTable();
   renderInvestmentSplitChart();
@@ -6726,16 +6737,20 @@
           return { x: p.x, y: p.y + extra };
         });
 
-        // Snap the last point to Overview's authoritative current value:
-        // Overview's fiCurrent/commCurrent include interest accrual + live
-        // prices that the historical timeline can't replay. Historical points
-        // stay as deposits (correct); only the tail matches Overview.
+        // Snap the last point to the Overview's authoritative Current total so
+        // the chart's tail equals the Overview card exactly. Using
+        // getOverviewCurrentTotal() (which gates by the FI toggle and falls back
+        // seCurrent→seInvested, never →0) avoids dropping the Stocks/ETF value
+        // when its live prices haven't finished loading yet. If the overview
+        // isn't ready, keep the timeline's own last point (which already values
+        // MF+SE at current prices) — and the overview-ready listener re-renders.
         (function snapLastPointToOverview() {
-          if (!pointsAll.length || typeof _ov === "undefined" || !_ov) return;
-          var live = (_ov.mfCurrent || 0) + (_ov.seCurrent > 0 ? _ov.seCurrent : 0)
-            + (isFixedIncomeExcluded() ? 0 : (_ov.fiCurrent || 0))
-            + (isFixedIncomeExcluded() ? 0 : (_ov.commCurrent || 0));
-          if (live > 0) pointsAll[pointsAll.length - 1] = { x: pointsAll[pointsAll.length - 1].x, y: live };
+          if (!pointsAll.length) return;
+          var overviewTotal = (typeof getOverviewCurrentTotal === "function") ? getOverviewCurrentTotal() : null;
+          if (overviewTotal && overviewTotal > 0) {
+            var li = pointsAll.length - 1;
+            pointsAll[li] = { x: pointsAll[li].x, y: overviewTotal };
+          }
         })();
 
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
