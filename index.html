@@ -387,7 +387,7 @@
       <button class="auth-modal-close" id="auth-modal-close" aria-label="Close">&times;</button>
       <div class="auth-logo">
         <svg width="32" height="32" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="7" fill="#1F9D6B"/><path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>PF Dashboard</span>
+        <span id="auth-modal-title">PF Dashboard</span>
       </div>
       <div class="auth-tabs">
         <button class="auth-tab active" id="auth-tab-signin">Sign In</button>
@@ -625,14 +625,10 @@
     var resetErr = document.getElementById("auth-reset-error");
     var resetSubmit = document.getElementById("auth-reset-submit");
 
-    if (_recoveryTokens) {
-      openModal("signin");
-      authForm.style.display = "none";
-      forgotForm.style.display = "none";
-      resetForm.style.display = "flex";
-      document.getElementById("login-title").textContent = "Reset password";
-    }
-
+    // Register the reset handler FIRST so nothing above can throw and prevent
+    // it from binding (previously a missing #login-title node crashed the
+    // script here and left "Update password" doing a native form submit that
+    // discarded the recovery tokens).
     if (resetForm) resetForm.addEventListener("submit", function (e) {
       e.preventDefault();
       resetErr.hidden = true;
@@ -642,14 +638,28 @@
       WfAuth.updatePassword(pw, _recoveryTokens.access_token)
         .then(function () {
           WfAuth.setSessionFromTokens(_recoveryTokens.access_token, _recoveryTokens.refresh_token);
-          window.location.href = "dashboard.html";
-        }).catch(function (err) {
+          // Populate session.user + expiry so the dashboard isn't blank and the
+          // token can refresh; setSessionFromTokens alone stores neither.
+          return WfAuth.refreshUser().catch(function () { return null; });
+        })
+        .then(function () { window.location.href = "dashboard.html"; })
+        .catch(function (err) {
           resetErr.textContent = err.message || "Could not update password.";
           resetErr.hidden = false;
           resetSubmit.disabled = false;
           resetSubmit.textContent = "Update password";
         });
     });
+
+    if (_recoveryTokens) {
+      openModal("signin");
+      authForm.style.display = "none";
+      forgotForm.style.display = "none";
+      resetForm.style.display = "flex";
+      // Guarded: the title node is optional, so a missing id can't crash the flow.
+      var _resetTitle = document.getElementById("login-title") || document.getElementById("auth-modal-title");
+      if (_resetTitle) _resetTitle.textContent = "Reset password";
+    }
   </script>
 </body>
 </html>

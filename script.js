@@ -939,16 +939,21 @@
         return;
       }
       var unitsToMatch = txn.units;
+      var matchedThisSell = 0;
       while (unitsToMatch > 0 && buyLots.length) {
         var lot = buyLots[0];
         var matched = Math.min(unitsToMatch, lot.units);
         costOfSoldUnits += matched * lot.price;
+        matchedThisSell += matched;
         lot.units -= matched;
         unitsToMatch -= matched;
         if (lot.units <= 0) buyLots.shift();
       }
-      saleProceeds += txn.units * txn.price;
-      unitsSold += txn.units;
+      // Clamp to units actually matched against buy lots — selling more than was
+      // ever bought must not credit phantom zero-cost proceeds (mirrors the fix
+      // in sumUnitBasedRealizedReturn).
+      saleProceeds += matchedThisSell * txn.price;
+      unitsSold += matchedThisSell;
       if (!lastSell || (txn.date && (!lastSell.date || txn.date.getTime() >= lastSell.date.getTime()))) {
         lastSell = txn;
       }
@@ -2689,9 +2694,17 @@
   // goldapi.io's `ch` field is the official daily change (today close vs previous close) per troy oz.
   // This is more accurate than subtracting two dated-endpoint prices, which often return the same value.
   function fetchGoldDayChangeINRPerGram() {
+    var mult = getGoldPremiumMultiplier();
     try {
       var cached = JSON.parse(localStorage.getItem(GOLD_DAY_CHANGE_CACHE_KEY));
-      if (cached && Date.now() - cached.fetchedAt < GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS) return Promise.resolve(cached.change);
+      if (cached && Date.now() - cached.fetchedAt < GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS) {
+        // Cache the RAW (pre-premium) delta and apply the CURRENT premium on
+        // read, so changing the premium % updates the day change like it does
+        // the price. (Legacy caches stored the premium-applied value under
+        // .change; fall back to that.)
+        if (cached.rawChange != null) return Promise.resolve(cached.rawChange * mult);
+        return Promise.resolve(cached.change);
+      }
     } catch (e) {}
     // Keyless day change: today's spot per gram minus yesterday's, both via the
     // free currency-api. (goldapi.io is no longer used — its key 403s.)
@@ -2704,8 +2717,9 @@
     ]).then(function (r) {
       var today = r[0], prev = r[1];
       if (today == null || prev == null) throw new Error("gold day change unavailable");
-      var changePerGram = today - prev;
-      try { localStorage.setItem(GOLD_DAY_CHANGE_CACHE_KEY, JSON.stringify({ change: changePerGram, fetchedAt: Date.now() })); } catch (e) {}
+      var changePerGram = today - prev;               // premium-applied (both inputs are)
+      var rawChange = mult ? changePerGram / mult : changePerGram; // strip premium for cache
+      try { localStorage.setItem(GOLD_DAY_CHANGE_CACHE_KEY, JSON.stringify({ rawChange: rawChange, fetchedAt: Date.now() })); } catch (e) {}
       return changePerGram;
     });
   }
@@ -4586,6 +4600,12 @@
     if (!converged || !isFinite(rate) || Math.abs(npv(rate)) > 1) {
       var low = -0.999999, high = 10;
       var fLow = npv(low), fHigh = npv(high);
+      // Grow the upper bracket until it brackets the root, so genuine extreme
+      // returns (>1000%/yr over very short holdings) don't return null/"—".
+      var grow = 0;
+      while (fLow * fHigh > 0 && high < 1e7 && grow < 40) {
+        high *= 2; fHigh = npv(high); grow++;
+      }
       if (fLow * fHigh > 0) return converged ? rate : null;
       for (var j = 0; j < 200; j++) {
         var mid = (low + high) / 2;

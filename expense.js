@@ -537,23 +537,38 @@
     return rows.filter(function (r) { return r.some(function (v) { return String(v).trim().length; }); });
   }
 
+  // Validate that y-m-d is a real calendar date (rejects 2026-13-45, 2026-02-30).
+  function isRealYmd(y, mm, dd) {
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return false;
+    var dt = new Date(y, mm - 1, dd);
+    return dt.getFullYear() === y && dt.getMonth() === mm - 1 && dt.getDate() === dd;
+  }
   function normDate(s) {
     s = String(s || "").trim().replace(/^"|"$/g, "");
     if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, "-");
+    var iso = s.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+    if (iso) {
+      var iy = Number(iso[1]), im = Number(iso[2]), id = Number(iso[3]);
+      // Range-check the ISO branch too — previously "2026-13-45" passed
+      // validation but then failed at insert time (row silently dropped).
+      if (!isRealYmd(iy, im, id)) return null;
+      return iso[1] + "-" + iso[2] + "-" + iso[3];
+    }
     var m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
     if (m) {
-      var p1 = Number(m[1]), p2 = Number(m[2]), yr = m[3];
+      var p1 = Number(m[1]), p2 = Number(m[2]), yr = Number(m[3]);
       var mm, dd;
       if (p1 > 12) { dd = p1; mm = p2; }        // DD/MM/YYYY
       else if (p2 > 12) { mm = p1; dd = p2; }   // M/D/YYYY (US)
-      else { mm = p1; dd = p2; }                // ambiguous → assume M/D/YYYY
-      if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+      else { dd = p1; mm = p2; }                // ambiguous → assume DD/MM/YYYY (₹/IST app)
+      if (!isRealYmd(yr, mm, dd)) return null;
       return yr + "-" + String(mm).padStart(2, "0") + "-" + String(dd).padStart(2, "0");
     }
     var d = new Date(s);
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    if (!isNaN(d.getTime())) {
+      var pad = function (n) { return String(n).padStart(2, "0"); };
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    }
     return null;
   }
 
@@ -757,7 +772,10 @@
         }
         var txnAtIso;
         try {
-          var d0 = new Date(date + "T00:00:00");
+          // Anchor at local midday so toISOString() (UTC) keeps txn_at on the
+          // SAME calendar day as txn_date for positive-offset zones like IST —
+          // local midnight would roll back to the previous day in UTC.
+          var d0 = new Date(date + "T12:00:00");
           if (isNaN(d0.getTime())) d0 = new Date(date);
           if (isNaN(d0.getTime())) { errors.push("Line " + lineNo + ": could not parse date \"" + row[iDate] + "\""); continue; }
           txnAtIso = d0.toISOString();
@@ -1037,13 +1055,22 @@
   }
   function advanceDate(iso, freq) {
     var d = new Date(iso + "T00:00:00");
+    var day = d.getDate();
+    // For month/year steps, clamp to the last valid day of the target month so
+    // Jan 31 → Feb 28 (not Mar 3 via JS Date overflow), keeping the schedule
+    // pinned to month-end instead of drifting forward.
+    function addMonths(base, n) {
+      var y = base.getFullYear(), m = base.getMonth() + n;
+      var lastDay = new Date(y, m + 1, 0).getDate();
+      return new Date(y, m, Math.min(day, lastDay));
+    }
     switch (freq) {
       case "daily":     d.setDate(d.getDate() + 1); break;
       case "weekly":    d.setDate(d.getDate() + 7); break;
-      case "monthly":   d.setMonth(d.getMonth() + 1); break;
-      case "quarterly": d.setMonth(d.getMonth() + 3); break;
-      case "yearly":    d.setFullYear(d.getFullYear() + 1); break;
-      default:          d.setMonth(d.getMonth() + 1);
+      case "monthly":   d = addMonths(d, 1); break;
+      case "quarterly": d = addMonths(d, 3); break;
+      case "yearly":    d = addMonths(d, 12); break;
+      default:          d = addMonths(d, 1);
     }
     return localIso(d);
   }
@@ -1136,7 +1163,14 @@
     if (content) content.hidden = false;
     wireOnce();
     if (!state.loaded) loadData();
-    processRecurringPayments();
+    // Pull latest recurring state from cloud before processing (same as the
+    // page-load path) so switching to the Expense tab on a second device can't
+    // re-post an installment another device already advanced.
+    if (WfAuth.loadSettingsFromCloud) {
+      WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { processRecurringPayments(); });
+    } else {
+      processRecurringPayments();
+    }
   }
 
   window.WfExpense = { onShow: onShow, processRecurring: processRecurringPayments };
