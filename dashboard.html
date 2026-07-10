@@ -2621,7 +2621,10 @@
         if (t.classList.contains("rec-day-add") || t.closest(".rec-day-add")) {
           var addDate = (t.closest(".rec-day-add") || t).dataset.addDate;
           openRecModal(null);
-          if (addDate) setTimeout(function(){ var d = document.getElementById("rec-date"); if(d) d.value = addDate + "T00:00"; }, 50);
+          // Use setDtValue so the VISIBLE date field + picker state update too —
+          // setting only the hidden #rec-date left the display showing today and
+          // the picker would overwrite the chosen day back to today.
+          if (addDate) setTimeout(function(){ if (typeof setDtValue === "function") setDtValue(addDate + "T00:00"); }, 50);
           return;
         }
         if (t.closest(".rec-item-cb")) return;
@@ -2645,8 +2648,18 @@
         var ids = Object.keys(recSelected).filter(function (k) { return recSelected[k]; });
         if (!ids.length) return;
         if (!confirm("Delete " + ids.length + " selected record(s)?")) return;
+        var delBtn = document.getElementById("rec-delete-btn");
+        if (delBtn) delBtn.disabled = true;
         Promise.all(ids.map(function (id) { return WfDb.remove("expense_records", id); }))
-          .then(function () { recSelected = {}; loadDashAccounts(); });
+          .then(function () { recSelected = {}; if (delBtn) delBtn.disabled = false; loadDashAccounts(); })
+          .catch(function (err) {
+            // Surface the failure and re-sync from server instead of freezing
+            // silently with a stale selection/list.
+            if (delBtn) delBtn.disabled = false;
+            alert("Some records could not be deleted: " + ((err && err.message) || "network error") + "\nRefreshing to show current state.");
+            recSelected = {};
+            loadDashAccounts();
+          });
       });
 
       document.getElementById("rec-export-btn").addEventListener("click", function () {
@@ -2887,14 +2900,28 @@
         var newIds = contribs.map(function(a) { return a.id; }).join(",");
         if (existingIds === newIds && !existingSplit) return; // already built with defaults
 
-        // Only first account gets an editable input; rest are read-only auto-calculated
-        var defaultPct = contribs.length ? Math.floor(100 / contribs.length) : 0;
+        // Only first account gets an editable input; rest are read-only auto-calculated.
+        // Build an equal-split default that SUMS TO 100 using the same distribution
+        // as the first-input handler (editable = floor(100/n); the remainder is
+        // shared across the auto rows, last row absorbing the rounding). The old
+        // "100 - defaultPct" gave every auto row ~67%, so 3+ accounts summed to
+        // >100 and the save guard rejected until the user poked an input.
+        var n = contribs.length;
+        var editablePct = n ? Math.floor(100 / n) : 0;
+        var autoCount = n - 1;
+        var autoRemaining = 100 - editablePct;
+        var perOther = autoCount ? Math.round(autoRemaining / autoCount) : 0;
+        function defaultForIndex(i) {
+          if (i === 0) return editablePct;
+          if (i === n - 1) return autoRemaining - perOther * (autoCount - 1);
+          return perOther;
+        }
         splitRows.innerHTML = contribs.map(function(a, i) {
           var isEditable = (i === 0);
           // Use saved value if editing, otherwise default equal split
           var initVal = existingSplit && existingSplit[a.id] !== undefined
             ? existingSplit[a.id]
-            : (isEditable ? defaultPct : (100 - defaultPct * (contribs.length > 1 ? 1 : 0)));
+            : defaultForIndex(i);
           if (isEditable) {
             return '<div style="display:flex; align-items:center; gap:8px;">' +
               '<span style="flex:1; font-size:0.875rem;">' + esc(a.name) + '</span>' +
@@ -3033,7 +3060,9 @@
             document.getElementById("rec-modal-error").textContent = "Choose a subcategory."; return;
           }
         }
-        var pmId = document.getElementById("rec-payment-method").value || null;
+        // Payment method only applies to expenses — force null otherwise so a
+        // previously-picked method doesn't get written onto Budget/Income rows.
+        var pmId = (t === "expense") ? (document.getElementById("rec-payment-method").value || null) : null;
         if (t === "expense" && !pmId) { document.getElementById("rec-modal-error").textContent = "Choose a payment type."; return; }
         var datePart, txnAt;
         if (t === "budget" || t === "income") {
@@ -3193,7 +3222,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=review2"></script>
+  <script src="script.js?v=qa2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
