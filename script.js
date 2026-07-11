@@ -346,12 +346,37 @@
       // "Refresh NAV" applies to the Mutual Fund tab only.
       var refreshBtn = document.getElementById("equity-refresh-nav");
       if (refreshBtn) refreshBtn.style.display = (key === "equity") ? "" : "none";
+      if (typeof window.wfResizeCharts === "function") window.wfResizeCharts();
     }
 
     investSubTabs.forEach(function (entry) {
       if (!entry.tab) return;
       entry.tab.addEventListener("click", function () { showInvestmentSubTab(entry.key); });
     });
+
+    // Chart.js charts created while their tab/panel is hidden lay out at 0×0 and
+    // don't fix themselves when shown or when the device rotates. Resize every
+    // live chart whenever a panel becomes visible or the viewport changes, so
+    // all cards/charts render correctly on any device (esp. mobile).
+    function resizeAllCharts() {
+      if (!window.Chart || typeof Chart.getChart !== "function") return;
+      document.querySelectorAll("canvas").forEach(function (cv) {
+        if (cv.offsetParent === null) return; // skip hidden canvases
+        var ch = Chart.getChart(cv);
+        if (ch) { try { ch.resize(); } catch (e) {} }
+      });
+    }
+    var _chartResizeT = null;
+    function scheduleChartResize(delay) {
+      clearTimeout(_chartResizeT);
+      _chartResizeT = setTimeout(resizeAllCharts, delay || 80);
+    }
+    window.wfResizeCharts = scheduleChartResize;
+    if (!window.__wfChartResizeBound) {
+      window.__wfChartResizeBound = true;
+      window.addEventListener("resize", function () { scheduleChartResize(120); });
+      window.addEventListener("orientationchange", function () { scheduleChartResize(250); });
+    }
 
     function showDashboardTab(tab) {
       dashTabs.forEach(function (entry) {
@@ -374,6 +399,7 @@
         // Re-fetch accounts/categories/payment methods so any Settings renames appear.
         window.loadDashAccounts();
       }
+      scheduleChartResize();
     }
 
     dashTabs.forEach(function (entry) {
