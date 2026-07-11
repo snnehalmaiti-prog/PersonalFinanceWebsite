@@ -8683,19 +8683,11 @@
 
     var statsEl = document.getElementById("monthly-invest-cat-stats");
     if (statsEl) {
-      if (__monthlyInvestCatSplit) {
-        // Split mode: "₹X avg invested / month" headline only — legend carries per-category avgs
-        statsEl.innerHTML =
-          '<div class="mic-stat"><span class="mic-stat-value">' +
-          fmtCompact(avgPerMonth) + '</span><span class="mic-stat-label">avg invested / month</span></div>';
-      } else {
-        var hasOut = totalOut > 0;
-        var peakFmt = peakVal > 0 ? (peakLabel + " &middot; " + formatCurrency(peakVal)) : "—";
-        statsEl.innerHTML =
-          '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
-          (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
-          (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '');
-      }
+      var hasOut = totalOut > 0;
+      statsEl.innerHTML =
+        '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
+        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
+        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '');
     }
 
     // Custom legend
