@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=crformat1" />
+<link rel="stylesheet" href="styles.css?v=ovportfolio1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -53,15 +53,6 @@
           </span>
           <span class="logo-text">PF Dashboard</span>
         </a>
-        <div class="portfolio-dropdown" style="margin-left:8px;">
-          <button type="button" id="portfolio-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
-            <span id="portfolio-label">All Portfolios</span>
-            <svg class="portfolio-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <ul id="portfolio-menu" class="portfolio-menu" role="listbox" aria-label="Select portfolio" hidden>
-            <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
-          </ul>
-        </div>
       </div>
       <nav class="header-tabs" role="tablist" aria-label="Dashboard sections">
         <button type="button" class="header-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Overview</button>
@@ -104,6 +95,15 @@
         <div class="overview-top-row">
           <div class="overview-header-left">
             <span class="overview-title-label">OVERVIEW &middot; NET WORTH</span>
+            <div class="portfolio-dropdown" style="margin-left:12px;">
+              <button type="button" id="portfolio-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
+                <span id="portfolio-label">All Portfolios</span>
+                <svg class="portfolio-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <ul id="portfolio-menu" class="portfolio-menu" role="listbox" aria-label="Select portfolio" hidden>
+                <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
+              </ul>
+            </div>
           </div>
           <div class="portfolio-dropdown exclusions-dropdown">
             <button type="button" id="exclusions-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
@@ -3241,7 +3241,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=crformat1"></script>
+  <script src="script.js?v=ovportfolio1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

@@ -456,14 +456,19 @@
     localStorage.setItem(SELECTED_PORTFOLIO_KEY, value);
     var portfolioLabel = document.getElementById("portfolio-label");
     if (portfolioLabel) portfolioLabel.textContent = label;
+    // The Overview selector filters ONLY the Overview tab. Refresh the Overview
+    // surfaces: cards (updateDashboardStats), Account Value / Growth chart,
+    // Portfolio & Category splits, and the Stocks/ETF _ov totals (which
+    // renderStockEtfHoldingsTable recomputes for the selected portfolio). The
+    // Investments/Expense tabs are independent and are not re-rendered here.
     updateDashboardStats();
     renderValueChart();
-    renderEquityHoldingsTable();
-    renderAllFixedIncomeHoldingsTable();
-    renderCommodityHoldingsTable();
-    renderMarketSegmentChart();
-    renderMutualFundPortfolioSplitChart();
+    renderInvestmentSplitChart();
+    renderInstrumentSplitChart();
     renderStockEtfHoldingsTable();
+    // Nudge the Benchmark Comparison + Rolling Returns cards to recompute for
+    // the new portfolio (they refresh on the next wf-overview-flows-ready).
+    document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
   }
 
   function parseNumber(value) {
@@ -1631,7 +1636,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var byKey = {};
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
@@ -1990,7 +1995,7 @@
     }
     if (!statusEl || !tableWrap) return;
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var fdRows = getSheetRows("fd");
     var fiRows = getSheetRows("fixedincome");
 
@@ -2115,7 +2120,7 @@
   // Collects Fixed Income holdings from BOTH the fd sheet (FD/Corpus/Savings/PF)
   // AND the fixedincome sheet (EPF/PPF deposits + interest).
   function _buildAllFixedIncomeHoldingsList() {
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var out = [];
     var fdRows = getSheetRows("fd");
     if (fdRows && fdRows.length) {
@@ -2579,7 +2584,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var holdings = buildFdHoldingsList(rows, selectedPortfolio, function (normSubCategory) {
       return normSubCategory === "investment corpus" || normSubCategory === "savings account";
     });
@@ -2606,7 +2611,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var holdings = buildFdHoldingsList(rows, selectedPortfolio, function (normSubCategory) {
       return normSubCategory === "fixed deposit";
     });
@@ -3914,7 +3919,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     statusEl.textContent = "Fetching gold prices…";
 
     // Collect unique buy + sell dates from commodity rows to fetch historical prices
@@ -8026,7 +8031,7 @@
   }
 
   function _renderRegionSplit(prefixes, fiExcluded, statusEl) {
-    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var barEl = document.getElementById("isc-bar");
     var listEl = document.getElementById("isc-list");
     var totalEl = document.getElementById("isc-total-value");
@@ -9057,7 +9062,7 @@
       return;
     }
 
-    var selectedPortfolio = window.__mfHoldingsPortfolioOverride || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = window.__mfHoldingsPortfolioOverride || "all";
     var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, selectedPortfolio);
     if (!transactionsByInstrument) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -9724,7 +9729,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, selectedPortfolio);
     if (!transactionsByInstrument) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -9858,7 +9863,7 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     if (selectedPortfolio !== "all") {
       var filteredByPortfolio = {};
       Object.keys(byPortfolio).forEach(function (portfolio) {
@@ -10091,7 +10096,7 @@
       warnEl.hidden = true; return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var selectedPortfolio = "all";
     var mappingTable = buildStockMappingTable();
 
     // Build per-(portfolio × ticker) transaction lists directly from the sheet,
@@ -10227,7 +10232,12 @@
       return;
     }
 
-    var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    // The Stocks/ETF TAB is independent of the Overview portfolio selector — it
+    // always builds all portfolios and lets its own per-region toggle filter.
+    // The Overview accumulator (_ov.se*), however, must reflect the Overview
+    // selector, so it is computed from a separate portfolio-filtered build below.
+    var selectedPortfolio = "all";
+    var ovPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var mappingTable = buildStockMappingTable();
 
     if (!Object.keys(mappingTable).length) {
@@ -10248,12 +10258,15 @@
     Promise.all([
       buildStockHoldings(rows, mappingTable, selectedPortfolio, showClosed),
       buildStockHoldings(rows, mappingTable, selectedPortfolio, showClosedUS),
-      buildStockHoldings(rows, mappingTable, selectedPortfolio, false)
+      buildStockHoldings(rows, mappingTable, selectedPortfolio, false),
+      buildStockHoldings(rows, mappingTable, ovPortfolio, false)
     ]).then(function (results) {
       var indiaHoldings = results[0].filter(function(h) { return h.region !== "US"; });
       var usHoldings = results[1].filter(function(h) { return h.region === "US"; });
       var holdings = indiaHoldings.concat(usHoldings);
       var openHoldings = results[2];
+      // Overview-portfolio-filtered open positions — drives _ov.se* only.
+      var ovOpenHoldings = ovPortfolio === "all" ? results[2] : results[3];
 
       if (!holdings.length) {
         indiaStatusEl.textContent = "No Stocks/ETF holdings with unsold units found. Ensure instrument names match the mapping sheet exactly.";
@@ -10367,9 +10380,11 @@
           });
         });
 
-          // Compute header stats always from open positions only
+          // Compute header stats (feeding _ov.se*) from the Overview-portfolio
+          // open positions, so the Overview cards honour the Overview selector
+          // while the tab itself shows all portfolios.
           var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
-          openHoldings.forEach(function (h) {
+          ovOpenHoldings.forEach(function (h) {
             var priceEntry = allPrices[h.ticker] || null;
             var eodRaw = priceEntry ? priceEntry.price : null;
             var prevRaw = priceEntry ? priceEntry.prev_close : null;
@@ -10447,9 +10462,11 @@
             seReturnPctEl.className = "overview-stat-value " + (retPct > 0 ? "positive" : retPct < 0 ? "negative" : "");
           }
 
-          // Portfolio-level XIRR (always from open positions)
+          // Portfolio-level XIRR — from the Overview-portfolio open positions so
+          // _ov.seXirrFlows (and the overview XIRR) honour the Overview selector,
+          // consistent with the totals above.
           var seXirrFlows = [];
-          openHoldings.forEach(function (hh) {
+          ovOpenHoldings.forEach(function (hh) {
             if (hh.region === "US") {
               (hh.txns || []).forEach(function (txn) {
                 if (!txn.date || !txn.units || !txn.price) return;
@@ -10458,7 +10475,7 @@
                 seXirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -(txn.units * txn.price * rateForDate) : (txn.units * txn.price * rateForDate) });
               });
             } else {
-              buildXirrCashFlows(rows, selectedPortfolio, hh.instrument).forEach(function (f) { seXirrFlows.push(f); });
+              buildXirrCashFlows(rows, ovPortfolio, hh.instrument).forEach(function (f) { seXirrFlows.push(f); });
             }
           });
           // Store flows WITH terminal in _ov so the overview XIRR has a positive terminal to converge on.
