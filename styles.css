@@ -3277,6 +3277,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-year-sel { padding-right: 10px; }
 /* Compact selectors on the Realized Profit card */
 #profit-cat-card .mic-dropdown-btn { padding: 3px 8px; font-size: 0.68rem; gap: 3px; }
+/* Let the three split/profit cards stretch to fill the row so the last card's
+   right edge lines up with the full-width chart above them. */
+#monthly-invest-row .isc-card { flex: 1 1 300px; max-width: none; }
 .mic-stats-row {
   display: flex;
   gap: 20px;
