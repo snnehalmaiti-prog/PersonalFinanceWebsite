@@ -3287,7 +3287,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   color: var(--muted);
 }
 .mic-stat-value {
-  font-size: 1.3rem;
+  font-size: 1rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--text);
