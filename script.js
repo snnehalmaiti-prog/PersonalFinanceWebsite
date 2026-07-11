@@ -8707,15 +8707,11 @@
         // Per-category colour swatch + avg/month; clicking filters to that instrument
         legendEl.innerHTML = catList.map(function (cat, i) {
           var col = MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
-          var catTotal = monthKeys.reduce(function (s, k) {
-            return s + ((byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0);
-          }, 0);
-          var catAvg = catTotal / activeMonths;
           var dimmed = __monthlyInvestCatFilter && __monthlyInvestCatFilter !== cat;
           return '<div class="mic-legend-item mic-legend-clickable' + (dimmed ? ' mic-legend-dimmed' : '') + '"' +
             ' role="button" tabindex="0" data-mic-cat="' + cat.replace(/"/g, '&quot;') + '">' +
             '<div class="mic-legend-bar" style="background:' + col + '"></div>' +
-            cat + ' ' + fmtCompact(catAvg) + '</div>';
+            cat + '</div>';
         }).join("");
         // Wire clicks: toggle filter for the clicked instrument, then redraw
         Array.prototype.forEach.call(legendEl.querySelectorAll("[data-mic-cat]"), function (item) {
