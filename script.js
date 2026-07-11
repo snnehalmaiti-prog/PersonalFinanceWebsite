@@ -2679,7 +2679,7 @@
   }
 
   // ─── Stocks/ETF: stock_prices.json helpers ────────────────────────────────
-  var STOCK_PRICES_CACHE_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
+  var STOCK_PRICES_CACHE_MAX_AGE_MS = 3 * 60 * 1000; // 3 minutes
   var _stockPricesPromise = null;
 
   function buildStockMappingTable() {
