@@ -8745,15 +8745,28 @@
         plugins: {
           legend: { display: false },
           tooltip: {
+            // Show the full month summary from anywhere in the column, so the
+            // user never has to hover the thin withdrawal line.
+            mode: "index",
+            intersect: false,
+            // Collapse all datasets at this month into a single consolidated
+            // block (built in `label`), so keep only the first item.
+            filter: function (item) { return item.datasetIndex === 0; },
             callbacks: {
-              label: function (ctx) { return ctx.dataset.label + ": " + formatCurrency(ctx.parsed.y); },
-              afterBody: function (items) {
-                var k = monthKeys[items[0].dataIndex];
-                if (!k) return [];
+              label: function (ctx) {
+                var k = monthKeys[ctx.dataIndex];
+                if (!k) return "";
                 var inv = investedTotal(k), out = outTotal(k);
-                var lines = [];
-                if (!net && out > 0) lines.push("Withdrawn: " + formatCurrency(out));
-                if (out > 0) lines.push("Net: " + formatCurrency(inv - out));
+                var lines = ["Total Invested: " + formatCurrency(inv)];
+                if (out > 0) {
+                  lines.push("Total Withdrawn: " + formatCurrency(out));
+                  var byCat = byMonthCatOut[k] || {};
+                  Object.keys(byCat)
+                    .filter(function (c) { return byCat[c] > 0; })
+                    .sort(function (a, b) { return byCat[b] - byCat[a]; })
+                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(byCat[c])); });
+                  lines.push("Net: " + formatCurrency(inv - out));
+                }
                 return lines;
               }
             }
