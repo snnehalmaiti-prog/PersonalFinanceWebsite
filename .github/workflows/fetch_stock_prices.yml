@@ -2,10 +2,13 @@ name: Fetch Stock Prices
 
 on:
   schedule:
-    # Every 15 minutes Mon–Fri during NSE hours (9:20 AM–3:30 PM IST = 3:50–10:00 UTC)
+    # Every 30 minutes Mon–Fri during NSE hours (9:20 AM–3:30 PM IST = 3:50–10:00 UTC)
     - cron: "50 3 * * 1-5"         # 9:20 AM IST (market open)
-    - cron: "*/15 4-9 * * 1-5"     # 9:30 AM–3:15 PM IST
+    - cron: "*/30 4-9 * * 1-5"     # 9:30 AM–3:30 PM IST, every 30 min
     - cron: "0 10 * * 1-5"         # 3:30 PM IST (market close)
+    # Every 30 minutes Mon–Fri during US hours (covers EDT 13:30–20:00 UTC and
+    # EST 14:30–21:00 UTC → ~7:00 PM–2:30 AM IST). Captures US intraday prices.
+    - cron: "*/30 13-21 * * 1-5"   # US regular session, every 30 min
   push:
     paths:
       - stocksetf_mapping.json
