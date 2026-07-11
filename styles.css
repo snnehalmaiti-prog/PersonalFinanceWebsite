@@ -3219,7 +3219,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   padding: 16px 20px 12px;
   flex-wrap: wrap;
 }
-.mic-title-group { display: flex; flex-direction: column; gap: 2px; }
+.mic-title-group { display: flex; flex-direction: row; align-items: center; gap: 18px; flex-wrap: wrap; }
 .mic-eyebrow {
   font-size: 0.62rem;
   font-weight: 700;
@@ -3275,9 +3275,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-stats-row {
   display: flex;
   gap: 20px;
-  padding: 4px 20px 12px;
+  padding: 0;
   flex-wrap: nowrap;
   white-space: nowrap;
+  align-items: center;
 }
 .mic-stat { display: flex; flex-direction: column; gap: 2px; }
 .mic-stat-label {

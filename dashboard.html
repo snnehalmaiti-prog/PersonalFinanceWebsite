@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=micportname1" />
+<link rel="stylesheet" href="styles.css?v=micinline1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -286,6 +286,7 @@
         <div class="mic-header">
           <div class="mic-title-group">
             <span class="mic-eyebrow">CASH FLOW &middot; MONTHLY<span id="mic-portfolio-name" class="mic-portfolio-name"></span></span>
+            <div class="mic-stats-row" id="monthly-invest-cat-stats"></div>
           </div>
           <div class="mic-controls">
             <div class="mic-toggle-group">
@@ -298,7 +299,6 @@
             <select id="monthly-invest-cat-year" class="mic-dropdown-btn mic-year-sel"></select>
           </div>
         </div>
-        <div class="mic-stats-row" id="monthly-invest-cat-stats"></div>
         <p class="muted small" id="monthly-invest-cat-status" style="margin:0;padding:0 20px 4px;font-size:0.7rem;"></p>
         <div id="monthly-invest-cat-wrap" style="position:relative;height:280px;"></div>
         <div class="mic-legend" id="monthly-invest-cat-legend"></div>
@@ -3240,7 +3240,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=micportname1"></script>
+  <script src="script.js?v=micinline1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
