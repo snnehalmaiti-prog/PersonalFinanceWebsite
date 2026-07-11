@@ -8758,6 +8758,15 @@
                 if (!k) return "";
                 var inv = investedTotal(k), out = outTotal(k);
                 var lines = ["Total Invested: " + formatCurrency(inv)];
+                // In "By instrument" mode, break the invested total down by
+                // Instrument Sub Category.
+                if (__monthlyInvestCatSplit && inv > 0) {
+                  var invByCat = byMonthCat[k] || {};
+                  Object.keys(invByCat)
+                    .filter(function (c) { return invByCat[c] > 0; })
+                    .sort(function (a, b) { return invByCat[b] - invByCat[a]; })
+                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(invByCat[c])); });
+                }
                 if (out > 0) {
                   lines.push("Total Withdrawn: " + formatCurrency(out));
                   var byCat = byMonthCatOut[k] || {};
