@@ -3038,7 +3038,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   border-radius: 14px;
   padding: 20px 22px;
   box-shadow: var(--shadow-sm);
+  min-width: 0; /* allow the breakdown table's overflow-x to contain itself instead of widening the whole card row */
 }
+.exp-matrix-wrap { max-width: 100%; }
 .acc-section-top {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   margin-bottom: 4px;
