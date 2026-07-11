@@ -465,6 +465,7 @@
     renderValueChart();
     renderInvestmentSplitChart();
     renderInstrumentSplitChart();
+    renderMonthlyInvestmentByCategory();
     renderStockEtfHoldingsTable();
     // Nudge the Benchmark Comparison + Rolling Returns cards to recompute for
     // the new portfolio (they refresh on the next wf-overview-flows-ready).
@@ -8379,6 +8380,12 @@
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
   function buildMonthlyInvestCatData() {
+    // Cash Flow · Monthly follows the Overview portfolio selector.
+    var ovPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    function ovSkip(row, portIdx) {
+      return ovPortfolio !== "all" && portIdx !== -1 &&
+        normalizeText((row[portIdx] || "").trim()) !== normalizeText(ovPortfolio);
+    }
     var instrCatMap = {};
     ["mfmapping", "stocksetfmapping"].forEach(function (mp) {
       var mrows = getSheetRows(mp);
@@ -8423,9 +8430,11 @@
       var amtIdx = header.indexOf("amount");
       var instrIdx = header.indexOf("instrument name");
       var subCatIdx = header.indexOf("instrument sub category");
+      var portIdx = header.indexOf("portfolio name");
       if (typeIdx === -1 || dateIdx === -1) return;
       if (amtIdx === -1 && (unitsIdx === -1 || priceIdx === -1)) return;
       rows.slice(1).forEach(function (row) {
+        if (ovSkip(row, portIdx)) return;
         var type = normalizeText(row[typeIdx] || "");
         var isBuy = type.indexOf("buy") !== -1;
         var isOut = isOutType(type);
@@ -8451,8 +8460,10 @@
       var dateIdx   = header.indexOf("transaction date");
       var amtIdx    = header.indexOf("amount");
       var subCatIdx = header.indexOf("instrument sub category");
+      var portIdx   = header.indexOf("portfolio name");
       if (typeIdx === -1 || dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
+        if (ovSkip(row, portIdx)) return;
         var type = normalizeText(row[typeIdx] || "");
         var isDep = type.indexOf("deposit") !== -1;
         var isOut = isOutType(type);
@@ -8476,8 +8487,10 @@
       if (amtIdx === -1) amtIdx = header.indexOf("amount");
       var subCatIdx = header.indexOf("instrument sub category");
       var typeIdx   = header.indexOf("transaction type");
+      var portIdx   = header.indexOf("portfolio name");
       if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
+        if (ovSkip(row, portIdx)) return;
         var isOut = false;
         if (typeIdx !== -1) {
           var type = normalizeText(row[typeIdx] || "");
