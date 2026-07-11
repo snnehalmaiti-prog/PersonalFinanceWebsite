@@ -1286,9 +1286,38 @@
     return { missingColumns: false, message: baseMessage };
   }
 
-  function formatCurrency(amount) {
+  // Full, comma-grouped rupee amount (e.g. ₹2,58,55,820). Used for tooltips,
+  // exports, and any place that needs the exact figure.
+  function formatCurrencyFull(amount) {
     var sign = amount < 0 ? "-" : "";
     return sign + "₹" + Math.abs(amount).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  }
+
+  // Display format: amounts of ₹1 crore or more are abbreviated as "₹2.58 CR";
+  // smaller amounts keep the full comma-grouped form. Pair with _crTitle()/
+  // el.title so the exact value is available on hover.
+  function formatCurrency(amount) {
+    var abs = Math.abs(amount);
+    if (abs >= 1e7) {
+      var sign = amount < 0 ? "-" : "";
+      return sign + "₹" + (abs / 1e7).toFixed(2) + " CR";
+    }
+    return formatCurrencyFull(amount);
+  }
+
+  // Returns a ` title="₹full"` attribute string (for innerHTML) when the amount
+  // is abbreviated (≥ 1 crore), else "". Keeps the exact figure on hover.
+  function _crTitle(amount) {
+    if (Math.abs(amount) < 1e7) return "";
+    return ' title="' + formatCurrencyFull(amount).replace(/"/g, "") + '"';
+  }
+
+  // Sets textContent to the (possibly abbreviated) amount and, when abbreviated,
+  // a title with the exact value so hovering reveals the full number.
+  function setMoneyText(el, text, rawAmount) {
+    if (!el) return;
+    el.textContent = text;
+    el.title = Math.abs(rawAmount) >= 1e7 ? formatCurrencyFull(rawAmount) : "";
   }
 
   function formatCompactINR(amount) {
@@ -1303,6 +1332,7 @@
   function setSignedCurrency(el, amount) {
     if (!el) return;
     el.textContent = (amount > 0 ? "+" : "") + formatCurrency(amount);
+    el.title = Math.abs(amount) >= 1e7 ? (amount > 0 ? "+" : "") + formatCurrencyFull(amount) : "";
     el.classList.remove("positive", "negative");
     if (amount > 0) el.classList.add("positive");
     else if (amount < 0) el.classList.add("negative");
@@ -1334,8 +1364,8 @@
     var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + commInvested;
     var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + commCurrent;
     var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + commRealized;
-    if (overviewInvestedEl) overviewInvestedEl.textContent = formatCurrency(totalInvested);
-    if (overviewCurrentEl) overviewCurrentEl.textContent = formatCurrency(totalCurrent);
+    setMoneyText(overviewInvestedEl, formatCurrency(totalInvested), totalInvested);
+    setMoneyText(overviewCurrentEl, formatCurrency(totalCurrent), totalCurrent);
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
     if (overviewRealizedEl) setSignedCurrency(overviewRealizedEl, totalRealized);
     // Keep the Account Value chart's tail in lockstep with this card. _ov is
@@ -1381,8 +1411,8 @@
     var elMfUnr = document.getElementById("cat-mf-unrealized");
     var elMfRlz = document.getElementById("cat-mf-realized");
     var elMfRet = document.getElementById("cat-mf-return");
-    if (elMfInv) elMfInv.textContent = formatCurrency(mfInv);
-    if (elMfCur) elMfCur.textContent = formatCurrency(mfCur);
+    setMoneyText(elMfInv, formatCurrency(mfInv), mfInv);
+    setMoneyText(elMfCur, formatCurrency(mfCur), mfCur);
     if (elMfUnr) setSignedCurrency(elMfUnr, _ov.mfUnrealized);
     if (elMfRlz) setSignedCurrency(elMfRlz, _ov.mfRealized);
     if (elMfRet) {
@@ -1399,8 +1429,8 @@
     var elSeUnr = document.getElementById("cat-se-unrealized");
     var elSeRlz = document.getElementById("cat-se-realized");
     var elSeRet = document.getElementById("cat-se-return");
-    if (elSeInv) elSeInv.textContent = formatCurrency(seInv);
-    if (elSeCur) elSeCur.textContent = formatCurrency(seCur);
+    setMoneyText(elSeInv, formatCurrency(seInv), seInv);
+    setMoneyText(elSeCur, formatCurrency(seCur), seCur);
     if (elSeDc)  setSignedCurrency(elSeDc, _ov.seDayChange);
     if (elSeUnr) setSignedCurrency(elSeUnr, _ov.seUnrealized);
     if (elSeRlz) setSignedCurrency(elSeRlz, _ov.seRealized);
@@ -1420,8 +1450,8 @@
     var elFiUnr = document.getElementById("cat-fi-unrealized");
     var elFiRlz = document.getElementById("cat-fi-realized");
     var elFiRet = document.getElementById("cat-fi-return");
-    if (elFiInv) elFiInv.textContent = formatCurrency(fiTotalInv);
-    if (elFiCur) elFiCur.textContent = formatCurrency(fiTotalCur);
+    setMoneyText(elFiInv, formatCurrency(fiTotalInv), fiTotalInv);
+    setMoneyText(elFiCur, formatCurrency(fiTotalCur), fiTotalCur);
     if (elFiUnr) setSignedCurrency(elFiUnr, fiTotalUnr);
     if (elFiRlz) setSignedCurrency(elFiRlz, fiTotalRlz);
     if (elFiRet) {
@@ -2219,11 +2249,11 @@
           '</div>' +
         '</div>' +
         '<div class="mfpc-current-label">CURRENT VALUE</div>' +
-        '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+        '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
         '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
         '<div class="mfpc-return-row">' +
           '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '">' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
+          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
         '</div>' +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
@@ -4264,13 +4294,13 @@
         '</div>' +
         '<div class="mfpc-current-label">CURRENT VALUE</div>' +
         '<div class="mfpc-current-row">' +
-          '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+          '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
           dayChgHtml +
         '</div>' +
         '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
         '<div class="mfpc-return-row">' +
           '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '">' + (isNeg ? "" : "+") + formatCurrency(pnl) + '</span>' +
+          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' + (isNeg ? "" : "+") + formatCurrency(pnl) + '</span>' +
         '</div>' +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
@@ -4491,10 +4521,10 @@
             '<div class="mfh-inst-sub">' + subLine + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.investedINR || 0) + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.currentINR || 0) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(h.investedINR || 0) + '>' + formatCurrency(h.investedINR || 0) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(h.currentINR || 0) + '>' + formatCurrency(h.currentINR || 0) + '</div>' +
         '<div class="mfh-col-num mfh-num-pnl">' +
-          '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '">' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
+          '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(pnl) + '>' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
         '</div>' +
         _mfhDayCell(Math.abs(day) < 0.01 ? null : day, (h.currentINR - day) > 0 ? (day / (h.currentINR - day)) * 100 : null) +
@@ -4505,9 +4535,9 @@
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
     var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
       '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · IN INR" : "") + '</div></div>' +
-      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subInv) + '</div>' +
-      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subCur) + '</div>' +
-      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '">' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
+      '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subInv) + '>' + formatCurrency(subInv) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subCur) + '>' + formatCurrency(subCur) + '</div>' +
+      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
       '</div>';
     list.innerHTML = header + body + footer;
@@ -4584,6 +4614,7 @@
     var cls = unrealized > 0 ? "positive" : (unrealized < 0 ? "negative" : "");
     if (returnEl) {
       returnEl.textContent = (unrealized > 0 ? "+" : "") + formatCurrency(unrealized);
+      returnEl.title = Math.abs(unrealized) >= 1e7 ? (unrealized > 0 ? "+" : "") + formatCurrencyFull(unrealized) : "";
       returnEl.classList.remove("positive", "negative");
       if (cls) returnEl.classList.add(cls);
     }
@@ -4598,6 +4629,7 @@
     if (!el) return;
     var cls = dayChange > 0 ? "positive" : (dayChange < 0 ? "negative" : "");
     el.textContent = (dayChange > 0 ? "+" : "") + formatCurrency(dayChange);
+    el.title = Math.abs(dayChange) >= 1e7 ? (dayChange > 0 ? "+" : "") + formatCurrencyFull(dayChange) : "";
     el.classList.remove("positive", "negative");
     if (cls) el.classList.add(cls);
   }
@@ -9254,14 +9286,14 @@
             '<div class="mfh-inst-sub">' + sub + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.invested) + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(r.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.current) + '>' + formatCurrency(r.current) + '</div>' +
         (function () {
           var dayVal = (r.dayChgPct == null || r.current == null) ? null : (r.current * r.dayChgPct / 100);
           return _mfhDayCell(dayVal, r.dayChgPct);
         })() +
         '<div class="mfh-col-num mfh-num-pnl">' +
-          '<span class="mfh-num-pnl-value ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + formatCurrency(r.pnl) + '</span>' +
+          '<span class="mfh-num-pnl-value ' + (pnlPos ? "" : "mfh-negative") + '"' + _crTitle(r.pnl) + '>' + (pnlPos ? "+" : "") + formatCurrency(r.pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPos ? "" : "mfh-negative") + '">' + (pnlPos ? "+" : "") + r.pnlPct.toFixed(2) + '%</span>' +
         '</div>' +
         '<div class="mfh-col-num mfh-num-xirr ' + xirrCls + '">' + xirrText + '</div>' +
@@ -9271,10 +9303,10 @@
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
     var footer = '<div class="mfh-row" style="background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
       '<div style="font-size:0.72rem;">' + (MFH_STATE.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
-      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subInv) + '</div>' +
-      '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subCur) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subInv) + '>' + formatCurrency(subInv) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subCur) + '>' + formatCurrency(subCur) + '</div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
-      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '">' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
+      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       '<div class="mfh-col-num mfh-num-xirr mfh-muted">—</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
@@ -9347,13 +9379,13 @@
           '</div>' +
           '<div class="mfpc-current-label">CURRENT VALUE</div>' +
           '<div class="mfpc-current-row">' +
-            '<div class="mfpc-current-value">' + formatCurrency(p.current) + '</div>' +
+            '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
             dayChgHtml +
           '</div>' +
           '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
           '<div class="mfpc-return-row">' +
             '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-            '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '">' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
+            '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
           '</div>' +
           '<div class="mfpc-footer">' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
