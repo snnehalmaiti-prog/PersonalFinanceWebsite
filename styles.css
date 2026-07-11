@@ -3348,6 +3348,22 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .isc-bar-seg:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
 .isc-bar-seg:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
 .isc-list { display: flex; flex-direction: column; }
+/* Realized Profit by Category card */
+.pcat-group { border-top: 1px solid var(--border); }
+.pcat-group:first-child { border-top: none; }
+.pcat-row { display: flex; align-items: center; gap: 7px; padding: 8px 2px; cursor: pointer; }
+.pcat-row:hover { background: color-mix(in srgb, var(--surface-alt) 40%, transparent); }
+.pcat-caret { font-size: 0.6rem; color: var(--muted); width: 10px; flex-shrink: 0; }
+.pcat-name { flex: 1; min-width: 0; font-size: 0.76rem; font-weight: 700; color: var(--text); }
+.pcat-val { font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pcat-val.positive, .pcat-sub-val.positive { color: var(--emerald); }
+.pcat-val.negative, .pcat-sub-val.negative { color: #E8623A; }
+.pcat-subs { padding: 0 2px 6px 19px; }
+.pcat-subrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.pcat-sub-name { font-size: 0.7rem; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcat-sub-val { font-size: 0.7rem; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.isc-total-value.positive { color: var(--emerald); }
+.isc-total-value.negative { color: #E8623A; }
 .isc-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
 .isc-row:first-child { border-top: none; }
 .isc-avatar {

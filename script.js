@@ -466,6 +466,7 @@
     renderInvestmentSplitChart();
     renderInstrumentSplitChart();
     renderMonthlyInvestmentByCategory();
+    renderProfitByCategoryCard();
     renderStockEtfHoldingsTable();
     // Nudge the Benchmark Comparison + Rolling Returns cards to recompute for
     // the new portfolio (they refresh on the next wf-overview-flows-ready).
@@ -5178,6 +5179,7 @@
   renderAllFixedIncomeHoldingsTable();
   renderInvestmentSplitChart();
   renderInstrumentSplitChart();
+  renderProfitByCategoryCard();
 
   var equityHoldingsShowClosedOnly = document.getElementById("equity-holdings-show-closed-only");
   if (equityHoldingsShowClosedOnly) equityHoldingsShowClosedOnly.addEventListener("change", renderEquityHoldingsTable);
@@ -5213,6 +5215,7 @@
         if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
         renderInvestmentSplitChart();
         renderInstrumentSplitChart();
+        renderProfitByCategoryCard();
         renderMonthlyCashFlow();
       }, canonicalFields);
     });
@@ -8381,6 +8384,184 @@
   // script, and `= null` here would wipe the state it already set.
   var __monthlyInvestCatChart;
   var __monthlyInvestCatData; // { byMonthCat, yearList }
+  // ─── Realized Profit by Category card ─────────────────────────────────────
+  // instrument (normalized) → { category, sub } from the Mutual Fund mapping.
+  function buildMfCatSubMap() {
+    var rows = getSheetRows("mfmapping");
+    var map = {};
+    if (!rows || rows.length < 2) return map;
+    var header = rows[0].map(normalizeText);
+    var iIdx = header.indexOf("instrument name");
+    var cIdx = header.indexOf("instrument category");
+    var sIdx = header.indexOf("instrument sub category");
+    if (sIdx === -1) sIdx = header.findIndex(function (h) { return h.indexOf("market segment") !== -1 || h.indexOf("segment") !== -1; });
+    if (iIdx === -1) return map;
+    rows.slice(1).forEach(function (row) {
+      var name = (row[iIdx] || "").trim();
+      if (!name) return;
+      map[normalizeText(name)] = {
+        category: cIdx !== -1 ? (row[cIdx] || "").trim() : "",
+        sub: sIdx !== -1 ? (row[sIdx] || "").trim() : ""
+      };
+    });
+    return map;
+  }
+
+  // Computes realized (booked) profit — sale proceeds minus FIFO-matched cost —
+  // from Mutual Fund + Stocks/ETF sells, bucketed by year → category → sub
+  // category. US sells/costs are converted to INR at each leg's transaction-date
+  // rate. Returns Promise<{ buckets, years }>, where buckets[year|"all"][cat][sub].
+  function buildRealizedProfitByCategory(portfolioFilter) {
+    return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var mfMap = buildMfCatSubMap();
+
+      var buckets = {}, years = {};
+      function add(year, cat, sub, amt) {
+        if (!amt) return;
+        years[year] = true;
+        [year, "all"].forEach(function (Y) {
+          buckets[Y] = buckets[Y] || {};
+          buckets[Y][cat] = buckets[Y][cat] || {};
+          buckets[Y][cat][sub] = (buckets[Y][cat][sub] || 0) + amt;
+        });
+      }
+
+      [{ prefix: "equity", defCat: "Mutual Funds" }, { prefix: "stocksetf", defCat: "Stocks/ETF" }].forEach(function (spec) {
+        var rows = getSheetRows(spec.prefix);
+        if (!rows) return;
+        var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+        if (!tx) return;
+        Object.keys(tx).forEach(function (instr) {
+          var norm = normalizeText(instr);
+          var cat, sub, region = "India";
+          if (spec.prefix === "stocksetf") {
+            var m = seMap[norm];
+            cat = (m && m.category) || spec.defCat;
+            sub = (m && (m.subCat || m.segment)) || (m && m.category) || "Other";
+            region = (m && m.region) || "India";
+          } else {
+            var mm = mfMap[norm];
+            cat = (mm && mm.category) || spec.defCat;
+            sub = (mm && mm.sub) || "Other";
+          }
+          if (!cat) cat = spec.defCat;
+          if (!sub) sub = cat;
+          var isUsd = normalizeText(region) === "us";
+          var lots = [];
+          tx[instr].forEach(function (t) {
+            if (t.type === "buy") {
+              var buyRate = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+              lots.push({ units: t.units, cost: t.price * buyRate });
+              return;
+            }
+            var toMatch = t.units, costMatched = 0, matched = 0;
+            while (toMatch > 0 && lots.length) {
+              var l = lots[0];
+              var mq = Math.min(toMatch, l.units);
+              costMatched += mq * l.cost;
+              matched += mq;
+              l.units -= mq;
+              toMatch -= mq;
+              if (l.units <= 0) lots.shift();
+            }
+            if (matched <= 0) return;
+            var sellRate = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            var realized = (matched * t.price * sellRate) - costMatched;
+            var yr = t.date ? String(t.date.getFullYear()) : null;
+            if (yr) add(yr, cat, sub, realized);
+          });
+        });
+      });
+
+      return { buckets: buckets, years: Object.keys(years).sort() };
+    });
+  }
+
+  var __profitCatYear = "all";
+  var __profitCatExpanded = {}; // category → expanded?
+  function renderProfitByCategoryCard() {
+    var listEl = document.getElementById("profit-cat-list");
+    var totalEl = document.getElementById("profit-cat-total");
+    var labelEl = document.getElementById("profit-cat-total-label");
+    var yearSel = document.getElementById("profit-cat-year");
+    var statusEl = document.getElementById("profit-cat-status");
+    if (!listEl || !totalEl || !yearSel) return;
+
+    var portfolioFilter = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    buildRealizedProfitByCategory(portfolioFilter).then(function (data) {
+      var years = data.years || [];
+      // Year dropdown: All time + each year (desc). Rebuild only when changed.
+      var wantOpts = ["all"].concat(years.slice().reverse());
+      var haveOpts = [];
+      for (var oi = 0; oi < yearSel.options.length; oi++) haveOpts.push(yearSel.options[oi].value);
+      if (haveOpts.join(",") !== wantOpts.join(",")) {
+        yearSel.innerHTML = wantOpts.map(function (y) {
+          return '<option value="' + y + '">' + (y === "all" ? "All time" : y) + '</option>';
+        }).join("");
+      }
+      if (wantOpts.indexOf(__profitCatYear) === -1) __profitCatYear = "all";
+      yearSel.value = __profitCatYear;
+      yearSel.onchange = function () { __profitCatYear = yearSel.value; renderProfitByCategoryCard(); };
+
+      if (labelEl) labelEl.textContent = __profitCatYear === "all" ? "REALIZED PROFIT · ALL TIME" : ("REALIZED PROFIT · " + __profitCatYear);
+
+      var byCat = data.buckets[__profitCatYear] || {};
+      var cats = Object.keys(byCat).map(function (cat) {
+        var subs = byCat[cat];
+        var catTotal = Object.keys(subs).reduce(function (s, k) { return s + subs[k]; }, 0);
+        return { cat: cat, total: catTotal, subs: subs };
+      }).filter(function (c) { return Math.abs(c.total) > 0.5; })
+        .sort(function (a, b) { return b.total - a.total; });
+
+      var grand = cats.reduce(function (s, c) { return s + c.total; }, 0);
+      totalEl.textContent = (grand >= 0 ? "+" : "") + formatCurrency(grand);
+      totalEl.className = "isc-total-value " + (grand > 0 ? "positive" : grand < 0 ? "negative" : "");
+      totalEl.title = Math.abs(grand) >= 1e7 ? (grand >= 0 ? "+" : "") + formatCurrencyFull(grand) : "";
+
+      if (!cats.length) {
+        listEl.innerHTML = "";
+        if (statusEl) statusEl.textContent = "No realized profit booked" + (__profitCatYear === "all" ? " yet." : " in " + __profitCatYear + ".");
+        return;
+      }
+      if (statusEl) statusEl.textContent = "";
+
+      listEl.innerHTML = cats.map(function (c) {
+        var expanded = !!__profitCatExpanded[c.cat];
+        var sign = c.total >= 0 ? "positive" : "negative";
+        var caret = '<span class="pcat-caret">' + (expanded ? "▾" : "▸") + '</span>';
+        var subRows = Object.keys(c.subs)
+          .map(function (s) { return { sub: s, val: c.subs[s] }; })
+          .filter(function (s) { return Math.abs(s.val) > 0.5; })
+          .sort(function (a, b) { return b.val - a.val; })
+          .map(function (s) {
+            var scls = s.val >= 0 ? "positive" : "negative";
+            return '<div class="pcat-subrow"><span class="pcat-sub-name">' + escapeHtml(s.sub) + '</span>' +
+              '<span class="pcat-sub-val ' + scls + '"' + _crTitle(s.val) + '>' + (s.val >= 0 ? "+" : "") + formatCurrency(s.val) + '</span></div>';
+          }).join("");
+        return '<div class="pcat-group">' +
+          '<div class="pcat-row" role="button" tabindex="0" data-pcat="' + escapeHtml(c.cat) + '">' +
+            caret + '<span class="pcat-name">' + escapeHtml(c.cat) + '</span>' +
+            '<span class="pcat-val ' + sign + '"' + _crTitle(c.total) + '>' + (c.total >= 0 ? "+" : "") + formatCurrency(c.total) + '</span>' +
+          '</div>' +
+          '<div class="pcat-subs" style="display:' + (expanded ? "block" : "none") + ';">' + subRows + '</div>' +
+        '</div>';
+      }).join("");
+
+      Array.prototype.forEach.call(listEl.querySelectorAll("[data-pcat]"), function (row) {
+        function toggle() {
+          var cat = row.getAttribute("data-pcat");
+          __profitCatExpanded[cat] = !__profitCatExpanded[cat];
+          renderProfitByCategoryCard();
+        }
+        row.addEventListener("click", toggle);
+        row.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      });
+    }).catch(function () {});
+  }
+
   var __monthlyInvestCatYear;
   var __monthlyInvestCatAllTime = false;
   var __monthlyInvestCatSplit = false; // off = single total bar per month
