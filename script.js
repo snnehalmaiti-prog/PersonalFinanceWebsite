@@ -10633,11 +10633,19 @@
           }
         }
         // Visible "Price Updated: DD/MM & HH:MM" pill (mirrors the MF NAV Data pill).
+        // When a fresh fetch has no timestamp, fall back to the last known update
+        // time (persisted) instead of hiding — so it always shows the last price time.
         var priceAsOfEl = document.getElementById("stocksetf-price-asof");
         var priceAsOfTextEl = document.getElementById("stocksetf-price-asof-text");
         if (priceAsOfEl && priceAsOfTextEl) {
-          if (pricesAvailable && stockData.updated) {
-            var u = new Date(stockData.updated);
+          var updatedTs = (pricesAvailable && stockData.updated) ? stockData.updated : null;
+          if (updatedTs) {
+            try { localStorage.setItem("wf-stocksetf-price-asof", updatedTs); } catch (e) {}
+          } else {
+            updatedTs = localStorage.getItem("wf-stocksetf-price-asof") || null;
+          }
+          if (updatedTs) {
+            var u = new Date(updatedTs);
             var dm = u.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit" });
             var hm = u.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
             priceAsOfTextEl.textContent = "Price Updated: " + dm + " & " + hm;
