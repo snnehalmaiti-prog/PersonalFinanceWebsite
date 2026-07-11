@@ -10632,6 +10632,22 @@
             pricesUpdatedEl.textContent = "";
           }
         }
+        // Visible "Price Updated: DD/MM & HH:MM" pill (mirrors the MF NAV Data pill).
+        var priceAsOfEl = document.getElementById("stocksetf-price-asof");
+        var priceAsOfTextEl = document.getElementById("stocksetf-price-asof-text");
+        if (priceAsOfEl && priceAsOfTextEl) {
+          if (pricesAvailable && stockData.updated) {
+            var u = new Date(stockData.updated);
+            var dm = u.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit" });
+            var hm = u.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+            priceAsOfTextEl.textContent = "Price Updated: " + dm + " & " + hm;
+            var isStalePrice = (Date.now() - u.getTime()) > (1000 * 60 * 60 * 24);
+            priceAsOfEl.classList.toggle("stale", isStalePrice);
+            priceAsOfEl.hidden = false;
+          } else {
+            priceAsOfEl.hidden = true;
+          }
+        }
 
         var rowsData = [];
 
