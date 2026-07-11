@@ -2858,8 +2858,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Settlement two-person card layout */
 .settlement-cards { display: flex; gap: 16px; margin-top: 4px; }
 .settlement-person-card {
-  flex: 1; border: 1px solid var(--border); border-radius: 12px;
+  flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 12px;
   overflow: hidden; background: var(--surface);
+}
+@media (max-width: 760px) {
+  .settlement-cards { flex-direction: column; }
 }
 .settlement-person-header {
   display: flex; align-items: center; gap: 10px;
