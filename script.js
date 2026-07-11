@@ -8481,16 +8481,35 @@
   }
 
   var __profitCatYear = "all";
+  var __profitCatPortfolio = "all";
   var __profitCatExpanded = {}; // category → expanded?
   function renderProfitByCategoryCard() {
     var listEl = document.getElementById("profit-cat-list");
     var totalEl = document.getElementById("profit-cat-total");
     var labelEl = document.getElementById("profit-cat-total-label");
     var yearSel = document.getElementById("profit-cat-year");
+    var portSel = document.getElementById("profit-cat-portfolio");
     var statusEl = document.getElementById("profit-cat-status");
     if (!listEl || !totalEl || !yearSel) return;
 
-    var portfolioFilter = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    // Portfolio dropdown: All Portfolios + each portfolio (independent of the
+    // Overview selector).
+    if (portSel) {
+      var portNames = collectPortfolioNamesFromSheets(["equity", "stocksetf"]) || [];
+      var wantPorts = ["all"].concat(portNames);
+      var havePorts = [];
+      for (var pi = 0; pi < portSel.options.length; pi++) havePorts.push(portSel.options[pi].value);
+      if (havePorts.join(",") !== wantPorts.join(",")) {
+        portSel.innerHTML = wantPorts.map(function (p) {
+          return '<option value="' + escapeHtml(p) + '">' + (p === "all" ? "All Portfolios" : escapeHtml(p)) + '</option>';
+        }).join("");
+      }
+      if (wantPorts.indexOf(__profitCatPortfolio) === -1) __profitCatPortfolio = "all";
+      portSel.value = __profitCatPortfolio;
+      portSel.onchange = function () { __profitCatPortfolio = portSel.value; renderProfitByCategoryCard(); };
+    }
+
+    var portfolioFilter = __profitCatPortfolio;
     buildRealizedProfitByCategory(portfolioFilter).then(function (data) {
       var years = data.years || [];
       // Year dropdown: All time + each year (desc). Rebuild only when changed.

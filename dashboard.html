@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=profitcat1" />
+<link rel="stylesheet" href="styles.css?v=profitcat2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -337,7 +337,10 @@
       <div class="isc-card" id="profit-cat-card">
         <div class="isc-header">
           <h3 class="isc-title">Realized Profit</h3>
-          <select id="profit-cat-year" class="mic-dropdown-btn mic-year-sel" aria-label="Select year"></select>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="profit-cat-portfolio" class="mic-dropdown-btn mic-year-sel" aria-label="Select portfolio"></select>
+            <select id="profit-cat-year" class="mic-dropdown-btn mic-year-sel" aria-label="Select year"></select>
+          </div>
         </div>
         <div class="isc-total-block">
           <span class="isc-total-label" id="profit-cat-total-label">REALIZED PROFIT</span>
@@ -3252,7 +3255,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=profitcat1"></script>
+  <script src="script.js?v=profitcat2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
