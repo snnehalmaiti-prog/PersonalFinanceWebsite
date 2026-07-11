@@ -8071,6 +8071,16 @@
         barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
         return;
       }
+      // Reconcile to the Overview's authoritative CURRENT total (same treatment
+      // as the Portfolio view), so switching Portfolio↔Region keeps the same
+      // "Current Total". Region proportions are preserved by scaling the
+      // invested-basis slices onto the current total.
+      var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
+      var overviewTotal = getOverviewCurrentTotal();
+      if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
+        var sc = overviewTotal / rawSum;
+        entries.forEach(function (e) { e.value *= sc; });
+      }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
       totalEl.textContent = formatCurrency(total);
       barEl.innerHTML = entries.map(function (e) {
