@@ -343,9 +343,9 @@
       });
       if (key === "stocksetf") renderStockEtfHoldingsTable();
       if (key === "equity") renderEquityHoldingsTable();
-      // "Refresh Current Value" applies to Mutual Fund + Stocks/ETF only.
+      // "Refresh NAV" applies to the Mutual Fund tab only.
       var refreshBtn = document.getElementById("equity-refresh-nav");
-      if (refreshBtn) refreshBtn.style.display = (key === "fixedincome") ? "none" : "";
+      if (refreshBtn) refreshBtn.style.display = (key === "equity") ? "" : "none";
     }
 
     investSubTabs.forEach(function (entry) {
