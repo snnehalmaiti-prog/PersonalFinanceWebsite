@@ -8789,6 +8789,11 @@
   function renderMonthlyInvestmentByCategory() {
     var statusEl = document.getElementById("monthly-invest-cat-status");
     var yearSel = document.getElementById("monthly-invest-cat-year");
+    var portNameEl = document.getElementById("mic-portfolio-name");
+    if (portNameEl) {
+      var ovPort = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+      portNameEl.textContent = ovPort === "all" ? "" : " · " + ovPort;
+    }
     if (typeof Chart === "undefined") return;
 
     // Rebuild raw data
