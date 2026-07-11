@@ -2963,6 +2963,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
+/* Accounts-tab charts: two columns on desktop, single column on mobile so
+   every chart renders full-width and stays fully visible. */
+.acc-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+@media (max-width: 760px) {
+  .acc-charts-grid { grid-template-columns: 1fr; }
+}
 .acc-card {
   background: var(--surface);
   border: 1px solid var(--border);
