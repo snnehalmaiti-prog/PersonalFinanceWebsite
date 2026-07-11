@@ -343,6 +343,9 @@
       });
       if (key === "stocksetf") renderStockEtfHoldingsTable();
       if (key === "equity") renderEquityHoldingsTable();
+      // "Refresh Current Value" applies to Mutual Fund + Stocks/ETF only.
+      var refreshBtn = document.getElementById("equity-refresh-nav");
+      if (refreshBtn) refreshBtn.style.display = (key === "fixedincome") ? "none" : "";
     }
 
     investSubTabs.forEach(function (entry) {
@@ -5277,12 +5280,14 @@
       equityRefreshNavBtn.disabled = true;
       equityRefreshNavBtn.textContent = "Triggering…";
 
-      // Clear locally cached NAV/ISIN data
+      // Clear locally cached NAV/ISIN data (Mutual Funds) + stock prices
+      // (Stocks/ETF) so both current values re-fetch fresh.
       Object.keys(localStorage).forEach(function (key) {
         if (key.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(key);
       });
       localStorage.removeItem(AMFI_ISIN_MAP_CACHE_KEY);
       localStorage.removeItem(AMFI_NAV_MAP_CACHE_KEY);
+      localStorage.removeItem("wf-stock-prices-json");
 
       // Trigger AMFI NAV and ISIN Map workflows via GitHub API if credentials are saved
       var gh = loadGhSettings();
@@ -5311,6 +5316,7 @@
       updateDashboardStats();
       renderValueChart();
       renderEquityHoldingsTable();
+      renderStockEtfHoldingsTable();
       renderMarketSegmentChart();
       renderMutualFundPortfolioSplitChart();
       renderInvestmentSplitChart();

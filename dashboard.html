@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=refreshlbl1" />
+<link rel="stylesheet" href="styles.css?v=refreshmove1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -377,6 +377,7 @@
         <button type="button" class="invest-sub-tab active" id="subtab-equity" role="tab" aria-selected="true" aria-controls="subpanel-equity">Mutual Fund</button>
         <button type="button" class="invest-sub-tab" id="subtab-stocksetf" role="tab" aria-selected="false" aria-controls="subpanel-stocksetf">Stocks/ETF</button>
         <button type="button" class="invest-sub-tab" id="subtab-fixedincome" role="tab" aria-selected="false" aria-controls="subpanel-fixedincome">Fixed Income/Commodity</button>
+        <button type="button" id="equity-refresh-nav" class="btn btn-outline btn-sm" style="margin-left:auto;flex-shrink:0;">Refresh Current Value</button>
       </div>
 
       <div id="subpanel-equity">
@@ -386,7 +387,6 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
           <span id="equity-nav-asof-text">—</span>
         </p>
-        <button type="button" id="equity-refresh-nav" class="btn btn-outline btn-sm">Refresh Current Value</button>
         <button type="button" id="equity-refresh" hidden aria-label="Refresh Mutual Fund data"></button>
       </div>
 
@@ -3255,7 +3255,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=refreshlbl1"></script>
+  <script src="script.js?v=refreshmove1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
