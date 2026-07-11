@@ -8686,8 +8686,8 @@
       if (__monthlyInvestCatSplit) {
         // Split mode: "₹X avg invested / month" headline only — legend carries per-category avgs
         statsEl.innerHTML =
-          '<div class="mic-stat"><span class="mic-stat-value" style="font-size:1.5rem;">' +
-          fmtCompact(avgPerMonth) + '</span><span class="mic-stat-label" style="font-size:0.75rem;letter-spacing:0;">avg invested / month</span></div>';
+          '<div class="mic-stat"><span class="mic-stat-value">' +
+          fmtCompact(avgPerMonth) + '</span><span class="mic-stat-label">avg invested / month</span></div>';
       } else {
         var hasOut = totalOut > 0;
         var peakFmt = peakVal > 0 ? (peakLabel + " &middot; " + formatCurrency(peakVal)) : "—";
