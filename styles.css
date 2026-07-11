@@ -3275,6 +3275,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .mic-dropdown-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 .mic-year-sel { padding-right: 10px; }
+/* Compact selectors on the Realized Profit card */
+#profit-cat-card .mic-dropdown-btn { padding: 3px 8px; font-size: 0.68rem; gap: 3px; }
 .mic-stats-row {
   display: flex;
   gap: 20px;
