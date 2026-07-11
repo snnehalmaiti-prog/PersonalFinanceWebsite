@@ -939,6 +939,46 @@
     return total;
   }
 
+  // Stocks/ETF realized return in INR — like sumUnitBasedRealizedReturn but
+  // converts US buy costs and sale proceeds to INR at each leg's transaction-date
+  // USD/INR rate (the plain version leaves US figures in USD). Async (needs the
+  // rate history). Returns Promise<number>.
+  function computeStocksEtfRealizedINR(portfolioFilter) {
+    return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var rows = getSheetRows("stocksetf");
+      if (!rows) return 0;
+      var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+      if (!tx) return 0;
+      var total = 0;
+      Object.keys(tx).forEach(function (instr) {
+        var m = seMap[normalizeText(instr)];
+        var isUsd = !!(m && normalizeText(m.region) === "us");
+        var lots = [];
+        tx[instr].forEach(function (t) {
+          if (t.type === "buy") {
+            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            lots.push({ units: t.units, cost: t.price * r });
+            return;
+          }
+          var toMatch = t.units, cm = 0, mt = 0;
+          while (toMatch > 0 && lots.length) {
+            var l = lots[0];
+            var q = Math.min(toMatch, l.units);
+            cm += q * l.cost; mt += q; l.units -= q; toMatch -= q;
+            if (l.units <= 0) lots.shift();
+          }
+          if (mt <= 0) return;
+          var sr = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+          total += mt * t.price * sr - cm;
+        });
+      });
+      return total;
+    });
+  }
+
   function computeInstrumentRealizedDetail(txns) {
     var buyLots = [];
     var costOfSoldUnits = 0;
@@ -1512,6 +1552,15 @@
     _ov.mfRealized = mfRealized;
     _ov.seRealized = seRealized;
     refreshOverviewStats(); refreshCategoryCards();
+
+    // The sync seRealized above leaves US sells in USD. Recompute it in INR
+    // (US converted at each leg's transaction-date rate) and refresh.
+    computeStocksEtfRealizedINR(selected).then(function (seINR) {
+      if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selected) return; // portfolio changed meanwhile
+      _ov.seRealized = seINR;
+      if (stocksEtfRealizedEl) setSignedCurrency(stocksEtfRealizedEl, seINR);
+      refreshOverviewStats(); refreshCategoryCards();
+    }).catch(function () {});
 
     // Commodity invested amount added to Fixed Income asynchronously
     var fdRowsInv = getSheetRows("fd");
@@ -8412,7 +8461,19 @@
   // category. US sells/costs are converted to INR at each leg's transaction-date
   // rate. Returns Promise<{ buckets, years }>, where buckets[year|"all"][cat][sub].
   function buildRealizedProfitByCategory(portfolioFilter) {
-    return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+    var fdRows = getSheetRows("fd");
+    var commDates = (fdRows && typeof collectCommodityUniqueDates === "function")
+      ? collectCommodityUniqueDates(fdRows, portfolioFilter) : [];
+    return Promise.all([
+      fetchAllStockPrices().catch(function () { return {}; }),
+      fdRows ? fetchGoldPriceINRPerGram().catch(function () { return null; }) : Promise.resolve(null),
+      Promise.all(commDates.map(function (d) {
+        return fetchXauInrForDate(d).then(function (p) { return { d: d, p: p }; }).catch(function () { return { d: d, p: null }; });
+      }))
+    ]).then(function (res) {
+      var sp = res[0], goldPrice = res[1];
+      var commHist = {};
+      res[2].forEach(function (r) { if (r.p) commHist[r.d] = r.p; });
       var usdInr = (sp && sp.usd_inr_history) || {};
       var usdToday = (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84;
       var seMap = buildStockMappingTable();
@@ -8427,6 +8488,14 @@
           buckets[Y][cat] = buckets[Y][cat] || {};
           buckets[Y][cat][sub] = (buckets[Y][cat][sub] || 0) + amt;
         });
+      }
+      // For realized amounts that can't be attributed to a specific year
+      // (FD accrued interest, PF interest): count only under "All time".
+      function addAllOnly(cat, sub, amt) {
+        if (!amt) return;
+        buckets["all"] = buckets["all"] || {};
+        buckets["all"][cat] = buckets["all"][cat] || {};
+        buckets["all"][cat][sub] = (buckets["all"][cat][sub] || 0) + amt;
       }
 
       [{ prefix: "equity", defCat: "Mutual Funds" }, { prefix: "stocksetf", defCat: "Stocks/ETF" }].forEach(function (spec) {
@@ -8475,6 +8544,27 @@
           });
         });
       });
+
+      // Commodity (physical gold/silver from the fd sheet): realized on sale,
+      // attributed to the sell year and its sub-category.
+      if (fdRows && goldPrice) {
+        var commHoldings = buildCommodityHoldingsList(fdRows, portfolioFilter, goldPrice, commHist) || [];
+        commHoldings.forEach(function (h) {
+          if (!h.realizedProfit) return;
+          var yr = h.sellDateStr ? h.sellDateStr.slice(0, 4) : null;
+          var sub = h.subCategory || "Commodity";
+          if (yr) add(yr, "Commodity", sub, h.realizedProfit);
+          else addAllOnly("Commodity", sub, h.realizedProfit);
+        });
+      }
+
+      // Fixed Income realized — FD accrued interest + Provident Fund interest.
+      // These accrue continuously (not booked in a single year), so they're
+      // shown only under "All time".
+      if (fdRows) {
+        addAllOnly("Fixed Income", "Fixed Deposit", sumFdRealizedProfit(fdRows, portfolioFilter));
+        addAllOnly("Fixed Income", "Provident Fund", sumProvidentFundRealizedProfit(fdRows, portfolioFilter));
+      }
 
       return { buckets: buckets, years: Object.keys(years).sort() };
     });
@@ -8540,12 +8630,13 @@
       totalEl.className = "isc-total-value " + (grand > 0 ? "positive" : grand < 0 ? "negative" : "");
       totalEl.title = Math.abs(grand) >= 1e7 ? (grand >= 0 ? "+" : "") + formatCurrencyFull(grand) : "";
 
+      var yearNote = __profitCatYear === "all" ? "" : "Fixed Income (FD/PF) interest is shown under All time only.";
       if (!cats.length) {
         listEl.innerHTML = "";
         if (statusEl) statusEl.textContent = "No realized profit booked" + (__profitCatYear === "all" ? " yet." : " in " + __profitCatYear + ".");
         return;
       }
-      if (statusEl) statusEl.textContent = "";
+      if (statusEl) statusEl.textContent = yearNote;
 
       listEl.innerHTML = cats.map(function (c) {
         var expanded = !!__profitCatExpanded[c.cat];
