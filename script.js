@@ -8032,7 +8032,7 @@
   }
 
   function _renderRegionSplit(prefixes, fiExcluded, statusEl) {
-    var selectedPortfolio = "all";
+    var selected = "all";
     var barEl = document.getElementById("isc-bar");
     var listEl = document.getElementById("isc-list");
     var totalEl = document.getElementById("isc-total-value");
