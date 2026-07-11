@@ -380,6 +380,20 @@
       if (!entry.tab) return;
       entry.tab.addEventListener("click", function () { showDashboardTab(entry.key); });
     });
+
+    // On mobile devices, only the Expense tab is available — hide the Overview
+    // and Investments tabs (header + left drawer) and default to Expense.
+    if (window.matchMedia && window.matchMedia("(max-width: 760px)").matches) {
+      ["tab-overview", "tab-investment"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      });
+      document.querySelectorAll('.left-drawer-item[data-tab="overview"], .left-drawer-item[data-tab="investment"]').forEach(function (el) {
+        var li = el.closest("li") || el;
+        li.style.display = "none";
+      });
+      showDashboardTab("expense");
+    }
   }
 
   // ===== Left nav drawer (mobile) =====
