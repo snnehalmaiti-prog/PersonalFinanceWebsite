@@ -7746,22 +7746,30 @@
       return true;
     });
 
-    // Which top-level categories have sub-categories with data (for drill affordance).
+    // Records carry the category in category_id and the sub-category in
+    // subcategory_id (a category with parent_id). Resolve the top-level category,
+    // and derive the sub from subcategory_id (or category_id itself if that is a
+    // child). hasSubByTop marks categories that actually have sub-category spend.
     var sums = {}, keyIds = {};
     var hasSubByTop = {};
+    function subIdOf(r, top) {
+      if (r.subcategory_id) return r.subcategory_id;
+      if (catById[r.category_id] && catById[r.category_id].parent_id) return r.category_id; // category_id is itself a sub
+      return "__other_" + top;
+    }
     yearRecs.forEach(function (r) {
       if (!r.category_id) return;
       var top = topLevelId(r.category_id);
+      var hasSub = !!(r.subcategory_id || (catById[r.category_id] && catById[r.category_id].parent_id));
       if (__epcDrillCat) {
         if (top !== __epcDrillCat) return;
-        // group by sub-category (the record's own category if it's a child, else "Other")
-        var subId = (catById[r.category_id] && catById[r.category_id].parent_id) ? r.category_id : ("__other_" + __epcDrillCat);
+        var subId = subIdOf(r, top);
         sums[subId] = (sums[subId] || 0) + Number(r.amount);
         keyIds[subId] = subId;
       } else {
         sums[top] = (sums[top] || 0) + Number(r.amount);
         keyIds[top] = top;
-        if (catById[r.category_id] && catById[r.category_id].parent_id) hasSubByTop[top] = true;
+        if (hasSub) hasSubByTop[top] = true;
       }
     });
 
