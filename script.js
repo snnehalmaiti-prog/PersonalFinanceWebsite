@@ -7662,9 +7662,140 @@
       };
     }
     _drawMcfChart();
+    try { renderExpenseCategoryPie(); } catch (e) {}
   }
 
   window.renderMonthlyCashFlow = renderMonthlyCashFlow;
+
+  // ─── Expense by Category pie (with year selector + category→sub drill-down) ──
+  var __epcYear = null;
+  var __epcDrillCat = null; // null = top-level categories; else a categoryId
+  var __EPC_PALETTE = ["#E8623A", "#F5A623", "#4DC0B5", "#8B5CF6", "#3B82F6", "#10B981",
+                       "#EC4899", "#84CC16", "#F97316", "#6366F1", "#14B8A6", "#D946EF"];
+  function renderExpenseCategoryPie() {
+    var canvas = document.getElementById("epc-chart");
+    var statusEl = document.getElementById("epc-status");
+    var yearSel = document.getElementById("epc-year");
+    var backBtn = document.getElementById("epc-back");
+    var subtitleEl = document.getElementById("epc-subtitle");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    var records = (window.dashExpState && window.dashExpState.records) || [];
+    var categories = (window.dashExpState && window.dashExpState.categories) || [];
+    var catById = {};
+    categories.forEach(function (c) { catById[c.id] = c; });
+    function topLevelId(catId) {
+      var c = catById[catId];
+      return (c && c.parent_id) ? c.parent_id : catId;
+    }
+    function nameOf(catId) {
+      var c = catById[catId];
+      return (c && c.name) ? c.name : "Uncategorized";
+    }
+
+    // Year list from expense records.
+    var yearSet = {};
+    records.forEach(function (r) {
+      if (r.type === "expense" && r.txn_date) yearSet[String(r.txn_date).slice(0, 4)] = 1;
+    });
+    var yearList = Object.keys(yearSet).sort();
+    if (!yearList.length) {
+      if (statusEl) statusEl.textContent = "No expense records yet.";
+      if (window.__epcChart) { try { window.__epcChart.destroy(); } catch (e) {} window.__epcChart = null; }
+      return;
+    }
+    if (!__epcYear || yearList.indexOf(__epcYear) < 0) __epcYear = yearList[yearList.length - 1];
+    if (yearSel) {
+      var existing = [];
+      for (var oi = 0; oi < yearSel.options.length; oi++) existing.push(yearSel.options[oi].value);
+      if (existing.join(",") !== yearList.join(",")) {
+        yearSel.innerHTML = yearList.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join("");
+      }
+      yearSel.value = __epcYear;
+      yearSel.onchange = function () { __epcYear = yearSel.value; __epcDrillCat = null; renderExpenseCategoryPie(); };
+    }
+    if (backBtn) {
+      backBtn.style.display = __epcDrillCat ? "" : "none";
+      backBtn.onclick = function () { __epcDrillCat = null; renderExpenseCategoryPie(); };
+    }
+    if (subtitleEl) subtitleEl.textContent = __epcDrillCat ? (" · " + nameOf(__epcDrillCat)) : "";
+
+    // Aggregate expenses for the selected year.
+    var yearRecs = records.filter(function (r) {
+      return r.type === "expense" && r.txn_date && String(r.txn_date).slice(0, 4) === __epcYear && Number(r.amount);
+    });
+
+    // Which top-level categories have sub-categories with data (for drill affordance).
+    var sums = {}, keyIds = {};
+    var hasSubByTop = {};
+    yearRecs.forEach(function (r) {
+      if (!r.category_id) return;
+      var top = topLevelId(r.category_id);
+      if (__epcDrillCat) {
+        if (top !== __epcDrillCat) return;
+        // group by sub-category (the record's own category if it's a child, else "Other")
+        var subId = (catById[r.category_id] && catById[r.category_id].parent_id) ? r.category_id : ("__other_" + __epcDrillCat);
+        sums[subId] = (sums[subId] || 0) + Number(r.amount);
+        keyIds[subId] = subId;
+      } else {
+        sums[top] = (sums[top] || 0) + Number(r.amount);
+        keyIds[top] = top;
+        if (catById[r.category_id] && catById[r.category_id].parent_id) hasSubByTop[top] = true;
+      }
+    });
+
+    var entries = Object.keys(sums).map(function (id) {
+      var label = (id.indexOf("__other_") === 0) ? "Other" : nameOf(id);
+      return { id: id, label: label, value: sums[id] };
+    }).filter(function (e) { return e.value > 0; })
+      .sort(function (a, b) { return b.value - a.value; });
+
+    if (!entries.length) {
+      if (statusEl) statusEl.textContent = "No expenses" + (__epcDrillCat ? " in this category" : "") + " for " + __epcYear + ".";
+      if (window.__epcChart) { try { window.__epcChart.destroy(); } catch (e) {} window.__epcChart = null; }
+      return;
+    }
+    var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+    if (statusEl) statusEl.textContent = (__epcDrillCat ? nameOf(__epcDrillCat) + " · " : "") + "Total " + formatCurrency(total) + " · " + __epcYear +
+      (__epcDrillCat ? "" : " · tap a slice for sub-categories");
+
+    var colors = entries.map(function (_, i) { return __EPC_PALETTE[i % __EPC_PALETTE.length]; });
+    if (window.__epcChart) { try { window.__epcChart.destroy(); } catch (e) {} window.__epcChart = null; }
+    window.__epcChart = new Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: entries.map(function (e) { return e.label; }),
+        datasets: [{ data: entries.map(function (e) { return e.value; }), backgroundColor: colors, borderWidth: 1, borderColor: "#fff" }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        cutout: "58%",
+        plugins: {
+          legend: { position: "right", labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 }, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var v = ctx.parsed || 0;
+                var pct = total > 0 ? (v / total * 100).toFixed(1) : "0";
+                return ctx.label + ": " + formatCurrency(v) + " (" + pct + "%)";
+              }
+            }
+          }
+        },
+        onClick: function (evt, els) {
+          if (__epcDrillCat) return; // already drilled — no further levels
+          if (!els || !els.length) return;
+          var id = entries[els[0].index].id;
+          if (!hasSubByTop[id]) return; // no sub-categories to drill into
+          __epcDrillCat = id;
+          renderExpenseCategoryPie();
+        }
+      }
+    });
+    // Pointer cursor over drillable slices.
+    canvas.style.cursor = __epcDrillCat ? "default" : "pointer";
+  }
+  window.renderExpenseCategoryPie = renderExpenseCategoryPie;
 
   function _drawMcfChart() {
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];

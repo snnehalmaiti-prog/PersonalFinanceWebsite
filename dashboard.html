@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=hideytd1" />
+<link rel="stylesheet" href="styles.css?v=exppie1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -367,6 +367,21 @@
         <p class="muted small" id="mcf-status" style="margin:0;padding:0 20px 4px;font-size:0.7rem;"></p>
         <div id="mcf-wrap" style="position:relative;height:280px;"></div>
         <div class="mic-legend" id="mcf-legend"></div>
+      </div>
+
+      <!-- Expense by category pie (with year selector + category→subcategory drill-down) -->
+      <div class="value-chart-card mic-card" id="expense-pie-card" style="flex:1 1 calc(50% - 8px);min-width:300px;box-sizing:border-box;">
+        <div class="mic-header">
+          <div class="mic-title-group">
+            <span class="mic-eyebrow">EXPENSE BY CATEGORY<span id="epc-subtitle" class="mic-portfolio-name"></span></span>
+          </div>
+          <div class="mic-controls">
+            <button id="epc-back" type="button" class="mic-dropdown-btn" style="display:none;">‹ Back</button>
+            <select id="epc-year" class="mic-dropdown-btn mic-year-sel" aria-label="Select year"></select>
+          </div>
+        </div>
+        <p class="muted small" id="epc-status" style="margin:0;padding:0 20px 4px;font-size:0.7rem;"></p>
+        <div id="epc-wrap" style="position:relative;height:280px;"><canvas id="epc-chart"></canvas></div>
       </div>
       </div><!-- /monthly-cashflow-row -->
 
@@ -3284,7 +3299,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=hideytd1"></script>
+  <script src="script.js?v=exppie1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
