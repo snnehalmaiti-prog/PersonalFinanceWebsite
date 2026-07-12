@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=modalmargin1" />
+<link rel="stylesheet" href="styles.css?v=numpad1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -858,7 +858,7 @@
               <label class="rec-field">
                 <span>Amount <span style="color:#EF4444;">*</span></span>
                 <div style="display:flex; gap:8px;">
-                  <input type="number" id="rec-amount" step="0.01" min="0" required style="flex:1;" />
+                  <input type="number" id="rec-amount" inputmode="decimal" step="0.01" min="0" required style="flex:1;" />
                   <input type="text" value="INR" readonly style="width:80px; background:#f3f4f6;" />
                 </div>
               </label>
@@ -2966,7 +2966,7 @@
           if (isEditable) {
             return '<div style="display:flex; align-items:center; gap:8px;">' +
               '<span style="flex:1; font-size:0.875rem;">' + esc(a.name) + '</span>' +
-              '<input type="number" data-split-id="' + a.id + '" min="0" max="100" value="' + initVal + '" ' +
+              '<input type="number" inputmode="numeric" data-split-id="' + a.id + '" min="0" max="100" value="' + initVal + '" ' +
                 'style="width:70px; padding:5px 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font-size:0.875rem; text-align:right;" />' +
               '<span style="font-size:0.875rem; color:var(--muted);">%</span>' +
             '</div>';
@@ -3264,7 +3264,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=modalmargin1"></script>
+  <script src="script.js?v=numpad1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
