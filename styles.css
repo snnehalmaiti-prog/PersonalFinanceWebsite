@@ -2975,6 +2975,20 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 @media (max-width: 900px) {
   .exp-top-bar { grid-template-columns: auto 1fr auto; gap: 8px; }
 }
+/* On mobile, drop the period picker to its own full-width row under the
+   sub-tabs (Records & Analytics). */
+@media (max-width: 760px) {
+  .exp-top-bar {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "subtabs add"
+      "period  period";
+  }
+  .exp-subtabs { grid-area: subtabs; min-width: 0; }
+  .rec-add-btn { grid-area: add; }
+  .exp-top-bar-center { grid-area: period; margin-top: 10px; }
+  .exp-top-bar-center .rec-period-picker { width: 100%; max-width: 100%; }
+}
 
 /* ── Account cards (new design) ─────────────────────────────────────────── */
 .acc-cards-grid {
