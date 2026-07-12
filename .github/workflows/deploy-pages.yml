@@ -17,8 +17,8 @@ name: Deploy static site to Pages
 
 on:
   workflow_dispatch: {}
-  # push:
-  #   branches: [claude/gracious-gates-yxh1l8]
+  push:
+    branches: [claude/website-pva-plan-efolua]
 
 permissions:
   contents: read
