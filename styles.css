@@ -3667,3 +3667,69 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-num-xirr { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-xirr.mfh-negative { color: var(--negative); }
 .mfh-num-xirr.mfh-muted { color: var(--muted); }
+
+/* ── PWA install chip ─────────────────────────────────────────────────── */
+.pwa-install-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--emerald);
+  background: color-mix(in srgb, var(--emerald) 10%, transparent);
+  color: var(--emerald);
+  font: 600 0.82rem/1 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.pwa-install-chip:hover  { background: color-mix(in srgb, var(--emerald) 18%, transparent); }
+.pwa-install-chip:active { transform: scale(0.97); }
+.pwa-install-chip svg    { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .pwa-install-chip span { display: none; }
+  .pwa-install-chip      { width: 36px; padding: 0; justify-content: center; }
+}
+
+/* ── PWA update toast ─────────────────────────────────────────────────── */
+.pwa-update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px 10px 16px;
+  border-radius: 12px;
+  background: var(--navy, #2B2A25);
+  color: #fff;
+  font: 500 0.88rem/1.2 "Inter", system-ui, sans-serif;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  animation: pwa-toast-in 0.25s ease-out;
+}
+@keyframes pwa-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.pwa-update-toast button {
+  border: none;
+  cursor: pointer;
+  font: 600 0.85rem "Inter", system-ui, sans-serif;
+}
+#pwa-update-reload {
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--emerald, #1F9D6B);
+  color: #fff;
+}
+#pwa-update-reload:active { transform: scale(0.97); }
+#pwa-update-dismiss {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 2px 6px;
+}
