@@ -2424,8 +2424,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-field > span { font-size: 0.85rem; font-weight: 600; }
 .rec-field input, .rec-field select, .rec-field textarea {
   padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
-  font-size: 14px; font: inherit; background: var(--surface); color: var(--text);
+  font-size: 14px; background: var(--surface); color: var(--text);
+  width: 100%; box-sizing: border-box; text-align: left;
 }
+.rec-field select { text-align-last: left; }
 .rec-field textarea { resize: vertical; }
 .rec-type-toggle {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
