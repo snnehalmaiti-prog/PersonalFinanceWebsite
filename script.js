@@ -7670,7 +7670,10 @@
   // ─── Expense by Category pie (with year selector + category→sub drill-down) ──
   var __epcYear = null;
   var __epcAccount = "all"; // "all" or an account_id
+  var __epcMonthMode = false; // false = whole year; true = a specific month
+  var __epcMonth = new Date().getMonth(); // 0-11 when in month mode
   var __epcDrillCat = null; // null = top-level categories; else a categoryId
+  var __EPC_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   var __EPC_PALETTE = ["#E8623A", "#F5A623", "#4DC0B5", "#8B5CF6", "#3B82F6", "#10B981",
                        "#EC4899", "#84CC16", "#F97316", "#6366F1", "#14B8A6", "#D946EF"];
   function renderExpenseCategoryPie() {
@@ -7741,10 +7744,29 @@
       acctSel.onchange = function () { __epcAccount = acctSel.value; __epcDrillCat = null; renderExpenseCategoryPie(); };
     }
 
-    // Aggregate expenses for the selected year + account.
+    // Month toggle + month dropdown: when active, view a specific month of the year.
+    var monthToggle = document.getElementById("epc-month-toggle");
+    var monthSel = document.getElementById("epc-month");
+    if (monthSel && !monthSel.options.length) {
+      monthSel.innerHTML = __EPC_MONTHS.map(function (n, i) { return '<option value="' + i + '">' + n + '</option>'; }).join("");
+    }
+    if (monthToggle) {
+      monthToggle.classList.toggle("active", __epcMonthMode);
+      monthToggle.onclick = function () { __epcMonthMode = !__epcMonthMode; __epcDrillCat = null; renderExpenseCategoryPie(); };
+    }
+    if (monthSel) {
+      monthSel.style.display = __epcMonthMode ? "" : "none";
+      monthSel.value = String(__epcMonth);
+      monthSel.onchange = function () { __epcMonth = Number(monthSel.value); __epcDrillCat = null; renderExpenseCategoryPie(); };
+    }
+
+    // Aggregate expenses for the selected year (+ month when in month mode) + account.
+    var monKey = __epcMonthMode ? (__epcYear + "-" + String(__epcMonth + 1).padStart(2, "0")) : null;
+    var periodLbl = __epcMonthMode ? (__EPC_MONTHS[__epcMonth] + " " + __epcYear) : String(__epcYear);
     var yearRecs = records.filter(function (r) {
       if (r.type !== "expense" || !r.txn_date || !Number(r.amount)) return false;
-      if (String(r.txn_date).slice(0, 4) !== __epcYear) return false;
+      if (__epcMonthMode) { if (String(r.txn_date).slice(0, 7) !== monKey) return false; }
+      else if (String(r.txn_date).slice(0, 4) !== __epcYear) return false;
       if (__epcAccount !== "all" && String(r.account_id) !== __epcAccount) return false;
       return true;
     });
@@ -7783,12 +7805,12 @@
       .sort(function (a, b) { return b.value - a.value; });
 
     if (!entries.length) {
-      if (statusEl) statusEl.textContent = "No expenses" + (__epcDrillCat ? " in this category" : "") + " for " + __epcYear + ".";
+      if (statusEl) statusEl.textContent = "No expenses" + (__epcDrillCat ? " in this category" : "") + " for " + periodLbl + ".";
       if (window.__epcChart) { try { window.__epcChart.destroy(); } catch (e) {} window.__epcChart = null; }
       return;
     }
     var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
-    if (statusEl) statusEl.textContent = (__epcDrillCat ? nameOf(__epcDrillCat) + " · " : "") + "Total " + formatCurrency(total) + " · " + __epcYear +
+    if (statusEl) statusEl.textContent = (__epcDrillCat ? nameOf(__epcDrillCat) + " · " : "") + "Total " + formatCurrency(total) + " · " + periodLbl +
       (__epcDrillCat ? "" : " · tap a slice for sub-categories");
 
     var colors = entries.map(function (_, i) { return __EPC_PALETTE[i % __EPC_PALETTE.length]; });
