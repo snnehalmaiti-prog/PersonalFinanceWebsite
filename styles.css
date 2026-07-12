@@ -3179,6 +3179,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .rec-day-left { display: flex; align-items: center; gap: 8px; }
 .rec-day-weekday { font-weight: 700; font-size: 0.9rem; }
+/* On mobile, show only the date (hide the weekday name) in the day header. */
+@media (max-width: 760px) {
+  .rec-day-weekday { display: none; }
+}
 .rec-day-date { font-size: 0.85rem; color: var(--muted); }
 .rec-day-count {
   font-size: 0.75rem; background: var(--surface-alt); border: 1px solid var(--border);
