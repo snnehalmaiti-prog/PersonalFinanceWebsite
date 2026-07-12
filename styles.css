@@ -2475,6 +2475,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   max-height: calc(100vh - 100px);
   overflow-y: auto;
   padding-right: 4px;
+  min-width: 0; /* let wide tables (Analytics/breakdown) scroll internally instead of widening the page on mobile */
 }
 .rec-sidebar .rec-field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
 .rec-sidebar .rec-field > span { font-size: 0.85rem; font-weight: 600; }
