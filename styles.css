@@ -3250,10 +3250,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* ── Cash Flow YTD summary row ──────────────────────────────────────────── */
 .cashflow-ytd-row {
-  display: flex; gap: 18px; flex-wrap: wrap; margin: 4px 0 10px;
-  font-size: 0.82rem;
+  display: flex; gap: 14px; flex-wrap: nowrap; margin: 4px 0 10px;
+  font-size: 0.82rem; overflow-x: auto;
 }
-.cashflow-ytd-stat { display: flex; align-items: center; gap: 5px; }
+.cashflow-ytd-stat { display: flex; align-items: center; gap: 5px; white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 480px) {
+  .cashflow-ytd-row { gap: 10px; font-size: 0.72rem; }
+}
 .cashflow-ytd-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .cashflow-ytd-label { color: var(--muted); }
 .cashflow-ytd-val { font-weight: 600; color: var(--text); }
