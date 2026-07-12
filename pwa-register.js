@@ -10,6 +10,69 @@
  *   - Suppress on the marketing landing page (index.html) — installing only
  *     makes sense once the user is inside the app.
  */
+/* ── Service-worker registration + update toast (Phase 2) ─────────────────
+ *
+ * Registers sw.js for offline support and the app shell. Skips registration
+ * on localhost and when the page URL carries ?nosw=1, so the SW never masks
+ * bugs during local development or debugging. When a new SW is waiting, shows
+ * a non-blocking "Update available — Reload" toast that applies the update.
+ */
+(function () {
+  "use strict";
+
+  if (!("serviceWorker" in navigator)) return;
+
+  var host = location.hostname;
+  var isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  var noSW = /[?&]nosw=1\b/.test(location.search);
+  if (isLocalhost || noSW) return;
+
+  var refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+
+  function showUpdateToast(worker) {
+    if (document.getElementById("pwa-update-toast")) return;
+    var toast = document.createElement("div");
+    toast.id = "pwa-update-toast";
+    toast.className = "pwa-update-toast";
+    toast.setAttribute("role", "status");
+    toast.innerHTML =
+      '<span>A new version is available.</span>' +
+      '<button type="button" id="pwa-update-reload">Reload</button>' +
+      '<button type="button" id="pwa-update-dismiss" aria-label="Dismiss">&times;</button>';
+    (document.body || document.documentElement).appendChild(toast);
+    document.getElementById("pwa-update-reload").addEventListener("click", function () {
+      worker.postMessage({ type: "SKIP_WAITING" });
+    });
+    document.getElementById("pwa-update-dismiss").addEventListener("click", function () {
+      toast.parentNode && toast.parentNode.removeChild(toast);
+    });
+  }
+
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      // A worker is already waiting (update downloaded in a previous session).
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        showUpdateToast(reg.waiting);
+      }
+      reg.addEventListener("updatefound", function () {
+        var installing = reg.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", function () {
+          // Installed while an old controller is active => it's an update.
+          if (installing.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateToast(installing);
+          }
+        });
+      });
+    }).catch(function () { /* registration failed — app still works online */ });
+  });
+})();
+
 (function () {
   "use strict";
 

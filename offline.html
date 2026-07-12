@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Offline — PF Dashboard</title>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+<meta name="theme-color" content="#1F9D6B" />
+<style>
+  :root {
+    --emerald: #1F9D6B;
+    --navy: #2B2A25;
+    --bg: #ffffff;
+    --text: #2B2A25;
+    --muted: #6b6b64;
+    --surface: #f6f7f5;
+    --border: #e4e4de;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131210;
+      --text: #f2f1ec;
+      --muted: #a5a49c;
+      --surface: #1d1c19;
+      --border: #333229;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font: 400 16px/1.5 "Inter", system-ui, -apple-system, sans-serif;
+  }
+  .card {
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+  }
+  .mark {
+    width: 72px; height: 72px;
+    margin: 0 auto 20px;
+    border-radius: 20px;
+    background: var(--emerald);
+    display: flex; align-items: center; justify-content: center;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 8px; }
+  p { color: var(--muted); margin: 0 0 24px; }
+  .btn {
+    display: inline-block;
+    padding: 11px 22px;
+    border-radius: 999px;
+    border: none;
+    background: var(--emerald);
+    color: #fff;
+    font: 600 0.95rem "Inter", system-ui, sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn:active { transform: scale(0.98); }
+  .hint {
+    margin-top: 18px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #d14343;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 17.5L10.5 10L14 14.5L20 7" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>You're offline</h1>
+    <p>This page hasn't been saved for offline use yet. Reconnect to load it — pages you've already opened remain available offline.</p>
+    <button class="btn" onclick="location.reload()">Try again</button>
+    <p class="hint"><span class="dot"></span>No internet connection</p>
+  </div>
+  <script>
+    // Auto-reload the moment connectivity returns.
+    window.addEventListener("online", function () { location.reload(); });
+  </script>
+</body>
+</html>
