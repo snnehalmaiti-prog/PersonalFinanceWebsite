@@ -7669,6 +7669,7 @@
 
   // ─── Expense by Category pie (with year selector + category→sub drill-down) ──
   var __epcYear = null;
+  var __epcAccount = "all"; // "all" or an account_id
   var __epcDrillCat = null; // null = top-level categories; else a categoryId
   var __EPC_PALETTE = ["#E8623A", "#F5A623", "#4DC0B5", "#8B5CF6", "#3B82F6", "#10B981",
                        "#EC4899", "#84CC16", "#F97316", "#6366F1", "#14B8A6", "#D946EF"];
@@ -7682,6 +7683,7 @@
 
     var records = (window.dashExpState && window.dashExpState.records) || [];
     var categories = (window.dashExpState && window.dashExpState.categories) || [];
+    var accounts = (window.dashExpState && window.dashExpState.accounts) || [];
     var catById = {};
     categories.forEach(function (c) { catById[c.id] = c; });
     function topLevelId(catId) {
@@ -7720,9 +7722,28 @@
     }
     if (subtitleEl) subtitleEl.textContent = __epcDrillCat ? (" · " + nameOf(__epcDrillCat)) : "";
 
-    // Aggregate expenses for the selected year.
+    // Account dropdown: All accounts + each account.
+    var acctSel = document.getElementById("epc-account");
+    if (acctSel) {
+      var wantAcct = ["all"].concat(accounts.map(function (a) { return String(a.id); }));
+      var haveAcct = [];
+      for (var ai = 0; ai < acctSel.options.length; ai++) haveAcct.push(acctSel.options[ai].value);
+      if (haveAcct.join(",") !== wantAcct.join(",")) {
+        acctSel.innerHTML = '<option value="all">All accounts</option>' + accounts.map(function (a) {
+          return '<option value="' + escapeHtml(String(a.id)) + '">' + escapeHtml(a.name || "Account") + '</option>';
+        }).join("");
+      }
+      if (wantAcct.indexOf(__epcAccount) === -1) __epcAccount = "all";
+      acctSel.value = __epcAccount;
+      acctSel.onchange = function () { __epcAccount = acctSel.value; __epcDrillCat = null; renderExpenseCategoryPie(); };
+    }
+
+    // Aggregate expenses for the selected year + account.
     var yearRecs = records.filter(function (r) {
-      return r.type === "expense" && r.txn_date && String(r.txn_date).slice(0, 4) === __epcYear && Number(r.amount);
+      if (r.type !== "expense" || !r.txn_date || !Number(r.amount)) return false;
+      if (String(r.txn_date).slice(0, 4) !== __epcYear) return false;
+      if (__epcAccount !== "all" && String(r.account_id) !== __epcAccount) return false;
+      return true;
     });
 
     // Which top-level categories have sub-categories with data (for drill affordance).
