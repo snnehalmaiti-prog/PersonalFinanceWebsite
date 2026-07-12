@@ -2086,6 +2086,16 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   height: 36px; box-sizing: border-box; padding: 0 16px;
 }
 .rec-add-btn:hover { background: var(--emerald-dark, #15846b); color: #fff; }
+.rec-add-plus { font-weight: 700; }
+/* On mobile the "Add record" button collapses to a compact circular + button. */
+@media (max-width: 760px) {
+  .rec-add-btn .rec-add-text { display: none; }
+  .rec-add-btn {
+    width: 40px; height: 40px; padding: 0; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; line-height: 1;
+  }
+}
 .benchmark-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex-shrink: 1; }
 .benchmark-col-label {
   font-size: 0.68rem;
