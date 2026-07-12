@@ -2658,8 +2658,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* Compact record modal on mobile */
 @media (max-width: 600px) {
-  .rec-modal-overlay { padding: 8px; }
-  .rec-modal { max-height: 96vh; border-radius: 10px; }
+  .rec-modal-overlay { padding: 28px 16px; }
+  .rec-modal { max-height: 82vh; border-radius: 14px; }
   .rec-modal-header { padding: 10px 12px; }
   .rec-modal-header h3 { font-size: 1rem; }
   .rec-modal-body { padding: 12px; gap: 10px; }
