@@ -3667,3 +3667,26 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-num-xirr { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-xirr.mfh-negative { color: var(--negative); }
 .mfh-num-xirr.mfh-muted { color: var(--muted); }
+
+/* ── PWA install chip ─────────────────────────────────────────────────── */
+.pwa-install-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--emerald);
+  background: color-mix(in srgb, var(--emerald) 10%, transparent);
+  color: var(--emerald);
+  font: 600 0.82rem/1 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.pwa-install-chip:hover  { background: color-mix(in srgb, var(--emerald) 18%, transparent); }
+.pwa-install-chip:active { transform: scale(0.97); }
+.pwa-install-chip svg    { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .pwa-install-chip span { display: none; }
+  .pwa-install-chip      { width: 36px; padding: 0; justify-content: center; }
+}
