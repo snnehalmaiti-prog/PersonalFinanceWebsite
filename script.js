@@ -7771,7 +7771,7 @@
         responsive: true, maintainAspectRatio: false, animation: false,
         cutout: "58%",
         plugins: {
-          legend: { position: "right", labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 }, padding: 8 } },
+          legend: { display: false },
           tooltip: {
             callbacks: {
               label: function (ctx) {
@@ -7794,6 +7794,27 @@
     });
     // Pointer cursor over drillable slices.
     canvas.style.cursor = __epcDrillCat ? "default" : "pointer";
+
+    // Custom legend list showing every (sub)category with its expense + %.
+    var legendEl = document.getElementById("epc-legend");
+    if (legendEl) {
+      legendEl.innerHTML = entries.map(function (e, i) {
+        var pct = total > 0 ? (e.value / total * 100).toFixed(1) : "0";
+        var drillable = !__epcDrillCat && hasSubByTop[e.id];
+        return '<div class="epc-legend-item' + (drillable ? " epc-legend-drill" : "") + '"' +
+          (drillable ? ' role="button" tabindex="0" data-epc-cat="' + escapeHtml(String(e.id)) + '"' : "") + '>' +
+          '<span class="epc-legend-dot" style="background:' + colors[i] + '"></span>' +
+          '<span class="epc-legend-name"' + _crTitle(e.value) + '>' + escapeHtml(e.label) + '</span>' +
+          '<span class="epc-legend-val">' + formatCurrency(e.value) + '</span>' +
+          '<span class="epc-legend-pct">' + pct + '%</span></div>';
+      }).join("");
+      // Clicking a drillable legend row drills in, matching a slice click.
+      Array.prototype.forEach.call(legendEl.querySelectorAll("[data-epc-cat]"), function (row) {
+        function drill() { __epcDrillCat = row.getAttribute("data-epc-cat"); renderExpenseCategoryPie(); }
+        row.addEventListener("click", drill);
+        row.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); drill(); } });
+      });
+    }
   }
   window.renderExpenseCategoryPie = renderExpenseCategoryPie;
 

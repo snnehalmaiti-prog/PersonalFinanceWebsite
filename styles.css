@@ -3257,6 +3257,15 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-list-footer { font-size: 0.78rem; color: var(--muted); text-align: center; padding: 8px 0 4px; }
 
 /* ── Cash Flow YTD summary row ──────────────────────────────────────────── */
+/* Expense-by-category pie legend (label + amount + %) */
+.epc-legend { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px 4px; max-height: 150px; overflow-y: auto; }
+.epc-legend-item { display: grid; grid-template-columns: 12px 1fr auto auto; align-items: center; gap: 8px; padding: 3px 2px; font-size: 0.74rem; border-radius: 6px; }
+.epc-legend-drill { cursor: pointer; }
+.epc-legend-drill:hover { background: color-mix(in srgb, var(--surface-alt) 45%, transparent); }
+.epc-legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+.epc-legend-name { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epc-legend-val { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.epc-legend-pct { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
 .cashflow-ytd-row {
   display: flex; gap: 14px; flex-wrap: nowrap; margin: 4px 0 10px;
   font-size: 0.82rem; overflow-x: auto;
