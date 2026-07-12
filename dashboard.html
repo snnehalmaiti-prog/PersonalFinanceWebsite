@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=exppie5" />
+<link rel="stylesheet" href="styles.css?v=anayear1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1686,7 +1686,7 @@
       // ── Analytics table: category × (this period, previous period) ──────
       var anaPeriod = (function () {
         var d = new Date();
-        return { year: d.getFullYear(), month: d.getMonth() };
+        return { kind: "month", year: d.getFullYear(), month: d.getMonth() };
       })();
       var anaCollapsed = {};
       function anaMonthLabel(y, m) {
@@ -1696,10 +1696,13 @@
       function anaPrev(y, m) { return m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }; }
       function anaSumByCat(records, y, m) {
         // Returns { cats: {catId: {expense: n, budget: n, income: n, subs: {subId: n}}}, totals: {expense, budget, income} }
+        // m === null → aggregate the whole year y (used when a Year is selected).
         var result = { cats: {}, totals: { expense: 0, budget: 0, income: 0 } };
-        var key = String(y) + "-" + String(m + 1).padStart(2, "0");
+        var isYear = (m === null || m === undefined);
+        var key = isYear ? String(y) : (String(y) + "-" + String(m + 1).padStart(2, "0"));
+        var keyLen = isYear ? 4 : 7;
         records.forEach(function (r) {
-          if (!r.txn_date || r.txn_date.slice(0, 7) !== key) return;
+          if (!r.txn_date || r.txn_date.slice(0, keyLen) !== key) return;
           var amt = Number(r.amount) || 0;
           var t = r.type;
           if (t === "expense" || t === "budget" || t === "income") result.totals[t] += amt;
@@ -1762,15 +1765,23 @@
         var table = document.getElementById("ana-table");
         var lbl = document.getElementById("ana-period-label");
         if (!table) return;
-        var cur = { year: anaPeriod.year, month: anaPeriod.month };
-        var prev = anaPrev(cur.year, cur.month);
-        if (lbl) lbl.textContent = anaMonthLabel(cur.year, cur.month);
+        var isYear = anaPeriod.kind === "year";
+        var cur, prev, curLbl, prvLbl;
+        if (isYear) {
+          cur = { year: anaPeriod.year, month: null };
+          prev = { year: anaPeriod.year - 1, month: null };
+          curLbl = String(cur.year);
+          prvLbl = String(prev.year);
+        } else {
+          cur = { year: anaPeriod.year, month: anaPeriod.month };
+          prev = anaPrev(cur.year, cur.month);
+          curLbl = anaMonthLabel(cur.year, cur.month);
+          prvLbl = anaMonthLabel(prev.year, prev.month);
+        }
+        if (lbl) lbl.textContent = curLbl;
         var records = applyAnaFilters(dashExpState.records || []);
         var curAgg = anaSumByCat(records, cur.year, cur.month);
         var prvAgg = anaSumByCat(records, prev.year, prev.month);
-
-        var curLbl = anaMonthLabel(cur.year, cur.month);
-        var prvLbl = anaMonthLabel(prev.year, prev.month);
         var html = "";
         // ── Budget section ─────────────────────────────────────────────
         html += '<tr class="ana-period-row"><td></td><td>' + curLbl + '</td><td>' + prvLbl + '</td></tr>';
@@ -1918,10 +1929,12 @@
           var listEl = document.getElementById("ana-txn-list");
           var sub = dashExpState.categories.find(function (c) { return c.id === subId; });
           var parent = sub && sub.parent_id ? dashExpState.categories.find(function (c) { return c.id === sub.parent_id; }) : null;
-          var key = String(anaPeriod.year) + "-" + String(anaPeriod.month + 1).padStart(2, "0");
-          var monthLabel = anaMonthLabel(anaPeriod.year, anaPeriod.month);
+          var isYearDrill = anaPeriod.kind === "year";
+          var key = isYearDrill ? String(anaPeriod.year) : (String(anaPeriod.year) + "-" + String(anaPeriod.month + 1).padStart(2, "0"));
+          var keyLen = isYearDrill ? 4 : 7;
+          var monthLabel = isYearDrill ? String(anaPeriod.year) : anaMonthLabel(anaPeriod.year, anaPeriod.month);
           var records = applyAnaFilters(dashExpState.records || [])
-            .filter(function (r) { return r.subcategory_id === subId && r.txn_date && r.txn_date.slice(0, 7) === key; })
+            .filter(function (r) { return r.subcategory_id === subId && r.txn_date && r.txn_date.slice(0, keyLen) === key; })
             .sort(function (a, b) { return String(b.txn_date).localeCompare(String(a.txn_date)); });
           if (titleEl) {
             var total = records.reduce(function (s, r) {
@@ -2234,11 +2247,18 @@
       // "July 2026" picker drives both Records and Analytics views.
       function syncAnaFromRec() {
         try {
-          if (recPeriod && recPeriod.kind === "months" && typeof anaPeriod !== "undefined") {
+          if (typeof anaPeriod === "undefined" || !recPeriod) return;
+          if (recPeriod.kind === "years") {
+            anaPeriod.kind = "year";
+            anaPeriod.year = recPeriod.year;
+          } else if (recPeriod.kind === "months") {
+            anaPeriod.kind = "month";
             anaPeriod.year = recPeriod.year;
             anaPeriod.month = recPeriod.month;
-            if (typeof renderAnalyticsTable === "function") renderAnalyticsTable();
+          } else {
+            return; // custom/weeks: leave analytics on its current period
           }
+          if (typeof renderAnalyticsTable === "function") renderAnalyticsTable();
         } catch (e) {}
       }
       function nudgePeriod(dir) {
@@ -3302,7 +3322,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=exppie5"></script>
+  <script src="script.js?v=anayear1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
