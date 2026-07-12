@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=anayear1" />
+<link rel="stylesheet" href="styles.css?v=anacustom1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1694,15 +1694,11 @@
         return names[m] + " " + y;
       }
       function anaPrev(y, m) { return m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }; }
-      function anaSumByCat(records, y, m) {
-        // Returns { cats: {catId: {expense: n, budget: n, income: n, subs: {subId: n}}}, totals: {expense, budget, income} }
-        // m === null → aggregate the whole year y (used when a Year is selected).
+      // Aggregate records that satisfy matchFn into { cats, totals }.
+      function anaAggregate(records, matchFn) {
         var result = { cats: {}, totals: { expense: 0, budget: 0, income: 0 } };
-        var isYear = (m === null || m === undefined);
-        var key = isYear ? String(y) : (String(y) + "-" + String(m + 1).padStart(2, "0"));
-        var keyLen = isYear ? 4 : 7;
         records.forEach(function (r) {
-          if (!r.txn_date || r.txn_date.slice(0, keyLen) !== key) return;
+          if (!r.txn_date || !matchFn(r)) return;
           var amt = Number(r.amount) || 0;
           var t = r.type;
           if (t === "expense" || t === "budget" || t === "income") result.totals[t] += amt;
@@ -1712,6 +1708,20 @@
           if (r.subcategory_id) c.subs[r.subcategory_id] = (c.subs[r.subcategory_id] || 0) + amt;
         });
         return result;
+      }
+      // m === null → aggregate the whole year y (used when a Year is selected).
+      function anaSumByCat(records, y, m) {
+        var isYear = (m === null || m === undefined);
+        var key = isYear ? String(y) : (String(y) + "-" + String(m + 1).padStart(2, "0"));
+        var keyLen = isYear ? 4 : 7;
+        return anaAggregate(records, function (r) { return r.txn_date.slice(0, keyLen) === key; });
+      }
+      // Aggregate over an inclusive ISO date range [startIso, endIso].
+      function anaSumByRange(records, startIso, endIso) {
+        return anaAggregate(records, function (r) {
+          var d = String(r.txn_date).slice(0, 10);
+          return d >= startIso && d <= endIso;
+        });
       }
       function anaFmtSigned(v, isExpense) {
         if (v === 0) return "₹0";
@@ -1765,23 +1775,34 @@
         var table = document.getElementById("ana-table");
         var lbl = document.getElementById("ana-period-label");
         if (!table) return;
-        var isYear = anaPeriod.kind === "year";
-        var cur, prev, curLbl, prvLbl;
-        if (isYear) {
-          cur = { year: anaPeriod.year, month: null };
-          prev = { year: anaPeriod.year - 1, month: null };
-          curLbl = String(cur.year);
-          prvLbl = String(prev.year);
+        var records = applyAnaFilters(dashExpState.records || []);
+        var curLbl, prvLbl, curAgg, prvAgg;
+        if (anaPeriod.kind === "custom" && anaPeriod.customStart && anaPeriod.customEnd) {
+          // Aggregate the custom range vs the preceding equal-length window.
+          var cs = anaPeriod.customStart, ce = anaPeriod.customEnd;
+          var msDay = 86400000;
+          var sD = new Date(cs + "T00:00:00"), eD = new Date(ce + "T00:00:00");
+          var lenMs = eD.getTime() - sD.getTime();
+          var pEnd = new Date(sD.getTime() - msDay), pStart = new Date(pEnd.getTime() - lenMs);
+          var isoL = function (d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+          var pEndIso = isoL(pEnd), pStartIso = isoL(pStart);
+          curLbl = cs + " – " + ce;
+          prvLbl = pStartIso + " – " + pEndIso;
+          curAgg = anaSumByRange(records, cs, ce);
+          prvAgg = anaSumByRange(records, pStartIso, pEndIso);
+        } else if (anaPeriod.kind === "year") {
+          curLbl = String(anaPeriod.year);
+          prvLbl = String(anaPeriod.year - 1);
+          curAgg = anaSumByCat(records, anaPeriod.year, null);
+          prvAgg = anaSumByCat(records, anaPeriod.year - 1, null);
         } else {
-          cur = { year: anaPeriod.year, month: anaPeriod.month };
-          prev = anaPrev(cur.year, cur.month);
-          curLbl = anaMonthLabel(cur.year, cur.month);
+          var prev = anaPrev(anaPeriod.year, anaPeriod.month);
+          curLbl = anaMonthLabel(anaPeriod.year, anaPeriod.month);
           prvLbl = anaMonthLabel(prev.year, prev.month);
+          curAgg = anaSumByCat(records, anaPeriod.year, anaPeriod.month);
+          prvAgg = anaSumByCat(records, prev.year, prev.month);
         }
         if (lbl) lbl.textContent = curLbl;
-        var records = applyAnaFilters(dashExpState.records || []);
-        var curAgg = anaSumByCat(records, cur.year, cur.month);
-        var prvAgg = anaSumByCat(records, prev.year, prev.month);
         var html = "";
         // ── Budget section ─────────────────────────────────────────────
         html += '<tr class="ana-period-row"><td></td><td>' + curLbl + '</td><td>' + prvLbl + '</td></tr>';
@@ -1930,11 +1951,17 @@
           var sub = dashExpState.categories.find(function (c) { return c.id === subId; });
           var parent = sub && sub.parent_id ? dashExpState.categories.find(function (c) { return c.id === sub.parent_id; }) : null;
           var isYearDrill = anaPeriod.kind === "year";
+          var isCustomDrill = anaPeriod.kind === "custom" && anaPeriod.customStart && anaPeriod.customEnd;
           var key = isYearDrill ? String(anaPeriod.year) : (String(anaPeriod.year) + "-" + String(anaPeriod.month + 1).padStart(2, "0"));
           var keyLen = isYearDrill ? 4 : 7;
-          var monthLabel = isYearDrill ? String(anaPeriod.year) : anaMonthLabel(anaPeriod.year, anaPeriod.month);
+          var monthLabel = isCustomDrill ? (anaPeriod.customStart + " – " + anaPeriod.customEnd)
+            : (isYearDrill ? String(anaPeriod.year) : anaMonthLabel(anaPeriod.year, anaPeriod.month));
           var records = applyAnaFilters(dashExpState.records || [])
-            .filter(function (r) { return r.subcategory_id === subId && r.txn_date && r.txn_date.slice(0, keyLen) === key; })
+            .filter(function (r) {
+              if (r.subcategory_id !== subId || !r.txn_date) return false;
+              if (isCustomDrill) { var dd = String(r.txn_date).slice(0, 10); return dd >= anaPeriod.customStart && dd <= anaPeriod.customEnd; }
+              return r.txn_date.slice(0, keyLen) === key;
+            })
             .sort(function (a, b) { return String(b.txn_date).localeCompare(String(a.txn_date)); });
           if (titleEl) {
             var total = records.reduce(function (s, r) {
@@ -2255,8 +2282,12 @@
             anaPeriod.kind = "month";
             anaPeriod.year = recPeriod.year;
             anaPeriod.month = recPeriod.month;
+          } else if (recPeriod.kind === "custom" && recPeriod.customStart && recPeriod.customEnd) {
+            anaPeriod.kind = "custom";
+            anaPeriod.customStart = recPeriod.customStart;
+            anaPeriod.customEnd = recPeriod.customEnd;
           } else {
-            return; // custom/weeks: leave analytics on its current period
+            return; // weeks / incomplete custom: leave analytics on its current period
           }
           if (typeof renderAnalyticsTable === "function") renderAnalyticsTable();
         } catch (e) {}
@@ -2340,7 +2371,8 @@
           for (var i = 0; i < 42; i++) { var d = new Date(start); d.setDate(start.getDate() + i); cells.push(d); }
           var cs = recCustomSel.start, ce = recCustomSel.end;
           var gridHtml = cells.map(function (d) {
-            var iso = d.toISOString().slice(0, 10);
+            // Local ISO (toISOString would shift the date by the UTC offset).
+            var iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
             var isOther = d.getMonth() !== month;
             var dow = d.getDay();
             var isWknd = (dow === 0 || dow === 6);
@@ -2429,6 +2461,7 @@
             recPeriod.customStart = recCustomSel.start;
             recPeriod.customEnd = recCustomSel.end;
             renderDashRecords();
+            syncAnaFromRec();
           }
           renderPeriodPopover();
           return;
@@ -2455,6 +2488,7 @@
           recCustomView = new Date(sd.getFullYear(), sd.getMonth(), 1);
           renderPeriodPopover();
           renderDashRecords();
+          syncAnaFromRec();
           return;
         }
       });
@@ -3322,7 +3356,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=anayear1"></script>
+  <script src="script.js?v=anacustom1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
