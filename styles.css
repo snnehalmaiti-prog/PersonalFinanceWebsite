@@ -2519,6 +2519,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .ana-table td:nth-child(3) { color: var(--muted); font-weight: 500; }
 .ana-period-row td { color: var(--text); font-weight: 700; padding: 14px 16px 6px; border-top: 0; }
 .ana-total-row td { font-weight: 700; background: var(--surface); }
+/* Mobile: compact the table so category + both amount columns fit in one row
+   without horizontal scroll. */
+@media (max-width: 600px) {
+  .ana-table { font-size: 0.72rem; table-layout: fixed; }
+  .ana-table td { padding: 7px 6px; word-break: break-word; }
+  .ana-table td:first-child { padding-left: 8px; }
+  .ana-table td:nth-child(2), .ana-table td:nth-child(3) { width: 26%; padding-right: 8px; }
+}
 .ana-cat-row td { background: rgba(0,0,0,0.02); }
 .ana-sub-row td { background: transparent; padding-left: 40px; color: var(--muted); }
 .ana-sub-row td:first-child { padding-left: 56px; }
