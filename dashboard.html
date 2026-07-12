@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=recdayhdr1" />
+<link rel="stylesheet" href="styles.css?v=anafilter1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -947,7 +947,7 @@
         <div class="rec-page" style="margin-top:20px;">
           <aside class="rec-sidebar rec-filter-panel">
             <div class="rec-filter-header">
-              <span class="rec-filter-title">Filters</span>
+              <span class="rec-filter-title">Filters<span class="rec-filter-caret" aria-hidden="true">▾</span></span>
               <button type="button" id="ana-filter-reset" class="rec-filter-clear-btn">Clear</button>
             </div>
 
@@ -1117,18 +1117,19 @@
         });
       });
 
-      // Records filter panel: collapsed by default on mobile so records show at
-      // first glance; tap the "Filters" header to expand/collapse.
+      // Filter panels (Records + Analytics): collapsed by default on mobile so
+      // the content shows at first glance; tap the "Filters" header to expand.
+      // Both tabs behave identically.
       (function () {
-        var panel = document.querySelector(".rec-filter-panel");
-        var header = document.getElementById("rec-filter-header");
-        if (!panel || !header) return;
-        if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
-          panel.classList.add("rec-filters-collapsed");
-        }
-        header.addEventListener("click", function (e) {
-          if (e.target.closest("#rec-filter-reset")) return; // let Clear work normally
-          panel.classList.toggle("rec-filters-collapsed");
+        var isMobile = window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+        document.querySelectorAll(".rec-filter-panel").forEach(function (panel) {
+          var header = panel.querySelector(".rec-filter-header");
+          if (!header) return;
+          if (isMobile) panel.classList.add("rec-filters-collapsed");
+          header.addEventListener("click", function (e) {
+            if (e.target.closest(".rec-filter-clear-btn")) return; // let Clear work normally
+            panel.classList.toggle("rec-filters-collapsed");
+          });
         });
       })();
 
@@ -3279,7 +3280,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=recdayhdr1"></script>
+  <script src="script.js?v=anafilter1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
