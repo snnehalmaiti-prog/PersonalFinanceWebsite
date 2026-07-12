@@ -3085,6 +3085,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   margin-bottom: 12px;
 }
 .rec-filter-title { font-weight: 700; font-size: 0.95rem; }
+.rec-filter-caret { display: none; margin-left: 6px; font-size: 0.75rem; color: var(--muted); transition: transform 0.15s; }
+/* On mobile the filter panel collapses so records are visible at first glance.
+   Tap the "Filters" header to expand. */
+@media (max-width: 900px) {
+  .rec-filter-caret { display: inline-block; }
+  .rec-filter-header { cursor: pointer; margin-bottom: 0; }
+  .rec-filter-panel { gap: 0; }
+  .rec-filter-panel.rec-filters-collapsed .rec-filter-caret { transform: rotate(-90deg); }
+  .rec-filter-panel.rec-filters-collapsed > *:not(.rec-filter-header) { display: none; }
+  .rec-sidebar { max-height: none; overflow: visible; }
+}
 .rec-filter-clear-btn {
   background: none; border: none; cursor: pointer;
   color: var(--muted); font-size: 0.82rem; padding: 0;

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=numpad1" />
+<link rel="stylesheet" href="styles.css?v=recfilter1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -763,8 +763,8 @@
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
         <div class="rec-page" style="margin-top:20px;">
           <aside class="rec-sidebar rec-filter-panel">
-            <div class="rec-filter-header">
-              <span class="rec-filter-title">Filters</span>
+            <div class="rec-filter-header" id="rec-filter-header">
+              <span class="rec-filter-title">Filters<span class="rec-filter-caret" aria-hidden="true">▾</span></span>
               <button type="button" id="rec-filter-reset" class="rec-filter-clear-btn">Clear</button>
             </div>
 
@@ -1116,6 +1116,21 @@
           if (typeof window.wfResizeCharts === "function") window.wfResizeCharts();
         });
       });
+
+      // Records filter panel: collapsed by default on mobile so records show at
+      // first glance; tap the "Filters" header to expand/collapse.
+      (function () {
+        var panel = document.querySelector(".rec-filter-panel");
+        var header = document.getElementById("rec-filter-header");
+        if (!panel || !header) return;
+        if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
+          panel.classList.add("rec-filters-collapsed");
+        }
+        header.addEventListener("click", function (e) {
+          if (e.target.closest("#rec-filter-reset")) return; // let Clear work normally
+          panel.classList.toggle("rec-filters-collapsed");
+        });
+      })();
 
       function fmtMoney(n) {
         var v = Number(n) || 0;
@@ -3264,7 +3279,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=numpad1"></script>
+  <script src="script.js?v=recfilter1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
