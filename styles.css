@@ -3257,6 +3257,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-list-footer { font-size: 0.78rem; color: var(--muted); text-align: center; padding: 8px 0 4px; }
 
 /* ── Cash Flow YTD summary row ──────────────────────────────────────────── */
+.epc-drill-title { display: block; font-size: 1rem; font-weight: 700; color: var(--text); margin-top: 2px; }
 /* Expense-by-category pie legend (label + amount + %) */
 .epc-legend { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px 4px; max-height: 150px; overflow-y: auto; }
 .epc-legend-item { display: grid; grid-template-columns: 12px 1fr auto auto; align-items: center; gap: 8px; padding: 3px 2px; font-size: 0.74rem; border-radius: 6px; }

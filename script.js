@@ -7720,7 +7720,10 @@
       backBtn.style.display = __epcDrillCat ? "" : "none";
       backBtn.onclick = function () { __epcDrillCat = null; renderExpenseCategoryPie(); };
     }
-    if (subtitleEl) subtitleEl.textContent = __epcDrillCat ? (" · " + nameOf(__epcDrillCat)) : "";
+    if (subtitleEl) {
+      subtitleEl.textContent = __epcDrillCat ? nameOf(__epcDrillCat) : "";
+      subtitleEl.style.display = __epcDrillCat ? "" : "none";
+    }
 
     // Account dropdown: All accounts + each account.
     var acctSel = document.getElementById("epc-account");
