@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=chartstab1" />
+<link rel="stylesheet" href="styles.css?v=pmbreakdown1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -748,15 +748,17 @@
           <!-- Account × Payment Method spend pivot -->
           <div class="acc-section-card" style="margin:0;">
             <div class="acc-section-top">
-              <span class="acc-section-label">BREAKDOWN</span>
+              <span class="acc-section-label" id="dash-exp-matrix-label">BREAKDOWN</span>
               <div style="display:flex; gap:6px;">
                 <select id="dash-exp-matrix-month" class="acc-pill-select"></select>
                 <select id="dash-exp-matrix-year" class="acc-pill-select"></select>
               </div>
             </div>
-            <div class="acc-section-title">Spend by account &amp; payment method</div>
+            <div class="acc-section-title" id="dash-exp-matrix-title">Spend by account &amp; payment method</div>
             <p class="muted small" id="dash-exp-matrix-status" style="margin:4px 0 0;"></p>
+            <!-- Desktop: account×payment matrix. Mobile: by-payment-method list. -->
             <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
+            <div id="dash-exp-matrix-list" class="exp-pm-list"></div>
           </div>
 
           <!-- Payment to Joint Account -->
@@ -1481,9 +1483,14 @@
           });
         var usedAcIds = accounts.map(function (a) { return a.id; }).filter(function (id) { return acctTotals[id]; });
 
+        var listEl = document.getElementById("dash-exp-matrix-list");
+        var labelEl = document.getElementById("dash-exp-matrix-label");
+        var titleEl = document.getElementById("dash-exp-matrix-title");
+        if (labelEl) labelEl.textContent = "BREAKDOWN · " + MONTH_NAMES[mo].slice(0, 3).toUpperCase() + " " + yr;
         if (!records.length) {
           if (statusEl) statusEl.textContent = "No expense records for " + MONTH_NAMES[mo] + " " + yr + ".";
           wrap.innerHTML = "";
+          if (listEl) listEl.innerHTML = "";
           return;
         }
         if (statusEl) statusEl.textContent = "";
@@ -1526,6 +1533,41 @@
         html += "</tbody></table>";
 
         wrap.innerHTML = html;
+
+        // Mobile: by-payment-method expandable list (expand → accounts).
+        if (listEl) {
+          var listHtml = usedPmIds.map(function (pmId, i) {
+            var pm = pms.find(function (p) { return p.id === pmId; });
+            var pmLabel = pm ? esc(pm.name) : pmId;
+            var rowTotal = pmTotals[pmId] || 0;
+            var subs = usedAcIds.map(function (acId) {
+              var val = (pivot[pmId] && pivot[pmId][acId]) || 0;
+              if (!val) return "";
+              var ac = accounts.find(function (a) { return a.id === acId; });
+              return '<div class="exp-pm-sub"><span class="exp-pm-sub-name">' + esc(ac ? ac.name : acId) + '</span><span class="exp-pm-sub-amt">' + fmtMoney(val) + '</span></div>';
+            }).join("");
+            return '<div class="exp-pm-group">' +
+              '<button type="button" class="exp-pm-row" data-pm-toggle>' +
+                '<span class="exp-pm-dot" style="background:' + pmColorMap[pmId] + '"></span>' +
+                '<span class="exp-pm-name">' + pmLabel + '</span>' +
+                '<span class="exp-pm-amt">' + fmtMoney(rowTotal) + '</span>' +
+                '<span class="exp-pm-caret">▾</span>' +
+              '</button>' +
+              '<div class="exp-pm-subs" hidden>' + subs + '</div>' +
+            '</div>';
+          }).join("");
+          listHtml += '<div class="exp-pm-total"><span>TOTAL</span><span>' + fmtMoney(grand) + '</span></div>';
+          listEl.innerHTML = listHtml;
+          listEl.querySelectorAll("[data-pm-toggle]").forEach(function (row) {
+            row.addEventListener("click", function () {
+              var subs = row.nextElementSibling;
+              var open = !subs.hidden;
+              subs.hidden = open;
+              var caret = row.querySelector(".exp-pm-caret");
+              if (caret) caret.textContent = open ? "▾" : "▴";
+            });
+          });
+        }
       }
 
       // ── Payment to Joint Account calculator ───────────────────────────────
@@ -3398,7 +3440,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=chartstab1"></script>
+  <script src="script.js?v=pmbreakdown1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

@@ -2820,6 +2820,29 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* Account × Payment Method spend pivot table */
 .exp-matrix-wrap { display: flex; }
+/* Mobile Breakdown: by-payment-method expandable list (desktop keeps the matrix) */
+.exp-pm-list { display: none; }
+@media (max-width: 760px) {
+  .exp-matrix-wrap { display: none; }
+  .exp-pm-list { display: block; margin-top: 8px; }
+}
+.exp-pm-group { border-bottom: 1px solid var(--border); }
+.exp-pm-row {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 12px 2px; background: none; border: 0; cursor: pointer;
+  text-align: left; font-size: 0.95rem; color: var(--text);
+}
+.exp-pm-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.exp-pm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.exp-pm-amt { font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.exp-pm-caret { color: var(--muted); font-size: 0.8rem; width: 14px; text-align: center; flex-shrink: 0; }
+.exp-pm-subs { padding: 0 2px 10px 22px; }
+.exp-pm-sub { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 0.85rem; }
+.exp-pm-sub-name { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-pm-sub-amt { color: var(--text); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.exp-pm-total { display: flex; justify-content: space-between; padding: 12px 2px 2px; font-weight: 800; font-size: 1rem; border-top: 1px solid var(--border); }
+.exp-pm-total span:first-child { color: var(--text); }
+.exp-pm-total span:last-child { color: #E8623A; font-variant-numeric: tabular-nums; }
 .exp-matrix-table {
   width: auto; border-collapse: separate; border-spacing: 0;
   font-size: 0.85rem; border-radius: 10px; overflow: hidden;
