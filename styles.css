@@ -3866,6 +3866,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .overview-header-left .portfolio-dropdown {
     margin-left: 0 !important; align-self: flex-end;
   }
+  .overview-header-left .portfolio-toggle {
+    padding: 5px 10px; font-size: 0.78rem; max-width: 120px;
+  }
   .exclusions-dropdown { display: none; }
 
   .overview-stats-inline {
