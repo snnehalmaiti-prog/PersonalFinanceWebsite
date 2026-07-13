@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=commfix1" />
+<link rel="stylesheet" href="styles.css?v=chartstab1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -46,6 +46,16 @@
         Expense
       </button></li>
     </ul>
+    <!-- Expense sub-sections (shown on mobile in place of the chip row) -->
+    <div class="left-drawer-section" id="left-drawer-expense-section">
+      <span class="left-drawer-section-label">Expense</span>
+      <ul class="left-drawer-nav">
+        <li><button class="left-drawer-item left-drawer-sub active" data-exp-subtab="accounts">Accounts</button></li>
+        <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="records">Records</button></li>
+        <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="analytics">Analytics</button></li>
+        <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="charts">Charts</button></li>
+      </ul>
+    </div>
   </nav>
 
   <header class="site-header">
@@ -705,6 +715,7 @@
           <button type="button" class="exp-subtab active" data-dash-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
+          <button type="button" class="exp-subtab" data-dash-exp-subtab="charts" role="tab" aria-selected="false">Charts</button>
         </div>
         <div class="exp-top-bar-center">
           <div class="rec-period-picker" id="rec-period-picker-inline" style="max-width:340px; width:100%; display:none;">
@@ -734,6 +745,36 @@
 
         <div class="acc-charts-grid">
 
+          <!-- Account × Payment Method spend pivot -->
+          <div class="acc-section-card" style="margin:0;">
+            <div class="acc-section-top">
+              <span class="acc-section-label">BREAKDOWN</span>
+              <div style="display:flex; gap:6px;">
+                <select id="dash-exp-matrix-month" class="acc-pill-select"></select>
+                <select id="dash-exp-matrix-year" class="acc-pill-select"></select>
+              </div>
+            </div>
+            <div class="acc-section-title">Spend by account &amp; payment method</div>
+            <p class="muted small" id="dash-exp-matrix-status" style="margin:4px 0 0;"></p>
+            <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
+          </div>
+
+          <!-- Payment to Joint Account -->
+          <div class="acc-section-card" style="margin:0;">
+            <div class="acc-section-top">
+              <span class="acc-section-label" id="dash-exp-joint-period-label">SETTLEMENT</span>
+            </div>
+            <div class="acc-section-title" id="dash-exp-joint-heading">Payment to Joint Account</div>
+            <p class="muted small" id="dash-exp-joint-status" style="margin:4px 0 0;"></p>
+            <div id="dash-exp-joint-wrap" style="margin-top:14px;"></div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <div id="dash-exp-subpanel-charts" class="exp-subpanel" hidden>
+        <div class="acc-charts-grid" style="margin-top:20px;">
           <!-- Monthly IBE chart -->
           <div class="acc-section-card" style="margin:0;">
             <div class="acc-section-top">
@@ -761,33 +802,7 @@
               <canvas id="dash-exp-wf-chart"></canvas>
             </div>
           </div>
-
-          <!-- Account × Payment Method spend pivot -->
-          <div class="acc-section-card" style="margin:0;">
-            <div class="acc-section-top">
-              <span class="acc-section-label">BREAKDOWN</span>
-              <div style="display:flex; gap:6px;">
-                <select id="dash-exp-matrix-month" class="acc-pill-select"></select>
-                <select id="dash-exp-matrix-year" class="acc-pill-select"></select>
-              </div>
-            </div>
-            <div class="acc-section-title">Spend by account &amp; payment method</div>
-            <p class="muted small" id="dash-exp-matrix-status" style="margin:4px 0 0;"></p>
-            <div id="dash-exp-matrix-wrap" class="exp-matrix-wrap" style="overflow-x:auto; margin-top:12px;"></div>
-          </div>
-
-          <!-- Payment to Joint Account -->
-          <div class="acc-section-card" style="margin:0;">
-            <div class="acc-section-top">
-              <span class="acc-section-label" id="dash-exp-joint-period-label">SETTLEMENT</span>
-            </div>
-            <div class="acc-section-title" id="dash-exp-joint-heading">Payment to Joint Account</div>
-            <p class="muted small" id="dash-exp-joint-status" style="margin:4px 0 0;"></p>
-            <div id="dash-exp-joint-wrap" style="margin-top:14px;"></div>
-          </div>
-
         </div>
-
       </div>
 
       <div id="dash-exp-subpanel-records" class="exp-subpanel" hidden>
@@ -1134,7 +1149,7 @@
             b.classList.toggle("active", active);
             b.setAttribute("aria-selected", String(active));
           });
-          ["accounts", "records", "analytics"].forEach(function (k) {
+          ["accounts", "records", "analytics", "charts"].forEach(function (k) {
             var p = document.getElementById("dash-exp-subpanel-" + k);
             if (p) p.hidden = (k !== key);
           });
@@ -1148,6 +1163,21 @@
           // Resize charts now that this sub-panel is visible (fixes 0×0 charts
           // created while hidden, esp. on mobile).
           if (typeof window.wfResizeCharts === "function") window.wfResizeCharts();
+          // Keep drawer sub-items in sync.
+          document.querySelectorAll("[data-exp-subtab]").forEach(function (b) {
+            b.classList.toggle("active", b.getAttribute("data-exp-subtab") === key);
+          });
+        });
+      });
+
+      // Drawer Expense sub-nav → trigger the matching chip + close the drawer.
+      document.querySelectorAll("[data-exp-subtab]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var key = btn.getAttribute("data-exp-subtab");
+          var chip = document.querySelector('[data-dash-exp-subtab="' + key + '"]');
+          if (chip) chip.click();
+          var closeBtn = document.getElementById("left-drawer-close");
+          if (closeBtn) closeBtn.click();
         });
       });
 
@@ -3368,7 +3398,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=commfix1"></script>
+  <script src="script.js?v=chartstab1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

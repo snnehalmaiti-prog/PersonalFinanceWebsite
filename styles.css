@@ -984,6 +984,15 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-weight: 600;
 }
 .left-drawer-item svg { flex-shrink: 0; }
+.left-drawer-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.left-drawer-section-label {
+  display: block; padding: 0 18px 6px; font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.left-drawer-sub { font-size: 1.02rem; font-weight: 600; }
+/* The Expense sub-nav in the drawer is for mobile navigation; hide on desktop
+   where the chip row is used instead. */
+@media (min-width: 761px) { #left-drawer-expense-section { display: none; } }
 
 @media (max-width: 760px) {
   .left-drawer-toggle { display: flex; }
