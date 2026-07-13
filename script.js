@@ -5361,14 +5361,20 @@
         equityRefreshNavBtn.textContent = "Refreshing…";
       }
 
-      updateDashboardStats();
-      renderValueChart();
-      renderEquityHoldingsTable();
-      renderStockEtfHoldingsTable();
-      renderMarketSegmentChart();
-      renderMutualFundPortfolioSplitChart();
-      renderInvestmentSplitChart();
-      renderInstrumentSplitChart();
+      // Re-render dashboard surfaces if they exist (this button also lives on the
+      // Settings page, where these dashboard elements are absent).
+      try {
+        if (document.getElementById("value-chart")) {
+          updateDashboardStats();
+          renderValueChart();
+          renderEquityHoldingsTable();
+          renderStockEtfHoldingsTable();
+          renderMarketSegmentChart();
+          renderMutualFundPortfolioSplitChart();
+          renderInvestmentSplitChart();
+          renderInstrumentSplitChart();
+        }
+      } catch (e) {}
       setTimeout(function () {
         equityRefreshNavBtn.disabled = false;
         equityRefreshNavBtn.textContent = originalLabel;
@@ -5404,10 +5410,14 @@
         stocksetfRefreshPriceBtn.textContent = "Set GitHub token in Settings";
       }
 
-      // Re-render Stocks/ETF surfaces with cleared cache.
-      updateDashboardStats();
-      renderStockEtfHoldingsTable();
-      renderMarketSegmentChart();
+      // Re-render Stocks/ETF surfaces with cleared cache (dashboard only).
+      try {
+        if (document.getElementById("value-chart")) {
+          updateDashboardStats();
+          renderStockEtfHoldingsTable();
+          renderMarketSegmentChart();
+        }
+      } catch (e) {}
       setTimeout(function () {
         stocksetfRefreshPriceBtn.disabled = false;
         stocksetfRefreshPriceBtn.textContent = originalLabel;
