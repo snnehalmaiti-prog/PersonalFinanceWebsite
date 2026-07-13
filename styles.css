@@ -3058,14 +3058,21 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    sub-tabs (Records & Analytics). */
 @media (max-width: 760px) {
   .exp-top-bar {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "subtabs add"
-      "period  period";
+      "subtabs"
+      "add"
+      "period";
+    gap: 10px;
   }
   .exp-subtabs { grid-area: subtabs; min-width: 0; }
-  .rec-add-btn { grid-area: add; }
-  .exp-top-bar-center { grid-area: period; margin-top: 10px; }
+  /* Add-record: full-width green CTA just below the sub-tab chips. */
+  .rec-add-btn {
+    grid-area: add; width: 100%; justify-content: center;
+    background: var(--emerald); color: #fff; min-height: 44px; border-radius: 12px;
+  }
+  .rec-add-btn .rec-add-text { display: inline; }
+  .exp-top-bar-center { grid-area: period; margin-top: 0; }
   .exp-top-bar-center .rec-period-picker { width: 100%; max-width: 100%; }
 }
 
