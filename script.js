@@ -6421,12 +6421,20 @@
     fetch(apiBase + (gh.branch ? "?ref=" + encodeURIComponent(gh.branch) : ""), { headers: headers })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (existing) {
+        // Skip the push when the file already matches — avoids a redundant commit
+        // (and the Pages deploy + price-fetch run it would trigger) on every load.
+        if (existing && typeof existing.content === "string" &&
+            existing.content.replace(/\s/g, "") === content) {
+          showGhToast("✓ Mapping already up to date.", true);
+          return null;
+        }
         var body = { message: "chore: update stocksetf_mapping.json", content: content };
         if (gh.branch) body.branch = gh.branch;
         if (existing && existing.sha) body.sha = existing.sha;
         return fetch(apiBase, { method: "PUT", headers: headers, body: JSON.stringify(body) });
       })
       .then(function (r) {
+        if (r === null) return; // no push needed (already up to date)
         if (r && (r.status === 200 || r.status === 201)) {
           dbg("stocksetf_mapping.json pushed to GitHub successfully.");
           showGhToast("✓ Mapping pushed to GitHub.", true);
