@@ -3831,8 +3831,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   #mobile-header-title { display: flex; }
   .header-refresh { display: inline-flex; }
 
-  /* --- Cards get breathing room --- */
-  #panel-overview:not([hidden]) { display: flex; flex-direction: column; gap: 16px; }
+  /* --- Overview panel is not itself a card on mobile (matches Expense tab):
+     strip its surface/border/padding so inner cards align to the container
+     edge, and tighten the gap between cards. --- */
+  #panel-overview {
+    background: none; border: none; border-radius: 0; padding: 0;
+  }
+  #panel-overview:not([hidden]) { display: flex; flex-direction: column; gap: 12px; }
   #panel-overview .benchmark-card,
   #panel-overview .avc-card,
   #panel-overview .isc-card,
