@@ -3988,3 +3988,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   #overview-cashflow-row { display: none !important; }
   #profit-cat-card { display: none; }
 }
+
+/* "Matured" pill on Fixed Deposit holdings rows */
+.fd-matured-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 8px;
+  border-radius: 999px; font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--emerald, #1a9e6e); color: #fff; vertical-align: middle;
+}

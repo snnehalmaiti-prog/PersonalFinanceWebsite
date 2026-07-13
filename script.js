@@ -1803,6 +1803,13 @@
       var nameTd = document.createElement("td");
       nameTd.className = "fund-name";
       nameTd.textContent = h.instrument;
+      if (h.matured) {
+        var maturedTag = document.createElement("span");
+        maturedTag.className = "fd-matured-tag";
+        maturedTag.textContent = "Matured";
+        nameTd.appendChild(document.createTextNode(" "));
+        nameTd.appendChild(maturedTag);
+      }
       tr.appendChild(nameTd);
 
       var subCategoryTd = document.createElement("td");
@@ -2655,6 +2662,13 @@
       var nameTd = document.createElement("td");
       nameTd.className = "fund-name";
       nameTd.textContent = h.instrument;
+      if (h.matured) {
+        var maturedTag = document.createElement("span");
+        maturedTag.className = "fd-matured-tag";
+        maturedTag.textContent = "Matured";
+        nameTd.appendChild(document.createTextNode(" "));
+        nameTd.appendChild(maturedTag);
+      }
       tr.appendChild(nameTd);
 
       var subCategoryTd = document.createElement("td");
