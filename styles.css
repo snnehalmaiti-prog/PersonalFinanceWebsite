@@ -1007,16 +1007,16 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .site-header .theme-toggle { display: none; }
   .site-header .menu-toggle { display: none; }
   .header-tabs { flex: 1; justify-content: center; }
-  .header-add-btn { display: inline-flex; }
   .left-drawer-toggle {
     width: 40px; height: 40px; border-radius: 12px;
     border: 1px solid var(--border); background: var(--surface);
     justify-content: center;
   }
   /* Sub-tab chips stay visible on mobile as the Expense sub-navigation. */
-  /* The Add-record button now lives in the header on mobile. */
-  .exp-top-bar .rec-add-btn { display: none; }
 }
+
+/* PWA install/download chip removed per request. */
+.pwa-install-chip { display: none !important; }
 
 /* ===== Login modal ===== */
 .modal-overlay {
