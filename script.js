@@ -344,9 +344,12 @@
       if (key === "stocksetf") renderStockEtfHoldingsTable();
       if (key === "equity") renderEquityHoldingsTable();
       if (key === "fixedincome") { renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
-      // "Refresh NAV" applies to the Mutual Fund tab only.
+      // "Refresh NAV" applies to the Mutual Fund tab only; "Refresh Price" to
+      // the Stocks/ETF tab only — each in the same right-aligned position.
       var refreshBtn = document.getElementById("equity-refresh-nav");
       if (refreshBtn) refreshBtn.style.display = (key === "equity") ? "" : "none";
+      var refreshPriceBtn = document.getElementById("stocksetf-refresh-price");
+      if (refreshPriceBtn) refreshPriceBtn.style.display = (key === "stocksetf") ? "" : "none";
       if (typeof window.wfResizeCharts === "function") window.wfResizeCharts();
     }
 
