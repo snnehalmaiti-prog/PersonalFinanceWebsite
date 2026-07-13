@@ -566,6 +566,51 @@
     });
   }
 
+  // USD/INR rate for a given ISO date. Exact match first; otherwise the nearest
+  // available date in the history map (prev preferred, then next) — ISO date keys
+  // sort chronologically — and finally the supplied fallback (today's rate).
+  // This avoids the old "exact-date-only, else hardcoded 84" mispricing for buys
+  // dated on weekends/holidays or outside the history window.
+  function lookupUsdInrRate(rateMap, dateStr, fallback) {
+    if (!rateMap) return fallback;
+    if (rateMap[dateStr]) return rateMap[dateStr];
+    var keys = rateMap.__wfSortedKeys;
+    if (!keys) {
+      keys = Object.keys(rateMap).filter(function (k) { return k.indexOf("__") !== 0; }).sort();
+      try { Object.defineProperty(rateMap, "__wfSortedKeys", { value: keys, enumerable: false, configurable: true }); } catch (e) {}
+    }
+    if (!keys.length) return fallback;
+    var lo = 0, hi = keys.length - 1, bestPrev = null, bestNext = null;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (keys[mid] <= dateStr) { bestPrev = keys[mid]; lo = mid + 1; }
+      else { bestNext = keys[mid]; hi = mid - 1; }
+    }
+    var chosen = bestPrev || bestNext;
+    return chosen ? rateMap[chosen] : fallback;
+  }
+
+  // Last available price on or before dateStr (unbounded forward-fill). Used by the
+  // TWR value series so a price gap wider than a few days doesn't drop a holding to
+  // 0 for that month (which would create an artificial dip/recovery in the CAGR).
+  function lastPriceOnOrBefore(priceMap, dateStr) {
+    if (!priceMap) return null;
+    if (priceMap[dateStr] !== undefined) return priceMap[dateStr];
+    var keys = priceMap.__wfSortedKeys;
+    if (!keys) {
+      keys = Object.keys(priceMap).filter(function (k) { return k.indexOf("__") !== 0; }).sort();
+      try { Object.defineProperty(priceMap, "__wfSortedKeys", { value: keys, enumerable: false, configurable: true }); } catch (e) {}
+    }
+    if (!keys.length) return null;
+    var lo = 0, hi = keys.length - 1, best = null;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (keys[mid] <= dateStr) { best = keys[mid]; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return best ? priceMap[best] : null;
+  }
+
   // Provident-fund family sub-categories — all valued with the same
   // deposit + interest + FIFO-withdrawal logic. Accepts common spellings.
   function isProvidentFundSub(sub) {
@@ -1456,7 +1501,7 @@
 
   // Per-tab numeric values — refreshed by each tab's async computation; overview is their sum.
   var _ov = { mfInvested: 0, mfCurrent: 0, mfUnrealized: 0, mfRealized: 0,
-               seInvested: 0, seCurrent: 0, seUnrealized: 0, seDayChange: 0, seRealized: 0, seXirrFlows: [],
+               seInvested: 0, seCurrent: 0, seUnrealized: 0, seDayChange: 0, seRealized: 0, seXirrFlows: [], _seFlowsINR: [],
                fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0,
                commInvested: 0, commCurrent: 0, commUnrealized: 0, commRealized: 0 };
 
@@ -2874,13 +2919,14 @@
     // For US stocks, look up historical USD/INR from stock_prices.json usd_inr_history
     return fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; }).then(function (stockPricesData) {
       var usdRateMap = stockPricesData.usd_inr_history || {};
+      var usdInrToday = (stockPricesData.prices && stockPricesData.prices["__USD_INR__"]) ? stockPricesData.prices["__USD_INR__"].price : 84;
 
       return holdings.map(function (h) {
         var investedINR = 0;
         h.lots.forEach(function (lot) {
           if (h.region === "US") {
             var dateStr = formatDateISO(lot.date);
-            var rate = usdRateMap[dateStr] || 84; // fallback rate
+            var rate = lookupUsdInrRate(usdRateMap, dateStr, usdInrToday);
             investedINR += lot.units * lot.price * rate;
           } else {
             investedINR += lot.units * lot.price;
@@ -3128,8 +3174,13 @@
     var seRows = getSheetRows("stocksetf");
     var fdRows = getSheetRows("fd");
 
+    // INR-converted SE flows (US buys/sells converted at transaction-date FX). Fall
+    // back to the raw sheet flows only until the SE render has populated _seFlowsINR.
+    var seFlowsINR = (_ov._seFlowsINR && _ov._seFlowsINR.length) ? _ov._seFlowsINR
+                     : (seRows ? buildXirrCashFlows(seRows, selected) : []);
+
     var allFlows = buildXirrCashFlows(equityRows, selected);
-    if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
+    if (seRows) allFlows = allFlows.concat(seFlowsINR);
     if (fdRows && !isFixedIncomeExcluded()) {
       allFlows = allFlows
         .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
@@ -3143,7 +3194,7 @@
     // flows are included/excluded with the same toggle as the portfolio side so
     // the comparison stays apples-to-apples.
     var allFlowsForIndex = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
-    if (seRows) allFlowsForIndex = allFlowsForIndex.concat(buildXirrCashFlows(seRows, selected).filter(afterCutoff));
+    if (seRows) allFlowsForIndex = allFlowsForIndex.concat(seFlowsINR.filter(afterCutoff));
     if (fdRows && !isFixedIncomeExcluded()) {
       allFlowsForIndex = allFlowsForIndex
         .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
@@ -3174,7 +3225,7 @@
         // Period cash flows for MF + stocks (buys/sells after the cutoff).
         var periodFlows = [];
         var mfSeFlows = buildXirrCashFlows(equityRows, selected);
-        if (seRows) mfSeFlows = mfSeFlows.concat(buildXirrCashFlows(seRows, selected));
+        if (seRows) mfSeFlows = mfSeFlows.concat(seFlowsINR);
         mfSeFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
 
         // Fixed Income follows the exclusion toggle: with "No Exclusion" it is
@@ -3290,7 +3341,7 @@
             var units = lastAtOrBefore(entry.events, date, "cumulativeUnits") || 0;
             if (units <= UNITS_EPSILON) return;
             var hist = stockHistory[ticker];
-            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+            var price = hist ? lastPriceOnOrBefore(hist.prices, dateStr) : null;
             if (!price) return;
             if (entry.region === "US" || (hist && hist.currency === "USD")) {
               total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
@@ -3310,8 +3361,19 @@
         });
         if (seRows) {
           Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            var entry = seUnitEventsByTicker[ticker];
             if (!stockHistory[ticker]) return;
-            extFlows = extFlows.concat(buildXirrCashFlows(seRows, selected, seUnitEventsByTicker[ticker].instrument));
+            // US flows are in USD — convert each to INR at the flow's transaction-date
+            // FX so they match the INR portfolio values (fixes CAGR/Growth-of-₹100).
+            var isUsd = entry.region === "US" || (stockHistory[ticker] && stockHistory[ticker].currency === "USD");
+            buildXirrCashFlows(seRows, selected, entry.instrument).forEach(function (f) {
+              if (isUsd) {
+                var rate = usdInrHistMap[formatDateISO(f.date)] || usdInrToday;
+                extFlows.push({ date: f.date, amount: f.amount * rate });
+              } else {
+                extFlows.push(f);
+              }
+            });
           });
         }
         extFlows.sort(function (a, b) { return a.date - b.date; });
@@ -8243,10 +8305,11 @@
       .catch(function () { return { usd_inr_history: {} }; })
       .then(function (data) {
         var rateMap = (data && data.usd_inr_history) || {};
+        var usdInrToday = (data && data.prices && data.prices["__USD_INR__"]) ? data.prices["__USD_INR__"].price : 84;
         var indiaInr = 0, usInr = 0;
         lotsByRegion.India.forEach(function (lot) { indiaInr += lot.units * lot.price; });
         lotsByRegion.US.forEach(function (lot) {
-          var rate = rateMap[formatDateISO(lot.date)] || 84;
+          var rate = lookupUsdInrRate(rateMap, formatDateISO(lot.date), usdInrToday);
           usInr += lot.units * lot.price * rate;
         });
         return { India: indiaInr, US: usInr };
@@ -11231,6 +11294,9 @@
               buildXirrCashFlows(rows, ovPortfolio, hh.instrument).forEach(function (f) { seXirrFlows.push(f); });
             }
           });
+          // INR-converted SE cash flows WITHOUT terminal — reused by the benchmark
+          // comparison and period XIRR so those paths stop using unconverted USD.
+          _ov._seFlowsINR = seXirrFlows.slice();
           // Store flows WITH terminal in _ov so the overview XIRR has a positive terminal to converge on.
           var seXirrFlowsWithTerminal = seXirrFlows.slice();
           if (totalCurrentINR > UNITS_EPSILON) seXirrFlowsWithTerminal.push({ date: new Date(), amount: totalCurrentINR });
