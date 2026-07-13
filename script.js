@@ -4126,6 +4126,8 @@
 
       holdings.push({ portfolio: portfolio, bank: category, instrument: instrument, subCategory: subCategory,
         invested: invested, current: current, grams: isSold ? 0 : grams,
+        soldGrams: isSold ? grams : 0,
+        soldInvested: (isSold && buyPrice && grams > 0) ? grams * buyPrice : 0,
         dateStr: dateStr, sellDateStr: sellDateStr, isSold: isSold, realizedProfit: realizedProfit });
     });
     return holdings;
@@ -4169,11 +4171,12 @@
         tableWrap.hidden = true;
         return;
       }
-      // Only show active (unsold) holdings in the table
+      // Legacy table shows active (unsold) only; the card list handles Open/Closed.
       var holdings = allHoldings.filter(function (h) { return !h.isSold; });
-      if (!holdings.length) {
+      if (!allHoldings.length) {
         statusEl.textContent = "No Physical Commodity holdings found.";
         tableWrap.hidden = true;
+        try { renderCmHoldingsCardList([], null, null, null); } catch (e) {}
         return;
       }
 
@@ -4244,44 +4247,90 @@
       })() : null;
       statusEl.textContent = "";
       tableWrap.hidden = true;
-      try { renderCmHoldingsCardList(holdings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
+      try { renderCmHoldingsCardList(allHoldings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
     });
   }
 
-  function renderCmHoldingsCardList(holdings, goldPrice, dayChangePerGram, rateDate) {
+  var COMH_STATE = { portfolio: "all", showClosed: false };
+  function renderCmHoldingsCardList(allHoldings, goldPrice, dayChangePerGram, rateDate) {
     var list = document.getElementById("cmh-list");
     var eyebrow = document.getElementById("cmh-eyebrow");
     var asof = document.getElementById("cmh-gold-asof");
     var goldTop = document.getElementById("fi-gold-asof");
     if (!list) return;
-    if (eyebrow) eyebrow.textContent = "";
+
+    // Open / Closed (sold) toggle — mirrors the India/US & Fixed Income feature.
+    var cmhOc = document.getElementById("cmh-open-closed");
+    if (cmhOc && !cmhOc.dataset.bound) {
+      cmhOc.dataset.bound = "1";
+      cmhOc.querySelectorAll("[data-cmh-oc]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          COMH_STATE.showClosed = btn.dataset.cmhOc === "closed";
+          cmhOc.querySelectorAll("[data-cmh-oc]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          renderCommodityHoldingsTable();
+        });
+      });
+    }
+    // Portfolio pill toggle.
+    var cmhPf = document.getElementById("cmh-portfolio-toggle");
+    if (cmhPf && !cmhPf.dataset.bound) {
+      cmhPf.dataset.bound = "1";
+      var ports = ["all"].concat(collectPortfolioNamesFromSheets(["fd"]) || []);
+      cmhPf.innerHTML = ports.map(function (p) {
+        var label = p === "all" ? "All" : p;
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === COMH_STATE.portfolio ? "active" : "") + '" data-cmh-portfolio="' + p.replace(/"/g, "&quot;") + '">' + label + '</button>';
+      }).join("");
+      cmhPf.querySelectorAll("[data-cmh-portfolio]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          COMH_STATE.portfolio = btn.dataset.cmhPortfolio;
+          cmhPf.querySelectorAll("[data-cmh-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          renderCommodityHoldingsTable();
+        });
+      });
+    }
+
     var asofText = rateDate ? "Gold rate as of " + rateDate + " · ₹" + Math.round(goldPrice).toLocaleString("en-IN") + "/g" : "";
     if (asof) asof.textContent = asofText;
     if (goldTop) goldTop.innerHTML = asofText ? "&#128337; " + asofText : "";
-    if (!holdings.length) { list.innerHTML = ""; return; }
+
+    var holdings = (allHoldings || []).filter(function (h) {
+      if (COMH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(COMH_STATE.portfolio)) return false;
+      return !!h.isSold === !!COMH_STATE.showClosed;
+    });
+    if (eyebrow) eyebrow.textContent = holdings.length ? ("HOLDINGS · " + holdings.length + (COMH_STATE.showClosed ? " CLOSED" : " OPEN")) : "";
+    if (!holdings.length) {
+      list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + (COMH_STATE.showClosed ? "closed (sold)" : "open") + ' commodity holdings.</p>';
+      return;
+    }
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
       '<span>Instrument</span><span>Sub-Cat</span><span class="mfh-col-num">Rate</span><span class="mfh-col-num">Gms</span>' +
       '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
-    var _subInv = 0, _subCur = 0, _subDay = 0;
+    var _subInv = 0, _subCur = 0, _subDay = 0, _subPnl = 0;
     var body = holdings.map(function (h, i) {
       var pal = { bg: "#FEF3C7", fg: "#B45309", accent: "amber" };
-      var pnl = h.current - h.invested;
-      var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
-      var dayChg = (dayChangePerGram || 0) * (h.grams || 0);
-      _subInv += h.invested; _subCur += h.current; _subDay += dayChg;
+      // Closed (sold): show original cost as Invested, sale proceeds as Current, and
+      // the realized gain as the P&L (Return %). Day change is N/A for a sold lot.
+      var isClosed = !!h.isSold;
+      var dispInvested = isClosed ? h.soldInvested : h.invested;
+      var dispCurrent = isClosed ? (h.soldInvested + h.realizedProfit) : h.current;
+      var dispGrams = isClosed ? h.soldGrams : h.grams;
+      var pnl = isClosed ? h.realizedProfit : (h.current - h.invested);
+      var pnlPct = dispInvested > 0 ? (pnl / dispInvested) * 100 : 0;
+      var dayChg = isClosed ? 0 : ((dayChangePerGram || 0) * (h.grams || 0));
+      var soldBadge = isClosed ? '<span class="mfh-sip-badge" style="background:var(--emerald,#1a9e6e);color:#fff;">SOLD</span>' : '';
+      _subInv += dispInvested; _subCur += dispCurrent; _subDay += dayChg; _subPnl += pnl;
       return '<div class="mfh-row mfh-color-amber" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
         '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">Au</div>' +
-          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + escapeHtml(h.instrument || "Gold") + '</div><div class="mfh-inst-sub">' + escapeHtml(h.portfolio || "—") + '</div></div></div>' +
+          '<div class="mfh-inst-body"><div class="mfh-inst-name">' + escapeHtml(h.instrument || "Gold") + soldBadge + '</div><div class="mfh-inst-sub">' + escapeHtml(h.portfolio || "—") + '</div></div></div>' +
         '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + escapeHtml(h.subCategory || "Gold") + '</span></div>' +
         '<div class="mfh-col-num mfh-num-primary">₹' + Math.round(goldPrice || 0).toLocaleString("en-IN") + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + (h.grams || 0).toFixed(2) + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + (dispGrams || 0).toFixed(2) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(dispInvested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(dispCurrent) + '</div>' +
         '<div class="mfh-col-num mfh-num-day ' + (Math.abs(dayChg) < 0.01 ? "mfh-muted" : (dayChg >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(dayChg) < 0.01 ? "—" : ((dayChg >= 0 ? "+" : "") + formatCurrency(dayChg))) + '</div>' +
         '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : pnlPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
       '</div>';
     }).join("");
-    var _subPnl = _subCur - _subInv;
     var _subPct = _subInv > 0 ? (_subPnl / _subInv) * 100 : 0;
     var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 12px;margin-top:6px;">' +
       '<div style="grid-column:span 4;font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);">SUB-TOTAL · ' + holdings.length + ' HOLDINGS</div>' +
