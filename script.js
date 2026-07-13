@@ -400,6 +400,15 @@
         // Re-fetch accounts/categories/payment methods so any Settings renames appear.
         window.loadDashAccounts();
       }
+      // Mobile header shows the active tab as a centred title; the "+" add-record
+      // button is only meaningful on the Expense tab.
+      var titleEl = document.getElementById("mobile-header-title");
+      if (titleEl) {
+        var labels = { overview: "Overview", investment: "Investments", expense: "Expense" };
+        titleEl.textContent = labels[tab] || "";
+      }
+      var addBtn = document.getElementById("header-add-record");
+      if (addBtn) addBtn.style.display = (tab === "expense") ? "" : "none";
       scheduleChartResize();
     }
 
@@ -408,18 +417,11 @@
       entry.tab.addEventListener("click", function () { showDashboardTab(entry.key); });
     });
 
-    // On mobile devices, only the Expense tab is available — hide the Overview
-    // and Investments tabs (header + left drawer) and default to Expense.
+    // On mobile the header tab buttons are hidden (CSS) in favour of a centred
+    // title + hamburger drawer; every tab is reachable from the drawer. Land on
+    // Overview, matching the mobile design.
     if (window.matchMedia && window.matchMedia("(max-width: 760px)").matches) {
-      ["tab-overview", "tab-investment"].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el) el.style.display = "none";
-      });
-      document.querySelectorAll('.left-drawer-item[data-tab="overview"], .left-drawer-item[data-tab="investment"]').forEach(function (el) {
-        var li = el.closest("li") || el;
-        li.style.display = "none";
-      });
-      showDashboardTab("expense");
+      showDashboardTab("overview");
     }
   }
 

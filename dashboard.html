@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=piecharts1" />
+<link rel="stylesheet" href="styles.css?v=ovmobile1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -75,9 +75,13 @@
         <button type="button" class="header-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Overview</button>
         <button type="button" class="header-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investments</button>
         <button type="button" class="header-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
+        <span id="mobile-header-title" class="show-mobile" aria-hidden="true">Overview</span>
       </nav>
       <div class="header-actions">
         <button type="button" id="header-add-record" class="header-add-btn show-mobile" aria-label="Add record">+</button>
+        <button type="button" id="header-refresh" class="header-refresh show-mobile" aria-label="Refresh data">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        </button>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -135,6 +139,12 @@
             </ul>
           </div>
         </div>
+        <!-- Mobile-only hero: big CURRENT net worth + today's change -->
+        <div class="ov-hero show-mobile">
+          <span class="ov-hero-label">CURRENT</span>
+          <span class="ov-hero-value" id="ov-hero-current">—</span>
+          <span class="ov-hero-today" id="ov-hero-today">—</span>
+        </div>
         <p class="muted small" id="overview-status-msg" style="margin:0;padding:2px 20px;font-size:0.7rem;line-height:1;"></p>
         <div class="overview-stats-inline">
           <div class="overview-stat-inline">
@@ -166,8 +176,8 @@
             <span class="overview-stat-label">Realized P&amp;L</span>
             <span class="overview-stat-value" id="overview-realized-return">—</span>
           </div>
-          <div class="overview-stat-divider"></div>
-          <div class="overview-stat-inline">
+          <div class="overview-stat-divider overview-stat-xirr"></div>
+          <div class="overview-stat-inline overview-stat-xirr">
             <span class="overview-stat-label">XIRR</span>
             <span class="overview-stat-value" id="overview-xirr">—</span>
           </div>
@@ -238,7 +248,7 @@
               <span class="benchmark-col-value" id="rolling-summary-idx">—</span>
             </div>
             <div class="benchmark-col benchmark-col-verdict">
-              <span class="benchmark-col-label">Alpha</span>
+              <span class="benchmark-col-label">Rolling Alpha</span>
               <span class="benchmark-col-value" id="rolling-summary-alpha">—</span>
             </div>
           </div>
@@ -297,6 +307,9 @@
         <p class="muted small" style="margin:8px 20px 4px;font-size:0.72rem;font-style:italic;">Total portfolio market value over time; respects the exclusion filter.</p>
       </div>
       </div><!-- /account-value-row -->
+      <div class="ov-charts-dots show-mobile" id="ov-charts-dots" aria-hidden="true">
+        <span class="ov-dot active"></span><span class="ov-dot"></span>
+      </div>
 
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->
       <div id="monthly-invest-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;margin-top:16px;">
@@ -1187,6 +1200,59 @@
         if (hb) hb.addEventListener("click", function () {
           var b = document.getElementById("rec-open-btn");
           if (b) b.click();
+        });
+      })();
+
+      // Header refresh (mobile) reloads to re-pull latest prices/data.
+      (function () {
+        var rb = document.getElementById("header-refresh");
+        if (!rb) return;
+        rb.addEventListener("click", function () {
+          rb.classList.add("is-spinning");
+          window.location.reload();
+        });
+      })();
+
+      // Mobile Overview hero mirrors the canonical Current + Day Change stats,
+      // so it stays in sync with every async recompute without extra wiring.
+      (function () {
+        function mirror(srcId, dstId, opts) {
+          opts = opts || {};
+          var s = document.getElementById(srcId), d = document.getElementById(dstId);
+          if (!s || !d) return;
+          function sync() {
+            var t = s.textContent || "";
+            d.textContent = opts.suffix ? (t + opts.suffix) : t;
+            if (opts.color) d.style.color = s.style.color || window.getComputedStyle(s).color;
+          }
+          sync();
+          new MutationObserver(sync).observe(s, {
+            childList: true, characterData: true, subtree: true,
+            attributes: true, attributeFilter: ["style", "class"]
+          });
+        }
+        mirror("overview-total-current-value", "ov-hero-current", {});
+        mirror("overview-day-change", "ov-hero-today", { color: true, suffix: " today" });
+      })();
+
+      // Overview charts carousel (mobile): the two trend charts swipe; sync dots.
+      (function () {
+        var row = document.getElementById("account-value-row");
+        var dots = document.getElementById("ov-charts-dots");
+        if (!row || !dots) return;
+        function cards() { return row.querySelectorAll(".avc-card"); }
+        function update() {
+          var w = row.clientWidth || 1;
+          var idx = Math.round(row.scrollLeft / w);
+          dots.querySelectorAll(".ov-dot").forEach(function (d, i) {
+            d.classList.toggle("active", i === idx);
+          });
+        }
+        row.addEventListener("scroll", function () { window.requestAnimationFrame(update); });
+        dots.querySelectorAll(".ov-dot").forEach(function (d, i) {
+          d.addEventListener("click", function () {
+            row.scrollTo({ left: i * row.clientWidth, behavior: "smooth" });
+          });
         });
       })();
 
@@ -3528,7 +3594,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=piecharts1"></script>
+  <script src="script.js?v=ovmobile1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

@@ -3807,3 +3807,100 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   line-height: 1;
   padding: 2px 6px;
 }
+
+/* ============================================================
+   Mobile Overview redesign (per mockups) — phone only.
+   Desktop layout is untouched; everything is gated ≤760px.
+   ============================================================ */
+.header-refresh {
+  width: 40px; height: 40px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  display: none; align-items: center; justify-content: center; cursor: pointer;
+}
+.header-refresh.is-spinning svg { animation: hdr-spin 0.8s linear infinite; }
+@keyframes hdr-spin { to { transform: rotate(360deg); } }
+#mobile-header-title {
+  display: none;
+  font-family: "Sora", sans-serif; font-weight: 700; font-size: 1.15rem;
+  color: var(--text); justify-content: center;
+}
+
+@media (max-width: 760px) {
+  /* --- Header: hamburger · centred title · refresh --- */
+  .header-tabs .header-tab { display: none; }
+  #mobile-header-title { display: flex; }
+  .header-refresh { display: inline-flex; }
+
+  /* --- Cards get breathing room --- */
+  #panel-overview:not([hidden]) { display: flex; flex-direction: column; gap: 16px; }
+  #panel-overview .benchmark-card,
+  #panel-overview .avc-card,
+  #panel-overview .isc-card,
+  #panel-overview .mic-card { margin-top: 0; }
+
+  /* --- Net Worth card: hero + 2-col stat grid --- */
+  .ov-hero {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 4px 20px 12px;
+  }
+  .ov-hero-label {
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .ov-hero-value {
+    font-family: "Sora", sans-serif; font-weight: 800;
+    font-size: 2.4rem; line-height: 1.05; color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .ov-hero-today { font-size: 0.95rem; font-weight: 700; }
+
+  .overview-top-row { flex-wrap: wrap; padding: 14px 20px 6px; }
+  .overview-header-left { flex: 1 1 100%; justify-content: space-between; }
+  .overview-header-left .portfolio-dropdown { margin-left: 0 !important; }
+  .exclusions-dropdown { display: none; }
+
+  .overview-stats-inline {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0; overflow: visible;
+  }
+  .overview-stat-divider { display: none; }
+  .overview-stat-xirr { display: none; }
+  .overview-stat-inline {
+    min-width: 0; padding: 12px 20px; gap: 3px;
+    border-top: 1px solid var(--border);
+  }
+  .overview-stat-value { font-size: 1.05rem; }
+
+  /* --- Benchmark card: 2×2 metric grid (Portfolio | Index / Alpha | Rolling) --- */
+  .benchmark-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .bench-period-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .benchmark-result { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 12px; }
+  .benchmark-group { display: contents; }
+  .benchmark-divider { display: none; }
+  .benchmark-vs { display: none; }
+  #benchmark-rolling-group .benchmark-col:not(.benchmark-col-verdict) { display: none; }
+  .benchmark-col {
+    display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left;
+  }
+  .benchmark-col-value { font-size: 1.35rem; }
+
+  /* --- Trend charts: swipe carousel + dots --- */
+  #account-value-row {
+    display: flex; flex-wrap: nowrap; gap: 12px;
+    overflow-x: auto; scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  #account-value-row::-webkit-scrollbar { display: none; }
+  #account-value-row > .avc-card {
+    flex: 0 0 100%; scroll-snap-align: start; min-width: 0;
+  }
+  .ov-charts-dots { display: flex; justify-content: center; gap: 8px; margin-top: -4px; }
+  .ov-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: background 0.2s, width 0.2s; }
+  .ov-dot.active { background: var(--emerald); width: 22px; border-radius: 4px; }
+
+  /* --- Portfolio Split sits directly after the charts (before Cash Flow) --- */
+  #monthly-invest-row { display: flex; flex-direction: column; gap: 16px; }
+  #monthly-invest-row #investment-split-card { order: -1; }
+  #monthly-invest-row .isc-card,
+  #monthly-invest-row .mic-card { width: 100%; max-width: none; flex: none; }
+}
