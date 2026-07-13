@@ -3925,6 +3925,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
      (Expense-by-Category lives in the Expense > Charts tab; it is relocated
      out of Overview on mobile, so it does not appear here.) */
   #monthly-invest-cat-card { display: none; }
-  #overview-cashflow-row { display: none; }
+  #overview-cashflow-row { display: none !important; }
   #profit-cat-card { display: none; }
 }
