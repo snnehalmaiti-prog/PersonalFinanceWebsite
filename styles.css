@@ -3882,21 +3882,22 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .benchmark-title-group { width: 100%; padding-right: 100px; }
   /* Index dropdown pinned top-right, on the title's line */
   #benchmark-dropdown-wrap { position: absolute; top: 0; right: 0; }
-  /* Range pills: six equal chips filling one row */
+  /* Range pills: six equal chips filling one row (chip-sized) */
   .bench-period-row { display: flex; flex-wrap: nowrap; gap: 6px; }
   .bench-period-row .range-pill {
-    flex: 1; min-width: 0; padding: 9px 0; text-align: center;
-    min-height: 40px; display: flex; align-items: center; justify-content: center;
+    flex: 1; min-width: 0; padding: 0; text-align: center;
+    min-height: 32px; font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: center;
   }
-  /* XIRR | CAGR as two big pills side by side */
+  /* XIRR | CAGR: two chip-sized pills side by side */
   .benchmark-header > div:last-child { width: 100%; }
   .bench-mode-toggle {
-    display: flex; width: 100%; gap: 10px;
+    display: flex; width: 100%; gap: 8px;
     background: none; border: none; padding: 0; border-radius: 0;
   }
   .bench-mode-btn {
-    flex: 1; min-height: 46px; padding: 12px 0;
-    font-size: 0.85rem; border-radius: 999px;
+    flex: 1; min-height: 34px; padding: 6px 0;
+    font-size: 0.8rem; border-radius: 999px;
     background: var(--bg); border: 1px solid var(--border); color: var(--muted);
   }
   .bench-mode-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
