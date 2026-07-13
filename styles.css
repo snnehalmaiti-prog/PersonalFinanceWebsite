@@ -152,6 +152,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(14px) saturate(160%);
   border-bottom: 1px solid var(--border);
+  /* Clear the iOS status bar / notch when running as a standalone PWA
+     (viewport-fit=cover exposes the safe-area insets). */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .header-inner {
