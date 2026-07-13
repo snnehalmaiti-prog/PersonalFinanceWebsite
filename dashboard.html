@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=ovmobile13" />
+<link rel="stylesheet" href="styles.css?v=ovmobile14" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -142,7 +142,6 @@
         <div class="ov-hero show-mobile">
           <span class="ov-hero-label">CURRENT</span>
           <span class="ov-hero-value" id="ov-hero-current">—</span>
-          <span class="ov-hero-today" id="ov-hero-today">—</span>
         </div>
         <p class="muted small" id="overview-status-msg" style="margin:0;padding:2px 20px;font-size:0.7rem;line-height:1;"></p>
         <div class="overview-stats-inline">
@@ -1234,7 +1233,6 @@
           });
         }
         mirror("overview-total-current-value", "ov-hero-current", {});
-        mirror("overview-day-change", "ov-hero-today", { color: true, suffix: " today" });
       })();
 
       // Overview charts carousel (mobile): the two trend charts swipe; sync dots.
@@ -3599,7 +3597,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=ovmobile13"></script>
+  <script src="script.js?v=ovmobile14"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
