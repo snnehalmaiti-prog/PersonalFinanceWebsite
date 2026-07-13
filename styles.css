@@ -3926,8 +3926,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   }
   #ov-charts-card .avc-header {
     flex-direction: column; align-items: flex-start; gap: 8px;
-    flex-wrap: wrap; padding-right: 44px; margin-bottom: 10px;
+    flex-wrap: wrap; margin-bottom: 10px;
   }
+  /* Only the eyebrow line must clear the counter; the legend gets full width. */
+  #ov-charts-card .avc-eyebrow { padding-right: 44px; }
+  #ov-charts-card .avc-legend {
+    flex-wrap: wrap; white-space: normal; gap: 4px 16px; width: 100%;
+  }
+  #ov-charts-card .avc-legend-item { white-space: nowrap; }
   .ov-charts-count {
     position: absolute; top: 16px; right: 20px; z-index: 2;
     font-size: 0.8rem; font-weight: 700; color: var(--muted);
