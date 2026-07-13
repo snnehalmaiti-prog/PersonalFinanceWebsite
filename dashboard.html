@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=chipalign1" />
+<link rel="stylesheet" href="styles.css?v=piecharts1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -370,7 +370,7 @@
       </div><!-- /monthly-invest-row -->
 
       <!-- Monthly Cash Flow chart (50% width) -->
-      <div style="display:flex;gap:16px;margin-top:16px;">
+      <div id="overview-cashflow-row" style="display:flex;gap:16px;margin-top:16px;">
       <div class="value-chart-card mic-card" id="monthly-cashflow-card" style="flex:0 0 calc(50% - 8px);min-width:300px;box-sizing:border-box;">
         <div class="mic-header">
           <div class="mic-title-group">
@@ -1230,15 +1230,21 @@
           var pager = document.getElementById("dash-exp-charts-pager");
           var grid = document.querySelector("#dash-exp-subpanel-accounts .acc-charts-grid");
           var breakdown = document.getElementById("exp-card-breakdown");
+          // Expense-by-category pie lives in the Overview row on desktop; on mobile
+          // it joins the Charts stack (Overview is hidden on mobile).
+          var pie = document.getElementById("expense-pie-card");
+          var ovRow = document.getElementById("overview-cashflow-row");
           if (!monthly || !variance || !carousel || !grid) return;
           if (mq.matches) {
             // Mobile: charts belong in the carousel (before the pager).
             if (monthly.parentNode !== carousel) carousel.insertBefore(monthly, pager && pager.parentNode === carousel ? pager : null);
             if (variance.parentNode !== carousel) carousel.insertBefore(variance, pager && pager.parentNode === carousel ? pager : null);
+            if (pie && pie.parentNode !== carousel) carousel.insertBefore(pie, pager && pager.parentNode === carousel ? pager : null);
           } else {
             // Desktop: charts belong in the Accounts grid, before Breakdown.
             if (monthly.parentNode !== grid) grid.insertBefore(monthly, breakdown || null);
             if (variance.parentNode !== grid) grid.insertBefore(variance, breakdown || null);
+            if (pie && ovRow && pie.parentNode !== ovRow) ovRow.appendChild(pie);
             // If the user was on the (now hidden) Charts tab, fall back to Accounts.
             var chartsPanel = document.getElementById("dash-exp-subpanel-charts");
             if (chartsPanel && !chartsPanel.hidden) {
@@ -3522,7 +3528,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=chipalign1"></script>
+  <script src="script.js?v=piecharts1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

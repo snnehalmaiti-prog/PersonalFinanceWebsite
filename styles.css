@@ -2848,6 +2848,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
     display: grid; grid-template-columns: 1fr; gap: 16px;
   }
   .exp-charts-carousel > .acc-section-card { min-width: 0; }
+  /* The expense-by-category pie joins the stack on mobile; neutralise its
+     desktop flex sizing so it fits the single column. */
+  .exp-charts-carousel > #expense-pie-card { min-width: 0; flex: none; width: 100%; }
   /* Charts stack vertically now — no swipe pager needed. */
   .exp-charts-pager { display: none; }
 }
