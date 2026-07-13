@@ -637,6 +637,9 @@
     if (fiHoldings) fiHoldings.forEach(function (h) {
       var normSub = normalizeText(h.subCategory || "");
       if (isSavingsInvestmentExcluded() && (normSub === "investment corpus" || normSub === "savings account")) return;
+      // Once an FD matures it is treated as closed — its principal is returned to
+      // the user (untracked), so drop it from the Invested total.
+      if (h.matured) return;
       fiTotal += h.invested;
     });
     return fiTotal;
@@ -725,6 +728,21 @@
     return total;
   }
 
+  // Current Value of ACTIVE (not-yet-matured) Fixed Deposits only. A matured FD is
+  // treated as closed: its principal + interest leave the Current Value (the interest
+  // is booked as Realized Profit instead). Used for the displayed Current Value;
+  // XIRR keeps using sumFdMaturedCurrentValue (accrued maturity value as terminal).
+  function sumFdActiveCurrentValue(rows, portfolioFilter) {
+    if (!rows || !rows.length) return 0;
+    var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
+      return normSubCategory === "fixed deposit";
+    });
+    if (!holdings) return 0;
+    var total = 0;
+    holdings.forEach(function (h) { if (!h.matured) total += h.current; });
+    return total;
+  }
+
   function sumProvidentFundCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdFixedIncomeHoldingsList(rows, portfolioFilter);
@@ -749,8 +767,9 @@
     return total;
   }
 
-  // Realized Profit for Fixed Deposits = current accrued value − invested amount,
-  // identical to Unrealized Profit (applies to all FDs regardless of maturity status).
+  // Realized Profit for Fixed Deposits = interest earned, booked ONLY once the FD has
+  // matured (maturity value − invested). While an FD is still running the interest
+  // stays in Current Value as Unrealized Profit, not Realized.
   function sumFdRealizedProfit(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
@@ -758,7 +777,7 @@
     });
     if (!holdings) return 0;
     var total = 0;
-    holdings.forEach(function (h) { total += h.current - h.invested; });
+    holdings.forEach(function (h) { if (h.matured) total += h.current - h.invested; });
     return total;
   }
 
@@ -1682,7 +1701,7 @@
 
       var fiInvestment = (fdRows ? sumFdInvestment(fdRows, selected) : 0) + epfInvested;
       var investment = fiInvestment + commodityInvested;
-      var fiCurrentValue = (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0) + epfCurrent;
+      var fiCurrentValue = (fdRows ? sumFdCurrentValueAtPar(fdRows, selected) : 0) + (fdRows ? sumFdActiveCurrentValue(fdRows, selected) : 0) + (fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0) + epfCurrent;
       var currentValue = fiCurrentValue + commodityCurrent;
       if (currentValueEl) currentValueEl.textContent = formatCurrency(currentValue);
       setUnrealizedReturn(profitEl, pctEl, currentValue, investment);
@@ -1865,10 +1884,12 @@
 
       var invested = parseNumber(row[amountIdx]);
       var current = invested;
+      var fdMatured = false;
       if (normSubCategory === "fixed deposit") {
         var rate = parsePercentRate(row[rateIdx]);
         var startDate = parseFlexibleDate(row[dateIdx]);
         var maturityDate = parseFlexibleDate(row[maturityIdx]);
+        fdMatured = !!(maturityDate && maturityDate < today);
         if (startDate) {
           var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
           var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
@@ -1885,6 +1906,7 @@
         subCategory: subCategory,
         invested: invested,
         current: current,
+        matured: fdMatured,
         startDate: parseFlexibleDate(row[dateIdx])
       });
     });
@@ -1973,17 +1995,19 @@
 
       var invested = parseNumber(row[amountIdx]);
       var current = invested;
+      var fdMatured = false;
       if (normSubCategory === "fixed deposit" && maturityIdx !== -1 && rateIdx !== -1) {
         var rate = parsePercentRate(row[rateIdx]);
         var startDate = parseFlexibleDate(row[dateIdx]);
         var maturityDate = parseFlexibleDate(row[maturityIdx]);
+        fdMatured = !!(maturityDate && maturityDate < today);
         if (startDate) {
           var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
           var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
           if (elapsedQuarters > 0 && rate) current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
         }
       }
-      holdings.push({ portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory, invested: invested, current: current });
+      holdings.push({ portfolio: portfolio, bank: bank, instrument: instrument, subCategory: subCategory, invested: invested, current: current, matured: fdMatured });
     });
 
     Object.keys(latestCorpusByKey).forEach(function (key) {
