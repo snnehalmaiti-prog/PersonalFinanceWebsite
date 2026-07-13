@@ -3860,8 +3860,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .ov-hero-today { font-size: 0.95rem; font-weight: 700; }
 
   .overview-top-row { flex-wrap: wrap; padding: 14px 20px 6px; }
-  .overview-header-left { flex: 1 1 100%; justify-content: space-between; }
-  .overview-header-left .portfolio-dropdown { margin-left: 0 !important; }
+  .overview-header-left {
+    flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 8px;
+  }
+  .overview-header-left .portfolio-dropdown {
+    margin-left: 0 !important; align-self: flex-end;
+  }
   .exclusions-dropdown { display: none; }
 
   .overview-stats-inline {
