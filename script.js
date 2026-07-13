@@ -5372,6 +5372,45 @@
     });
   }
 
+  // "Refresh Price" (Stocks/ETF tab) — dispatch only the stock-price workflow
+  // and re-fetch stock/ETF current values.
+  var stocksetfRefreshPriceBtn = document.getElementById("stocksetf-refresh-price");
+  if (stocksetfRefreshPriceBtn) {
+    stocksetfRefreshPriceBtn.addEventListener("click", function () {
+      var originalLabel = stocksetfRefreshPriceBtn.textContent;
+      stocksetfRefreshPriceBtn.disabled = true;
+      stocksetfRefreshPriceBtn.textContent = "Triggering…";
+
+      // Clear cached stock prices so current values re-fetch fresh.
+      localStorage.removeItem("wf-stock-prices-json");
+
+      var gh = loadGhSettings();
+      if (gh.owner && gh.repo && gh.token) {
+        var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/actions/workflows/";
+        var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
+        var body = JSON.stringify({ ref: gh.branch || "main" });
+        fetch(apiBase + "fetch_stock_prices.yml/dispatches", { method: "POST", headers: headers, body: body })
+          .then(function (r) {
+            stocksetfRefreshPriceBtn.textContent = r.ok ? "Triggered ✓" : "Trigger failed — check GitHub token";
+          })
+          .catch(function () {
+            stocksetfRefreshPriceBtn.textContent = "Trigger failed — check GitHub token";
+          });
+      } else {
+        stocksetfRefreshPriceBtn.textContent = "Set GitHub token in Settings";
+      }
+
+      // Re-render Stocks/ETF surfaces with cleared cache.
+      updateDashboardStats();
+      renderStockEtfHoldingsTable();
+      renderMarketSegmentChart();
+      setTimeout(function () {
+        stocksetfRefreshPriceBtn.disabled = false;
+        stocksetfRefreshPriceBtn.textContent = originalLabel;
+      }, 2500);
+    });
+  }
+
   if (portfolioToggle && portfolioMenu) {
     populatePortfolioSelect();
 
