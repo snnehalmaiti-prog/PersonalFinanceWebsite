@@ -3066,10 +3066,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
     gap: 10px;
   }
   .exp-subtabs { grid-area: subtabs; min-width: 0; }
-  /* Add-record: full-width green CTA just below the sub-tab chips. */
+  /* Add-record: compact, centred green CTA just below the sub-tab chips. */
   .rec-add-btn {
-    grid-area: add; width: 100%; justify-content: center;
-    background: var(--emerald); color: #fff; min-height: 44px; border-radius: 12px;
+    grid-area: add; justify-self: center; width: auto;
+    justify-content: center; padding: 8px 22px;
+    background: var(--emerald) !important; color: #fff !important;
+    border: none !important; min-height: 38px; border-radius: 999px;
+    font-size: 0.85rem;
   }
   .rec-add-btn .rec-add-text { display: inline; }
   .exp-top-bar-center { grid-area: period; margin-top: 0; }
@@ -3918,12 +3921,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
     display: flex; width: 100%; gap: 8px;
     background: none; border: none; padding: 0; border-radius: 0;
   }
-  .bench-mode-btn {
+  .bench-mode-toggle .bench-mode-btn {
     flex: 1; min-height: 34px; padding: 6px 0;
     font-size: 0.8rem; border-radius: 999px;
     background: var(--bg); border: 1px solid var(--border); color: var(--muted);
   }
-  .bench-mode-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .bench-mode-toggle .bench-mode-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
   .benchmark-result { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 12px; }
   .benchmark-group { display: contents; }
   .benchmark-divider { display: none; }
