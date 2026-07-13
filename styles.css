@@ -1013,8 +1013,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
     border: 1px solid var(--border); background: var(--surface);
     justify-content: center;
   }
-  /* Sub-tab chips move into the drawer on mobile. */
-  .exp-subtabs { display: none; }
+  /* Sub-tab chips stay visible on mobile as the Expense sub-navigation. */
   /* The Add-record button now lives in the header on mobile. */
   .exp-top-bar .rec-add-btn { display: none; }
 }

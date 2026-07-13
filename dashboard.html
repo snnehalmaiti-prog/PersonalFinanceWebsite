@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=chartstack1" />
+<link rel="stylesheet" href="styles.css?v=chipsnav1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -46,16 +46,7 @@
         Expense
       </button></li>
     </ul>
-    <!-- Expense sub-sections (shown on mobile in place of the chip row) -->
-    <div class="left-drawer-section" id="left-drawer-expense-section">
-      <span class="left-drawer-section-label">Expense</span>
-      <ul class="left-drawer-nav">
-        <li><button class="left-drawer-item left-drawer-sub active" data-exp-subtab="accounts">Accounts</button></li>
-        <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="records">Records</button></li>
-        <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="analytics">Analytics</button></li>
-        <li class="show-mobile"><button class="left-drawer-item left-drawer-sub" data-exp-subtab="charts">Charts</button></li>
-      </ul>
-    </div>
+    <!-- Expense sub-navigation lives in the on-screen chip row; not duplicated here. -->
     <div class="left-drawer-section show-mobile">
       <ul class="left-drawer-nav">
         <li><a class="left-drawer-item" href="settings.html">Settings</a></li>
@@ -3531,7 +3522,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=chartstack1"></script>
+  <script src="script.js?v=chipsnav1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
