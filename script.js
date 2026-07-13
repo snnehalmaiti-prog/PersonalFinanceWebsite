@@ -2302,7 +2302,13 @@
     var fdRows = getSheetRows("fd");
     if (fdRows && fdRows.length) {
       var fd = buildFdFixedIncomeHoldingsList(fdRows, selectedPortfolio);
-      if (fd && fd.length) out = out.concat(fd);
+      if (fd && fd.length) {
+        // A matured FD is treated as closed — show it with zero Invested/Current
+        // (and hence zero Unrealized / Return %) in the Fixed Income Holding view.
+        // (The interest is already booked as Realized Profit in the Overview.)
+        fd.forEach(function (h) { if (h.matured) { h.invested = 0; h.current = 0; } });
+        out = out.concat(fd);
+      }
     }
     var fiRows = getSheetRows("fixedincome");
     if (fiRows && fiRows.length) {
@@ -2721,24 +2727,29 @@
       subCategoryTd.textContent = h.subCategory;
       tr.appendChild(subCategoryTd);
 
+      // A matured FD is closed — display it as 0 Invested / 0 Current (hence 0
+      // Unrealized / 0 Return %). Its interest is booked under Realized Profit.
+      var dispInvested = h.matured ? 0 : h.invested;
+      var dispCurrent = h.matured ? 0 : h.current;
+
       var investedTd = document.createElement("td");
       investedTd.className = "num";
-      investedTd.textContent = formatCurrency(h.invested);
+      investedTd.textContent = formatCurrency(dispInvested);
       tr.appendChild(investedTd);
 
       var currentTd = document.createElement("td");
       currentTd.className = "num col-desktop-only";
-      currentTd.textContent = formatCurrency(h.current);
+      currentTd.textContent = formatCurrency(dispCurrent);
       tr.appendChild(currentTd);
 
       if (showReturn) {
-        var unrealizedProfit = h.current - h.invested;
+        var unrealizedProfit = dispCurrent - dispInvested;
         var unrealizedTd = document.createElement("td");
         unrealizedTd.className = "num " + (unrealizedProfit > 0 ? "positive" : unrealizedProfit < 0 ? "negative" : "");
         unrealizedTd.textContent = (unrealizedProfit > 0 ? "+" : "") + formatCurrency(unrealizedProfit);
         tr.appendChild(unrealizedTd);
 
-        var returnPct = h.invested > 0 ? (unrealizedProfit / h.invested) * 100 : 0;
+        var returnPct = dispInvested > 0 ? (unrealizedProfit / dispInvested) * 100 : 0;
         var returnTd = document.createElement("td");
         returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
         returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";
