@@ -2288,9 +2288,12 @@
   }
 
   function renderFiRedesign(holdings) {
-    renderFiPortfolioCards(holdings);
-    renderFiAllocation(holdings);
-    renderFiInterestSplit(holdings);
+    // Aggregate cards/allocation/split reflect only ACTIVE (open) holdings — a
+    // matured FD is closed, so it's excluded from these like a sold stock is.
+    var active = holdings.filter(function (h) { return !h.matured; });
+    renderFiPortfolioCards(active);
+    renderFiAllocation(active);
+    renderFiInterestSplit(active);
     renderFiHoldingsCardList(holdings);
   }
 
@@ -2302,13 +2305,7 @@
     var fdRows = getSheetRows("fd");
     if (fdRows && fdRows.length) {
       var fd = buildFdFixedIncomeHoldingsList(fdRows, selectedPortfolio);
-      if (fd && fd.length) {
-        // A matured FD is treated as closed — show it with zero Invested/Current
-        // (and hence zero Unrealized / Return %) in the Fixed Income Holding view.
-        // (The interest is already booked as Realized Profit in the Overview.)
-        fd.forEach(function (h) { if (h.matured) { h.invested = 0; h.current = 0; } });
-        out = out.concat(fd);
-      }
+      if (fd && fd.length) out = out.concat(fd);
     }
     var fiRows = getSheetRows("fixedincome");
     if (fiRows && fiRows.length) {
@@ -2569,7 +2566,7 @@
     if (summary) summary.innerHTML = '<strong>' + iPct.toFixed(0) + '%</strong> is earning interest &middot; Corpus and Savings sit idle at ' + formatCurrency(nonInterest) + '.';
   }
 
-  var FIH_STATE = { sort: "pnl-desc", portfolio: "all" };
+  var FIH_STATE = { sort: "pnl-desc", portfolio: "all", showClosed: false };
   function _fihSortCompare(a, b, key) {
     var pnlA = a.current - a.invested, pnlB = b.current - b.invested;
     var av, bv;
@@ -2590,21 +2587,36 @@
     var list = document.getElementById("fih-list");
     var eyebrow = document.getElementById("fih-eyebrow");
     if (!list) return;
+    // Open / Closed (matured) toggle — mirrors the India/US holdings feature.
+    // Wired up-front so it works even when the Open list is empty.
+    var ocToggle = document.getElementById("fih-open-closed");
+    if (ocToggle && !ocToggle.dataset.bound) {
+      ocToggle.dataset.bound = "1";
+      ocToggle.querySelectorAll("[data-fih-oc]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          FIH_STATE.showClosed = btn.dataset.fihOc === "closed";
+          ocToggle.querySelectorAll("[data-fih-oc]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          renderAllFixedIncomeHoldingsTable();
+        });
+      });
+    }
     var filtered = holdings.filter(function (h) {
       if (FIH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(FIH_STATE.portfolio)) return false;
       if (_fiIsGold(h.subCategory)) return false; // gold shown in commodity card
+      // Open = active holdings; Closed = matured FDs (money returned, interest realized).
+      if (!!h.matured !== !!FIH_STATE.showClosed) return false;
       return true;
     });
     var fparts = String(FIH_STATE.sort || "pnl-desc").split("-");
     var fSortKey = fparts[0];
     var fSortDir = fparts[1] === "asc" ? 1 : -1;
     filtered.sort(function (a, b) { return fSortDir * _fihSortCompare(a, b, fSortKey); });
-    if (eyebrow) eyebrow.textContent = "";
+    if (eyebrow) eyebrow.textContent = "HOLDINGS · " + filtered.length + (FIH_STATE.showClosed ? " CLOSED" : " OPEN");
     if (!filtered.length) {
-      list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No fixed income holdings.</p>';
+      list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + (FIH_STATE.showClosed ? "closed (matured)" : "open") + ' fixed income holdings.</p>';
       return;
     }
-    var subtotalInv = 0, subtotalCur = 0;
+    var subtotalInv = 0, subtotalCur = 0, subtotalPnl = 0;
     function _fArrow(k) { return fSortKey === k ? (fSortDir === -1 ? " ↓" : " ↑") : ""; }
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
       '<span class="mfh-sortable" data-fih-sort-col="instrument">Instrument' + _fArrow("instrument") + '</span>' +
@@ -2622,26 +2634,32 @@
     var body = filtered.map(function (h, i) {
       var pal = FI_AVATAR_PALETTE[i % FI_AVATAR_PALETTE.length];
       var initial = (h.portfolio || "?").charAt(0).toUpperCase();
+      // Closed (matured FD): money is returned, so Current shows 0 and the P&L
+      // column is the realized interest (maturity value − principal).
+      var dispCurrent = h.matured ? 0 : h.current;
       var pnl = h.current - h.invested;
       var pnlPct = h.invested > 0 ? (pnl / h.invested) * 100 : 0;
       var isIdle = !_fiIsInterestBearing(h.subCategory);
       var idleBadge = isIdle ? '<span class="mfh-sip-badge" style="background:#F1EBDD;color:#8B7E6B;">IDLE</span>' : '';
-      subtotalInv += h.invested; subtotalCur += h.current;
+      var maturedBadge = h.matured ? '<span class="mfh-sip-badge" style="background:var(--emerald,#1a9e6e);color:#fff;">MATURED</span>' : '';
+      subtotalInv += h.invested; subtotalCur += dispCurrent; subtotalPnl += pnl;
       return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
         '<div class="mfh-inst"><div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + initial + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) + idleBadge + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) + idleBadge + maturedBadge + '</div>' +
             '<div class="mfh-inst-sub">' + escapeHtml(h.portfolio || "—") + '</div>' +
           '</div>' +
         '</div>' +
         '<div><span class="mfh-sip-badge" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + escapeHtml(h.subCategory) + '</span></div>' +
         '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.invested) + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(h.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(dispCurrent) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary ' + (pnl >= 0 ? "" : "mfh-negative") + '" style="color:' + (pnl > 0 ? "var(--emerald)" : pnl < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (pnl > 0 ? "+" : "") + (pnl === 0 ? "₹0" : formatCurrency(pnl)) + '</div>' +
         '<div class="mfh-col-num mfh-num-xirr ' + (pnlPct > 0 ? "" : (pnlPct < 0 ? "mfh-negative" : "mfh-muted")) + '">' + (pnlPct > 0 ? "+" : "") + pnlPct.toFixed(2) + '%</div>' +
       '</div>';
     }).join("");
-    var subSum = subtotalCur - subtotalInv;
+    // P&L = Σ(maturity/current − invested): unrealized for Open, realized interest for
+    // Closed. Not (subtotalCur − subtotalInv), since Closed shows Current as 0.
+    var subSum = subtotalPnl;
     var subPct = subtotalInv > 0 ? (subSum / subtotalInv) * 100 : 0;
     var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 12px;">' +
       '<div style="grid-column:span 2;font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);">SUB-TOTAL · ' + filtered.length + ' HOLDINGS</div>' +
@@ -2727,29 +2745,24 @@
       subCategoryTd.textContent = h.subCategory;
       tr.appendChild(subCategoryTd);
 
-      // A matured FD is closed — display it as 0 Invested / 0 Current (hence 0
-      // Unrealized / 0 Return %). Its interest is booked under Realized Profit.
-      var dispInvested = h.matured ? 0 : h.invested;
-      var dispCurrent = h.matured ? 0 : h.current;
-
       var investedTd = document.createElement("td");
       investedTd.className = "num";
-      investedTd.textContent = formatCurrency(dispInvested);
+      investedTd.textContent = formatCurrency(h.invested);
       tr.appendChild(investedTd);
 
       var currentTd = document.createElement("td");
       currentTd.className = "num col-desktop-only";
-      currentTd.textContent = formatCurrency(dispCurrent);
+      currentTd.textContent = formatCurrency(h.current);
       tr.appendChild(currentTd);
 
       if (showReturn) {
-        var unrealizedProfit = dispCurrent - dispInvested;
+        var unrealizedProfit = h.current - h.invested;
         var unrealizedTd = document.createElement("td");
         unrealizedTd.className = "num " + (unrealizedProfit > 0 ? "positive" : unrealizedProfit < 0 ? "negative" : "");
         unrealizedTd.textContent = (unrealizedProfit > 0 ? "+" : "") + formatCurrency(unrealizedProfit);
         tr.appendChild(unrealizedTd);
 
-        var returnPct = dispInvested > 0 ? (unrealizedProfit / dispInvested) * 100 : 0;
+        var returnPct = h.invested > 0 ? (unrealizedProfit / h.invested) * 100 : 0;
         var returnTd = document.createElement("td");
         returnTd.className = "num " + (returnPct > 0 ? "positive" : returnPct < 0 ? "negative" : "");
         returnTd.textContent = (returnPct > 0 ? "+" : "") + returnPct.toFixed(2) + "%";

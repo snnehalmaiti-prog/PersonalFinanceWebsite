@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=fdmatured3" />
+<link rel="stylesheet" href="styles.css?v=fiopenclosed1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -661,6 +661,10 @@
             <p class="muted small" style="margin:2px 0 0;font-size:0.7rem;">* Investment Corpus &amp; Savings Account are non-interest bearing and show no Unrealized Profit.</p>
           </div>
           <div class="mfh-header-right">
+            <div class="mfh-portfolio-toggle" id="fih-open-closed" role="group">
+              <button type="button" class="mfh-portfolio-btn active" data-fih-oc="open">Open</button>
+              <button type="button" class="mfh-portfolio-btn" data-fih-oc="closed">Closed</button>
+            </div>
             <div class="mfh-portfolio-toggle" id="fih-portfolio-toggle" role="group"></div>
           </div>
         </div>
@@ -3596,7 +3600,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=fdmatured3"></script>
+  <script src="script.js?v=fiopenclosed1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
