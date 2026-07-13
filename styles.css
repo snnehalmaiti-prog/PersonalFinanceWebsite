@@ -2841,25 +2841,16 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* Account × Payment Method spend pivot table */
 .exp-matrix-wrap { display: flex; }
-/* Charts tab: two cards side-by-side on desktop; swipeable 1/2 carousel on mobile. */
+/* Charts tab: two cards side-by-side on desktop; stacked vertically on mobile. */
 .exp-charts-carousel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
 .exp-charts-pager { display: none; }
 @media (max-width: 760px) {
   .exp-charts-carousel {
-    display: flex; grid-template-columns: none; gap: 12px;
-    overflow-x: auto; scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    display: grid; grid-template-columns: 1fr; gap: 16px;
   }
-  .exp-charts-carousel::-webkit-scrollbar { display: none; }
-  .exp-charts-carousel > .acc-section-card { flex: 0 0 100%; scroll-snap-align: start; min-width: 0; }
-  .exp-charts-pager {
-    display: flex; align-items: center; justify-content: center; gap: 16px;
-    margin-top: 12px; font-size: 0.82rem; font-weight: 700; color: var(--muted);
-  }
-  .exp-charts-pager button {
-    width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); font-size: 1.1rem; cursor: pointer;
-  }
+  .exp-charts-carousel > .acc-section-card { min-width: 0; }
+  /* Charts stack vertically now — no swipe pager needed. */
+  .exp-charts-pager { display: none; }
 }
 /* Mobile Breakdown: by-payment-method expandable list (desktop keeps the matrix) */
 .exp-pm-list { display: none; }
