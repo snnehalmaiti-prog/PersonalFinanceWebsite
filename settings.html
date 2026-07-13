@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=exptwopanel1" />
+<link rel="stylesheet" href="styles.css?v=ghtab2" />
 <script src="supabase-client.js?v=nofisync"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
@@ -135,6 +135,7 @@
       <button type="button" class="settings-tab" id="tab-transactions" role="tab" aria-selected="false" aria-controls="panel-transactions">Transaction Details</button>
       <button type="button" class="settings-tab" id="tab-mapping" role="tab" aria-selected="false" aria-controls="panel-mapping">Mapping</button>
       <button type="button" class="settings-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
+      <button type="button" class="settings-tab" id="tab-github" role="tab" aria-selected="false" aria-controls="panel-github">GitHub Integration</button>
     </div>
 
     <section id="panel-profile" class="settings-panel" role="tabpanel" aria-labelledby="tab-profile">
@@ -309,9 +310,11 @@
           <table id="stocksetfmapping-sheet-table" class="sheet-table"></table>
         </div>
       </div>
-    <section class="settings-section">
+    </section>
+
+    <section id="panel-github" class="settings-panel" role="tabpanel" aria-labelledby="tab-github" hidden>
       <h2 class="settings-section-title">GitHub Integration</h2>
-      <p class="muted small" style="margin-bottom:16px;">When set, syncing the Stocks/ETF Mapping will automatically push <code>stocksetf_mapping.json</code> to your repo so the price-fetch workflow always discovers new instruments.</p>
+      <p class="muted small" style="margin-bottom:16px;">When set, syncing the Stocks/ETF Mapping automatically pushes <code>stocksetf_mapping.json</code> to your repo so the price-fetch workflow discovers new instruments, and the <strong>Refresh NAV</strong> / <strong>Refresh Price</strong> buttons can trigger the workflows. The token is stored only in this browser and never synced to the cloud.</p>
       <div class="equity-card">
         <div class="equity-card-header">
           <h3>GitHub Repository</h3>
@@ -322,12 +325,11 @@
           <input type="text" id="gh-branch" placeholder="Branch (e.g. main)" style="flex:1;min-width:150px;" />
         </div>
         <div class="equity-link-row" style="margin-top:10px;">
-          <input type="password" id="gh-token" placeholder="GitHub Personal Access Token (repo scope)" style="flex:1;" />
+          <input type="password" id="gh-token" placeholder="GitHub Personal Access Token (Contents + Actions: read/write)" style="flex:1;" />
           <button type="button" class="btn btn-primary" id="gh-save-btn">Save</button>
         </div>
         <p id="gh-save-status" class="muted small" style="margin-top:10px;"></p>
       </div>
-    </section>
     </section>
 
 
@@ -557,7 +559,7 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=review2"></script>
+  <script src="script.js?v=ghtab2"></script>
   <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching

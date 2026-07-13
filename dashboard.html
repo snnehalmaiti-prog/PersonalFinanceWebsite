@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=ghtab1" />
+<link rel="stylesheet" href="styles.css?v=ghtab2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -44,10 +44,6 @@
       <li><button class="left-drawer-item" data-tab="expense">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
         Expense
-      </button></li>
-      <li><button class="left-drawer-item" data-tab="github">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-        GitHub Integration
       </button></li>
     </ul>
     <!-- Expense sub-navigation lives in the on-screen chip row; not duplicated here. -->
@@ -79,7 +75,6 @@
         <button type="button" class="header-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">Overview</button>
         <button type="button" class="header-tab" id="tab-investment" role="tab" aria-selected="false" aria-controls="panel-investment">Investments</button>
         <button type="button" class="header-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
-        <button type="button" class="header-tab" id="tab-github" role="tab" aria-selected="false" aria-controls="panel-github">GitHub Integration</button>
         <span id="mobile-header-title" class="show-mobile" aria-hidden="true">Overview</span>
       </nav>
       <div class="header-actions">
@@ -1089,26 +1084,6 @@
         </div>
       </div>
     </section><!-- /panel-expense -->
-
-    <section id="panel-github" class="settings-panel" role="tabpanel" aria-labelledby="tab-github" hidden>
-      <h2 style="margin:0 0 6px;">GitHub Integration</h2>
-      <p class="muted small" style="margin:0 0 16px;">When set, syncing the Stocks/ETF Mapping automatically pushes <code>stocksetf_mapping.json</code> to your repo, and the <strong>Refresh NAV</strong> / <strong>Refresh Price</strong> buttons can trigger the price-fetch workflows. The token is stored only in this browser (localStorage) and never synced to the cloud.</p>
-      <div class="equity-card">
-        <div class="equity-card-header">
-          <h3>GitHub Repository</h3>
-        </div>
-        <div class="equity-link-row" style="flex-wrap:wrap;gap:10px;">
-          <input type="text" id="gh-owner" placeholder="GitHub username (e.g. snnehalmaiti-prog)" style="flex:1;min-width:180px;" />
-          <input type="text" id="gh-repo" placeholder="Repo name (e.g. PersonalFinanceWebsite)" style="flex:1;min-width:180px;" />
-          <input type="text" id="gh-branch" placeholder="Branch (e.g. main)" style="flex:1;min-width:150px;" />
-        </div>
-        <div class="equity-link-row" style="margin-top:10px;">
-          <input type="password" id="gh-token" placeholder="GitHub Personal Access Token (Contents + Actions: read/write)" style="flex:1;" />
-          <button type="button" class="btn btn-primary" id="gh-save-btn">Save</button>
-        </div>
-        <p id="gh-save-status" class="muted small" style="margin-top:10px;"></p>
-      </div>
-    </section>
 
     <script>
       // Replace each multi-select filter with a scrollable checkbox list.
@@ -3623,7 +3598,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=ghtab1"></script>
+  <script src="script.js?v=ghtab2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

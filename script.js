@@ -294,7 +294,8 @@
       { tab: settingsTabProfile, panel: document.getElementById("panel-profile"), key: "profile" },
       { tab: settingsTabTransactions, panel: document.getElementById("panel-transactions"), key: "transactions" },
       { tab: settingsTabMapping, panel: document.getElementById("panel-mapping"), key: "mapping" },
-      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" }
+      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" },
+      { tab: document.getElementById("tab-github"), panel: document.getElementById("panel-github"), key: "github" }
     ];
 
     function showSettingsTab(tab) {
@@ -323,8 +324,7 @@
     var dashTabs = [
       { tab: dashTabOverview, panel: panelOverview, key: "overview" },
       { tab: dashTabInvestment, panel: panelInvestment, key: "investment" },
-      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" },
-      { tab: document.getElementById("tab-github"), panel: document.getElementById("panel-github"), key: "github" }
+      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" }
     ];
 
     // ===== Investment sub-tabs =====
