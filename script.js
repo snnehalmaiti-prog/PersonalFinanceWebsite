@@ -5375,6 +5375,14 @@
       localStorage.removeItem(AMFI_NAV_MAP_CACHE_KEY);
       localStorage.removeItem("wf-stock-prices-json");
 
+      // Restore the button to its resting label after showing the outcome.
+      function resetNavBtn(delay) {
+        setTimeout(function () {
+          equityRefreshNavBtn.disabled = false;
+          equityRefreshNavBtn.textContent = originalLabel;
+        }, delay);
+      }
+
       // Trigger AMFI NAV and ISIN Map workflows via GitHub API if credentials are saved
       var gh = loadGhSettings();
       if (gh.owner && gh.repo && gh.token) {
@@ -5390,13 +5398,16 @@
           var okCount = results.filter(Boolean).length;
           // Reflect real dispatch status instead of always claiming success —
           // an expired/invalid PAT returns 401/404 and should not read as "Triggered".
+          // Set the final state from INSIDE the promise so it is never clobbered by a
+          // blind timer; keep it visible for a few seconds before restoring the label.
           equityRefreshNavBtn.textContent = okCount === results.length
             ? "Triggered ✓"
             : (okCount > 0 ? "Partly triggered" : "Trigger failed — check GitHub token");
+          resetNavBtn(4000);
         });
-        equityRefreshNavBtn.textContent = "Triggering…";
       } else {
-        equityRefreshNavBtn.textContent = "Refreshing…";
+        equityRefreshNavBtn.textContent = "Set GitHub token in Settings";
+        resetNavBtn(3000);
       }
 
       // Re-render dashboard surfaces if they exist (this button also lives on the
@@ -5413,10 +5424,6 @@
           renderInstrumentSplitChart();
         }
       } catch (e) {}
-      setTimeout(function () {
-        equityRefreshNavBtn.disabled = false;
-        equityRefreshNavBtn.textContent = originalLabel;
-      }, 2000);
     });
   }
 
@@ -5432,6 +5439,13 @@
       // Clear cached stock prices so current values re-fetch fresh.
       localStorage.removeItem("wf-stock-prices-json");
 
+      function resetPriceBtn(delay) {
+        setTimeout(function () {
+          stocksetfRefreshPriceBtn.disabled = false;
+          stocksetfRefreshPriceBtn.textContent = originalLabel;
+        }, delay);
+      }
+
       var gh = loadGhSettings();
       if (gh.owner && gh.repo && gh.token) {
         var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/actions/workflows/";
@@ -5439,13 +5453,18 @@
         var body = JSON.stringify({ ref: gh.branch || "main" });
         fetch(apiBase + "fetch_stock_prices.yml/dispatches", { method: "POST", headers: headers, body: body })
           .then(function (r) {
+            // Final state set from inside the promise so it survives (not clobbered
+            // by a blind timer); shown for a few seconds, then the label restores.
             stocksetfRefreshPriceBtn.textContent = r.ok ? "Triggered ✓" : "Trigger failed — check GitHub token";
+            resetPriceBtn(4000);
           })
           .catch(function () {
             stocksetfRefreshPriceBtn.textContent = "Trigger failed — check GitHub token";
+            resetPriceBtn(4000);
           });
       } else {
         stocksetfRefreshPriceBtn.textContent = "Set GitHub token in Settings";
+        resetPriceBtn(3000);
       }
 
       // Re-render Stocks/ETF surfaces with cleared cache (dashboard only).
@@ -5456,10 +5475,6 @@
           renderMarketSegmentChart();
         }
       } catch (e) {}
-      setTimeout(function () {
-        stocksetfRefreshPriceBtn.disabled = false;
-        stocksetfRefreshPriceBtn.textContent = originalLabel;
-      }, 2500);
     });
   }
 
@@ -8025,7 +8040,7 @@
         // Bound the range to months that actually have income/expense records
         // (ignore investment-only months like a 2024-only investment history).
         var expKeys = allKeys.filter(function(k) {
-          return k >= "2026-01" && byMonth[k] && (byMonth[k].income > 0 || byMonth[k].expense > 0);
+          return byMonth[k] && (byMonth[k].income > 0 || byMonth[k].expense > 0);
         });
         if (expKeys.length) {
           first = expKeys[0];
@@ -9992,7 +10007,7 @@
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
       var seg = lookupSegment(segmentMap, r.instrument);
-      var sub = seg + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
+      var sub = escapeHtml(seg) + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
       var isSip = _isSipInstrument(r.instrument);
       var pnlPos = r.pnl >= 0;
       var xirrCls = r.xirrPct == null ? "mfh-muted" : (r.xirrPct >= 0 ? "" : "mfh-negative");
@@ -10001,7 +10016,7 @@
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + truncateInstrumentNameToFund(r.instrument) + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(truncateInstrumentNameToFund(r.instrument)) + '</div>' +
             '<div class="mfh-inst-sub">' + sub + '</div>' +
           '</div>' +
         '</div>' +
