@@ -3873,12 +3873,20 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
     gap: 0; overflow: visible;
   }
   .overview-stat-divider { display: none; }
-  .overview-stat-xirr { display: none; }
   .overview-stat-inline {
     min-width: 0; padding: 12px 20px; gap: 3px;
     border-top: 1px solid var(--border);
   }
   .overview-stat-value { font-size: 1.05rem; }
+  /* Current is shown in the hero, so drop it here. XIRR stays.
+     Order: Invested, Unrealized P&L, Return %, Day Change, Realized P&L, XIRR. */
+  .overview-stat-inline:has(#overview-total-current-value) { display: none; }
+  .overview-stat-inline:has(#overview-total-investment) { order: 1; }
+  .overview-stat-inline:has(#overview-unrealized-return) { order: 2; }
+  .overview-stat-inline:has(#overview-return-pct) { order: 3; }
+  .overview-stat-inline:has(#overview-day-change) { order: 4; }
+  .overview-stat-inline:has(#overview-realized-return) { order: 5; }
+  .overview-stat-inline:has(#overview-xirr) { order: 6; }
 
   /* --- Benchmark card: title+dropdown / pills / XIRR|CAGR / 2×2 metrics --- */
   .benchmark-header { flex-direction: column; align-items: stretch; gap: 14px; position: relative; }
