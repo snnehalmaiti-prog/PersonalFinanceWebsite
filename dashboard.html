@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=mobilechartsonly1" />
+<link rel="stylesheet" href="styles.css?v=addrecfix1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1170,9 +1170,15 @@
           var inlinePicker = document.getElementById("rec-period-picker-inline");
           var showPicker = (key === "records" || key === "analytics");
           if (inlinePicker) inlinePicker.style.display = showPicker ? "" : "none";
-          // Also toggle the wrapper so its full-width mobile row leaves no empty gap on Accounts.
+          // On mobile the picker drops to its own full-width row, so collapse the
+          // wrapper when unused to avoid an empty gap. On desktop keep the wrapper
+          // present (empty) so it holds its grid column — otherwise the Add-record
+          // button falls into the 1fr column and stretches full-width.
           var pickerWrap = inlinePicker && inlinePicker.closest(".exp-top-bar-center");
-          if (pickerWrap) pickerWrap.style.display = showPicker ? "" : "none";
+          if (pickerWrap) {
+            var isMobile = window.matchMedia("(max-width: 760px)").matches;
+            pickerWrap.style.display = (showPicker || !isMobile) ? "" : "none";
+          }
           if (key === "analytics" && typeof syncAnaFromRec === "function") syncAnaFromRec();
           // Resize charts now that this sub-panel is visible (fixes 0×0 charts
           // created while hidden, esp. on mobile).
@@ -3525,7 +3531,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=mobilechartsonly1"></script>
+  <script src="script.js?v=addrecfix1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
