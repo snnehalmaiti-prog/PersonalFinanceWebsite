@@ -826,6 +826,84 @@
     return total;
   }
 
+  // Matured-FD realized interest keyed by maturity YEAR (mirrors sumFdRealizedProfit's
+  // total). Lets the Realized Profit card attribute FD interest to a year, not just "all".
+  function fdMaturedRealizedByYear(rows, portfolioFilter) {
+    var out = {};
+    if (!rows || !rows.length) return out;
+    var header = rows[0].map(normalizeText);
+    var pI = header.indexOf("portfolio name"), cI = header.indexOf("instrument category"),
+        sI = header.indexOf("instrument sub category"), aI = header.indexOf("invested amount"),
+        dI = header.indexOf("transaction date"), rI = header.indexOf("rate of return"),
+        mI = header.indexOf("maturity date/sell date");
+    if (mI === -1) mI = header.indexOf("maturity date");
+    if (pI === -1 || aI === -1 || dI === -1 || sI === -1 || mI === -1 || rI === -1) return out;
+    var todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+    rows.slice(1).forEach(function (row) {
+      var pf = (row[pI] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(pf) !== normalizeText(portfolioFilter)) return;
+      if (cI !== -1 && normalizeText(row[cI]) !== "fixed income") return;
+      if (normalizeText(row[sI] || "") !== "fixed deposit") return;
+      var matD = parseFlexibleDate(row[mI]);
+      if (!(matD && matD < todayD)) return; // not matured
+      var principal = parseNumber(row[aI]);
+      var rate = parsePercentRate(row[rI]);
+      var q = countElapsedQuarters(parseFlexibleDate(row[dI]), matD);
+      var matVal = (q > 0 && rate) ? principal * Math.pow(1 + rate / 4, q) : principal;
+      var interest = matVal - principal;
+      if (!interest) return;
+      var yr = String(matD.getFullYear());
+      out[yr] = (out[yr] || 0) + interest;
+    });
+    return out;
+  }
+
+  // Provident-fund realized interest keyed by WITHDRAWAL year (mirrors the FIFO logic
+  // in buildFdFixedIncomeHoldingsList so the total equals sumProvidentFundRealizedProfit).
+  function pfRealizedByYear(rows, portfolioFilter) {
+    var out = {};
+    if (!rows || !rows.length) return out;
+    var header = rows[0].map(normalizeText);
+    var pI = header.indexOf("portfolio name"), cI = header.indexOf("instrument category"),
+        sI = header.indexOf("instrument sub category"), tI = header.indexOf("transaction type"),
+        aI = header.indexOf("invested amount"), dI = header.indexOf("transaction date"),
+        iI = header.indexOf("instrument name");
+    if (pI === -1 || aI === -1 || dI === -1 || sI === -1) return out;
+    var byKey = {};
+    rows.slice(1).forEach(function (row) {
+      var pf = (row[pI] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(pf) !== normalizeText(portfolioFilter)) return;
+      if (cI !== -1 && normalizeText(row[cI]) !== "fixed income") return;
+      if (!isProvidentFundSub(normalizeText(row[sI] || ""))) return;
+      var key = normalizeText(pf) + "||" + normalizeText(iI !== -1 ? (row[iI] || "") : "") + "||" + normalizeText(row[sI] || "");
+      (byKey[key] = byKey[key] || []).push({ date: parseFlexibleDate(row[dI]), amount: parseNumber(row[aI]), type: tI !== -1 ? normalizeText(row[tI] || "") : "" });
+    });
+    Object.keys(byKey).forEach(function (k) {
+      var lots = [], totalInterest = 0;
+      byKey[k].forEach(function (tx) {
+        if (tx.type === "interest") { totalInterest += tx.amount; return; }
+        if (tx.type === "withdrawal") {
+          var totalPrincipalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+          var remaining = tx.amount;
+          while (remaining > 0 && lots.length > 0) {
+            if (lots[0].amount <= remaining) { remaining -= lots[0].amount; lots.shift(); }
+            else { lots[0].amount -= remaining; remaining = 0; }
+          }
+          var withdrawnPrincipal = tx.amount - remaining;
+          if (totalPrincipalBefore > 0 && totalInterest > 0) {
+            var realized = totalInterest * (withdrawnPrincipal / totalPrincipalBefore);
+            totalInterest -= realized;
+            var yr = tx.date ? String(tx.date.getFullYear()) : "all";
+            out[yr] = (out[yr] || 0) + realized;
+          }
+          return;
+        }
+        lots.push({ amount: tx.amount });
+      });
+    });
+    return out;
+  }
+
   function buildFdMaturedXirrCashFlows(rows, portfolioFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -9095,12 +9173,20 @@
         });
       }
 
-      // Fixed Income realized — FD accrued interest + Provident Fund interest.
-      // These accrue continuously (not booked in a single year), so they're
-      // shown only under "All time".
+      // Fixed Income realized — matured-FD interest is booked at its maturity year;
+      // Provident Fund interest is booked at each withdrawal year. Attributed per
+      // year (falling back to "all" only when a date is missing).
       if (fdRows) {
-        addAllOnly("Fixed Income", "Fixed Deposit", sumFdRealizedProfit(fdRows, portfolioFilter));
-        addAllOnly("Fixed Income", "Provident Fund", sumProvidentFundRealizedProfit(fdRows, portfolioFilter));
+        var fdByYear = fdMaturedRealizedByYear(fdRows, portfolioFilter);
+        Object.keys(fdByYear).forEach(function (y) {
+          if (y === "all") addAllOnly("Fixed Income", "Fixed Deposit", fdByYear[y]);
+          else add(y, "Fixed Income", "Fixed Deposit", fdByYear[y]);
+        });
+        var pfByYear = pfRealizedByYear(fdRows, portfolioFilter);
+        Object.keys(pfByYear).forEach(function (y) {
+          if (y === "all") addAllOnly("Fixed Income", "Provident Fund", pfByYear[y]);
+          else add(y, "Fixed Income", "Provident Fund", pfByYear[y]);
+        });
       }
 
       return { buckets: buckets, years: Object.keys(years).sort() };
@@ -9122,7 +9208,7 @@
     // Portfolio dropdown: All Portfolios + each portfolio (independent of the
     // Overview selector).
     if (portSel) {
-      var portNames = collectPortfolioNamesFromSheets(["equity", "stocksetf"]) || [];
+      var portNames = collectPortfolioNamesFromSheets(["equity", "stocksetf", "fd"]) || [];
       var wantPorts = ["all"].concat(portNames);
       var havePorts = [];
       for (var pi = 0; pi < portSel.options.length; pi++) havePorts.push(portSel.options[pi].value);
@@ -9167,7 +9253,7 @@
       totalEl.className = "isc-total-value " + (grand > 0 ? "positive" : grand < 0 ? "negative" : "");
       totalEl.title = Math.abs(grand) >= 1e7 ? (grand >= 0 ? "+" : "") + formatCurrencyFull(grand) : "";
 
-      var yearNote = __profitCatYear === "all" ? "" : "Fixed Income (FD/PF) interest is shown under All time only.";
+      var yearNote = "";
       if (!cats.length) {
         listEl.innerHTML = "";
         if (statusEl) statusEl.textContent = "No realized profit booked" + (__profitCatYear === "all" ? " yet." : " in " + __profitCatYear + ".");
