@@ -3180,6 +3180,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .exp-subtab:hover { color: var(--text); }
 .exp-subtab.active { background: var(--text); color: var(--bg); font-weight: 600; }
+/* Charts is a mobile-only sub-tab; hide it on desktop while keeping its natural
+   inline display on mobile so it aligns with the other chips. */
+@media (min-width: 761px) { .exp-subtab-charts { display: none; } }
 
 /* ── Records filter panel redesign ───────────────────────────────────────── */
 .rec-filter-panel {
