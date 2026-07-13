@@ -5344,7 +5344,7 @@
         var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
         var branch = gh.branch || "main";
         var body = JSON.stringify({ ref: branch });
-        Promise.all(["update-amfi-nav.yml", "update-amfi-isin-map.yml", "fetch_stock_prices.yml"].map(function (wf) {
+        Promise.all(["update-amfi-nav.yml", "update-amfi-isin-map.yml"].map(function (wf) {
           return fetch(apiBase + wf + "/dispatches", { method: "POST", headers: headers, body: body })
             .then(function (r) { return r.ok; })
             .catch(function () { return false; });
