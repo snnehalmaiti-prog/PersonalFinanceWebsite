@@ -323,7 +323,8 @@
     var dashTabs = [
       { tab: dashTabOverview, panel: panelOverview, key: "overview" },
       { tab: dashTabInvestment, panel: panelInvestment, key: "investment" },
-      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" }
+      { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" },
+      { tab: document.getElementById("tab-github"), panel: document.getElementById("panel-github"), key: "github" }
     ];
 
     // ===== Investment sub-tabs =====
@@ -407,7 +408,7 @@
       // button is only meaningful on the Expense tab.
       var titleEl = document.getElementById("mobile-header-title");
       if (titleEl) {
-        var labels = { overview: "Overview", investment: "Investments", expense: "Expense" };
+        var labels = { overview: "Overview", investment: "Investments", expense: "Expense", github: "GitHub Integration" };
         titleEl.textContent = labels[tab] || "";
       }
       var addBtn = document.getElementById("header-add-record");
