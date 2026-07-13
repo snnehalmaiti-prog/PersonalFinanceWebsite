@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=pmbreakdown1" />
+<link rel="stylesheet" href="styles.css?v=mobilechartsonly1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -53,7 +53,13 @@
         <li><button class="left-drawer-item left-drawer-sub active" data-exp-subtab="accounts">Accounts</button></li>
         <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="records">Records</button></li>
         <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="analytics">Analytics</button></li>
-        <li><button class="left-drawer-item left-drawer-sub" data-exp-subtab="charts">Charts</button></li>
+        <li class="show-mobile"><button class="left-drawer-item left-drawer-sub" data-exp-subtab="charts">Charts</button></li>
+      </ul>
+    </div>
+    <div class="left-drawer-section show-mobile">
+      <ul class="left-drawer-nav">
+        <li><a class="left-drawer-item" href="settings.html">Settings</a></li>
+        <li><a class="left-drawer-item" href="index.html">Log out</a></li>
       </ul>
     </div>
   </nav>
@@ -80,6 +86,7 @@
         <button type="button" class="header-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
       </nav>
       <div class="header-actions">
+        <button type="button" id="header-add-record" class="header-add-btn show-mobile" aria-label="Add record">+</button>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -715,7 +722,7 @@
           <button type="button" class="exp-subtab active" data-dash-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
-          <button type="button" class="exp-subtab" data-dash-exp-subtab="charts" role="tab" aria-selected="false">Charts</button>
+          <button type="button" class="exp-subtab show-mobile" data-dash-exp-subtab="charts" role="tab" aria-selected="false">Charts</button>
         </div>
         <div class="exp-top-bar-center">
           <div class="rec-period-picker" id="rec-period-picker-inline" style="max-width:340px; width:100%; display:none;">
@@ -746,7 +753,7 @@
         <div class="acc-charts-grid">
 
           <!-- Account × Payment Method spend pivot -->
-          <div class="acc-section-card" style="margin:0;">
+          <div class="acc-section-card" id="exp-card-breakdown" style="margin:0;">
             <div class="acc-section-top">
               <span class="acc-section-label" id="dash-exp-matrix-label">BREAKDOWN</span>
               <div style="display:flex; gap:6px;">
@@ -776,9 +783,9 @@
       </div>
 
       <div id="dash-exp-subpanel-charts" class="exp-subpanel" hidden>
-        <div class="acc-charts-grid" style="margin-top:20px;">
+        <div class="exp-charts-carousel" id="dash-exp-charts-carousel">
           <!-- Monthly IBE chart -->
-          <div class="acc-section-card" style="margin:0;">
+          <div class="acc-section-card" id="exp-card-monthly" style="margin:0;">
             <div class="acc-section-top">
               <span class="acc-section-label">CASH FLOW · MONTHLY · YTD</span>
               <select id="dash-exp-monthly-year" class="acc-pill-select"></select>
@@ -790,7 +797,7 @@
           </div>
 
           <!-- Waterfall / Variance chart -->
-          <div class="acc-section-card" style="margin:0;">
+          <div class="acc-section-card" id="exp-card-variance" style="margin:0;">
             <div class="acc-section-top">
               <span class="acc-section-label">VARIANCE · RUNNING</span>
               <select id="dash-exp-wf-account" class="acc-pill-select">
@@ -804,6 +811,11 @@
               <canvas id="dash-exp-wf-chart"></canvas>
             </div>
           </div>
+        </div>
+        <div class="exp-charts-pager" id="dash-exp-charts-pager">
+          <button type="button" data-cc-nav="-1" aria-label="Previous chart">‹</button>
+          <span id="dash-exp-charts-pageno">1 / 2</span>
+          <button type="button" data-cc-nav="1" aria-label="Next chart">›</button>
         </div>
       </div>
 
@@ -1171,6 +1183,79 @@
           });
         });
       });
+
+      // Header "+" (mobile) opens Add Record via the existing button.
+      (function () {
+        var hb = document.getElementById("header-add-record");
+        if (hb) hb.addEventListener("click", function () {
+          var b = document.getElementById("rec-open-btn");
+          if (b) b.click();
+        });
+      })();
+
+      // Charts carousel (mobile): update "1 / 2" pager on scroll; arrows page.
+      (function () {
+        var car = document.getElementById("dash-exp-charts-carousel");
+        var pageNo = document.getElementById("dash-exp-charts-pageno");
+        if (!car) return;
+        function cards() { return car.querySelectorAll(".acc-section-card"); }
+        function curIndex() {
+          var w = car.clientWidth || 1;
+          return Math.round(car.scrollLeft / w);
+        }
+        function updatePager() {
+          if (!pageNo) return;
+          var n = cards().length || 1;
+          pageNo.textContent = (Math.min(n, curIndex() + 1)) + " / " + n;
+        }
+        car.addEventListener("scroll", function () { window.requestAnimationFrame(updatePager); });
+        document.querySelectorAll("[data-cc-nav]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var dir = Number(btn.getAttribute("data-cc-nav"));
+            var n = cards().length;
+            var next = Math.max(0, Math.min(n - 1, curIndex() + dir));
+            car.scrollTo({ left: next * car.clientWidth, behavior: "smooth" });
+          });
+        });
+        updatePager();
+      })();
+
+      // Charts are a MOBILE-ONLY tab. On desktop the two chart cards live in the
+      // Accounts panel (original layout); on mobile they move into the Charts
+      // carousel. Relocate the single DOM nodes based on viewport so the desktop
+      // web UI is unchanged.
+      (function () {
+        var mq = window.matchMedia("(max-width: 760px)");
+        function layoutExpCharts() {
+          var monthly = document.getElementById("exp-card-monthly");
+          var variance = document.getElementById("exp-card-variance");
+          var carousel = document.getElementById("dash-exp-charts-carousel");
+          var pager = document.getElementById("dash-exp-charts-pager");
+          var grid = document.querySelector("#dash-exp-subpanel-accounts .acc-charts-grid");
+          var breakdown = document.getElementById("exp-card-breakdown");
+          if (!monthly || !variance || !carousel || !grid) return;
+          if (mq.matches) {
+            // Mobile: charts belong in the carousel (before the pager).
+            if (monthly.parentNode !== carousel) carousel.insertBefore(monthly, pager && pager.parentNode === carousel ? pager : null);
+            if (variance.parentNode !== carousel) carousel.insertBefore(variance, pager && pager.parentNode === carousel ? pager : null);
+          } else {
+            // Desktop: charts belong in the Accounts grid, before Breakdown.
+            if (monthly.parentNode !== grid) grid.insertBefore(monthly, breakdown || null);
+            if (variance.parentNode !== grid) grid.insertBefore(variance, breakdown || null);
+            // If the user was on the (now hidden) Charts tab, fall back to Accounts.
+            var chartsPanel = document.getElementById("dash-exp-subpanel-charts");
+            if (chartsPanel && !chartsPanel.hidden) {
+              var accChip = document.querySelector('[data-dash-exp-subtab="accounts"]');
+              if (accChip) accChip.click();
+            }
+          }
+          if (typeof window.wfResizeCharts === "function") window.wfResizeCharts();
+        }
+        if (mq.addEventListener) mq.addEventListener("change", layoutExpCharts);
+        else if (mq.addListener) mq.addListener(layoutExpCharts);
+        layoutExpCharts();
+        window.wfLayoutExpCharts = layoutExpCharts;
+      })();
 
       // Drawer Expense sub-nav → trigger the matching chip + close the drawer.
       document.querySelectorAll("[data-exp-subtab]").forEach(function (btn) {
@@ -3440,7 +3525,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=pmbreakdown1"></script>
+  <script src="script.js?v=mobilechartsonly1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
