@@ -6335,9 +6335,32 @@
     };
   }
 
+  // Visible, non-console status for the GitHub mapping push so users can see
+  // success/failure without opening DevTools (esp. on mobile).
+  function showGhToast(msg, ok) {
+    var t = document.getElementById("gh-push-toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "gh-push-toast";
+      t.style.cssText =
+        "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);" +
+        "z-index:9999;max-width:88vw;padding:10px 16px;border-radius:10px;" +
+        "font:600 0.85rem/1.3 system-ui,sans-serif;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.25);";
+      document.body.appendChild(t);
+    }
+    t.style.background = ok ? "#1a9e6e" : "#c0392b";
+    t.textContent = msg;
+    t.style.display = "block";
+    clearTimeout(showGhToast._h);
+    showGhToast._h = setTimeout(function () { t.style.display = "none"; }, 6000);
+  }
+
   function pushMappingToGitHub(rows) {
     var gh = loadGhSettings();
-    if (!gh.owner || !gh.repo || !gh.token) return; // not configured — silent skip
+    if (!gh.owner || !gh.repo || !gh.token) {
+      showGhToast("GitHub push skipped: set owner, repo & token in Settings.", false);
+      return; // not configured
+    }
     var content = btoa(unescape(encodeURIComponent(JSON.stringify(rows))));
     var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/contents/stocksetf_mapping.json";
     var headers = { "Authorization": "Bearer " + gh.token, "Content-Type": "application/json", "Accept": "application/vnd.github+json" };
@@ -6353,11 +6376,19 @@
       .then(function (r) {
         if (r && (r.status === 200 || r.status === 201)) {
           dbg("stocksetf_mapping.json pushed to GitHub successfully.");
+          showGhToast("✓ Mapping pushed to GitHub.", true);
         } else {
           console.warn("GitHub push returned status", r && r.status);
+          showGhToast("GitHub push failed: HTTP " + (r && r.status) +
+            ((r && r.status === 404) ? " (check branch name / repo access)" :
+             (r && r.status === 403) ? " (token needs Contents: write)" :
+             (r && r.status === 401) ? " (token invalid or expired)" : ""), false);
         }
       })
-      .catch(function (err) { console.warn("GitHub push failed:", err); });
+      .catch(function (err) {
+        console.warn("GitHub push failed:", err);
+        showGhToast("GitHub push error: " + (err && err.message || err), false);
+      });
   }
 
   // Wire GitHub settings save button
