@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=pfyear1" />
+<link rel="stylesheet" href="styles.css?v=regfix2" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1880,12 +1880,6 @@
 
         // DEBUG — remove after diagnosis
         console.group("Settlement debug");
-        console.log("commonBudgetCat", commonBudgetCat);
-        console.log("acct1Id", acct1Id, "acct2Id", acct2Id);
-        console.log("budgetRecs (next month):", budgetRecs.map(function(r){return {id:r.id,cat:r.category_id,labels:r.labels,amt:r.amount};}));
-        console.log("prevBudgetRecs (this month):", prevBudgetRecs.map(function(r){return {id:r.id,cat:r.category_id,labels:r.labels,amt:r.amount,txn_date:r.txn_date};}));
-        console.log("ALL budget recs for joint acct:", (dashExpState.records||[]).filter(function(r){return r.type==="budget"&&r.account_id===jointId;}).map(function(r){return {id:r.id,txn_date:r.txn_date,cat:r.category_id,labels:r.labels};}));
-        console.log("splitPct1/2:", splitPct1, splitPct2, "prevSplitPct1/2:", prevSplitPct1, prevSplitPct2);
         console.groupEnd();
 
         var accounts = dashExpState.accounts || [];
@@ -1900,8 +1894,6 @@
         var COLORS = ["#1A9E6E", "#6C3FBC"];
 
         // DEBUG — next month records for budget contribution
-        console.log("nextMonthRecs Common Budget:", nextMonthRecs.filter(function(r){return r.type==="budget"&&r.account_id===jointId;}).map(function(r){return {id:r.id,txn_date:r.txn_date,cat:r.category_id,labels:r.labels};}));
-        console.log("yr/mo (selected):", yr, mo, "nextMo:", mo+1);
 
         function personCard(name, contribPct, overrunPct, budgetContrib, hasSplit, ccSpend, overrunShare, hasOverrun, transfer) {
           var letter = (name || "?")[0].toUpperCase();
@@ -2004,7 +1996,7 @@
           if (f.account.length && f.account.indexOf(r.account_id) === -1) return false;
           if (f.payment.length && f.payment.indexOf(r.payment_method_id) === -1) return false;
           if (f.type.length && f.type.indexOf(r.type) === -1) return false;
-          if (f.person && r.person_id !== f.person) return false;
+          if (f.person && r.account_id !== f.person) return false;
           if (f.category.length) {
             var cat = dashExpState.categories.find(function (c) { return c.id === r.category_id; });
             var parentId = cat ? (cat.parent_id || cat.id) : r.category_id;
@@ -3507,7 +3499,6 @@
         }
         var origLabel = editingRecId ? "Save Changes" : "Add Record";
         btn.disabled = true; btn.textContent = "Saving…";
-        console.log("Saving record", editingRecId, "labels:", row.labels, "splitData:", splitData);
         var op = editingRecId ? WfDb.update("expense_records", editingRecId, row) : WfDb.insert("expense_records", row);
         op.then(function () {
           btn.disabled = false; btn.textContent = origLabel;
@@ -3591,7 +3582,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=nofisync"></script>
+  <script src="supabase-client.js?v=regfix2"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -3607,7 +3598,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=pfyear1"></script>
+  <script src="script.js?v=regfix2"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

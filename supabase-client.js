@@ -169,6 +169,13 @@
   function signOut() {
     var token = getAccessToken();
     setSession(null);
+    // Clear per-user data so the next user on a shared device can't see the prior
+    // user's sheet configs or GitHub PAT.
+    try {
+      SYNC_KEYS.forEach(function (k) { localStorage.removeItem(k); });
+      localStorage.removeItem("wf-gh-token");
+      sessionStorage.removeItem("wf-cloud-synced");
+    } catch (e) {}
     return fetch(SUPABASE_URL + "/auth/v1/logout", {
       method: "POST",
       headers: authHeaders(token)
@@ -246,7 +253,14 @@
         method: "POST",
         headers: Object.assign({}, authHeaders(token), { "Prefer": "resolution=merge-duplicates,return=representation" }),
         body: JSON.stringify(payload)
-      }).then(function (r) { return r.json(); });
+      }).then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (data) {
+          // Surface silent failures (e.g. a missing column → PGRST204 fails the whole
+          // upsert) instead of swallowing them, so sync problems are diagnosable.
+          if (!r.ok) console.warn("Settings sync failed:", r.status, data && (data.message || data.code || data));
+          return data;
+        });
+      });
     });
   }
 

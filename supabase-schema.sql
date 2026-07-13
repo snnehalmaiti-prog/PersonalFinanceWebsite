@@ -11,8 +11,16 @@ CREATE TABLE IF NOT EXISTS user_settings (
   gh_owner text DEFAULT '',
   gh_repo text DEFAULT '',
   gh_branch text DEFAULT '',
+  expense_templates jsonb,
+  recurring_payments jsonb,
   updated_at timestamptz DEFAULT now()
 );
+
+-- Migration for existing databases created before expense_templates / recurring_payments
+-- were synced. Without these columns the whole settings upsert fails (PGRST204) and
+-- ALL settings sync silently stops once a template/recurring payment exists.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS expense_templates jsonb;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS recurring_payments jsonb;
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 

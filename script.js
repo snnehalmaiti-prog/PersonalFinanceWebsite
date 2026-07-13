@@ -838,7 +838,9 @@
         mI = header.indexOf("maturity date/sell date");
     if (mI === -1) mI = header.indexOf("maturity date");
     if (pI === -1 || aI === -1 || dI === -1 || sI === -1 || mI === -1 || rI === -1) return out;
-    var todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+    // Same boundary as the holdings builders (un-zeroed now) so the matured set matches
+    // sumFdRealizedProfit exactly, including maturity-on-today.
+    var todayD = new Date();
     rows.slice(1).forEach(function (row) {
       var pf = (row[pI] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(pf) !== normalizeText(portfolioFilter)) return;
@@ -880,6 +882,9 @@
     });
     Object.keys(byKey).forEach(function (k) {
       var lots = [], totalInterest = 0;
+      // Match buildFdFixedIncomeHoldingsList: replay chronologically, else the FIFO
+      // realized-interest total (path-dependent) can differ from the source of truth.
+      byKey[k].sort(function (a, b) { return (a.date || 0) - (b.date || 0); });
       byKey[k].forEach(function (tx) {
         if (tx.type === "interest") { totalInterest += tx.amount; return; }
         if (tx.type === "withdrawal") {
@@ -1714,7 +1719,7 @@
     // Only clear them when the portfolio actually changes — then
     // renderStockEtfHoldingsTable will repopulate them.
     if (_ov._seComputedPortfolio !== selected) {
-      _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seXirrFlows = [];
+      _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seXirrFlows = []; _ov._seFlowsINR = [];
     }
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
     _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
@@ -2764,7 +2769,7 @@
       var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["fd", "fixedincome"]) || []);
       pf.innerHTML = portfolios.map(function (p) {
         var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === FIH_STATE.portfolio ? "active" : "") + '" data-fih-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === FIH_STATE.portfolio ? "active" : "") + '" data-fih-portfolio="' + p.replace(/"/g, '&quot;') + '">' + escapeHtml(label) + '</button>';
       }).join("");
       pf.querySelectorAll("[data-fih-portfolio]").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -4356,7 +4361,7 @@
       var ports = ["all"].concat(collectPortfolioNamesFromSheets(["fd"]) || []);
       cmhPf.innerHTML = ports.map(function (p) {
         var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === COMH_STATE.portfolio ? "active" : "") + '" data-cmh-portfolio="' + p.replace(/"/g, "&quot;") + '">' + label + '</button>';
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === COMH_STATE.portfolio ? "active" : "") + '" data-cmh-portfolio="' + p.replace(/"/g, "&quot;") + '">' + escapeHtml(label) + '</button>';
       }).join("");
       cmhPf.querySelectorAll("[data-cmh-portfolio]").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -4565,7 +4570,7 @@
       var currentPortfolio = SEH_STATE.portfolio[spec.region] || "all";
       el.innerHTML = portfolios.map(function (p) {
         var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === currentPortfolio ? "active" : "") + '" data-seh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === currentPortfolio ? "active" : "") + '" data-seh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + escapeHtml(label) + '</button>';
       }).join("");
       el.querySelectorAll("[data-seh-portfolio]").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -10656,7 +10661,7 @@
       var current = window.__mfHoldingsPortfolioOverride || "all";
       pfToggle.innerHTML = portfolios.map(function (p) {
         var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === current ? "active" : "") + '" data-mfh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + label + '</button>';
+        return '<button type="button" class="mfh-portfolio-btn ' + (p === current ? "active" : "") + '" data-mfh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + escapeHtml(label) + '</button>';
       }).join("");
       pfToggle.querySelectorAll("[data-mfh-portfolio]").forEach(function (btn) {
         btn.addEventListener("click", function () {
