@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=ovmobile4" />
+<link rel="stylesheet" href="styles.css?v=ovmobile5" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -256,6 +256,8 @@
         <p class="muted small" id="benchmark-status" hidden></p>
       </div>
 
+      <div id="ov-charts-card">
+      <span class="ov-charts-count show-mobile" id="ov-charts-count" aria-hidden="true">1 / 2</span>
       <div id="account-value-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;">
       <div class="avc-card" id="account-value-card" style="flex:1 1 480px;min-width:0;">
         <div class="avc-header">
@@ -310,6 +312,7 @@
       <div class="ov-charts-dots show-mobile" id="ov-charts-dots" aria-hidden="true">
         <span class="ov-dot active"></span><span class="ov-dot"></span>
       </div>
+      </div><!-- /ov-charts-card -->
 
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->
       <div id="monthly-invest-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;margin-top:16px;">
@@ -1240,13 +1243,16 @@
         var row = document.getElementById("account-value-row");
         var dots = document.getElementById("ov-charts-dots");
         if (!row || !dots) return;
+        var counter = document.getElementById("ov-charts-count");
         function cards() { return row.querySelectorAll(".avc-card"); }
         function update() {
           var w = row.clientWidth || 1;
-          var idx = Math.round(row.scrollLeft / w);
+          var n = cards().length || 1;
+          var idx = Math.max(0, Math.min(n - 1, Math.round(row.scrollLeft / w)));
           dots.querySelectorAll(".ov-dot").forEach(function (d, i) {
             d.classList.toggle("active", i === idx);
           });
+          if (counter) counter.textContent = (idx + 1) + " / " + n;
         }
         row.addEventListener("scroll", function () { window.requestAnimationFrame(update); });
         dots.querySelectorAll(".ov-dot").forEach(function (d, i) {
@@ -3594,7 +3600,7 @@
       });
     })();
   </script>
-  <script src="script.js?v=ovmobile4"></script>
+  <script src="script.js?v=ovmobile5"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

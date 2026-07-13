@@ -3884,17 +3884,34 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   }
   .benchmark-col-value { font-size: 1.35rem; }
 
-  /* --- Trend charts: swipe carousel + dots --- */
+  /* --- Trend charts: one card, swipe between the two charts + dots --- */
+  #ov-charts-card {
+    position: relative;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px 4px 12px;
+  }
   #account-value-row {
-    display: flex; flex-wrap: nowrap; gap: 12px;
+    display: flex; flex-wrap: nowrap; gap: 0;
     overflow-x: auto; scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch; scrollbar-width: none;
   }
   #account-value-row::-webkit-scrollbar { display: none; }
   #account-value-row > .avc-card {
     flex: 0 0 100%; scroll-snap-align: start; min-width: 0;
+    /* Strip the individual card chrome — the outer card provides it. */
+    background: none; border: none; border-radius: 0;
+    margin: 0; padding: 0 16px;
   }
-  .ov-charts-dots { display: flex; justify-content: center; gap: 8px; margin-top: -4px; }
+  #ov-charts-card .avc-header {
+    flex-direction: column; align-items: flex-start; gap: 8px;
+    flex-wrap: wrap; padding-right: 44px; margin-bottom: 10px;
+  }
+  .ov-charts-count {
+    position: absolute; top: 16px; right: 20px; z-index: 2;
+    font-size: 0.8rem; font-weight: 700; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .ov-charts-dots { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
   .ov-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: background 0.2s, width 0.2s; }
   .ov-dot.active { background: var(--emerald); width: 22px; border-radius: 4px; }
 
