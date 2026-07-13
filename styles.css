@@ -3909,4 +3909,5 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
      out of Overview on mobile, so it does not appear here.) */
   #monthly-invest-cat-card { display: none; }
   #overview-cashflow-row { display: none; }
+  #profit-cat-card { display: none; }
 }
