@@ -113,9 +113,31 @@
     return buyLots;
   }
 
+  // forwardFillOverTimeline — value-at-or-before every timeline date, in one linear
+  // pass. Equivalent to calling a binary-search lastAtOrBefore(sortedEvents, date,
+  // valueKey) for each date, but O(events + dates) instead of O(dates·log events),
+  // by exploiting that BOTH the timeline and the events are sorted ascending.
+  //
+  // Preconditions: `timeline` (Array<Date>) and `sortedEvents` (Array<{date:Date}>)
+  // are both ascending. Returns Array aligned to `timeline`: each entry is the
+  // valueKey of the latest event whose date <= that timeline date, or null if none.
+  function forwardFillOverTimeline(sortedEvents, timeline, valueKey) {
+    var n = timeline ? timeline.length : 0;
+    var out = new Array(n);
+    var m = sortedEvents ? sortedEvents.length : 0;
+    var p = -1; // index of the latest event with date <= the current timeline date
+    for (var i = 0; i < n; i++) {
+      var t = timeline[i];
+      while (p + 1 < m && sortedEvents[p + 1].date <= t) p++;
+      out[i] = p >= 0 ? sortedEvents[p][valueKey] : null;
+    }
+    return out;
+  }
+
   root.WfMath = {
     DAYS_PER_YEAR: DAYS_PER_YEAR,
     calculateXIRR: calculateXIRR,
-    fifoRemainingLots: fifoRemainingLots
+    fifoRemainingLots: fifoRemainingLots,
+    forwardFillOverTimeline: forwardFillOverTimeline
   };
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this));

@@ -150,11 +150,20 @@ const chartDates = [];
   for (let i = 0; i < 3650; i++) chartDates.push(new Date(base + i * day));
 }
 const series20 = Array.from({ length: 20 }, () => sortedEvents(400));
-bench("3650 x 20 lastAtOrBefore lookups", () => {
+bench("OLD: 3650 x 20 per-date binary searches", () => {
   let s = 0;
   for (let d = 0; d < chartDates.length; d++)
     for (let k = 0; k < series20.length; k++)
       s += lastAtOrBefore(series20[k], chartDates[d], "cumulativeUnits") || 0;
+  return s;
+}, 3);
+const forwardFill = (globalThis.WfMath || global.WfMath).forwardFillOverTimeline;
+bench("NEW: 20x forwardFillOverTimeline (pointer-walk)", () => {
+  let s = 0;
+  for (let k = 0; k < series20.length; k++) {
+    const filled = forwardFill(series20[k], chartDates, "cumulativeUnits");
+    for (let d = 0; d < filled.length; d++) s += filled[d] || 0;
+  }
   return s;
 }, 3);
 console.log();

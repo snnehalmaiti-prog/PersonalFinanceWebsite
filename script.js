@@ -7509,26 +7509,43 @@
           return;
         }
 
+        // Pre-compute each sorted series' value-at-or-before every timeline date in
+        // one linear pass (WfMath.forwardFillOverTimeline), instead of a binary
+        // search per (date × series). Turns this O(dates·series·log n) hot loop into
+        // O(dates·series) — the chart's dominant render cost. Exact equivalence to
+        // the previous lastAtOrBefore calls is unit-tested (test-math W1).
+        var _ff = WfMath.forwardFillOverTimeline;
+        var commodityGramsAt = _ff(commodityGramEvents, timeline, "cumulativeGrams");
+        var goldPriceSeriesAt = _ff(goldPriceHistory, timeline, "price");
+        var epfAt = _ff(epfEvents, timeline, "cumulativeValue");
+        var fdAt = _ff(fdValueEvents, timeline, "cumulativeValue");
+        var unitsAtByName = {}, navAtByName = {};
+        instruments.forEach(function (name) {
+          unitsAtByName[name] = _ff(unitEvents[name], timeline, "cumulativeUnits");
+          navAtByName[name] = _ff(navByInstrument[name], timeline, "nav");
+        });
+        var seUnitsAtByTicker = {};
+        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+          seUnitsAtByTicker[ticker] = _ff(seUnitEventsByTicker[ticker], timeline, "cumulativeUnits");
+        });
+
         var commodityValueAt = [];
-        var points = timeline.map(function (date) {
-          var activeGrams = lastAtOrBefore(commodityGramEvents, date, "cumulativeGrams") || 0;
-          var goldPriceAtDate = lastAtOrBefore(goldPriceHistory, date, "price") || currentGoldPrice || 0;
+        var points = timeline.map(function (date, i) {
+          var activeGrams = commodityGramsAt[i] || 0;
+          var goldPriceAtDate = goldPriceSeriesAt[i] || currentGoldPrice || 0;
           var commVal = activeGrams > 0 ? activeGrams * goldPriceAtDate : 0;
           commodityValueAt.push(commVal);
-          var total = (lastAtOrBefore(epfEvents, date, "cumulativeValue") || 0)
-            + (lastAtOrBefore(fdValueEvents, date, "cumulativeValue") || 0)
-            + commVal;
+          var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
           instruments.forEach(function (name) {
-            var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
-            var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
+            var units = unitsAtByName[name][i] || 0;
+            var nav = navAtByName[name][i];
             if (units > UNITS_EPSILON && nav) total += units * nav;
           });
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
           var stockHistory = (stockPricesData && stockPricesData.stock_history) || {};
           Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
-            var events = seUnitEventsByTicker[ticker];
-            var units = lastAtOrBefore(events, date, "cumulativeUnits") || 0;
+            var units = seUnitsAtByTicker[ticker][i] || 0;
             if (units <= UNITS_EPSILON) return;
             var hist = stockHistory[ticker];
             var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
@@ -7549,9 +7566,10 @@
         // Build a parallel points-all series that layers fixed-income /
         // savings on top of the equity value so the Account Value chart
         // reflects total portfolio worth respecting the exclusion toggles.
-        var pointsAll = points.map(function (p) {
-          var extra = (lastAtOrBefore(epfEventsAll, p.x, "cumulativeValue") || 0)
-                    + (lastAtOrBefore(fdValueEventsAll, p.x, "cumulativeValue") || 0);
+        var epfAllAt = _ff(epfEventsAll, timeline, "cumulativeValue");
+        var fdAllAt = _ff(fdValueEventsAll, timeline, "cumulativeValue");
+        var pointsAll = points.map(function (p, i) {
+          var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0);
           return { x: p.x, y: p.y + extra };
         });
 

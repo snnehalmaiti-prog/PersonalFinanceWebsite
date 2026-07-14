@@ -150,5 +150,46 @@ console.log("F. fifoRemainingLots");
 // F6: no transactions → empty.
 ok(fifoRemainingLots([]).length === 0, "F6 empty txns → empty");
 
+console.log("W. forwardFillOverTimeline ≡ lastAtOrBefore (chart optimization)");
+// Extract the REAL binary-search lastAtOrBefore from script.js and prove the
+// linear pointer-walk returns byte-identical results — the safety guarantee for
+// swapping it into the value-chart hot loop.
+{
+  const SRC = fs.readFileSync(path.join(__dirname, "..", "script.js"), "utf8");
+  const mk = "function lastAtOrBefore(sortedEvents, targetDate, valueKey)";
+  const s = SRC.indexOf(mk), bs = SRC.indexOf("{", s);
+  let depth = 0, i = bs;
+  for (; i < SRC.length; i++) { const c = SRC[i]; if (c === "{") depth++; else if (c === "}") { depth--; if (!depth) break; } }
+  eval(SRC.slice(s, i + 1)); // defines lastAtOrBefore
+  const { forwardFillOverTimeline } = WfMath;
+
+  // Deterministic pseudo-random (no Math.random) for repeatable events + timeline.
+  function build(nEvents, nDates, seed) {
+    let x = seed;
+    const rnd = () => (x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const evs = [];
+    let day = 0, val = 0;
+    for (let k = 0; k < nEvents; k++) { day += Math.floor(rnd() * 40); val += rnd() * 100; evs.push({ date: new Date(2015, 0, 1 + day), v: val }); }
+    const tl = [];
+    let d2 = -10; // start before first event so some queries return null
+    for (let k = 0; k < nDates; k++) { d2 += Math.floor(rnd() * 15); tl.push(new Date(2015, 0, 1 + d2)); }
+    return { evs, tl };
+  }
+  let mism = 0, cases = 0;
+  [[50, 300, 7], [5, 500, 11], [0, 20, 3], [200, 50, 99]].forEach(([ne, nd, sd]) => {
+    const { evs, tl } = build(ne, nd, sd);
+    const filled = forwardFillOverTimeline(evs, tl, "v");
+    for (let k = 0; k < tl.length; k++) {
+      cases++;
+      const ref = lastAtOrBefore(evs, tl[k], "v");
+      if (!(filled[k] === ref || (filled[k] == null && ref == null))) mism++;
+    }
+  });
+  ok(mism === 0, "W1 pointer-walk matches binary-search on " + cases + " randomized queries", mism + " mismatches");
+  // Empty events → all null; empty timeline → empty output.
+  ok(forwardFillOverTimeline([], [new Date()], "v")[0] === null, "W2 no events → null");
+  ok(forwardFillOverTimeline([{ date: new Date(2020, 0, 1), v: 5 }], [], "v").length === 0, "W3 empty timeline → empty");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
