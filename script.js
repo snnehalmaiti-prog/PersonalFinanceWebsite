@@ -8936,19 +8936,10 @@
         totalEl.textContent = "—";
         return;
       }
-      // Invested phase only: reconcile to the Overview's total so the fast initial
-      // render sums cleanly. Skipped once currentByName is set — each portfolio's
-      // actual current is authoritative, and their sum is the true all-portfolios
-      // total (getOverviewCurrentTotal reflects the Overview's SELECTED portfolio,
-      // which may be one portfolio, so it must not rescale the all-portfolios split).
-      if (!currentByName) {
-        var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
-        var overviewTotal = getOverviewCurrentTotal();
-        if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
-          var s = overviewTotal / rawSum;
-          entries.forEach(function (e) { e.value *= s; });
-        }
-      }
+      // No reconciliation to _ov here: this card always covers ALL portfolios and
+      // must ignore the Overview's portfolio selector (getOverviewCurrentTotal
+      // reflects the SELECTED portfolio). The invested render is a fast placeholder;
+      // the per-portfolio current pass supersedes it with authoritative values.
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
       // Palette: green, orange, blue, purple, teal, pink, amber, indigo …
@@ -9137,23 +9128,11 @@
     var eyebrowEl = document.getElementById("iscat-eyebrow-text");
     if (!statusEl || !barEl || !listEl || !totalEl) return;
 
-    // Category Split always covers ALL portfolios so its total reconciles with
-    // Portfolio Split (which also uses "all"). Ignoring the header filter here.
+    // Category Split always covers ALL portfolios and ignores the Overview's
+    // portfolio selector entirely — totals are computed per portfolio and summed,
+    // never read from _ov (which reflects the SELECTED portfolio).
     var selected = "all";
     var fiExcluded = isFixedIncomeExcluded();
-
-    // Anchor to the Overview's current values (same source Portfolio Split uses).
-    // If the Overview hasn't populated _ov yet, wait and retry so the grand total
-    // always matches Portfolio Split.
-    if (!getOverviewCurrentTotal()) {
-      if ((_retry || 0) < 8) {
-        statusEl.textContent = "Loading…";
-        setTimeout(function () { renderInstrumentSplitChart((_retry || 0) + 1); }, 500);
-      } else {
-        statusEl.textContent = "No holdings found yet.";
-      }
-      return;
-    }
 
     // Category → color + display icon
     var CATS = [
@@ -9211,24 +9190,54 @@
       }
     });
 
-    // Category TOTALS are anchored to the Overview's authoritative CURRENT values
-    // (the same _ov values Portfolio Split reconciles to). This guarantees the
-    // grand total equals Portfolio Split's. The only adjustment is moving the
-    // commodity MF/ETF current value out of Equity into Commodity (net-zero on
-    // the grand total). commCurrentByP holds physical + MF/ETF commodity current
-    // per portfolio for the Commodity chips.
+    // Category TOTALS are the SUM of per-portfolio CURRENT values across ALL
+    // portfolios (computePortfolioCurrentBreakdown — same helper Portfolio Split
+    // uses), never _ov (which follows the Overview's selected portfolio). Until the
+    // async currents resolve, invested sums serve as a fast placeholder. The only
+    // adjustment is moving the commodity MF/ETF current value out of Equity into
+    // Commodity (net-zero on the grand total). commCurrentByP holds physical +
+    // MF/ETF commodity current per portfolio for the Commodity chips.
     var commCurrentByP = {};
     var catTotal = { "Equity": 0, "Fixed Income": 0, "Commodity": 0 };
+    var _allCur = null;             // { eq, fi, comm } summed over all portfolios
+    var _lastCommEtfMf = 0;         // last commodity-MF/ETF current total applied
     function recomputeTotals(commEtfMfCurrentTotal) {
-      var mfC = (_ov && _ov.mfCurrent) || 0;
-      var seC = (_ov && (_ov.seCurrent > 0 ? _ov.seCurrent : (_ov.seInvested || 0))) || 0;
-      var fiC = fiExcluded ? 0 : ((_ov && _ov.fiCurrent) || 0);
-      var commPhys = fiExcluded ? 0 : ((_ov && _ov.commCurrent) || 0);
-      catTotal["Equity"] = Math.max(0, mfC + seC - commEtfMfCurrentTotal);
-      catTotal["Fixed Income"] = fiC;
-      catTotal["Commodity"] = commPhys + commEtfMfCurrentTotal;
+      _lastCommEtfMf = commEtfMfCurrentTotal;
+      var eqBase, fiC, commPhys;
+      if (_allCur) {
+        eqBase = _allCur.eq;        // MF+SE current (incl. commodity-category funds)
+        fiC = _allCur.fi;
+        commPhys = _allCur.comm;    // physical gold current
+      } else {
+        // Invested placeholder: eqInvByP excludes commodity MF/ETF, so add it back
+        // for the base that commEtfMfCurrentTotal is subtracted from.
+        eqBase = 0; commPhys = 0; fiC = 0;
+        Object.keys(eqInvByP).forEach(function (n) { eqBase += eqInvByP[n]; });
+        Object.keys(commInvByP).forEach(function (n) { eqBase += commInvByP[n]; });
+        Object.keys(fiInvByP).forEach(function (n) { fiC += fiInvByP[n]; });
+      }
+      catTotal["Equity"] = Math.max(0, eqBase - commEtfMfCurrentTotal);
+      catTotal["Fixed Income"] = fiExcluded ? 0 : fiC;
+      catTotal["Commodity"] = (fiExcluded ? 0 : commPhys) + commEtfMfCurrentTotal;
     }
     recomputeTotals(0);
+
+    // All-portfolio current pass: sum each portfolio's actual current breakdown,
+    // then re-anchor the category totals and redraw. Selection-independent.
+    Promise.all(portfolioNames.map(function (n) {
+      return computePortfolioCurrentBreakdown(n).then(function (b) { return b; }).catch(function () { return null; });
+    })).then(function (results) {
+      var eq = 0, fi = 0, comm = 0, any = false;
+      results.forEach(function (b) {
+        if (!b) return;
+        eq += b.equity || 0; fi += b.fixedIncome || 0; comm += b.commodity || 0;
+        if ((b.equity || 0) + (b.fixedIncome || 0) + (b.commodity || 0) > UNITS_EPSILON) any = true;
+      });
+      if (!any) return;
+      _allCur = { eq: eq, fi: fi, comm: comm };
+      recomputeTotals(_lastCommEtfMf);
+      draw();
+    });
 
     function chipMapFor(catKey) {
       if (catKey === "Equity") return eqInvByP;
@@ -9294,7 +9303,7 @@
     draw();
 
     // Physical commodity CURRENT value per portfolio (for Commodity chips only —
-    // the total is already in _ov.commCurrent).
+    // the category total comes from the all-portfolio current pass above).
     if (!fiExcluded) {
       var fdRows = getSheetRows("fd");
       var uniqueDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
