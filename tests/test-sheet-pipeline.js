@@ -268,6 +268,31 @@ console.log("K. findSavingsBankInstrumentConflicts");
     ["Snnehal", "HDFC", "", "Fixed Income", "Savings Account"],
   ]);
   ok(findSavingsBankInstrumentConflicts(blanks).length === 0, "K6 blank bank/instrument skipped (no false positive)");
+  // Investment Corpus is subject to the same rule.
+  const corpusConflict = mk([
+    ["Snnehal", "SBI", "SBI Corpus", "Fixed Income", "Investment Corpus"],
+    ["Snnehal", "SBI", "SBI Growth Corpus", "Fixed Income", "Investment Corpus"],
+  ]);
+  const cc = findSavingsBankInstrumentConflicts(corpusConflict);
+  ok(cc.length === 1 && cc[0].indexOf("Investment Corpus") !== -1 && cc[0].indexOf("SBI") !== -1,
+    "K7 Investment Corpus: two names per bank → conflict", cc[0]);
+  // Savings Account and Investment Corpus are checked INDEPENDENTLY — a bank may
+  // have one name for each without conflict.
+  const mixed = mk([
+    ["Snnehal", "HDFC", "HDFC Savings", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "HDFC Corpus", "Fixed Income", "Investment Corpus"],
+  ]);
+  ok(findSavingsBankInstrumentConflicts(mixed).length === 0, "K8 one Savings + one Corpus name per bank → no conflict");
+  // A conflict in BOTH sub-categories at the same bank → two separate messages.
+  const both = mk([
+    ["Snnehal", "HDFC", "HDFC Savings A", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "HDFC Savings B", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "HDFC Corpus A", "Fixed Income", "Investment Corpus"],
+    ["Snnehal", "HDFC", "HDFC Corpus B", "Fixed Income", "Investment Corpus"],
+  ]);
+  const bc = findSavingsBankInstrumentConflicts(both);
+  ok(bc.length === 2 && bc.some(m => m.indexOf("Savings Account") !== -1) && bc.some(m => m.indexOf("Investment Corpus") !== -1),
+    "K9 conflicts in both sub-categories → two distinct messages", bc.length);
 }
 
 console.log("I. loadSheetConfigs");
