@@ -222,5 +222,32 @@ function investedINR(txns, isUsd, rateByDate, usdToday) {
     "V5 invested computed with no stock price (price-independent)");
 }
 
+console.log("U. Stocks/ETF current = FX + FIFO + cost fallback (computeStocksEtfCurrentINR core)");
+// Mirrors computeStocksEtfCurrentINR: open units (FIFO) × live price (US × today's
+// USD/INR), falling back to INR cost basis when the live price hasn't loaded.
+function currentINR(txns, isUsd, currentPrice, usdToday, rateByDate) {
+  const lotTxns = txns.map(t => t.type === "buy"
+    ? { type: "buy", units: t.units, price: t.price * (isUsd ? (rateByDate[t.date] || usdToday) : 1) }
+    : { type: "sell", units: t.units, price: 0 });
+  let units = 0, cost = 0;
+  fifoRemainingLots(lotTxns).forEach(l => { units += l.units; cost += l.units * l.price; });
+  if (units <= 1e-9) return 0;
+  if (currentPrice == null) return cost;
+  return units * (isUsd ? currentPrice * usdToday : currentPrice);
+}
+{
+  const rates = { "2024-01-10": 83 };
+  const usBuy = [{ type: "buy", units: 2, price: 100, date: "2024-01-10" }];
+  ok(approx(currentINR(usBuy, true, 110, 84, rates), 2 * 110 * 84, 1e-9), "U1 US current = units × live price × today FX (₹18,480)");
+  ok(approx(currentINR(usBuy, true, null, 84, rates), 2 * 100 * 83, 1e-9), "U2 US no live price → INR cost-basis fallback (₹16,600)");
+  ok(currentINR([{ type: "buy", units: 3, price: 200, date: "2024-01-10" }], false, 250, 84, rates) === 3 * 250, "U3 India current = units × live price (₹750)");
+  const partial = [
+    { type: "buy", units: 3, price: 100, date: "2024-01-10" },
+    { type: "sell", units: 1, price: 150, date: "2024-01-10" },
+  ];
+  ok(approx(currentINR(partial, true, 120, 84, rates), 2 * 120 * 84, 1e-9), "U4 open units after FIFO sell × live price (₹20,160)");
+  ok(currentINR([{ type: "buy", units: 1, price: 5, date: "2024-01-10" }, { type: "sell", units: 1, price: 9, date: "2024-01-10" }], true, 120, 84, rates) === 0, "U5 fully sold → 0 current");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

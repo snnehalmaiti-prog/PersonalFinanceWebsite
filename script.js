@@ -1213,6 +1213,90 @@
     });
   }
 
+  // Stocks/ETF CURRENT value in INR — open units × live price, US converted at
+  // today's USD/INR. If an instrument's live price hasn't loaded yet, falls back to
+  // its INR cost basis so a freshly-added ticker still contributes. Returns
+  // Promise<number>.
+  function computeStocksEtfCurrentINR(portfolioFilter) {
+    return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+      var allPrices = (sp && sp.prices) || {};
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var rows = getSheetRows("stocksetf");
+      if (!rows) return 0;
+      var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+      if (!tx) return 0;
+      var total = 0;
+      Object.keys(tx).forEach(function (instr) {
+        var m = seMap[normalizeText(instr)];
+        var isUsd = !!(m && normalizeText(m.region) === "us");
+        var ticker = m && m.ticker;
+        var lotTxns = tx[instr].map(function (t) {
+          if (t.type === "buy") {
+            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            return { type: "buy", units: t.units, price: t.price * r };
+          }
+          return { type: "sell", units: t.units, price: 0 };
+        });
+        var units = 0, costINR = 0;
+        fifoRemainingLots(lotTxns).forEach(function (l) { units += l.units; costINR += l.units * l.price; });
+        if (units <= UNITS_EPSILON) return;
+        var priceEntry = ticker ? allPrices[ticker] : null;
+        if (priceEntry && priceEntry.price != null) {
+          total += units * (isUsd ? priceEntry.price * usdToday : priceEntry.price);
+        } else {
+          total += costINR; // no live price yet → cost-basis fallback
+        }
+      });
+      return total;
+    });
+  }
+
+  // Per-portfolio CURRENT value broken into { equity, fixedIncome, commodity } in
+  // INR, matching the Overview's own current aggregation (MF NAV + Stocks/ETF live
+  // prices + FD/PF/EPF interest accrual + gold). Honours the Fixed-Income and
+  // Savings/Investment exclusion toggles via the underlying helpers. Async; resolves
+  // to zeros on any failure so the caller can fall back. Returns Promise<object>.
+  function computePortfolioCurrentBreakdown(portfolio) {
+    var fiEx = isFixedIncomeExcluded();
+    var fdRows = getSheetRows("fd");
+    var epfRows = getSheetRows("fixedincome");
+    var commDates = (!fiEx && fdRows) ? collectCommodityUniqueDates(fdRows, portfolio) : [];
+    var commodityPromise = (!fiEx && fdRows && commDates.length)
+      ? Promise.all([
+          fetchGoldPriceINRPerGram().catch(function () { return null; }),
+          Promise.all(commDates.map(function (d) {
+            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
+          }))
+        ]).then(function (res) {
+          var goldPrice = res[0];
+          if (!goldPrice || !fdRows) return 0;
+          var hist = {};
+          res[1].forEach(function (r) { if (r.price) hist[r.dateStr] = r.price; });
+          var hs = buildCommodityHoldingsList(fdRows, portfolio, goldPrice, hist) || [];
+          var c = 0; hs.forEach(function (h) { c += h.current; }); return c;
+        }).catch(function () { return 0; })
+      : Promise.resolve(0);
+    return Promise.all([
+      _computeMfCurrentValueForPortfolio(portfolio).then(function (r) { return r.current; }).catch(function () { return 0; }),
+      computeStocksEtfCurrentINR(portfolio).catch(function () { return 0; }),
+      commodityPromise
+    ]).then(function (parts) {
+      var mfCur = parts[0] || 0, seCur = parts[1] || 0, commCur = parts[2] || 0;
+      var fiCur = 0;
+      if (!fiEx && fdRows) {
+        fiCur = (sumFdCurrentValueAtPar(fdRows, portfolio) || 0)
+              + (sumFdActiveCurrentValue(fdRows, portfolio) || 0)
+              + (sumProvidentFundCurrentValue(fdRows, portfolio) || 0);
+      }
+      if (!fiEx && epfRows && epfRows.length) {
+        (buildEpfFixedIncomeHoldingsList(epfRows, portfolio) || []).forEach(function (h) { fiCur += (h.current || 0); });
+      }
+      return { equity: mfCur + seCur, fixedIncome: fiCur, commodity: commCur };
+    }).catch(function () { return { equity: 0, fixedIncome: 0, commodity: 0 }; });
+  }
+
   function computeInstrumentRealizedDetail(txns) {
     var buyLots = [];
     var costOfSoldUnits = 0;
@@ -8740,6 +8824,12 @@
 
     var investedByName = {};
     var commodityByName = {}; // per-portfolio commodity invested (joins asynchronously)
+    // Once per-portfolio CURRENT values resolve (async), these hold each portfolio's
+    // actual current total and its {equity,fixedIncome,commodity} current breakdown.
+    // While null, the card shows the fast invested-based render; the current pass
+    // then supersedes it so each portfolio reflects its own return, not the blend.
+    var currentByName = null;
+    var currentCatByName = {};
     var namedSum = 0;
     names.forEach(function (name) {
       var invested = computeTotalInvestment(name, prefixes);
@@ -8784,14 +8874,21 @@
     // adds it to Equity so chip percentages line up with the row total.
     var _seInrDeltaByName = {};
 
-    // Instrument-category breakdown for one portfolio → sub-line under its name
+    // Instrument-category breakdown for one portfolio → sub-line under its name.
+    // Uses CURRENT breakdown once it has resolved; falls back to invested until then.
     function portfolioCatSubline(name) {
       if (name === "Unassigned") return "";
-      var eq = computeTotalInvestment(name, ["equity", "stocksetf"]) + (_seInrDeltaByName[name] || 0);
-      var extraComm = _commodityFromEquitySources(name);
-      eq -= extraComm; // reclassify commodity MF/ETF out of Equity
-      var fi = fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"]);
-      var comm = (fiExcluded ? 0 : (commodityByName[name] || 0)) + extraComm;
+      var eq, fi, comm;
+      if (currentByName && currentCatByName[name]) {
+        var cb = currentCatByName[name];
+        eq = cb.equity; fi = cb.fixedIncome; comm = cb.commodity;
+      } else {
+        eq = computeTotalInvestment(name, ["equity", "stocksetf"]) + (_seInrDeltaByName[name] || 0);
+        var extraComm = _commodityFromEquitySources(name);
+        eq -= extraComm; // reclassify commodity MF/ETF out of Equity
+        fi = fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"]);
+        comm = (fiExcluded ? 0 : (commodityByName[name] || 0)) + extraComm;
+      }
       var parts = [
         { label: "Equity", value: eq, color: "#10B981" },
         { label: "Fixed Income", value: fi, color: "#3B82F6" },
@@ -8825,25 +8922,32 @@
       var eyebrowEl = document.getElementById("isc-eyebrow-text");
       if (!barEl || !listEl || !totalEl) return;
 
-      var entries = Object.keys(investedByName)
-        .map(function (n) { return { name: n, value: investedByName[n] }; })
+      // Use per-portfolio CURRENT values once resolved; invested until then.
+      var valueByName = currentByName || investedByName;
+      var entries = Object.keys(valueByName)
+        .map(function (n) { return { name: n, value: valueByName[n] }; })
         .filter(function (e) { return e.value > UNITS_EPSILON; })
         .sort(function (a, b) { return b.value - a.value; });
 
       if (!entries.length) {
-        statusEl.textContent = "No invested amount found yet across your portfolios.";
+        statusEl.textContent = "No value found yet across your portfolios.";
         barEl.innerHTML = "";
         listEl.innerHTML = "";
         totalEl.textContent = "—";
         return;
       }
-      // Reconcile to Overview's authoritative Invested total (single source of
-      // truth). Scale per-portfolio slices proportionally so the sum matches.
-      var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
-      var overviewTotal = getOverviewCurrentTotal();
-      if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
-        var s = overviewTotal / rawSum;
-        entries.forEach(function (e) { e.value *= s; });
+      // Invested phase only: reconcile to the Overview's total so the fast initial
+      // render sums cleanly. Skipped once currentByName is set — each portfolio's
+      // actual current is authoritative, and their sum is the true all-portfolios
+      // total (getOverviewCurrentTotal reflects the Overview's SELECTED portfolio,
+      // which may be one portfolio, so it must not rescale the all-portfolios split).
+      if (!currentByName) {
+        var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
+        var overviewTotal = getOverviewCurrentTotal();
+        if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
+          var s = overviewTotal / rawSum;
+          entries.forEach(function (e) { e.value *= s; });
+        }
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
@@ -8860,7 +8964,8 @@
       ];
 
       if (eyebrowEl) {
-        eyebrowEl.textContent = "INVESTED SPLIT · " + entries.length + " PORTFOLIO" + (entries.length === 1 ? "" : "S");
+        eyebrowEl.textContent = (currentByName ? "CURRENT SPLIT · " : "INVESTED SPLIT · ") +
+          entries.length + " PORTFOLIO" + (entries.length === 1 ? "" : "S");
       }
       totalEl.textContent = formatCurrency(total);
 
@@ -8897,54 +9002,31 @@
     // US stocks/ETF INR conversion joins asynchronously. Replace the raw
     // stocksetf portion of each portfolio's total with the historical
     // USD/INR-adjusted value so US positions aren't undercounted.
-    (function applyStocksEtfInrConversion() {
-      var portfolios = Object.keys(investedByName);
-      Promise.all(portfolios.map(function (name) {
-        var raw = computeTotalInvestment(name, ["stocksetf"]);
-        return computeStocksEtfInvestmentINR(name).then(function (inr) {
-          return { name: name, delta: inr - raw };
-        }).catch(function () { return null; });
+    // Supersede the fast invested-based render with each portfolio's ACTUAL current
+    // value (its own return, not the portfolio-wide blend). Computes MF + Stocks/ETF
+    // + Fixed Income + commodity current per portfolio, then re-draws. Falls back to
+    // the invested render on failure. "Unassigned" keeps its invested figure since
+    // its instruments can't be attributed to a portfolio's holdings.
+    (function applyPerPortfolioCurrent() {
+      var names2 = Object.keys(investedByName).filter(function (n) { return n !== "Unassigned"; });
+      if (!names2.length) return;
+      Promise.all(names2.map(function (name) {
+        return computePortfolioCurrentBreakdown(name).then(function (b) { return { name: name, b: b }; }).catch(function () { return null; });
       })).then(function (results) {
-        var changed = false;
+        var cur = {}, cat = {}, any = false;
         results.forEach(function (r) {
-          if (r && Math.abs(r.delta) > 0.01) {
-            investedByName[r.name] = (investedByName[r.name] || 0) + r.delta;
-            _seInrDeltaByName[r.name] = (_seInrDeltaByName[r.name] || 0) + r.delta;
-            changed = true;
-          }
+          if (!r) return;
+          var tot = (r.b.equity || 0) + (r.b.fixedIncome || 0) + (r.b.commodity || 0);
+          if (tot > UNITS_EPSILON) { cur[r.name] = tot; cat[r.name] = r.b; any = true; }
         });
-        if (changed) drawSplitPie();
+        if (!any) return;
+        // Preserve any Unassigned slice from the invested render so the bar still totals.
+        if (investedByName["Unassigned"] > UNITS_EPSILON) cur["Unassigned"] = investedByName["Unassigned"];
+        currentByName = cur;
+        currentCatByName = cat;
+        drawSplitPie();
       });
     })();
-
-    // Commodity (gold) invested amounts join asynchronously, mirroring the overview
-    if (!fiExcluded) {
-      var fdRowsPie = getSheetRows("fd");
-      var uniqueDatesPie = fdRowsPie ? collectCommodityUniqueDates(fdRowsPie, "all") : [];
-      if (fdRowsPie && fdRowsPie.length) {
-        Promise.all([
-          fetchGoldPriceINRPerGram().catch(function () { return null; }),
-          Promise.all(uniqueDatesPie.map(function (d) {
-            return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
-          }))
-        ]).then(function (results) {
-          var goldPrice = results[0];
-          if (!goldPrice) return;
-          var histPrices = {};
-          results[1].forEach(function (r) { if (r.price) histPrices[r.dateStr] = r.price; });
-          var commHoldings = buildCommodityHoldingsList(fdRowsPie, "all", goldPrice, histPrices) || [];
-          var added = false;
-          commHoldings.forEach(function (h) {
-            if (!(h.invested > UNITS_EPSILON)) return;
-            var name = (h.portfolio || "").trim() || "Unassigned";
-            investedByName[name] = (investedByName[name] || 0) + h.invested;
-            commodityByName[name] = (commodityByName[name] || 0) + h.invested;
-            added = true;
-          });
-          if (added) drawSplitPie();
-        });
-      }
-    }
   }
 
   function _renderRegionSplit(prefixes, fiExcluded, statusEl) {
