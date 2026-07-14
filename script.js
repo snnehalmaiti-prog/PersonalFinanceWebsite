@@ -5562,37 +5562,69 @@
   var stocksetfUsShowClosed = document.getElementById("stocksetf-us-show-closed");
   if (stocksetfUsShowClosed) stocksetfUsShowClosed.addEventListener("change", renderStockEtfHoldingsTable);
 
+  // Re-fetch one transaction-sheet prefix from its source, refresh the cache, and
+  // re-render the dashboard surfaces it feeds. Used by the per-tab Refresh buttons
+  // AND by the on-load background resync below.
+  function resyncSheetPrefixFromCloud(prefix, spinBtn) {
+    var configs = loadSheetConfigs(prefix);
+    if (!configs.length) return;
+    var canonicalFields = prefix === "fixedincome" ? FIXED_INCOME_SHEET_FIELDS : prefix === "fd" ? FD_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
+    if (spinBtn) spinBtn.classList.add("spinning");
+    fetchAndMergeSheets(configs, function (merged) {
+      if (spinBtn) spinBtn.classList.remove("spinning");
+      if (merged && merged.length > 1) {
+        addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
+        localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        document.dispatchEvent(new CustomEvent("wf-sync-complete"));
+      }
+      updateDashboardStats();
+      updateRefreshButtonStatus(prefix);
+      populatePortfolioSelect();
+      if (prefix === "equity") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
+      if (prefix === "fixedincome") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); }
+      if (prefix === "fd") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
+      if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
+      renderInvestmentSplitChart();
+      renderInstrumentSplitChart();
+      renderProfitByCategoryCard();
+      renderMonthlyCashFlow();
+    }, canonicalFields);
+  }
+
   ["equity", "fixedincome", "fd", "stocksetf"].forEach(function (prefix) {
     var refreshBtn = document.getElementById(prefix + "-refresh");
     updateRefreshButtonStatus(prefix);
     if (!refreshBtn) return;
-
-    refreshBtn.addEventListener("click", function () {
-      var configs = loadSheetConfigs(prefix);
-      if (!configs.length) return;
-      var canonicalFields = prefix === "fixedincome" ? FIXED_INCOME_SHEET_FIELDS : prefix === "fd" ? FD_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
-      refreshBtn.classList.add("spinning");
-      fetchAndMergeSheets(configs, function (merged) {
-        refreshBtn.classList.remove("spinning");
-        if (merged && merged.length > 1) {
-          addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
-          localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
-          document.dispatchEvent(new CustomEvent("wf-sync-complete"));
-        }
-        updateDashboardStats();
-        updateRefreshButtonStatus(prefix);
-        populatePortfolioSelect();
-        if (prefix === "equity") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderEquityHoldingsTable(); renderMarketSegmentChart(); renderMutualFundPortfolioSplitChart(); }
-        if (prefix === "fixedincome") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); }
-        if (prefix === "fd") { renderValueChart(); renderMonthlyInvestmentByCategory(); renderAllFixedIncomeHoldingsTable(); renderCommodityHoldingsTable(); }
-        if (prefix === "stocksetf" || prefix === "stocksetfmapping") { renderMonthlyInvestmentByCategory(); renderStockEtfHoldingsTable(); }
-        renderInvestmentSplitChart();
-        renderInstrumentSplitChart();
-        renderProfitByCategoryCard();
-        renderMonthlyCashFlow();
-      }, canonicalFields);
-    });
+    refreshBtn.addEventListener("click", function () { resyncSheetPrefixFromCloud(prefix, refreshBtn); });
   });
+
+  // Refresh a single mapping sheet (stored raw, no canonical realignment) and
+  // re-render the holdings that depend on it.
+  function resyncMappingFromCloud(prefix) {
+    var cfgs = loadSheetConfigs(prefix);
+    var cfg = cfgs && cfgs[0];
+    if (!cfg || !cfg.link) return;
+    try {
+      fetchSheetData(cfg, function (rows) {
+        if (!rows || rows.length <= 1) return; // keep cache on empty/failure
+        localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+        document.dispatchEvent(new CustomEvent("wf-sync-complete"));
+        try { renderStockEtfHoldingsTable(); renderEquityHoldingsTable(); } catch (e) {}
+      }, function () {});
+    } catch (e) {}
+  }
+
+  // The dashboard renders sheet data from the localStorage cache; the sheet CARDS
+  // that re-fetch from the source live only on Settings. So on the dashboard,
+  // re-sync every configured sheet in the background on load — otherwise rows added
+  // elsewhere (e.g. a new portfolio) stay hidden behind a stale cache until the user
+  // visits Settings. Stale-while-revalidate: the cached view is already on screen and
+  // updates when the fresh data arrives. Guard: only run where the Settings sheet
+  // cards are absent (i.e. the dashboard), so Settings isn't double-syncing.
+  if (!document.getElementById("stocksetf-sheets-list")) {
+    ["equity", "stocksetf", "fixedincome", "fd"].forEach(function (prefix) { resyncSheetPrefixFromCloud(prefix); });
+    ["stocksetfmapping", "mfmapping"].forEach(function (prefix) { resyncMappingFromCloud(prefix); });
+  }
 
   var equityRefreshNavBtn = document.getElementById("equity-refresh-nav");
   if (equityRefreshNavBtn) {
