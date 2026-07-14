@@ -6173,6 +6173,20 @@
     var storageKey = "wf-" + prefix + "-sheet-link";
     var headerRowKey = "wf-" + prefix + "-header-row";
     var localDataKey = "wf-" + prefix + "-local-data";
+    // Single-sheet cards (the mapping sheets) historically stored their config only
+    // under the legacy -sheet-link / -header-row keys, which settings-sync does not
+    // upload (it syncs wf-<prefix>-sheets). Mirror the config into that array form so
+    // the mapping URL round-trips to other devices like the transaction sheets do.
+    var sheetsKey = "wf-" + prefix + "-sheets";
+    function writeSheetsMirror(url, headerRow) {
+      try {
+        if (url && url.indexOf("📎") === -1) {
+          localStorage.setItem(sheetsKey, JSON.stringify([{ link: url, headerRow: headerRow || "1" }]));
+        } else {
+          localStorage.removeItem(sheetsKey);
+        }
+      } catch (e) {}
+    }
     var _localData = null;
 
     // Restore local data from localStorage if previously uploaded
@@ -6350,9 +6364,25 @@
 
     var savedLink = localStorage.getItem(storageKey);
     var savedHeaderRow = localStorage.getItem(headerRowKey);
+    // Cross-device: the mapping config arrives from cloud as the wf-<prefix>-sheets
+    // array (settings-sync). If the legacy keys are empty, hydrate the card from it.
+    if (!savedLink) {
+      try {
+        var arr = JSON.parse(localStorage.getItem(sheetsKey) || "null");
+        if (Array.isArray(arr) && arr[0] && arr[0].link) {
+          savedLink = arr[0].link;
+          savedHeaderRow = arr[0].headerRow || savedHeaderRow;
+          localStorage.setItem(storageKey, savedLink);
+          if (savedHeaderRow) localStorage.setItem(headerRowKey, savedHeaderRow);
+        }
+      } catch (e) {}
+    }
     if (savedHeaderRow && headerRowInput) headerRowInput.value = savedHeaderRow;
     if (savedLink) {
       sheetLinkInput.value = savedLink;
+      // Backfill the array mirror for existing users whose config predates mapping
+      // settings-sync, so the next saveSettingsToCloud uploads it.
+      writeSheetsMirror(savedLink, savedHeaderRow);
       syncSheet(savedLink);
     }
 
@@ -6372,6 +6402,10 @@
         updateDashboardStats();
       }
       if (headerRowInput) localStorage.setItem(headerRowKey, headerRowInput.value || "1");
+      // Mirror into the synced array form and notify Settings so saveSettingsToCloud
+      // uploads the mapping config to the cloud (round-trips to other devices).
+      writeSheetsMirror(url, headerRowInput ? headerRowInput.value : "1");
+      document.dispatchEvent(new CustomEvent("wf-settings-saved"));
     }
 
     sheetLinkInput.addEventListener("change", autoSave);
