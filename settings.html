@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=settingslayout1" />
-<script src="supabase-client.js?v=settingslayout1"></script>
+<link rel="stylesheet" href="styles.css?v=refreshall1" />
+<script src="supabase-client.js?v=refreshall1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -186,6 +186,19 @@
                 <span id="gold-premium-status" class="muted small" style="margin-left:8px;"></span>
               </div>
               <p class="muted small" style="margin:8px 0 0;">Typical range: 15–18% (import duty ≈15% + GST 3%). Set 0 to use the raw international spot price.</p>
+            </div>
+          </div>
+
+          <div class="equity-card" style="margin-top:16px;">
+            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">
+              Refresh all data
+              <span class="muted" style="font-weight:400;">— re-sync every transaction and mapping sheet in one click</span>
+            </label>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-primary" id="refresh-all-sheets">
+                <span class="refresh-icon" aria-hidden="true">&#8635;</span> Refresh all sheets
+              </button>
+              <span id="refresh-all-status" class="muted small"></span>
             </div>
           </div>
         </div>
@@ -578,7 +591,7 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=settingslayout1"></script>
+  <script src="script.js?v=refreshall1"></script>
   <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching
@@ -1114,6 +1127,35 @@
         // immediately instead of waiting for cache TTL.
         try { localStorage.removeItem("wf-gold-price-inr-per-gram"); } catch (e) {}
         if (status) { status.style.color = "#059669"; status.textContent = "Saved (" + v + "%)"; setTimeout(function () { status.textContent = ""; }, 2500); }
+      });
+    })();
+
+    // Refresh all sheets at once — programmatically triggers every transaction and
+    // mapping card's own "Verify & sync" button, reusing their existing sync logic.
+    (function wireRefreshAll() {
+      var btn = document.getElementById("refresh-all-sheets");
+      var status = document.getElementById("refresh-all-status");
+      if (!btn) return;
+      // Every sheet card exposes a <prefix>-sheet-sync button (present in the DOM
+      // even while its tab is hidden). Transaction sheets + mapping sheets.
+      var prefixes = ["equity", "fixedincome", "fd", "stocksetf", "mfmapping", "stocksetfmapping"];
+      btn.addEventListener("click", function () {
+        var triggered = 0;
+        prefixes.forEach(function (p) {
+          var syncBtn = document.getElementById(p + "-sheet-sync");
+          if (syncBtn) { syncBtn.click(); triggered++; }
+        });
+        var origText = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = "Refreshing…";
+        if (status) { status.style.color = "#059669"; status.textContent = "Re-syncing " + triggered + " sheet(s)…"; }
+        // The individual cards sync asynchronously and update their own status pills;
+        // restore this button after a short delay so it's clickable again.
+        setTimeout(function () {
+          btn.disabled = false;
+          btn.innerHTML = origText;
+          if (status) { status.textContent = "Done — see each card's status."; setTimeout(function () { status.textContent = ""; }, 4000); }
+        }, 2500);
       });
     })();
 
