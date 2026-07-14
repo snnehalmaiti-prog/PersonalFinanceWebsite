@@ -1069,24 +1069,8 @@
     return transactionsByInstrument;
   }
 
-  function fifoRemainingLots(txns) {
-    var buyLots = [];
-    txns.forEach(function (txn) {
-      if (txn.type === "buy") {
-        buyLots.push({ units: txn.units, price: txn.price });
-        return;
-      }
-      var unitsToMatch = txn.units;
-      while (unitsToMatch > 0 && buyLots.length) {
-        var lot = buyLots[0];
-        var matched = Math.min(unitsToMatch, lot.units);
-        lot.units -= matched;
-        unitsToMatch -= matched;
-        if (lot.units <= 0) buyLots.shift();
-      }
-    });
-    return buyLots;
-  }
+  // fifoRemainingLots lives in wf-math.js (pure, unit-tested); thin wrapper here.
+  function fifoRemainingLots(txns) { return WfMath.fifoRemainingLots(txns); }
 
   function sumUnitBasedBuyInvestment(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
@@ -5274,74 +5258,9 @@
 
   // Solves XIRR via Newton-Raphson on NPV(rate) = sum(amount / (1+rate)^(days/365)),
   // falling back to bisection if Newton's method fails to converge.
-  function calculateXIRR(cashflows) {
-    if (!cashflows || cashflows.length < 2) return null;
-    var hasPositive = cashflows.some(function (c) { return c.amount > 0; });
-    var hasNegative = cashflows.some(function (c) { return c.amount < 0; });
-    if (!hasPositive || !hasNegative) return null;
-
-    var t0 = cashflows.reduce(function (min, c) {
-      return c.date.getTime() < min ? c.date.getTime() : min;
-    }, cashflows[0].date.getTime());
-
-    function yearsFromStart(date) {
-      // 365.25 to match the day-count used by the CAGR/benchmark figures XIRR is
-      // displayed alongside.
-      return (date.getTime() - t0) / (1000 * 60 * 60 * 24 * 365.25);
-    }
-
-    function npv(rate) {
-      return cashflows.reduce(function (sum, c) {
-        return sum + c.amount / Math.pow(1 + rate, yearsFromStart(c.date));
-      }, 0);
-    }
-
-    function npvDerivative(rate) {
-      return cashflows.reduce(function (sum, c) {
-        var t = yearsFromStart(c.date);
-        if (t === 0) return sum;
-        return sum - (t * c.amount) / Math.pow(1 + rate, t + 1);
-      }, 0);
-    }
-
-    // Acceptance tolerance scaled to flow magnitude — an absolute ₹1 residual is far
-    // below float precision for crore-sized flows and would spuriously reject a valid
-    // Newton root (forcing bisection, which can isolate a different IRR).
-    var _absScale = cashflows.reduce(function (s, c) { return s + Math.abs(c.amount); }, 0);
-    var npvTol = Math.max(1, _absScale * 1e-9);
-
-    var rate = 0.1;
-    var converged = false;
-    for (var i = 0; i < 100; i++) {
-      var f = npv(rate);
-      var fp = npvDerivative(rate);
-      if (Math.abs(fp) < 1e-10) break;
-      var nextRate = rate - f / fp;
-      if (!isFinite(nextRate) || nextRate <= -0.999999) break;
-      if (Math.abs(nextRate - rate) < 1e-7) { rate = nextRate; converged = true; break; }
-      rate = nextRate;
-    }
-
-    if (!converged || !isFinite(rate) || Math.abs(npv(rate)) > npvTol) {
-      var low = -0.999999, high = 10;
-      var fLow = npv(low), fHigh = npv(high);
-      // Grow the upper bracket until it brackets the root, so genuine extreme
-      // returns (>1000%/yr over very short holdings) don't return null/"—".
-      var grow = 0;
-      while (fLow * fHigh > 0 && high < 1e7 && grow < 40) {
-        high *= 2; fHigh = npv(high); grow++;
-      }
-      if (fLow * fHigh > 0) return converged ? rate : null;
-      for (var j = 0; j < 200; j++) {
-        var mid = (low + high) / 2;
-        var fMid = npv(mid);
-        if (Math.abs(fMid) < npvTol) { rate = mid; break; }
-        if ((fMid > 0) === (fLow > 0)) { low = mid; fLow = fMid; } else { high = mid; }
-        rate = mid;
-      }
-    }
-    return rate;
-  }
+  // calculateXIRR lives in wf-math.js (pure, unit-tested). This thin wrapper keeps
+  // the in-closure call sites and hoisting behaviour unchanged.
+  function calculateXIRR(cashflows) { return WfMath.calculateXIRR(cashflows); }
 
   function setXirr(el, rate) {
     if (!el) return;

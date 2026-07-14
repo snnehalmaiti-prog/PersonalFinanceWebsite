@@ -38,10 +38,13 @@ const pieces = [
   "function findHeaderIndex(ownHeader, canonicalName)",
   "function realignRowsToHeader(rows, canonicalHeader)",
   "function parseFlexibleDate(value)",
-  "function calculateXIRR(cashflows)",
   "function lastAtOrBefore(sortedEvents, targetDate, valueKey)",
 ].map(extract).join("\n\n");
 eval(pieces);
+
+// calculateXIRR now lives in wf-math.js — load it for the benchmark.
+eval(fs.readFileSync(path.join(__dirname, "..", "wf-math.js"), "utf8"));
+const calculateXIRR = (globalThis.WfMath || global.WfMath).calculateXIRR;
 
 // ── timing helper: median of N runs, plus ops/sec ────────────────────────────
 function bench(name, fn, iters) {
