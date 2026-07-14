@@ -177,6 +177,25 @@ ok(out.failures === 1 && out.merged.length === 3, "G4 invalid link pre-counted, 
 fetchAndMergeSheets([{ localData: scrambled }], (merged, failures) => { out = { merged, failures }; }, TXN_FIELDS);
 ok(out.failures === 0 && out.merged.length === 2 && out.merged[1][1] === "Snnehal", "G5 uploaded-file localData path realigned");
 
+// G6: REGRESSION — a statically-invalid config alongside a valid sheet must NOT be
+// counted as a fetchFailure. Callers gate cache writes on fetchFailures, so a bad
+// config entry must not freeze updates from the healthy sheet.
+fetchAndMergeSheets([{ link: "not a url" }, { link: GA }],
+  (merged, failures, reasons, stats, fetchFailures) => { out = { merged, failures, fetchFailures }; }, TXN_FIELDS);
+ok(out.failures === 1, "G6 invalid config still counted in total failures");
+ok(out.fetchFailures === 0, "G6 invalid config is NOT a fetchFailure (writes proceed)");
+ok(out.merged.length === 3, "G6 valid sheet's rows delivered despite bad config");
+
+// G7: a valid sheet that fails to LOAD is a real fetchFailure (keep last-known-good).
+fetchAndMergeSheets([{ link: GA }, { link: GBAD }],
+  (merged, failures, reasons, stats, fetchFailures) => { out = { merged, failures, fetchFailures }; }, TXN_FIELDS);
+ok(out.fetchFailures === 1 && out.failures === 1, "G7 real load failure counted as fetchFailure");
+
+// G8: all-invalid configs → early return still passes fetchFailures (0, no fetch attempted).
+fetchAndMergeSheets([{ link: "nope" }],
+  (merged, failures, reasons, stats, fetchFailures) => { out = { merged, failures, fetchFailures }; }, TXN_FIELDS);
+ok(out.merged === null && out.failures === 1 && out.fetchFailures === 0, "G8 all-invalid: merged null, fetchFailures 0");
+
 console.log("H. CSV parsing");
 const csv = 'Transaction Date,Portfolio Name,Instrument Name,Transaction Type,Units,Price\r\n' +
   '12/05/2024,Snnehal,"Bank, HDFC",Buy,10,1500\r\n' +

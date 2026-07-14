@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=refreshall1" />
-<script src="supabase-client.js?v=refreshall1"></script>
+<link rel="stylesheet" href="styles.css?v=regressionfix1" />
+<script src="supabase-client.js?v=regressionfix1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -591,7 +591,7 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=refreshall1"></script>
+  <script src="script.js?v=regressionfix1"></script>
   <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching
@@ -1138,7 +1138,9 @@
       if (!btn) return;
       // Every sheet card exposes a <prefix>-sheet-sync button (present in the DOM
       // even while its tab is hidden). Transaction sheets + mapping sheets.
-      var prefixes = ["equity", "fixedincome", "fd", "stocksetf", "mfmapping", "stocksetfmapping"];
+      // Fixed Income/Commodity transactions live under the "fd" prefix on Settings —
+      // there is no separate "fixedincome" sheet card here.
+      var prefixes = ["equity", "fd", "stocksetf", "mfmapping", "stocksetfmapping"];
       btn.addEventListener("click", function () {
         var triggered = 0;
         prefixes.forEach(function (p) {

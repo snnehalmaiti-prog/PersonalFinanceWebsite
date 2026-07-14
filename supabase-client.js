@@ -316,8 +316,14 @@
       var body = { user_id: uid, prefix: String(prefix), rows: rows, updated_at: new Date().toISOString() };
       var serialized;
       try { serialized = JSON.stringify(body); } catch (e) { return null; }
-      if (serialized.length > SHEET_DATA_MAX_BYTES) {
-        console.warn("Sheet-data sync: '" + prefix + "' is " + Math.round(serialized.length / 1024) +
+      // Measure real UTF-8 bytes, not string length (UTF-16 code units): multi-byte
+      // content (CJK, emoji) is up to ~3x larger on the wire, so a char-count check
+      // could pass a payload that the server then rejects for size.
+      var byteLen = (typeof TextEncoder !== "undefined")
+        ? new TextEncoder().encode(serialized).length
+        : serialized.length; // last-resort fallback (all modern browsers + Node have TextEncoder)
+      if (byteLen > SHEET_DATA_MAX_BYTES) {
+        console.warn("Sheet-data sync: '" + prefix + "' is " + Math.round(byteLen / 1024) +
           "KB, over the 2MB cap — skipping cloud cache for this prefix.");
         return null;
       }

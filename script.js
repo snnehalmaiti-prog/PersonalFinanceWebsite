@@ -5584,16 +5584,17 @@
     if (!configs.length) return;
     var canonicalFields = prefix === "fixedincome" ? FIXED_INCOME_SHEET_FIELDS : prefix === "fd" ? FD_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
     if (spinBtn) spinBtn.classList.add("spinning");
-    fetchAndMergeSheets(configs, function (merged, failures) {
+    fetchAndMergeSheets(configs, function (merged, failures, failureReasons, perSheetStats, fetchFailures) {
       if (spinBtn) spinBtn.classList.remove("spinning");
-      // Only accept the result when the merge is COMPLETE (no sheet timed out).
+      // Only accept the result when every sheet that was fetched actually LOADED.
       // A partial fetch returns fewer rows but still length>1; writing it would
       // (a) degrade the local view and (b) clobber the fuller shared cloud blob,
       // poisoning every other device that seeds from it. On a partial fetch we
       // keep the last-known-good cache untouched — the seed/next clean resync
-      // already holds the full data. Full failures give merged=null (handled by
-      // the length guard); this adds the partial-failure case.
-      if (merged && merged.length > 1 && !failures) {
+      // already holds the full data. Gate on fetchFailures (real load failures)
+      // NOT total failures, so a permanently-invalid config entry sitting beside
+      // valid sheets doesn't freeze this prefix's updates forever.
+      if (merged && merged.length > 1 && !fetchFailures) {
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
         pushSheetDataToCloud(prefix, merged);
@@ -6072,8 +6073,13 @@
       if (valid) validIndexes.push(i);
     });
     var failures = configs.length - validIndexes.length;
+    // fetchFailures counts only sheets that were valid but failed to LOAD (timeout,
+    // private, network) — NOT statically-invalid configs. Callers use this to decide
+    // whether a merge is a transient partial fetch (keep last-known-good) vs a
+    // complete result that happens to sit alongside a permanently-bad config entry.
+    var fetchFailures = 0;
     if (!validIndexes.length) {
-      onComplete(null, failures, [], perSheetStats);
+      onComplete(null, failures, [], perSheetStats, fetchFailures);
       return;
     }
 
@@ -6094,7 +6100,7 @@
           merged = merged.concat(realignRowsToHeader(rows, merged[0]));
         }
       });
-      onComplete(merged, failures, failureReasons, perSheetStats);
+      onComplete(merged, failures, failureReasons, perSheetStats, fetchFailures);
     }
 
     validIndexes.forEach(function (origIndex, i) {
@@ -6117,6 +6123,7 @@
         },
         function (reason) {
           failures += 1;
+          fetchFailures += 1;
           failureReasons.push(reason);
           perSheetStats[origIndex].error = reason;
           pending -= 1;
@@ -6370,26 +6377,31 @@
       );
     }
 
-    var savedLink = localStorage.getItem(storageKey);
-    var savedHeaderRow = localStorage.getItem(headerRowKey);
-    // Cross-device: the mapping config arrives from cloud as the wf-<prefix>-sheets
-    // array (settings-sync). If the legacy keys are empty, hydrate the card from it.
-    if (!savedLink) {
-      try {
-        var arr = JSON.parse(localStorage.getItem(sheetsKey) || "null");
-        if (Array.isArray(arr) && arr[0] && arr[0].link) {
-          savedLink = arr[0].link;
-          savedHeaderRow = arr[0].headerRow || savedHeaderRow;
-          // Rehydrate an uploaded file's parsed rows so a file-based mapping
-          // reconnects on a fresh device without re-uploading.
-          if (arr[0].localData && arr[0].localData.length > 1) {
-            _localData = arr[0].localData;
-            try { localStorage.setItem(localDataKey, JSON.stringify(_localData)); } catch (e) {}
-          }
-          localStorage.setItem(storageKey, savedLink);
-          if (savedHeaderRow) localStorage.setItem(headerRowKey, savedHeaderRow);
+    var savedLink = null;
+    var savedHeaderRow = null;
+    // Cross-device: the mapping config's source of truth is the synced
+    // wf-<prefix>-sheets array (settings-sync). PREFER it over the legacy
+    // -sheet-link / -header-row keys so a URL/header change made on another device
+    // propagates here even when a stale legacy config is present locally. Fall back
+    // to the legacy keys only when no mirror exists yet (pre-migration devices).
+    try {
+      var arr = JSON.parse(localStorage.getItem(sheetsKey) || "null");
+      if (Array.isArray(arr) && arr[0] && arr[0].link) {
+        savedLink = arr[0].link;
+        savedHeaderRow = arr[0].headerRow || localStorage.getItem(headerRowKey);
+        // Rehydrate an uploaded file's parsed rows so a file-based mapping
+        // reconnects on a fresh device without re-uploading.
+        if (arr[0].localData && arr[0].localData.length > 1) {
+          _localData = arr[0].localData;
+          try { localStorage.setItem(localDataKey, JSON.stringify(_localData)); } catch (e) {}
         }
-      } catch (e) {}
+        localStorage.setItem(storageKey, savedLink);
+        if (savedHeaderRow) localStorage.setItem(headerRowKey, savedHeaderRow);
+      }
+    } catch (e) {}
+    if (!savedLink) {
+      savedLink = localStorage.getItem(storageKey);
+      savedHeaderRow = localStorage.getItem(headerRowKey);
     }
     // Fallback: a file-based mapping whose rows didn't ride along in the settings
     // mirror can still recover them from the synced sheet-data cache (wf-<prefix>-data).
@@ -6722,7 +6734,7 @@
       }
       setStatus("Verifying and syncing " + configs.length + " sheet(s)…", false);
 
-      fetchAndMergeSheets(configs, function (merged, failures, failureReasons, perSheetStats) {
+      fetchAndMergeSheets(configs, function (merged, failures, failureReasons, perSheetStats, fetchFailures) {
         applyPerSheetStats(perSheetStats);
         if (!merged || merged.length <= 1) {
           var reasonMsg = failures
@@ -6737,9 +6749,11 @@
         }
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
-        // Complete merges only reach the shared cloud cache (see resync note) so a
-        // partial fetch can't clobber a fuller blob other devices seed from.
-        if (!failures) pushSheetDataToCloud(prefix, merged);
+        // Only a fetch-clean merge reaches the shared cloud cache (see resync note)
+        // so a partial fetch can't clobber a fuller blob other devices seed from.
+        // Gate on fetchFailures, not total failures, so a bad config entry beside
+        // valid sheets doesn't permanently block the cloud push.
+        if (!fetchFailures) pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);

@@ -207,6 +207,21 @@ const PGRST204 = col => ({
   ok(fetchCalls.length === 1 && d5 === null, "D5 server error resolves null");
   ok(warns.some(w => w.startsWith("Sheet-data sync failed")), "D5 failure surfaced");
 
+  // D6: byte-accurate cap — a multi-byte payload whose CHAR length is under 2MB but
+  // whose UTF-8 BYTE length exceeds it must be skipped (regression: char-count cap
+  // would have let it through to a server-side rejection).
+  reset();
+  // "㊂" is 1 UTF-16 code unit but 3 UTF-8 bytes. ~800K of them ≈ 0.8M chars (<2MB
+  // as chars) but ≈ 2.4MB as bytes (>2MB).
+  const multibyte = [["h"]];
+  const cjk = "㊂".repeat(1024);
+  for (let i = 0; i < 800; i++) multibyte.push([cjk]);
+  const serializedChars = JSON.stringify({ rows: multibyte }).length;
+  const d6 = await WfAuth.saveSheetData("equity", multibyte);
+  ok(serializedChars < 2 * 1024 * 1024, "D6 payload is under 2MB by char count (would pass old cap)");
+  ok(fetchCalls.length === 0 && d6 === null, "D6 over-2MB by BYTE count is skipped");
+  ok(warns.some(w => w.indexOf("over the 2MB cap") !== -1), "D6 byte-cap warned");
+
   console.log("E. loadAllSheetData (read path)");
 
   // E1: happy path → array of {prefix, rows} straight through
