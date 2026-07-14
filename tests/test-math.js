@@ -191,5 +191,36 @@ console.log("W. forwardFillOverTimeline ≡ lastAtOrBefore (chart optimization)"
   ok(forwardFillOverTimeline([{ date: new Date(2020, 0, 1), v: 5 }], [], "v").length === 0, "W3 empty timeline → empty");
 }
 
+console.log("V. Stocks/ETF invested = FX per-leg + FIFO (computeStocksEtfInvestedINR core)");
+// Mirrors the algorithm computeStocksEtfInvestedINR uses: convert each buy leg's
+// price to INR (US → × transaction-date USD/INR rate; India → ×1), FIFO-match
+// sells, then sum the open lots' INR cost. Reuses the tested fifoRemainingLots.
+function investedINR(txns, isUsd, rateByDate, usdToday) {
+  const lotTxns = txns.map(t => t.type === "buy"
+    ? { type: "buy", units: t.units, price: t.price * (isUsd ? (rateByDate[t.date] || usdToday) : 1) }
+    : { type: "sell", units: t.units, price: 0 });
+  return fifoRemainingLots(lotTxns).reduce((s, l) => s + l.units * l.price, 0);
+}
+{
+  const rates = { "2024-01-10": 83, "2024-06-20": 84 };
+  // US buy: 2 @ $100 on a day with rate 83 → ₹16,600 invested (no sells).
+  const us = investedINR([{ type: "buy", units: 2, price: 100, date: "2024-01-10" }], true, rates, 84);
+  ok(approx(us, 2 * 100 * 83, 1e-9), "V1 US buy invested is FX-converted (₹16,600)", us);
+  // Same numbers but India region → no conversion → ₹200 (the bug: Overview used this for US too).
+  const india = investedINR([{ type: "buy", units: 2, price: 100, date: "2024-01-10" }], false, rates, 84);
+  ok(india === 200, "V2 India buy invested is NOT converted (₹200)", india);
+  ok(approx(us / india, 83, 1e-9), "V3 US invested is ~rate× the un-converted figure (the ~84x bug)", us / india);
+  // US buy then partial sell: 3 @ $100 (rate 83), sell 1 → 2 open lots @ ₹8,300 = ₹16,600.
+  const partial = investedINR([
+    { type: "buy", units: 3, price: 100, date: "2024-01-10" },
+    { type: "sell", units: 1, price: 150, date: "2024-06-20" },
+  ], true, rates, 84);
+  ok(approx(partial, 2 * 100 * 83, 1e-9), "V4 open cost basis after FIFO sell, US converted (₹16,600)", partial);
+  // Price-independence: invested needs only the USD/INR rate, never the stock price —
+  // so a freshly-added instrument with no live price still contributes.
+  ok(investedINR([{ type: "buy", units: 1, price: 50, date: "2024-06-20" }], true, rates, 84) === 50 * 84,
+    "V5 invested computed with no stock price (price-independent)");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

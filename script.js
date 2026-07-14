@@ -1179,6 +1179,40 @@
     });
   }
 
+  // Stocks/ETF INVESTED in INR — the open cost basis after FIFO, with US buy legs
+  // converted at each leg's transaction-date USD/INR rate. The synchronous
+  // sumUnitBasedBuyInvestment leaves US figures in USD (they'd be ~84x too small in
+  // rupees); this async version is the invested counterpart to
+  // computeStocksEtfRealizedINR. Reuses the unit-tested FIFO kernel by feeding it
+  // per-unit INR costs. Returns Promise<number>.
+  function computeStocksEtfInvestedINR(portfolioFilter) {
+    return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var rows = getSheetRows("stocksetf");
+      if (!rows) return 0;
+      var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+      if (!tx) return 0;
+      var total = 0;
+      Object.keys(tx).forEach(function (instr) {
+        var m = seMap[normalizeText(instr)];
+        var isUsd = !!(m && normalizeText(m.region) === "us");
+        // Convert each buy leg's price to INR per-unit; sells carry no cost. FIFO
+        // matching then leaves the open lots whose INR cost is the invested amount.
+        var lotTxns = tx[instr].map(function (t) {
+          if (t.type === "buy") {
+            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            return { type: "buy", units: t.units, price: t.price * r };
+          }
+          return { type: "sell", units: t.units, price: 0 };
+        });
+        fifoRemainingLots(lotTxns).forEach(function (l) { total += l.units * l.price; });
+      });
+      return total;
+    });
+  }
+
   function computeInstrumentRealizedDetail(txns) {
     var buyLots = [];
     var costOfSoldUnits = 0;
@@ -1759,6 +1793,16 @@
       if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selected) return; // portfolio changed meanwhile
       _ov.seRealized = seINR;
       if (stocksEtfRealizedEl) setSignedCurrency(stocksEtfRealizedEl, seINR);
+      refreshOverviewStats(); refreshCategoryCards();
+    }).catch(function () {});
+
+    // Likewise, the sync seInvested above leaves US buys in USD. Recompute the
+    // invested cost basis in INR (US converted per-leg) and refresh so the
+    // top-line Invested, Return %, and Unrealized P&L are right for US holdings.
+    computeStocksEtfInvestedINR(selected).then(function (seInvINR) {
+      if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selected) return; // portfolio changed meanwhile
+      _ov.seInvested = seInvINR;
+      if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(seInvINR);
       refreshOverviewStats(); refreshCategoryCards();
     }).catch(function () {});
 
@@ -11514,11 +11558,14 @@
             var priceEntry = allPrices[h.ticker] || null;
             var eodRaw = priceEntry ? priceEntry.price : null;
             var prevRaw = priceEntry ? priceEntry.prev_close : null;
+            // Invested (cost basis) is price-independent — always count it, even for
+            // a freshly-added instrument whose live price hasn't been fetched yet.
+            // Only current value / P&L / day-change require a price.
+            totalInvestedINR += h.investedINR;
             if (eodRaw === null) return;
             var ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
             var cur = h.units * ltpINR;
             totalCurrentINR += cur;
-            totalInvestedINR += h.investedINR;
             totalPnlINR += cur - h.investedINR;
             if (prevRaw !== null) {
               var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
