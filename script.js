@@ -2568,7 +2568,7 @@
         var subs = Object.keys(e.bySub).sort(function (a, b) { return e.bySub[b] - e.bySub[a]; });
         var chips = subs.filter(function (s) { return e.bySub[s] > 0.01; }).map(function (s) {
           var sp = (e.bySub[s] / e.total) * 100;
-          return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + subColor[s] + '"></span>' + s + ' ' + Math.round(sp) + '%</span>';
+          return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + subColor[s] + '"></span>' + escapeHtml(s) + ' ' + Math.round(sp) + '%</span>';
         }).join("");
         return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
           '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +

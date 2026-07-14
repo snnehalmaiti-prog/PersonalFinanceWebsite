@@ -86,7 +86,7 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS "own_delete" ON %I;', t);
     EXECUTE format('CREATE POLICY "own_select" ON %I FOR SELECT USING (auth.uid() = user_id);', t);
     EXECUTE format('CREATE POLICY "own_insert" ON %I FOR INSERT WITH CHECK (auth.uid() = user_id);', t);
-    EXECUTE format('CREATE POLICY "own_update" ON %I FOR UPDATE USING (auth.uid() = user_id);', t);
+    EXECUTE format('CREATE POLICY "own_update" ON %I FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);', t);
     EXECUTE format('CREATE POLICY "own_delete" ON %I FOR DELETE USING (auth.uid() = user_id);', t);
   END LOOP;
 END $$;
