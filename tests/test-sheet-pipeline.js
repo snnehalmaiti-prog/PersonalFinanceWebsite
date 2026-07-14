@@ -28,6 +28,7 @@ const pieces = [
   "function findHeaderIndex(ownHeader, canonicalName)",
   "function realignRowsToHeader(rows, canonicalHeader)",
   "function getColumnIndices(header)",
+  "function findSavingsBankInstrumentConflicts(rows)",
   "function parseSheetUrl(url)",
   "function detectSheetUrlType(url)",
   "function toCsvFetchUrl(url, type)",
@@ -227,6 +228,46 @@ console.log("J. getColumnIndices");
   const empty = getColumnIndices([]);
   ok(empty.portfolio === -1 && empty.date === -1, "J5 empty header → all -1");
   ok(getColumnIndices(null).portfolio === -1, "J6 null header → -1 (no throw)");
+}
+
+console.log("K. findSavingsBankInstrumentConflicts");
+{
+  const H = ["Portfolio Name", "Bank", "Instrument Name", "Instrument Category", "Instrument Sub Category"];
+  const mk = (rows) => [H].concat(rows);
+  // Clean: each bank has one instrument name (across banks and portfolios).
+  const clean = mk([
+    ["Snnehal", "HDFC", "HDFC Savings", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "HDFC Savings", "Fixed Income", "Savings Account"], // same bank+name = running balance, OK
+    ["Snnehal", "ICICI", "ICICI Savings", "Fixed Income", "Savings Account"],
+  ]);
+  ok(findSavingsBankInstrumentConflicts(clean).length === 0, "K1 one instrument name per bank → no conflict");
+  // Conflict: same bank, two different instrument names.
+  const conflict = mk([
+    ["Snnehal", "HDFC", "HDFC Savings", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "HDFC Salary A/c", "Fixed Income", "Savings Account"],
+  ]);
+  const c = findSavingsBankInstrumentConflicts(conflict);
+  ok(c.length === 1, "K2 same bank, two instrument names → one conflict", c.length);
+  ok(c[0].indexOf("HDFC") !== -1 && c[0].indexOf("HDFC Savings") !== -1 && c[0].indexOf("HDFC Salary A/c") !== -1 && c[0].indexOf("row") !== -1,
+    "K3 conflict names both instruments + the bank + row refs", c[0]);
+  // Only Savings Account is checked — FD / other sub-categories with multiple names are fine.
+  const fd = mk([
+    ["Snnehal", "HDFC", "HDFC FD 1", "Fixed Income", "Fixed Deposit"],
+    ["Snnehal", "HDFC", "HDFC FD 2", "Fixed Income", "Fixed Deposit"],
+  ]);
+  ok(findSavingsBankInstrumentConflicts(fd).length === 0, "K4 Fixed Deposit sub-category is not subject to the rule");
+  // Case/whitespace-insensitive on bank + category + sub-category.
+  const messy = mk([
+    ["Snnehal", " hdfc ", "HDFC Savings", "fixed income", "savings account"],
+    ["Snnehal", "HDFC", "HDFC Salary", "Fixed Income", "Savings  Account"],
+  ]);
+  ok(findSavingsBankInstrumentConflicts(messy).length === 1, "K5 bank/category/sub-cat matched case & space-insensitively");
+  // Blanks are skipped here (flagged elsewhere); no false positive.
+  const blanks = mk([
+    ["Snnehal", "", "HDFC Savings", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "", "Fixed Income", "Savings Account"],
+  ]);
+  ok(findSavingsBankInstrumentConflicts(blanks).length === 0, "K6 blank bank/instrument skipped (no false positive)");
 }
 
 console.log("I. loadSheetConfigs");

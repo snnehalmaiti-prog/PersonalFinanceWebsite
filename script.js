@@ -1318,6 +1318,45 @@
     return total;
   }
 
+  // Validation for the Fixed Income (fd) sheet: a Savings Account is a running
+  // balance keyed by bank, so each Bank must map to exactly ONE Instrument Name.
+  // Two different Instrument Names under the same Bank would be treated as separate
+  // savings holdings (unintended). Pure helper — returns human-readable conflict
+  // messages (empty when clean).
+  function findSavingsBankInstrumentConflicts(rows) {
+    if (!rows || rows.length < 2) return [];
+    var header = rows[0].map(normalizeText);
+    var ci = getColumnIndices(header);
+    if (ci.category === -1 || ci.subCategory === -1 || ci.bank === -1 || ci.instrument === -1) return [];
+    var byBank = {};
+    rows.slice(1).forEach(function (row, i) {
+      if (normalizeText(row[ci.category]) !== "fixed income") return;
+      if (normalizeText(row[ci.subCategory]) !== "savings account") return;
+      var bank = (row[ci.bank] || "").trim();
+      var instrument = (row[ci.instrument] || "").trim();
+      if (!bank || !instrument) return; // blanks are flagged by the per-row checks
+      var bKey = normalizeText(bank);
+      var e = byBank[bKey] || (byBank[bKey] = { bankDisplay: bank, names: {} });
+      var nKey = normalizeText(instrument);
+      var nEntry = e.names[nKey] || (e.names[nKey] = { display: instrument, rows: [] });
+      nEntry.rows.push(i + 2); // 1-based sheet row (accounting for the header)
+    });
+    var conflicts = [];
+    Object.keys(byBank).forEach(function (bKey) {
+      var e = byBank[bKey];
+      var nameKeys = Object.keys(e.names);
+      if (nameKeys.length > 1) {
+        var nameList = nameKeys.map(function (nk) {
+          var r = e.names[nk].rows;
+          return '"' + e.names[nk].display + '" (row' + (r.length > 1 ? "s " : " ") + r.join(", ") + ")";
+        }).join(" and ");
+        conflicts.push('Savings Account at bank "' + e.bankDisplay + '" must use a single Instrument Name, but found ' +
+          nameKeys.length + ": " + nameList + ". Use one consistent Instrument Name for this bank's savings balance.");
+      }
+    });
+    return conflicts;
+  }
+
   function buildSyncDiagnostics(prefix, rows) {
     if (prefix === "mfmapping" || prefix === "stocksetfmapping") {
       var rawHeader = rows[0];
@@ -1444,6 +1483,9 @@
 
         if (issues.length) fdBadRows.push("Row " + (i + 2) + " (" + (portfolio || "unknown portfolio") + "): " + issues.join(", "));
       });
+
+      // Cross-row check: each Savings Account bank must use a single Instrument Name.
+      findSavingsBankInstrumentConflicts(rows).forEach(function (msg) { fdBadRows.push(msg); });
 
       var fdBaseMessage = "Synced " + (rows.length - 1) + " rows. Computed total: " + formatCurrency(fdTotal) + ".";
       if (fdBadRows.length) {
