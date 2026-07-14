@@ -5584,12 +5584,17 @@
     if (!configs.length) return;
     var canonicalFields = prefix === "fixedincome" ? FIXED_INCOME_SHEET_FIELDS : prefix === "fd" ? FD_SHEET_FIELDS : TRANSACTION_SHEET_FIELDS;
     if (spinBtn) spinBtn.classList.add("spinning");
-    fetchAndMergeSheets(configs, function (merged) {
+    fetchAndMergeSheets(configs, function (merged, failures) {
       if (spinBtn) spinBtn.classList.remove("spinning");
       if (merged && merged.length > 1) {
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
-        pushSheetDataToCloud(prefix, merged);
+        // Only mirror to the shared cloud cache when the merge is COMPLETE. A
+        // partial fetch (a sheet timed out) yields fewer rows; pushing it would
+        // clobber a fuller cloud blob and then poison every other device that
+        // seeds from it. On a partial fetch we keep the local view but leave the
+        // cloud authoritative-full — the next clean resync corrects local anyway.
+        if (!failures) pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
       }
       updateDashboardStats();
@@ -6670,7 +6675,9 @@
         }
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
-        pushSheetDataToCloud(prefix, merged);
+        // Complete merges only reach the shared cloud cache (see resync note) so a
+        // partial fetch can't clobber a fuller blob other devices seed from.
+        if (!failures) pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
