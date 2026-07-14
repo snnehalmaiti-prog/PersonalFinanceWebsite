@@ -7494,6 +7494,12 @@
         });
         epfEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         fdValueEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        // The Account Value series layers the *All* fixed-income events (epfEventsAll /
+        // fdValueEventsAll) on top of equity. Their dates must extend the timeline too —
+        // otherwise fixed-income history that predates the first MF/Stocks/commodity
+        // transaction (e.g. PF/EPF/FD started years earlier) falls off the left edge.
+        epfEventsAll.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
+        fdValueEventsAll.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         commodityGramEvents.forEach(function (entry) { allDates[dateKey(entry.date)] = entry.date; });
         Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
           seUnitEventsByTicker[ticker].forEach(function (e) { allDates[dateKey(e.date)] = e.date; });
@@ -7542,6 +7548,26 @@
             if (!firstTxnDate || seEarliest < firstTxnDate) firstTxnDate = seEarliest;
           }
         });
+        // Growth-of-₹100 is an equity vs equity-index comparison, so it stays anchored
+        // at the first MF/Stocks/commodity transaction. Capture that before extending
+        // the window for fixed income below.
+        var equityFirstTxnDate = firstTxnDate;
+        // Account Value · Over Time must span the earliest date across ALL transactional
+        // sheets. Fixed income (PF/EPF/FD/Savings) often starts years before the first
+        // equity buy — extend firstTxnDate with the *All* FI events so that history is
+        // plotted from its true start instead of being clipped to the equity inception.
+        if (epfEventsAll.length) {
+          var epfAllEarliest = epfEventsAll[0].date;
+          var epfAllLatest = epfEventsAll[epfEventsAll.length - 1].date;
+          if (!firstTxnDate || epfAllEarliest < firstTxnDate) firstTxnDate = epfAllEarliest;
+          if (!lastTxnDate || epfAllLatest > lastTxnDate) lastTxnDate = epfAllLatest;
+        }
+        if (fdValueEventsAll.length) {
+          var fdAllEarliest = fdValueEventsAll[0].date;
+          var fdAllLatest = fdValueEventsAll[fdValueEventsAll.length - 1].date;
+          if (!firstTxnDate || fdAllEarliest < firstTxnDate) firstTxnDate = fdAllEarliest;
+          if (!lastTxnDate || fdAllLatest > lastTxnDate) lastTxnDate = fdAllLatest;
+        }
         timeline = timeline.filter(function (d) { return d <= today && (!firstTxnDate || d >= firstTxnDate); });
 
         if (!timeline.length) {
@@ -7618,7 +7644,11 @@
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
 
-        var fullMinTime = first.getTime();
+        // The Account Value chart (rendered above from pointsAll) spans the full
+        // timeline including pre-equity fixed-income history. The Growth-of-₹100 chart
+        // below stays anchored at the equity inception so it isn't given a long empty
+        // left gap before the first MF/Stocks/commodity transaction.
+        var fullMinTime = (equityFirstTxnDate || first).getTime();
         var fullMaxTime = last.getTime();
 
         // === Growth-of-₹100 normalization + benchmark overlay ===
@@ -7917,7 +7947,7 @@
               zoom: {
                 limits: {
                   x: {
-                    min: firstTxnDate ? firstTxnDate.getTime() : undefined,
+                    min: equityFirstTxnDate ? equityFirstTxnDate.getTime() : (firstTxnDate ? firstTxnDate.getTime() : undefined),
                     max: lastTxnDate ? lastTxnDate.getTime() : undefined
                   }
                 },
