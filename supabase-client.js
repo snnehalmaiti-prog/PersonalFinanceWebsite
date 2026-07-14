@@ -248,19 +248,48 @@
         try { payload[col] = JSON.parse(raw); } catch (e) { payload[col] = raw; }
       });
       payload.updated_at = new Date().toISOString();
-      // upsert
-      return fetch(SUPABASE_URL + "/rest/v1/user_settings?on_conflict=user_id", {
-        method: "POST",
-        headers: Object.assign({}, authHeaders(token), { "Prefer": "resolution=merge-duplicates,return=representation" }),
-        body: JSON.stringify(payload)
-      }).then(function (r) {
-        return r.json().catch(function () { return null; }).then(function (data) {
-          // Surface silent failures (e.g. a missing column → PGRST204 fails the whole
-          // upsert) instead of swallowing them, so sync problems are diagnosable.
-          if (!r.ok) console.warn("Settings sync failed:", r.status, data && (data.message || data.code || data));
-          return data;
+
+      function doUpsert(body) {
+        return fetch(SUPABASE_URL + "/rest/v1/user_settings?on_conflict=user_id", {
+          method: "POST",
+          headers: Object.assign({}, authHeaders(token), { "Prefer": "resolution=merge-duplicates,return=representation" }),
+          body: JSON.stringify(body)
+        }).then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
         });
-      });
+      }
+
+      // Extract the offending column name from PostgREST's unknown-column error
+      // (PGRST204: "Could not find the 'expense_templates' column of ...").
+      function unknownColumnOf(res) {
+        if (!res || res.ok || !res.data) return null;
+        var msg = String(res.data.message || "");
+        var m = (res.data.code === "PGRST204" || msg.indexOf("column") !== -1)
+          ? msg.match(/'([^']+)' column/) : null;
+        return m ? m[1] : null;
+      }
+
+      // Resilient upsert: a database whose user_settings table predates newer synced
+      // keys rejects the WHOLE row for one unknown column, silently killing sync for
+      // everything (sheet links, mappings, GH settings). Drop the offending column(s)
+      // and retry — configs keep syncing even against an older schema. Retries are
+      // bounded by the payload's own key count.
+      var maxRetries = Object.keys(payload).length;
+      function attempt(body, triesLeft) {
+        return doUpsert(body).then(function (res) {
+          var badCol = unknownColumnOf(res);
+          if (badCol && badCol in body && triesLeft > 0) {
+            console.warn("Settings sync: column '" + badCol + "' missing in DB — retrying without it. " +
+              "Run the schema migration in supabase-schema.sql to sync this key too.");
+            var slim = Object.assign({}, body);
+            delete slim[badCol];
+            return attempt(slim, triesLeft - 1);
+          }
+          if (!res.ok) console.warn("Settings sync failed:", res.status, res.data && (res.data.message || res.data.code || res.data));
+          return res.data;
+        });
+      }
+      return attempt(payload, maxRetries);
     });
   }
 
