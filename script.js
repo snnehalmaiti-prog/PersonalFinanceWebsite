@@ -5621,10 +5621,20 @@
   // visits Settings. Stale-while-revalidate: the cached view is already on screen and
   // updates when the fresh data arrives. Guard: only run where the Settings sheet
   // cards are absent (i.e. the dashboard), so Settings isn't double-syncing.
-  if (!document.getElementById("stocksetf-sheets-list")) {
-    ["equity", "stocksetf", "fixedincome", "fd"].forEach(function (prefix) { resyncSheetPrefixFromCloud(prefix); });
-    ["stocksetfmapping", "mfmapping"].forEach(function (prefix) { resyncMappingFromCloud(prefix); });
-  }
+  // Deferred via setTimeout so the field-constant `var`s (declared later in this
+  // file) are assigned before the resync reads them, and wrapped in try/catch so a
+  // resync error can never break the rest of the page.
+  setTimeout(function () {
+    try {
+      if (document.getElementById("stocksetf-sheets-list")) return; // Settings page
+      ["equity", "stocksetf", "fixedincome", "fd"].forEach(function (prefix) {
+        try { resyncSheetPrefixFromCloud(prefix); } catch (e) {}
+      });
+      ["stocksetfmapping", "mfmapping"].forEach(function (prefix) {
+        try { resyncMappingFromCloud(prefix); } catch (e) {}
+      });
+    } catch (e) {}
+  }, 1500);
 
   var equityRefreshNavBtn = document.getElementById("equity-refresh-nav");
   if (equityRefreshNavBtn) {
