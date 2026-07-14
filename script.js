@@ -6381,8 +6381,12 @@
     if (savedLink) {
       sheetLinkInput.value = savedLink;
       // Backfill the array mirror for existing users whose config predates mapping
-      // settings-sync, so the next saveSettingsToCloud uploads it.
-      writeSheetsMirror(savedLink, savedHeaderRow);
+      // settings-sync. If it wasn't already present, upload it now so the mapping
+      // URL reaches the cloud without waiting for a manual re-sync.
+      if (!localStorage.getItem(sheetsKey)) {
+        writeSheetsMirror(savedLink, savedHeaderRow);
+        document.dispatchEvent(new CustomEvent("wf-settings-saved"));
+      }
       syncSheet(savedLink);
     }
 
