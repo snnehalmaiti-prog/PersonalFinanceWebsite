@@ -5586,15 +5586,17 @@
     if (spinBtn) spinBtn.classList.add("spinning");
     fetchAndMergeSheets(configs, function (merged, failures) {
       if (spinBtn) spinBtn.classList.remove("spinning");
-      if (merged && merged.length > 1) {
+      // Only accept the result when the merge is COMPLETE (no sheet timed out).
+      // A partial fetch returns fewer rows but still length>1; writing it would
+      // (a) degrade the local view and (b) clobber the fuller shared cloud blob,
+      // poisoning every other device that seeds from it. On a partial fetch we
+      // keep the last-known-good cache untouched — the seed/next clean resync
+      // already holds the full data. Full failures give merged=null (handled by
+      // the length guard); this adds the partial-failure case.
+      if (merged && merged.length > 1 && !failures) {
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
-        // Only mirror to the shared cloud cache when the merge is COMPLETE. A
-        // partial fetch (a sheet timed out) yields fewer rows; pushing it would
-        // clobber a fuller cloud blob and then poison every other device that
-        // seeds from it. On a partial fetch we keep the local view but leave the
-        // cloud authoritative-full — the next clean resync corrects local anyway.
-        if (!failures) pushSheetDataToCloud(prefix, merged);
+        pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
       }
       updateDashboardStats();
