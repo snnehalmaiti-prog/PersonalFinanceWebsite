@@ -248,8 +248,8 @@ console.log("K. findSavingsBankInstrumentConflicts");
   ]);
   const c = findSavingsBankInstrumentConflicts(conflict);
   ok(c.length === 1, "K2 same bank, two instrument names → one conflict", c.length);
-  ok(c[0].indexOf("HDFC") !== -1 && c[0].indexOf("HDFC Savings") !== -1 && c[0].indexOf("HDFC Salary A/c") !== -1 && c[0].indexOf("row") !== -1,
-    "K3 conflict names both instruments + the bank + row refs", c[0]);
+  ok(c[0].indexOf("Snnehal") !== -1 && c[0].indexOf("HDFC") !== -1 && c[0].indexOf("HDFC Savings") !== -1 && c[0].indexOf("HDFC Salary A/c") !== -1 && c[0].indexOf("row") !== -1,
+    "K3 conflict names portfolio + bank + both instruments + row refs", c[0]);
   // Only Savings Account is checked — FD / other sub-categories with multiple names are fine.
   const fd = mk([
     ["Snnehal", "HDFC", "HDFC FD 1", "Fixed Income", "Fixed Deposit"],
@@ -293,6 +293,23 @@ console.log("K. findSavingsBankInstrumentConflicts");
   const bc = findSavingsBankInstrumentConflicts(both);
   ok(bc.length === 2 && bc.some(m => m.indexOf("Savings Account") !== -1) && bc.some(m => m.indexOf("Investment Corpus") !== -1),
     "K9 conflicts in both sub-categories → two distinct messages", bc.length);
+  // Per-PORTFOLIO scoping: different portfolios at the same bank may use different
+  // Instrument Names without conflict.
+  const twoPortfolios = mk([
+    ["Snnehal", "HDFC", "Snnehal HDFC Savings", "Fixed Income", "Savings Account"],
+    ["Trisha", "HDFC", "Trisha HDFC Savings", "Fixed Income", "Savings Account"],
+  ]);
+  ok(findSavingsBankInstrumentConflicts(twoPortfolios).length === 0,
+    "K10 different portfolios, same bank, different names → no conflict (per-portfolio scope)");
+  // But the SAME portfolio+bank with two names is still a conflict.
+  const samePB = mk([
+    ["Snnehal", "HDFC", "Name A", "Fixed Income", "Savings Account"],
+    ["Snnehal", "HDFC", "Name B", "Fixed Income", "Savings Account"],
+    ["Trisha", "HDFC", "Trisha Name", "Fixed Income", "Savings Account"],
+  ]);
+  const spc = findSavingsBankInstrumentConflicts(samePB);
+  ok(spc.length === 1 && spc[0].indexOf("Snnehal") !== -1,
+    "K11 same portfolio+bank two names → conflict scoped to that portfolio", spc.length);
 }
 
 console.log("I. loadSheetConfigs");
