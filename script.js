@@ -556,6 +556,34 @@
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim().toLowerCase();
   }
 
+  // Resolve the app's standard sheet column positions from a NORMALIZED header row
+  // (i.e. rows[0].map(normalizeText)). Replaces the 4-6 line "var xIdx =
+  // header.indexOf(...)" preamble that was copy-pasted across dozens of functions —
+  // a single source of truth for column names that kills the "renamed a column,
+  // missed one call site" bug class. Behaviour is identical to the inline lookups:
+  // it does the same .indexOf on the same array, so every field is -1 when absent.
+  // `date` uses the app-wide fuzzy "contains 'date'" match.
+  function getColumnIndices(header) {
+    var h = header || [];
+    return {
+      portfolio: h.indexOf("portfolio name"),
+      instrument: h.indexOf("instrument name"),
+      type: h.indexOf("transaction type"),
+      units: h.indexOf("units"),
+      price: h.indexOf("price"),
+      amount: h.indexOf("amount"),
+      investedAmount: h.indexOf("invested amount"),
+      category: h.indexOf("instrument category"),
+      subCategory: h.indexOf("instrument sub category"),
+      bank: h.indexOf("bank"),
+      // Exact "transaction date" vs the fuzzy "contains 'date'" match — kept
+      // distinct because some sheets have several date columns (e.g. maturity date)
+      // and different call sites deliberately want one or the other.
+      transactionDate: h.indexOf("transaction date"),
+      date: h.findIndex(function (x) { return typeof x === "string" && x.indexOf("date") !== -1; })
+    };
+  }
+
   // Escape strings coming from Google Sheet cells (instrument/portfolio/sub-cat
   // names, etc.) before interpolating into innerHTML. The dashboard origin holds
   // the Supabase session + GitHub PAT in localStorage, so an unescaped sheet cell
@@ -627,12 +655,9 @@
   function sumInvestmentForRows(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var typeIdx = header.indexOf("transaction type");
-    var unitsIdx = header.indexOf("units");
-    var priceIdx = header.indexOf("price");
-    var amountIdx = header.indexOf("amount");
-    var categoryIdx = header.indexOf("instrument category");
+    var _ci = getColumnIndices(header);
+    var portfolioIdx = _ci.portfolio, typeIdx = _ci.type, unitsIdx = _ci.units,
+        priceIdx = _ci.price, amountIdx = _ci.amount, categoryIdx = _ci.category;
     var isAmountBased = amountIdx !== -1;
     if (portfolioIdx === -1 || typeIdx === -1 || (!isAmountBased && (unitsIdx === -1 || priceIdx === -1))) return 0;
 
@@ -651,10 +676,8 @@
   function sumEpfAmount(rows, portfolioFilter, includeInterest) {
     if (!rows || !rows.length) return 0;
     var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var typeIdx = header.indexOf("transaction type");
-    var amountIdx = header.indexOf("amount");
-    var categoryIdx = header.indexOf("instrument category");
+    var _ci = getColumnIndices(header);
+    var portfolioIdx = _ci.portfolio, typeIdx = _ci.type, amountIdx = _ci.amount, categoryIdx = _ci.category;
     if (portfolioIdx === -1 || typeIdx === -1 || amountIdx === -1) return 0;
 
     var total = 0;
@@ -726,11 +749,9 @@
   function buildFdAtParXirrCashFlows(rows, portfolioFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("invested amount");
-    var categoryIdx = header.indexOf("instrument category");
-    var subCategoryIdx = header.indexOf("instrument sub category");
-    var dateIdx = header.indexOf("transaction date");
+    var _ci = getColumnIndices(header);
+    var portfolioIdx = _ci.portfolio, amountIdx = _ci.investedAmount, categoryIdx = _ci.category,
+        subCategoryIdx = _ci.subCategory, dateIdx = _ci.transactionDate;
     if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1) return [];
 
     var flows = [];
@@ -912,11 +933,9 @@
   function buildFdMaturedXirrCashFlows(rows, portfolioFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
-    var portfolioIdx = header.indexOf("portfolio name");
-    var amountIdx = header.indexOf("invested amount");
-    var categoryIdx = header.indexOf("instrument category");
-    var subCategoryIdx = header.indexOf("instrument sub category");
-    var dateIdx = header.indexOf("transaction date");
+    var _ci = getColumnIndices(header);
+    var portfolioIdx = _ci.portfolio, amountIdx = _ci.investedAmount, categoryIdx = _ci.category,
+        subCategoryIdx = _ci.subCategory, dateIdx = _ci.transactionDate;
     if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1) return [];
 
     var flows = [];

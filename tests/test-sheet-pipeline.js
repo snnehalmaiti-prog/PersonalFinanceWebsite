@@ -27,6 +27,7 @@ const pieces = [
   "var CANONICAL_FIELD_KEYWORDS",
   "function findHeaderIndex(ownHeader, canonicalName)",
   "function realignRowsToHeader(rows, canonicalHeader)",
+  "function getColumnIndices(header)",
   "function parseSheetUrl(url)",
   "function detectSheetUrlType(url)",
   "function toCsvFetchUrl(url, type)",
@@ -204,6 +205,29 @@ const crows = parseCSVText(csv);
 ok(crows.length === 3, "H1 CRLF + trailing blank line handled");
 ok(crows[1][2] === "Bank, HDFC", "H2 quoted comma kept in one cell");
 ok(crows[2][2] === 'Say "Hi"', "H3 escaped quotes unescaped");
+
+console.log("J. getColumnIndices");
+{
+  const hdr = ["transaction date", "portfolio name", "instrument name", "transaction type", "units", "price", "amount", "instrument category", "instrument sub category", "invested amount", "bank"];
+  const ci = getColumnIndices(hdr);
+  // Behaviour-identical to inline header.indexOf(...) — verify each field.
+  ok(ci.portfolio === 1 && ci.instrument === 2 && ci.type === 3 && ci.units === 4 && ci.price === 5, "J1 core txn columns resolved");
+  ok(ci.amount === 6 && ci.category === 7 && ci.subCategory === 8 && ci.investedAmount === 9 && ci.bank === 10, "J2 fixed-income columns resolved");
+  ok(ci.date === 0, "J3 date uses fuzzy contains-'date' match");
+  // Exact transactionDate must NOT be confused with a fuzzy date match.
+  {
+    const multiDate = ["maturity date", "transaction date", "portfolio name"];
+    const mci = getColumnIndices(multiDate);
+    ok(mci.transactionDate === 1, "J3b transactionDate is exact (not the first 'date' column)");
+    ok(mci.date === 0, "J3c fuzzy date still matches the first 'date' column");
+  }
+  // "amount" must not partial-match "invested amount" (exact element match).
+  ok(getColumnIndices(["invested amount"]).amount === -1 && getColumnIndices(["invested amount"]).investedAmount === 0, "J4 'amount' != 'invested amount'");
+  // Absent columns → -1; null/empty header → all -1 without throwing.
+  const empty = getColumnIndices([]);
+  ok(empty.portfolio === -1 && empty.date === -1, "J5 empty header → all -1");
+  ok(getColumnIndices(null).portfolio === -1, "J6 null header → -1 (no throw)");
+}
 
 console.log("I. loadSheetConfigs");
 storage.clear();
