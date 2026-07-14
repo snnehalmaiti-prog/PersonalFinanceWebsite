@@ -3321,6 +3321,10 @@
 
     // For a selected period: compute portfolio value at cutoff as "starting investment",
     // then XIRR over [cutoff → today] using actual flows within the period + current value.
+    // portfolioXirrPromise resolves to { xirr, indexFlows } where indexFlows are the
+    // signed rupee cash flows (buys negative, sells positive) to simulate on the index —
+    // WITH the same opening mark as the portfolio for a period window, and WITHOUT the
+    // portfolio's rupee terminal (buildIndexXirrCashFlows computes its own terminal).
     var portfolioXirrPromise;
     if (periodYears && cutoff) {
       portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (result) {
@@ -3347,26 +3351,33 @@
             .forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
         }
 
-        if (!startVal || startVal <= 0) return allTimePortfolioXirr;
-        periodFlows.unshift({ date: cutoff, amount: -startVal });
-        if (periodCurrentVal > 0) periodFlows.push({ date: new Date(), amount: periodCurrentVal });
-        return calculateXIRR(periodFlows) || allTimePortfolioXirr;
+        if (!startVal || startVal <= 0) return { xirr: allTimePortfolioXirr, indexFlows: allFlowsForIndex };
+        // Index seed = same opening mark (cutoff value) + post-cutoff signed flows, so the
+        // index is measured over the SAME window and starting capital as the portfolio.
+        var idxFlows = periodFlows.slice();
+        idxFlows.unshift({ date: cutoff, amount: -startVal });
+        // Portfolio period XIRR = opening mark + flows + rupee terminal at today.
+        var portFlows = periodFlows.slice();
+        portFlows.unshift({ date: cutoff, amount: -startVal });
+        if (periodCurrentVal > 0) portFlows.push({ date: new Date(), amount: periodCurrentVal });
+        return { xirr: (calculateXIRR(portFlows) || allTimePortfolioXirr), indexFlows: idxFlows };
       });
     } else {
-      portfolioXirrPromise = Promise.resolve(allTimePortfolioXirr);
+      portfolioXirrPromise = Promise.resolve({ xirr: allTimePortfolioXirr, indexFlows: allFlowsForIndex });
     }
 
-    return portfolioXirrPromise.then(function (portfolioXirr) {
+    return portfolioXirrPromise.then(function (pr) {
       return fetchIndexHistory().then(function (indexHistory) {
         var indexData = indexHistory[indexKey];
         var indexPriceDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
         var indexHasHistory = indexPriceDates.length >= 30 &&
           (new Date(indexPriceDates[indexPriceDates.length - 1]) - new Date(indexPriceDates[0])) > 180 * 24 * 60 * 60 * 1000;
-        if (!indexHasHistory) return { portfolioXirr: portfolioXirr, indexXirr: null };
-        var buyFlowsForIndex = allFlowsForIndex.filter(function (f) { return f.amount < 0; });
-        var indexFlows = buildIndexXirrCashFlows(buyFlowsForIndex, indexData.prices);
+        if (!indexHasHistory) return { portfolioXirr: pr.xirr, indexXirr: null };
+        // Feed the FULL signed flows (buys AND sells) so the index redeems units when the
+        // portfolio sells — apples-to-apples, not buy-only.
+        var indexFlows = buildIndexXirrCashFlows(pr.indexFlows, indexData.prices);
         var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
-        return { portfolioXirr: portfolioXirr, indexXirr: indexXirr };
+        return { portfolioXirr: pr.xirr, indexXirr: indexXirr };
       });
     });
   }
@@ -5293,6 +5304,12 @@
       }, 0);
     }
 
+    // Acceptance tolerance scaled to flow magnitude — an absolute ₹1 residual is far
+    // below float precision for crore-sized flows and would spuriously reject a valid
+    // Newton root (forcing bisection, which can isolate a different IRR).
+    var _absScale = cashflows.reduce(function (s, c) { return s + Math.abs(c.amount); }, 0);
+    var npvTol = Math.max(1, _absScale * 1e-9);
+
     var rate = 0.1;
     var converged = false;
     for (var i = 0; i < 100; i++) {
@@ -5305,7 +5322,7 @@
       rate = nextRate;
     }
 
-    if (!converged || !isFinite(rate) || Math.abs(npv(rate)) > 1) {
+    if (!converged || !isFinite(rate) || Math.abs(npv(rate)) > npvTol) {
       var low = -0.999999, high = 10;
       var fLow = npv(low), fHigh = npv(high);
       // Grow the upper bracket until it brackets the root, so genuine extreme
@@ -5318,7 +5335,7 @@
       for (var j = 0; j < 200; j++) {
         var mid = (low + high) / 2;
         var fMid = npv(mid);
-        if (Math.abs(fMid) < 1e-6) { rate = mid; break; }
+        if (Math.abs(fMid) < npvTol) { rate = mid; break; }
         if ((fMid > 0) === (fLow > 0)) { low = mid; fLow = fMid; } else { high = mid; }
         rate = mid;
       }
