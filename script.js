@@ -6180,11 +6180,15 @@
     var sheetsKey = "wf-" + prefix + "-sheets";
     function writeSheetsMirror(url, headerRow) {
       try {
-        if (url && url.indexOf("📎") === -1) {
-          localStorage.setItem(sheetsKey, JSON.stringify([{ link: url, headerRow: headerRow || "1" }]));
-        } else {
-          localStorage.removeItem(sheetsKey);
+        if (!url) { localStorage.removeItem(sheetsKey); return; }
+        var entry = { link: url, headerRow: headerRow || "1" };
+        // File uploads have no fetchable URL, so carry the parsed rows in the mirror
+        // (exactly like the multi-sheet cards) — otherwise the file can't round-trip
+        // to other devices. Mapping files are small; cap defensively regardless.
+        if (url.indexOf("📎") !== -1 && _localData && _localData.length > 1) {
+          entry.localData = _localData.length > 50000 ? _localData.slice(0, 50000) : _localData;
         }
+        localStorage.setItem(sheetsKey, JSON.stringify([entry]));
       } catch (e) {}
     }
     var _localData = null;
@@ -6206,6 +6210,10 @@
           try { localStorage.setItem(localDataKey, JSON.stringify(rows)); } catch (e) {}
           sheetLinkInput.value = "📎 " + file.name;
           localStorage.setItem(storageKey, sheetLinkInput.value);
+          // Mirror the uploaded config (incl. parsed rows) into the synced array form
+          // and notify Settings so it uploads — lets a file-based mapping round-trip.
+          writeSheetsMirror(sheetLinkInput.value, headerRow);
+          document.dispatchEvent(new CustomEvent("wf-settings-saved"));
           syncWithLocalData(rows);
         }, function (err) {
           setStatus("Could not read file: " + err, true);
@@ -6372,9 +6380,23 @@
         if (Array.isArray(arr) && arr[0] && arr[0].link) {
           savedLink = arr[0].link;
           savedHeaderRow = arr[0].headerRow || savedHeaderRow;
+          // Rehydrate an uploaded file's parsed rows so a file-based mapping
+          // reconnects on a fresh device without re-uploading.
+          if (arr[0].localData && arr[0].localData.length > 1) {
+            _localData = arr[0].localData;
+            try { localStorage.setItem(localDataKey, JSON.stringify(_localData)); } catch (e) {}
+          }
           localStorage.setItem(storageKey, savedLink);
           if (savedHeaderRow) localStorage.setItem(headerRowKey, savedHeaderRow);
         }
+      } catch (e) {}
+    }
+    // Fallback: a file-based mapping whose rows didn't ride along in the settings
+    // mirror can still recover them from the synced sheet-data cache (wf-<prefix>-data).
+    if (savedLink && savedLink.indexOf("📎") !== -1 && (!_localData || _localData.length <= 1)) {
+      try {
+        var cachedData = JSON.parse(localStorage.getItem("wf-" + prefix + "-data") || "null");
+        if (Array.isArray(cachedData) && cachedData.length > 1) _localData = cachedData;
       } catch (e) {}
     }
     if (savedHeaderRow && headerRowInput) headerRowInput.value = savedHeaderRow;
@@ -6382,7 +6404,7 @@
       sheetLinkInput.value = savedLink;
       // Backfill the array mirror for existing users whose config predates mapping
       // settings-sync. If it wasn't already present, upload it now so the mapping
-      // URL reaches the cloud without waiting for a manual re-sync.
+      // config reaches the cloud without waiting for a manual re-sync.
       if (!localStorage.getItem(sheetsKey)) {
         writeSheetsMirror(savedLink, savedHeaderRow);
         document.dispatchEvent(new CustomEvent("wf-settings-saved"));
