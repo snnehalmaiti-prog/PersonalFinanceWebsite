@@ -5562,6 +5562,20 @@
   var stocksetfUsShowClosed = document.getElementById("stocksetf-us-show-closed");
   if (stocksetfUsShowClosed) stocksetfUsShowClosed.addEventListener("change", renderStockEtfHoldingsTable);
 
+  // Mirror a freshly-parsed sheet/mapping blob into the Supabase synced cache so
+  // other devices/browsers pick it up without re-entering URLs. Fire-and-forget:
+  // Google Sheets stays the source of truth and the local write already happened,
+  // so a cloud failure here is a silent no-op (WfAuth.saveSheetData never rejects).
+  // Always a FULL REPLACE of the prefix — never an append — so re-syncing the same
+  // sheet can't duplicate rows in the cache.
+  function pushSheetDataToCloud(prefix, rows) {
+    try {
+      if (window.WfAuth && WfAuth.isLoggedIn() && Array.isArray(rows)) {
+        WfAuth.saveSheetData(prefix, rows);
+      }
+    } catch (e) {}
+  }
+
   // Re-fetch one transaction-sheet prefix from its source, refresh the cache, and
   // re-render the dashboard surfaces it feeds. Used by the per-tab Refresh buttons
   // AND by the on-load background resync below.
@@ -5575,6 +5589,7 @@
       if (merged && merged.length > 1) {
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
       }
       updateDashboardStats();
@@ -5608,6 +5623,7 @@
       fetchSheetData(cfg, function (rows) {
         if (!rows || rows.length <= 1) return; // keep cache on empty/failure
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+        pushSheetDataToCloud(prefix, rows);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         try { renderStockEtfHoldingsTable(); renderEquityHoldingsTable(); } catch (e) {}
       }, function () {});
@@ -6268,6 +6284,7 @@
     function processRows(rows) {
       addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
       localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+      pushSheetDataToCloud(prefix, rows);
       document.dispatchEvent(new CustomEvent("wf-sync-complete"));
       if (typeof afterSync === "function") afterSync(rows);
       updateDashboardStats();
@@ -6653,6 +6670,7 @@
         }
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);

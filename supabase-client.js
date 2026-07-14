@@ -293,6 +293,68 @@
     });
   }
 
+  // ── Sheet-data synced cache (user_sheet_data) ───────────────────────────────
+  // Parsed sheet/mapping rows are cached per (user, prefix) so every device sees
+  // the same fresh data without re-entering Google Sheet URLs or trusting stale
+  // localStorage. Google Sheets stays the source of truth; this table is a cache.
+  //
+  // Rules that keep this safe (see failure-mode discussion):
+  //  - one jsonb blob per prefix, upserted (never appended) → no row duplication
+  //  - PAT and expense-ledger are never written here
+  //  - a payload over ~2 MB is skipped (Postgres/PostgREST body limits)
+  //  - all failures are swallowed; a bad cloud write never blocks the local write
+
+  var SHEET_DATA_MAX_BYTES = 2 * 1024 * 1024; // 2 MB per prefix
+
+  // saveSheetData(prefix, rows) — upsert the full rows array for one prefix.
+  // Fire-and-forget: resolves to null on any problem, never rejects.
+  function saveSheetData(prefix, rows) {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      var uid = getUserId();
+      if (!uid || !prefix || !Array.isArray(rows)) return null;
+      var body = { user_id: uid, prefix: String(prefix), rows: rows, updated_at: new Date().toISOString() };
+      var serialized;
+      try { serialized = JSON.stringify(body); } catch (e) { return null; }
+      if (serialized.length > SHEET_DATA_MAX_BYTES) {
+        console.warn("Sheet-data sync: '" + prefix + "' is " + Math.round(serialized.length / 1024) +
+          "KB, over the 2MB cap — skipping cloud cache for this prefix.");
+        return null;
+      }
+      return fetch(SUPABASE_URL + "/rest/v1/user_sheet_data?on_conflict=user_id,prefix", {
+        method: "POST",
+        headers: Object.assign({}, authHeaders(token), { "Prefer": "resolution=merge-duplicates,return=minimal" }),
+        body: serialized
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.json().catch(function () { return null; }).then(function (data) {
+            console.warn("Sheet-data sync failed for '" + prefix + "':", r.status, data && (data.message || data.code || data));
+            return null;
+          });
+        }
+        return true;
+      }).catch(function () { return null; });
+    }).catch(function () { return null; });
+  }
+
+  // loadAllSheetData() — fetch every cached prefix for the user in one request.
+  // Returns [{prefix, rows, updated_at}] on success, or [] on any error (never throws).
+  function loadAllSheetData() {
+    return getValidToken().then(function (token) {
+      if (!token) return [];
+      var uid = getUserId();
+      if (!uid) return [];
+      return fetch(SUPABASE_URL + "/rest/v1/user_sheet_data?user_id=eq." + uid + "&select=prefix,rows,updated_at", {
+        headers: authHeaders(token)
+      }).then(function (r) {
+        if (!r.ok) return [];
+        return r.json().then(function (data) {
+          return Array.isArray(data) ? data : [];
+        }).catch(function () { return []; });
+      }).catch(function () { return []; });
+    }).catch(function () { return []; });
+  }
+
   // ── Generic per-user table CRUD (used by the Expense manager) ───────────────
   // All helpers scope to the signed-in user; RLS enforces it server-side too.
 
@@ -378,6 +440,8 @@
     isLoggedIn: function () { return !!getAccessToken(); },
     loadSettingsFromCloud: loadSettingsFromCloud,
     saveSettingsToCloud: saveSettingsToCloud,
+    saveSheetData: saveSheetData,
+    loadAllSheetData: loadAllSheetData,
     requireAuth: function (redirectTo) {
       if (!getAccessToken()) {
         window.location.href = redirectTo || "index.html";

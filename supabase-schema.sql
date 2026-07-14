@@ -35,3 +35,31 @@ CREATE POLICY "Users can insert own settings"
 CREATE POLICY "Users can update own settings"
   ON user_settings FOR UPDATE
   USING (auth.uid() = user_id);
+
+-- ── Synced sheet-data cache ──────────────────────────────────────────────────
+-- Parsed sheet/mapping rows cached per (user, prefix) so every device/browser
+-- sees the same fresh data without re-entering Google Sheet URLs. Google Sheets
+-- stays the source of truth; this table is only a cache. One jsonb blob per
+-- prefix, upserted (full replace, never appended) → no row duplication.
+CREATE TABLE IF NOT EXISTS user_sheet_data (
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  prefix     text NOT NULL,
+  rows       jsonb,
+  updated_at timestamptz DEFAULT now(),
+  PRIMARY KEY (user_id, prefix)
+);
+
+ALTER TABLE user_sheet_data ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "own sheet data select"
+  ON user_sheet_data FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "own sheet data insert"
+  ON user_sheet_data FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "own sheet data update"
+  ON user_sheet_data FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);

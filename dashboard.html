@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=syncresilient1" />
+<link rel="stylesheet" href="styles.css?v=syncedcache1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -3582,7 +3582,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=syncresilient1"></script>
+  <script src="supabase-client.js?v=syncedcache1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -3592,13 +3592,37 @@
     (function () {
       if (!window.WfAuth || !WfAuth.isLoggedIn()) return;
       if (sessionStorage.getItem("wf-cloud-synced") === "1") return;
-      WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () {
-        sessionStorage.setItem("wf-cloud-synced", "1");
-        location.reload();
-      });
+
+      // Cloud-first seed of the sheet-data cache. Google Sheets stays the source of
+      // truth; this table is a synced cache so a fresh device/browser sees the same
+      // rows without re-entering URLs. Fail-safe: a bad/empty/mis-shaped blob is
+      // SKIPPED (never clobbers good local data), each prefix is isolated, and any
+      // failure falls back to whatever is already in localStorage.
+      function seedSheetDataFromCloud() {
+        if (!WfAuth.loadAllSheetData) return Promise.resolve();
+        return WfAuth.loadAllSheetData().then(function (list) {
+          if (!Array.isArray(list)) return;
+          list.forEach(function (entry) {
+            try {
+              if (!entry || !entry.prefix) return;
+              var rows = entry.rows;
+              // shape guard: skip null / empty / non-array — keeps local for that prefix
+              if (!Array.isArray(rows) || rows.length === 0) return;
+              localStorage.setItem("wf-" + entry.prefix + "-data", JSON.stringify(rows));
+            } catch (e) { /* one bad prefix never blocks the others */ }
+          });
+        }).catch(function () { /* offline / error → keep local cache */ });
+      }
+
+      WfAuth.loadSettingsFromCloud().catch(function () {})
+        .then(seedSheetDataFromCloud)
+        .then(function () {
+          sessionStorage.setItem("wf-cloud-synced", "1");
+          location.reload();
+        });
     })();
   </script>
-  <script src="script.js?v=syncresilient1"></script>
+  <script src="script.js?v=syncedcache1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

@@ -159,6 +159,81 @@ const PGRST204 = col => ({
   ok(localStorage.getItem("wf-gh-token") === null, "C2 PAT cleared on sign-out");
   ok(sessionStorage.getItem("wf-cloud-synced") === null, "C3 cloud-synced flag cleared");
 
+  console.log("D. saveSheetData (write path)");
+  setSession();
+
+  // D1: full-array upsert — one call, correct URL + body shape
+  reset();
+  fetchQueue = [{ status: 201, json: [] }];
+  const rowsA = [["Header"], ["r1"], ["r2"]];
+  const d1 = await WfAuth.saveSheetData("equity", rowsA);
+  ok(fetchCalls.length === 1, "D1 single upsert", "calls=" + fetchCalls.length);
+  ok(fetchCalls[0].url.indexOf("user_sheet_data") !== -1 &&
+     fetchCalls[0].url.indexOf("on_conflict=user_id,prefix") !== -1,
+     "D1 upserts on (user_id,prefix)");
+  const bd1 = lastBody();
+  ok(bd1.prefix === "equity" && Array.isArray(bd1.rows) && bd1.rows.length === 3 && bd1.user_id === "user-uuid-1",
+     "D1 body carries prefix + full rows + user_id");
+  ok(d1 === true, "D1 resolves truthy on success");
+
+  // D2: sync the SAME data twice → each is an independent full-replace upsert,
+  // never an append; row count is identical, so the cache cannot duplicate.
+  reset();
+  fetchQueue = [{ status: 201, json: [] }, { status: 201, json: [] }];
+  await WfAuth.saveSheetData("equity", rowsA);
+  await WfAuth.saveSheetData("equity", rowsA);
+  ok(fetchCalls.length === 2, "D2 two upserts (no batching)", "calls=" + fetchCalls.length);
+  ok(lastBody().rows.length === JSON.parse(fetchCalls[0].opts.body).rows.length,
+     "D2 re-sync sends identical row count (no duplication)");
+
+  // D3: non-array rows → no request, returns null (guards the append/shape contract)
+  reset();
+  const d3 = await WfAuth.saveSheetData("equity", "not-an-array");
+  ok(fetchCalls.length === 0 && d3 === null, "D3 non-array rows never written");
+
+  // D4: over-cap payload (>2MB) → skipped with a warning, no request
+  reset();
+  const huge = [["h"]];
+  const big = "x".repeat(1024);
+  for (let i = 0; i < 2200; i++) { const r = []; for (let j = 0; j < 2; j++) r.push(big); huge.push(r); }
+  const d4 = await WfAuth.saveSheetData("equity", huge);
+  ok(fetchCalls.length === 0 && d4 === null, "D4 over-2MB prefix skipped");
+  ok(warns.some(w => w.indexOf("over the 2MB cap") !== -1), "D4 over-cap warned", warns.join("|"));
+
+  // D5: server rejects (4xx) → resolves null, single warn, never throws
+  reset();
+  fetchQueue = [{ status: 403, json: { code: "42501", message: "RLS" } }];
+  const d5 = await WfAuth.saveSheetData("equity", rowsA);
+  ok(fetchCalls.length === 1 && d5 === null, "D5 server error resolves null");
+  ok(warns.some(w => w.startsWith("Sheet-data sync failed")), "D5 failure surfaced");
+
+  console.log("E. loadAllSheetData (read path)");
+
+  // E1: happy path → array of {prefix, rows} straight through
+  reset();
+  fetchQueue = [{ status: 200, json: [
+    { prefix: "equity", rows: [["H"], ["a"]], updated_at: "2026-01-01" },
+    { prefix: "fd", rows: null, updated_at: "2026-01-02" },
+  ] }];
+  const e1 = await WfAuth.loadAllSheetData();
+  ok(Array.isArray(e1) && e1.length === 2, "E1 returns rows array");
+  ok(e1[0].prefix === "equity" && Array.isArray(e1[0].rows), "E1 passes prefix+rows through");
+
+  // E2: HTTP error → [] (never throws, caller falls back to local cache)
+  reset();
+  fetchQueue = [{ status: 500, json: { message: "boom" } }];
+  const e2 = await WfAuth.loadAllSheetData();
+  ok(Array.isArray(e2) && e2.length === 0, "E2 error yields empty array");
+
+  // E3: seed guard contract (mirrors dashboard.html seedSheetDataFromCloud) —
+  // null / empty / non-array rows must be SKIPPED so they can't clobber local.
+  function seedGuardKeeps(rows) {
+    return !(Array.isArray(rows) && rows.length > 0); // true = skip (keep local)
+  }
+  ok(seedGuardKeeps(null) && seedGuardKeeps([]) && seedGuardKeeps("x") === true &&
+     seedGuardKeeps([["H"], ["a"]]) === false,
+     "E3 seed guard skips null/empty/non-array, accepts real rows");
+
   console.warn = realWarn;
   console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
