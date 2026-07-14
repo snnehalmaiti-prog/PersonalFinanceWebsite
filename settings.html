@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=accountvaluefi1" />
-<script src="supabase-client.js?v=accountvaluefi1"></script>
+<link rel="stylesheet" href="styles.css?v=settingslayout1" />
+<script src="supabase-client.js?v=settingslayout1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -139,47 +139,55 @@
     </div>
 
     <section id="panel-profile" class="settings-panel" role="tabpanel" aria-labelledby="tab-profile">
-      <h2>Profile</h2>
-      <p class="muted">Manage your personal information.</p>
+      <div class="settings-side-by-side" style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="flex:1 1 380px; min-width:0;">
+          <h2>Profile</h2>
+          <p class="muted">Manage your personal information.</p>
 
-      <div class="equity-card" style="max-width:520px;">
-        <p class="muted small" id="profile-signin-msg" hidden>Sign in to view and edit your profile.</p>
-        <form id="profile-form" style="display:flex; flex-direction:column; gap:14px;">
-          <div>
-            <label for="profile-first-name" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">First name</label>
-            <input type="text" id="profile-first-name" required
-              style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+          <div class="equity-card">
+            <p class="muted small" id="profile-signin-msg" hidden>Sign in to view and edit your profile.</p>
+            <form id="profile-form" style="display:flex; flex-direction:column; gap:14px;">
+              <div>
+                <label for="profile-first-name" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">First name</label>
+                <input type="text" id="profile-first-name" required
+                  style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+              </div>
+              <div>
+                <label for="profile-last-name" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">Last name</label>
+                <input type="text" id="profile-last-name" required
+                  style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+              </div>
+              <div>
+                <label for="profile-email" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">Email</label>
+                <input type="email" id="profile-email" readonly
+                  style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#f3f4f6;" />
+              </div>
+              <p id="profile-status" class="muted small" style="margin:0; min-height:18px;"></p>
+              <button type="submit" class="btn btn-primary" id="profile-save" style="align-self:flex-start;">Save changes</button>
+            </form>
           </div>
-          <div>
-            <label for="profile-last-name" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">Last name</label>
-            <input type="text" id="profile-last-name" required
-              style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
-          </div>
-          <div>
-            <label for="profile-email" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">Email</label>
-            <input type="email" id="profile-email" readonly
-              style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#f3f4f6;" />
-          </div>
-          <p id="profile-status" class="muted small" style="margin:0; min-height:18px;"></p>
-          <button type="submit" class="btn btn-primary" id="profile-save" style="align-self:flex-start;">Save changes</button>
-        </form>
-      </div>
+        </div>
 
-      <h3 style="margin-top:32px;">Preferences</h3>
-      <div class="equity-card" style="max-width:520px;">
-        <div>
-          <label for="gold-premium-input" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">
-            Gold premium % <span class="muted" style="font-weight:400;">— added on top of international spot price to approximate the Indian retail rate</span>
-          </label>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <input type="number" id="gold-premium-input" step="0.1" min="0" max="30"
-              placeholder="e.g. 15"
-              style="width:120px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
-            <span class="muted small">%</span>
-            <button type="button" class="btn btn-outline btn-sm" id="gold-premium-save">Save</button>
-            <span id="gold-premium-status" class="muted small" style="margin-left:8px;"></span>
+        <div style="flex:1 1 380px; min-width:0;">
+          <h2>Preferences</h2>
+          <p class="muted">Fine-tune how values are calculated.</p>
+
+          <div class="equity-card">
+            <div>
+              <label for="gold-premium-input" style="display:block; font-size:13px; font-weight:600; margin-bottom:4px;">
+                Gold premium % <span class="muted" style="font-weight:400;">— added on top of international spot price to approximate the Indian retail rate</span>
+              </label>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="number" id="gold-premium-input" step="0.1" min="0" max="30"
+                  placeholder="e.g. 15"
+                  style="width:120px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" />
+                <span class="muted small">%</span>
+                <button type="button" class="btn btn-outline btn-sm" id="gold-premium-save">Save</button>
+                <span id="gold-premium-status" class="muted small" style="margin-left:8px;"></span>
+              </div>
+              <p class="muted small" style="margin:8px 0 0;">Typical range: 15–18% (import duty ≈15% + GST 3%). Set 0 to use the raw international spot price.</p>
+            </div>
           </div>
-          <p class="muted small" style="margin:8px 0 0;">Typical range: 15–18% (import duty ≈15% + GST 3%). Set 0 to use the raw international spot price.</p>
         </div>
       </div>
     </section>
@@ -570,7 +578,7 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=accountvaluefi1"></script>
+  <script src="script.js?v=settingslayout1"></script>
   <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching
