@@ -5149,9 +5149,12 @@
     // for US rows (mirrors the P&L value/return two-line layout). usd==null → INR only.
     function _seAmtCell(inr, usd) {
       if (usd == null) return '<div class="mfh-col-num mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</div>';
+      // Neutral primary (mfh-num-primary), NOT the green mfh-num-pnl-value — an
+      // amount isn't a gain/loss, so it must match the black India/MF columns.
+      // The mfh-num-pnl wrapper only supplies the two-line stacking.
       return '<div class="mfh-col-num mfh-num-pnl">' +
-        '<span class="mfh-num-pnl-value"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
-        '<span class="mfh-num-pnl-pct" style="color:var(--muted);">' + _fmtUsd(usd) + '</span></div>';
+        '<span class="mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
+        '<span class="mfh-num-pnl-pct" style="color:var(--muted);font-weight:500;">' + _fmtUsd(usd) + '</span></div>';
     }
     var body = filtered.map(function (h, i) {
       var pal = SE_AVATAR_PALETTE[i % SE_AVATAR_PALETTE.length];
