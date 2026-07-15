@@ -4831,7 +4831,7 @@
     }
     window.__seLastOpenRowsData = openOnly;
     renderSePortfolioCards(openOnly);
-    renderSeAllocation(openOnly, usdInrToday);
+    renderSeAllocation(openOnly);
     renderSeMarketCapSplit(openOnly);
     _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday);
     renderSeHoldingsCardList(rowsData, "india");
@@ -4955,20 +4955,13 @@
     }).join("");
   }
 
-  function renderSeAllocation(rowsData, usdInrToday) {
+  function renderSeAllocation(rowsData) {
     var listEl = document.getElementById("sealloc-list");
     if (!listEl) return;
     var india = 0, us = 0, iCount = 0, uCount = 0;
-    // Native-USD accumulators for the US leg, used to derive the average buy
-    // USD/INR rate: total INR actually paid ÷ total USD cost = the units-weighted
-    // rate at which dollars were bought, as and when the stocks were purchased.
-    var usInvestedINR = 0, usInvestedUSD = 0;
     rowsData.forEach(function (h) {
-      if (h.region === "US") {
-        us += h.currentINR || 0; uCount++;
-        usInvestedINR += h.investedINR || 0;
-        if (h.investedUSD != null) usInvestedUSD += h.investedUSD;
-      } else { india += h.currentINR || 0; iCount++; }
+      if (h.region === "US") { us += h.currentINR || 0; uCount++; }
+      else { india += h.currentINR || 0; iCount++; }
     });
     var total = india + us;
     if (total <= 0) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
@@ -4979,27 +4972,7 @@
       '</div>';
     var rows = '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#10B981;"></span>India <span class="muted" style="font-weight:500;">· ' + iCount + ' holdings</span></span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(india) + '</span><span class="mfalloc-pct" style="color:#10B981;">' + iPct.toFixed(1) + '%</span></span></div>' +
       '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#E8623A;"></span>US <span class="muted" style="font-weight:500;">· ' + uCount + ' holdings</span></span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(us) + '</span><span class="mfalloc-pct" style="color:#E8623A;">' + uPct.toFixed(1) + '%</span></span></div>';
-
-    // USD/INR rate footnote — only meaningful when there are US holdings.
-    // Buy rate = weighted average ₹ paid per $1 across all US buys; Current
-    // rate = today's ₹ per $1 from stock_prices.json.
-    var fxRows = "";
-    if (uCount > 0) {
-      var buyRate = usInvestedUSD > 0 ? (usInvestedINR / usInvestedUSD) : null;
-      var curRate = (usdInrToday != null && usdInrToday > 0) ? usdInrToday : null;
-      function _fxLine(label, rate) {
-        return '<div class="mfalloc-fx-row">' +
-          '<span class="mfalloc-fx-label">' + label + '</span>' +
-          '<span class="mfalloc-fx-val">' + (rate != null ? '₹' + Number(rate).toFixed(2) : '—') + '</span>' +
-        '</div>';
-      }
-      fxRows = '<div class="mfalloc-fx" style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(150,150,150,0.18);">' +
-        '<div class="mfalloc-fx-title muted small" style="margin-bottom:6px;">US HOLDINGS · USD/INR</div>' +
-        _fxLine("Buy $ : ₹", buyRate) +
-        _fxLine("Current $ : ₹", curRate) +
-      '</div>';
-    }
-    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>' + fxRows;
+    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
   }
 
   var SECAP_STATE = { mode: "marketcap" };
@@ -8977,13 +8950,16 @@
       .then(function (data) {
         var rateMap = (data && data.usd_inr_history) || {};
         var usdInrToday = (data && data.prices && data.prices["__USD_INR__"]) ? data.prices["__USD_INR__"].price : 84;
-        var indiaInr = 0, usInr = 0;
+        var indiaInr = 0, usInr = 0, usUsd = 0;
         lotsByRegion.India.forEach(function (lot) { indiaInr += lot.units * lot.price; });
         lotsByRegion.US.forEach(function (lot) {
           var rate = lookupUsdInrRate(rateMap, formatDateISO(lot.date), usdInrToday);
-          usInr += lot.units * lot.price * rate;
+          usUsd += lot.units * lot.price;           // native USD cost of open US lots
+          usInr += lot.units * lot.price * rate;    // same lots × their historical buy rate
         });
-        return { India: indiaInr, US: usInr };
+        // usUsd/usdInrToday let callers derive the average buy USD/INR
+        // (usInr / usUsd) and today's rate without a second pass.
+        return { India: indiaInr, US: usInr, usUsd: usUsd, usdInrToday: usdInrToday };
       });
     return { sync: syncOut, promise: promise };
   }
@@ -8999,6 +8975,11 @@
     var mode = getIscMode();
     var titleEl = document.getElementById("isc-title");
     if (titleEl) titleEl.textContent = mode === "region" ? "Region Split" : "Portfolio Split";
+
+    // The USD/INR footnote belongs to Region mode only — clear any stale copy
+    // before a Portfolio render so it doesn't linger when the user toggles back.
+    var _fxEl = document.getElementById("isc-fx");
+    if (_fxEl) _fxEl.innerHTML = "";
 
     if (mode === "region") { _renderRegionSplit(prefixes, fiExcluded, statusEl); return; }
 
@@ -9235,8 +9216,32 @@
     seRegionInfo.promise.then(function (inr) {
       investedByRegion["India"] = mfInvested + fiInvested + inr.India;
       investedByRegion["US"] = inr.US;
+      // USD/INR footnote for the US leg:
+      //  • Buy $ : ₹  = units-weighted avg rate paid per $1 (US INR cost ÷ US USD cost)
+      //  • Current $ : ₹ = today's rate from stock_prices.json
+      // Rendered into #isc-fx (Region mode only). Placed below the India/US rows.
+      var buyRate = (inr.usUsd > 0) ? (inr.US / inr.usUsd) : null;
+      var curRate = (inr.usdInrToday > 0) ? inr.usdInrToday : null;
+      renderRegionFx(buyRate, curRate);
       draw();
     }).catch(function () {});
+
+    function renderRegionFx(buyRate, curRate) {
+      var fxEl = document.getElementById("isc-fx");
+      if (!fxEl) return;
+      // No US holdings → nothing to show (keeps the card compact).
+      if (buyRate == null && curRate == null) { fxEl.innerHTML = ""; return; }
+      function _line(label, rate) {
+        return '<div class="isc-fx-row">' +
+          '<span class="isc-fx-label">' + label + '</span>' +
+          '<span class="isc-fx-val">' + (rate != null ? '₹' + Number(rate).toFixed(2) : '—') + '</span>' +
+        '</div>';
+      }
+      fxEl.innerHTML =
+        '<div class="isc-fx-title">US · USD/INR</div>' +
+        _line("Buy $ : ₹", buyRate) +
+        _line("Current $ : ₹", curRate);
+    }
 
     // Supersede the invested placeholder with true per-region CURRENT values:
     // India = MF current + Fixed Income current + commodity (gold) + India-listed

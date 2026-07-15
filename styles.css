@@ -3522,6 +3522,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .isc-bar-seg:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
 .isc-bar-seg:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
 .isc-list { display: flex; flex-direction: column; }
+/* USD/INR footnote (Region mode). Compact so it fills the Region card's spare
+   vertical space (only 2 rows) without pushing the card taller than siblings. */
+.isc-fx { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); }
+.isc-fx:empty { display: none; }
+.isc-fx-title { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.isc-fx-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.isc-fx-label { font-size: 0.68rem; font-weight: 600; color: var(--muted); }
+.isc-fx-val { font-size: 0.72rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 /* Realized Profit by Category card */
 .pcat-group { border-top: 1px solid var(--border); }
 .pcat-group:first-child { border-top: none; }
@@ -3681,9 +3689,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfalloc-nums { display: inline-flex; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; }
 .mfalloc-amount { font-size: 0.78rem; font-weight: 700; color: var(--text); }
 .mfalloc-pct { font-size: 0.68rem; font-weight: 700; min-width: 42px; text-align: right; }
-.mfalloc-fx-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; }
-.mfalloc-fx-label { font-size: 0.76rem; font-weight: 600; color: var(--text-muted, #6b7280); }
-.mfalloc-fx-val { font-size: 0.8rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* Phase 3: Holdings card list */
 .mfh-card { background: var(--surface); border-radius: var(--radius-md); padding: 20px 22px; box-shadow: var(--shadow-sm); }
