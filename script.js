@@ -8320,10 +8320,17 @@
   var __mcfData; // { byMonth: { "YYYY-MM": { income, expense, investment } }, yearList }
 
   function buildMcfInvestmentByMonth() {
-    // Use the already-built Monthly Investment data to avoid duplication
+    // Income & Expenses · Monthly is HOUSEHOLD-WIDE (its income/expense series are
+    // never portfolio-filtered), so its Investment series must be all-portfolios
+    // too. The shared __monthlyInvestCatData follows the Overview's portfolio
+    // selector — reusing it silently shrank the Investment bars to the selected
+    // portfolio while income/expense stayed global (mixed-scope chart). Build an
+    // explicit all-scope dataset instead.
     var result = {};
-    if (__monthlyInvestCatData && __monthlyInvestCatData.byMonthCat) {
-      var byMonthCat = __monthlyInvestCatData.byMonthCat;
+    var allData;
+    try { allData = buildMonthlyInvestCatData("all"); } catch (e) { allData = null; }
+    if (allData && allData.byMonthCat) {
+      var byMonthCat = allData.byMonthCat;
       Object.keys(byMonthCat).forEach(function(ym) {
         var cats = byMonthCat[ym];
         var total = 0;
@@ -8969,7 +8976,7 @@
       var barEl = document.getElementById("isc-bar");
       var listEl = document.getElementById("isc-list");
       var totalEl = document.getElementById("isc-total-value");
-      var eyebrowEl = document.getElementById("isc-eyebrow-text");
+      var labelEl = document.getElementById("isc-total-label");
       if (!barEl || !listEl || !totalEl) return;
 
       // Use per-portfolio CURRENT values once resolved; invested until then.
@@ -9004,10 +9011,10 @@
         { bar: "#6366F1", tint: "#E0E7FF", ink: "#3730A3" }  // indigo
       ];
 
-      if (eyebrowEl) {
-        eyebrowEl.textContent = (currentByName ? "CURRENT SPLIT · " : "INVESTED SPLIT · ") +
-          entries.length + " PORTFOLIO" + (entries.length === 1 ? "" : "S");
-      }
+      // Truthful header: the fast first paint is INVESTED; the async per-portfolio
+      // pass upgrades it to CURRENT. The label must say which one is showing —
+      // "CURRENT TOTAL" over invested data was exactly the original defect.
+      if (labelEl) labelEl.textContent = currentByName ? "CURRENT TOTAL" : "INVESTED TOTAL";
       totalEl.textContent = formatCurrency(total);
 
       // Segmented bar
@@ -9137,6 +9144,9 @@
         return;
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
+      // Truthful header for the Region toggle too: invested placeholder vs current.
+      var regionLabelEl = document.getElementById("isc-total-label");
+      if (regionLabelEl) regionLabelEl.textContent = currentByRegion ? "CURRENT TOTAL" : "INVESTED TOTAL";
       totalEl.textContent = formatCurrency(total);
       barEl.innerHTML = entries.map(function (e) {
         var pct = (e.value / total) * 100;
@@ -9191,7 +9201,7 @@
     var barEl = document.getElementById("iscat-bar");
     var listEl = document.getElementById("iscat-list");
     var totalEl = document.getElementById("iscat-total-value");
-    var eyebrowEl = document.getElementById("iscat-eyebrow-text");
+    var catLabelEl = document.getElementById("iscat-total-label");
     if (!statusEl || !barEl || !listEl || !totalEl) return;
 
     // Category Split always covers ALL portfolios and ignores the Overview's
@@ -9338,8 +9348,10 @@
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
-      if (eyebrowEl) {
-        eyebrowEl.textContent = "ASSET SPLIT · " + entries.length + " CATEGOR" + (entries.length === 1 ? "Y" : "IES");
+      // Truthful header: invested placeholder until the all-portfolio current
+      // pass (_allCur) resolves, then CURRENT.
+      if (catLabelEl) {
+        catLabelEl.textContent = _allCur ? "CURRENT TOTAL" : "INVESTED TOTAL";
       }
       totalEl.textContent = formatCurrency(total);
 
@@ -9709,9 +9721,11 @@
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
-  function buildMonthlyInvestCatData() {
-    // Cash Flow · Monthly follows the Overview portfolio selector.
-    var ovPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+  function buildMonthlyInvestCatData(portfolioOverride) {
+    // Cash Flow · Monthly follows the Overview portfolio selector; callers with a
+    // different scope (e.g. the household-wide Income & Expenses chart) pass an
+    // explicit portfolioOverride instead of inheriting the selection.
+    var ovPortfolio = portfolioOverride || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     function ovSkip(row, portIdx) {
       return ovPortfolio !== "all" && portIdx !== -1 &&
         normalizeText((row[portIdx] || "").trim()) !== normalizeText(ovPortfolio);
@@ -11821,7 +11835,11 @@
           _ov.seCurrent    = totalCurrentINR;
           _ov.seUnrealized = totalPnlINR;
           _ov.seDayChange  = totalDayChangeINR;
-          _ov._seComputedPortfolio = selectedPortfolio;
+          // Tag with the OVERVIEW portfolio these totals were computed for
+          // (ovOpenHoldings scope) — NOT the tab's hardcoded "all". Tagging "all"
+          // while a portfolio is selected made updateDashboardStats' stale guard
+          // zero out correct SE totals on the next stats refresh.
+          _ov._seComputedPortfolio = ovPortfolio;
           var seInvestedEl = document.getElementById("stocksetf-total-investment");
           if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
           refreshOverviewStats(); refreshCategoryCards();
