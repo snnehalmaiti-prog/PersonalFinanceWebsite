@@ -8440,11 +8440,18 @@
     try { allData = buildMonthlyInvestCatData("all"); } catch (e) { allData = null; }
     if (allData && allData.byMonthCat) {
       var byMonthCat = allData.byMonthCat;
-      Object.keys(byMonthCat).forEach(function(ym) {
-        var cats = byMonthCat[ym];
-        var total = 0;
-        Object.keys(cats).forEach(function(cat) { total += cats[cat] || 0; });
-        if (total > 0) result[ym] = total;
+      var byMonthCatOut = allData.byMonthCatOut || {};
+      function sumCats(map, ym) {
+        var m = map[ym];
+        return m ? Object.keys(m).reduce(function (s, c) { return s + (m[c] || 0); }, 0) : 0;
+      }
+      // Net Invested = Total Invested − Total Withdrawal for each month.
+      var months = {};
+      Object.keys(byMonthCat).forEach(function (ym) { months[ym] = true; });
+      Object.keys(byMonthCatOut).forEach(function (ym) { months[ym] = true; });
+      Object.keys(months).forEach(function (ym) {
+        var net = sumCats(byMonthCat, ym) - sumCats(byMonthCatOut, ym);
+        if (net !== 0) result[ym] = net;
       });
     }
     return result;
