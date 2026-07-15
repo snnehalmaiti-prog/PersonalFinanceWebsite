@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=currentlabel1" />
+<link rel="stylesheet" href="styles.css?v=datepick1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -3213,9 +3213,22 @@
       document.getElementById("dt-grid").addEventListener("click", function (e) {
         var b = e.target.closest("[data-y]"); if (!b) return;
         var y = Number(b.getAttribute("data-y")), m = Number(b.getAttribute("data-m")), d = Number(b.getAttribute("data-d"));
-        dtState.sel = new Date(y, m, d, dtState.sel.getHours(), dtState.sel.getMinutes());
+        // Apply the day at the currently-set time and commit to the field
+        // immediately — no ✓ needed. The picker stays open so the time can still
+        // be adjusted; the ✓ just closes it.
+        var t = document.getElementById("dt-time").value || fmtDtLocal(dtState.sel).slice(11, 16) || "00:00";
+        var parts = t.split(":");
+        dtState.sel = new Date(y, m, d, Number(parts[0] || 0), Number(parts[1] || 0));
         dtState.view = new Date(y, m, 1);
+        setDtValue(fmtDtLocal(dtState.sel));
         renderDtGrid();
+      });
+      // Editing the time commits live too, so the field always matches the picker.
+      document.getElementById("dt-time").addEventListener("input", function () {
+        var parts = (this.value || "00:00").split(":");
+        dtState.sel.setHours(Number(parts[0] || 0), Number(parts[1] || 0));
+        document.getElementById("rec-date").value = fmtDtLocal(dtState.sel);
+        document.getElementById("rec-date-display").value = fmtDtDisplay(dtState.sel);
       });
       document.getElementById("dt-confirm").addEventListener("click", function () {
         var t = document.getElementById("dt-time").value || "00:00";
@@ -3584,7 +3597,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=currentlabel1"></script>
+  <script src="supabase-client.js?v=datepick1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -3624,8 +3637,8 @@
         });
     })();
   </script>
-  <script src="wf-math.js?v=currentlabel1"></script>
-  <script src="script.js?v=currentlabel1"></script>
+  <script src="wf-math.js?v=datepick1"></script>
+  <script src="script.js?v=datepick1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
