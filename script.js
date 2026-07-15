@@ -4746,6 +4746,7 @@
           var investedUSD = isUs ? (h.investedNative || 0) : null;
           var currentUSD = null;
           var ltpUSD = null;
+          var avgCostUSD = (isUs && h.units > UNITS_EPSILON) ? (h.investedNative || 0) / h.units : null; // native USD avg cost
           if (isClosed) {
             var detail = computeInstrumentRealizedDetail(h.txns || []);
             if (h.region === "US") {
@@ -4758,6 +4759,7 @@
               investedUSD = detail.costOfSoldUnits; // native USD cost of sold units
               currentUSD = detail.saleProceeds;     // native USD proceeds
               ltpUSD = detail.lastSellPrice;        // native USD last traded price
+              avgCostUSD = detail.avgBuyCost;       // native USD avg cost
             } else {
               ltpINR = detail.lastSellPrice;
               currentINR = detail.saleProceeds;
@@ -4788,6 +4790,7 @@
             investedUSD: investedUSD,
             currentUSD: currentUSD,
             ltpUSD: ltpUSD,
+            avgCostUSD: avgCostUSD,
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
@@ -5166,7 +5169,11 @@
       if (h.currentUSD != null) subCurUSD += h.currentUSD;
       var badges = '';
       if (isEtf) badges += ' <span class="mfh-sip-badge" style="background:#F1EBDD;color:#7A7568;">ETF</span>';
-      var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ₹' + Number(h.avgCostINR || 0).toFixed(2);
+      // US holdings show the native USD avg cost per unit; India shows ₹.
+      var avgCostStr = (h.avgCostUSD != null)
+        ? _fmtUsd(h.avgCostUSD)
+        : '₹' + Number(h.avgCostINR || 0).toFixed(2);
+      var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ' + avgCostStr;
       return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
@@ -11826,6 +11833,7 @@
           var investedUSD = isUsRow ? (h.investedNative || 0) : null; // native USD
           var currentUSD = null;
           var ltpUSD = null;
+          var avgCostUSD = (isUsRow && h.units > UNITS_EPSILON) ? (h.investedNative || 0) / h.units : null;
 
           if (isClosed) {
             // Mirrors MF closed position behaviour: show realized figures
@@ -11840,6 +11848,7 @@
               investedUSD = detail.costOfSoldUnits;
               currentUSD = detail.saleProceeds;
               ltpUSD = detail.lastSellPrice;
+              avgCostUSD = detail.avgBuyCost;
             } else {
               ltpINR = detail.lastSellPrice;
               currentINR = detail.saleProceeds;
@@ -11897,6 +11906,7 @@
             investedUSD: investedUSD,
             currentUSD: currentUSD,
             ltpUSD: ltpUSD,
+            avgCostUSD: avgCostUSD,
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
