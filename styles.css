@@ -3527,8 +3527,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .isc-fx { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); }
 .isc-fx:empty { display: none; }
 .isc-fx-title { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
-.isc-fx-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.isc-fx-label { font-size: 0.68rem; font-weight: 600; color: var(--muted); }
+.isc-fx-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.isc-fx-pair { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
+.isc-fx-label { font-size: 0.68rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .isc-fx-val { font-size: 0.72rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 /* Realized Profit by Category card */
 .pcat-group { border-top: 1px solid var(--border); }

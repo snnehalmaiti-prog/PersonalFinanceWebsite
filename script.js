@@ -9231,16 +9231,18 @@
       if (!fxEl) return;
       // No US holdings → nothing to show (keeps the card compact).
       if (buyRate == null && curRate == null) { fxEl.innerHTML = ""; return; }
-      function _line(label, rate) {
-        return '<div class="isc-fx-row">' +
+      function _pair(label, rate) {
+        return '<span class="isc-fx-pair">' +
           '<span class="isc-fx-label">' + label + '</span>' +
           '<span class="isc-fx-val">' + (rate != null ? '₹' + Number(rate).toFixed(2) : '—') + '</span>' +
-        '</div>';
+        '</span>';
       }
       fxEl.innerHTML =
         '<div class="isc-fx-title">US · USD/INR</div>' +
-        _line("Buy $ : ₹", buyRate) +
-        _line("Current $ : ₹", curRate);
+        '<div class="isc-fx-row">' +
+          _pair("Buy $ : ₹", buyRate) +
+          _pair("Current $ : ₹", curRate) +
+        '</div>';
     }
 
     // Supersede the invested placeholder with true per-region CURRENT values:
