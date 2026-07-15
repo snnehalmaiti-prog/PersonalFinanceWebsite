@@ -1058,7 +1058,9 @@
           activeGrams += e.grams;
         }
       });
-      if (activeGrams > 0) flows.push({ date: new Date(), amount: activeGrams * currentGoldPrice });
+      // Terminal marked so consumers that build their own terminal (the benchmark
+      // index replay) can strip it and keep only the real buy/sell cash flows.
+      if (activeGrams > 0) flows.push({ date: new Date(), amount: activeGrams * currentGoldPrice, _terminal: true });
       return flows;
     });
   }
@@ -3550,6 +3552,14 @@
         .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
         .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
     }
+    // Commodity (gold) is always part of the portfolio XIRR (its flows are in
+    // _overviewBaseFlows regardless of the FI toggle), so the index must replay the
+    // same gold rupees — otherwise the index never buys Nifty with money put into
+    // gold and the displayed alpha is overstated. Strip the commodity terminal (the
+    // index builds its own terminal). Populated async by the overview; the card
+    // re-runs on wf-overview-flows-ready so a transient miss self-heals.
+    var commodityIndexFlows = (_ov._commodityXirrFlows || []).filter(function (f) { return !f._terminal; });
+    if (commodityIndexFlows.length) allFlowsForIndex = allFlowsForIndex.concat(commodityIndexFlows.filter(afterCutoff));
 
     // All-time portfolio XIRR (used for "All" period and as fallback)
     var flowsWithTerminal;
@@ -5387,6 +5397,10 @@
       var commodityData = results[1];
       var commodityProfit = commodityData.profit;
       var commodityFlows = commodityData.flows;
+      // Stash for the benchmark card so its index side can replay the same gold
+      // rupees (the pre-terminal buy/sell flows) — otherwise the index never
+      // "buys Nifty" with money the user put into gold, overstating alpha.
+      _ov._commodityXirrFlows = commodityFlows || [];
 
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       dbg("[NAV] instruments held:", Object.keys(unitEvents), "resolved scheme codes:", instruments.map(function (name) { return name + " -> " + lookupSchemeCode(schemeMap, name); }));
