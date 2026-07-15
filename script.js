@@ -9906,6 +9906,13 @@
       return type.indexOf("sell") !== -1 || type.indexOf("redeem") !== -1 ||
              type.indexOf("redemption") !== -1 || type.indexOf("withdraw") !== -1;
     }
+    // Savings Account / Investment Corpus are running-balance parked cash, not
+    // discrete cash-flow events — excluded from the monthly cash-flow chart so
+    // balance snapshots don't masquerade as monthly inflows/outflows.
+    function isParkedCashSub(sub) {
+      var s = normalizeText(sub || "");
+      return s === "savings account" || s === "investment corpus";
+    }
     ["equity", "stocksetf"].forEach(function (prefix) {
       var rows = getSheetRows(prefix);
       if (!rows || rows.length < 2) return;
@@ -9955,6 +9962,7 @@
         var isDep = type.indexOf("deposit") !== -1;
         var isOut = isOutType(type);
         if (!isDep && !isOut) return;
+        if (isParkedCashSub(row[subCatIdx])) return;
         var d = parseFlexibleDate(row[dateIdx]);
         if (!d) return;
         var amount = parseNumber(row[amtIdx]);
@@ -9978,6 +9986,7 @@
       if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         if (ovSkip(row, portIdx)) return;
+        if (isParkedCashSub(row[subCatIdx])) return;
         var isOut = false;
         if (typeIdx !== -1) {
           var type = normalizeText(row[typeIdx] || "");
