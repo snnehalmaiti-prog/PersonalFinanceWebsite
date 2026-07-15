@@ -3763,7 +3763,14 @@
             netFlow += -ef.amount;
           }
           var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
-          if (!isFinite(g) || g <= 0) g = 1;
+          // C4: reflect real drawdowns instead of flattening them. Previously a
+          // collapse interval (g <= 0, i.e. netted value fell to/through zero) was
+          // forced to g = 1 (a flat 0% month), which understated the portfolio's
+          // true loss and inflated its CAGR. Keep NAV strictly positive by
+          // flooring a collapse at 0.01 (a bounded −99% for that interval) so the
+          // drawdown shows through; only a genuinely non-finite ratio stays flat.
+          if (!isFinite(g)) g = 1;
+          else if (g <= 0) g = 0.01;
           navSeries.push({ date: curPt.date, nav: navSeries[m - 1].nav * g });
         }
         return navSeries;
@@ -3771,85 +3778,98 @@
     });
   }
 
-  // Point-to-point time-weighted CAGR of the portfolio over the selected period
-  // (periodYears ago → today, or inception → today when no period is selected).
-  // Returns Promise<number|null>.
-  function computePortfolioCagr(periodYears) {
+  // Portfolio AND index CAGR computed over ONE identical window, so the two
+  // numbers (and their alpha) compare like-for-like. This replaces the earlier
+  // pair of independent functions whose windows could diverge:
+  //   C1 — the index CAGR's all-time start was the earliest of ALL cash flows
+  //        (incl. FD/PF, which can predate the first equity buy), while the
+  //        portfolio CAGR started at the first MF/Stocks-ETF sample.
+  //   C2 — for a period (e.g. 3Y) the index annualised over the full period
+  //        while the portfolio annualised over its own (possibly shorter) life.
+  //   C3 — the index exponent used the requested window years even though its
+  //        start PRICE was forced to the first available (later) date, so the
+  //        price span was shorter than the exponent → index CAGR understated.
+  //
+  // Fix: anchor both series to the SAME start sample, the SAME end sample, and
+  // the SAME actualYears exponent. The portfolio's TWR NAV series defines the
+  // window; the index is priced at that window's own start/end dates. If the
+  // index history begins after the window start, BOTH series are rebased to the
+  // first sample the index can cover, so the exponent always matches the price
+  // span. Returns Promise<{ portfolioCagr, indexCagr, years }>.
+  function computeAlignedCagr(indexKey, periodYears) {
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    return computePortfolioTwrNavSeries(selected).then(function (navSeries) {
-      if (!navSeries || navSeries.length < 2) return null;
-      var startPt;
+    var EMPTY = { portfolioCagr: null, indexCagr: null, years: null };
+    return Promise.all([
+      computePortfolioTwrNavSeries(selected),
+      fetchIndexHistory()
+    ]).then(function (res) {
+      var navSeries = res[0];
+      if (!navSeries || navSeries.length < 2) return EMPTY;
+      var indexHistory = res[1] || {};
+      var indexData = indexHistory[indexKey];
+      var prices = (indexData && indexData.prices) ? indexData.prices : null;
+      var sortedIdxDates = prices ? Object.keys(prices).sort() : [];
+      var indexUsable = sortedIdxDates.length >= 30 &&
+        (new Date(sortedIdxDates[sortedIdxDates.length - 1]) - new Date(sortedIdxDates[0])) > 180 * 24 * 60 * 60 * 1000;
+
+      // Window start = first NAV sample at/after the requested start (inception
+      // when no period is selected, or when the portfolio is younger than the
+      // period → its own inception).
+      var startIdx = 0;
       if (periodYears) {
         var startDate = new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000);
-        // First NAV sample at/after the period start; if the portfolio is younger
-        // than the period, fall back to inception (first sample).
-        startPt = null;
+        startIdx = -1;
         for (var i = 0; i < navSeries.length; i++) {
-          if (navSeries[i].date >= startDate) { startPt = navSeries[i]; break; }
+          if (navSeries[i].date >= startDate) { startIdx = i; break; }
         }
-        if (!startPt) return null; // period start is after the last sample
-      } else {
-        startPt = navSeries[0];
+        if (startIdx === -1) return EMPTY; // period start after the last sample
       }
+
+      // C1/C3: if index coverage begins after the portfolio's window start,
+      // rebase BOTH series forward to the first sample the index can price, so
+      // the portfolio and index cover the identical span.
+      if (indexUsable) {
+        var firstIdxDate = new Date(sortedIdxDates[0]);
+        if (navSeries[startIdx].date < firstIdxDate) {
+          var reIdx = -1;
+          for (var j = startIdx; j < navSeries.length; j++) {
+            if (navSeries[j].date >= firstIdxDate) { reIdx = j; break; }
+          }
+          if (reIdx === -1) indexUsable = false; else startIdx = reIdx;
+        }
+      }
+
+      var startPt = navSeries[startIdx];
       var endPt = navSeries[navSeries.length - 1];
       var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
-      if (actualYears < 0.05 || startPt.nav <= 0) return null;
-      var cagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
-      return (isFinite(cagr) && cagr > -1) ? cagr : null;
-    }).catch(function () { return null; });
-  }
+      if (actualYears < 0.05 || startPt.nav <= 0) return EMPTY;
 
-  function computeBenchmarkCagr(indexKey, periodYears) {
-    // Index CAGR = point-to-point from startDate to today.
-    // startDate = periodYears ago if a period is selected, else first investment date.
-    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var equityRows = getSheetRows("equity");
-    var seRows = getSheetRows("stocksetf");
-    var fdRows = getSheetRows("fd");
+      var out = { portfolioCagr: null, indexCagr: null, years: actualYears };
 
-    var startDate;
-    if (periodYears) {
-      startDate = new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000);
-    } else {
-      var allFlows = buildXirrCashFlows(equityRows, selected);
-      if (seRows) allFlows = allFlows.concat(buildXirrCashFlows(seRows, selected));
-      if (fdRows && !isFixedIncomeExcluded()) {
-        allFlows = allFlows
-          .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
-          .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+      // Portfolio CAGR over the common window.
+      var pCagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
+      if (isFinite(pCagr) && pCagr > -1) out.portfolioCagr = pCagr;
+
+      // Index CAGR over the SAME start date, end date and exponent.
+      if (indexUsable && prices) {
+        // Nearest price on/before the target date, then on/after, else the last
+        // available — robust to weekends/holidays/stale tails without stretching
+        // the exponent (which is fixed to the portfolio window above).
+        function idxPriceNear(dateStr) {
+          var p = lookupIndexPrice(prices, dateStr);
+          if (p) return p;
+          for (var k = 0; k < sortedIdxDates.length; k++) { if (sortedIdxDates[k] >= dateStr) return prices[sortedIdxDates[k]]; }
+          return sortedIdxDates.length ? prices[sortedIdxDates[sortedIdxDates.length - 1]] : null;
+        }
+        var startPrice = idxPriceNear(formatDateISO(startPt.date));
+        var endPrice = idxPriceNear(formatDateISO(endPt.date));
+        if (startPrice && endPrice) {
+          var iCagr = Math.pow(endPrice / startPrice, 1 / actualYears) - 1;
+          if (isFinite(iCagr) && iCagr > -1) out.indexCagr = iCagr;
+        }
       }
-      if (!allFlows.length) return Promise.resolve({ indexCagr: null, years: null });
-      startDate = allFlows.reduce(function (min, f) {
-        return f.date.getTime() < min.getTime() ? f.date : min;
-      }, allFlows[0].date);
-    }
-
-    var yearsHeld = (new Date() - startDate) / (1000 * 60 * 60 * 24 * 365.25);
-    if (yearsHeld < 0.05) return Promise.resolve({ indexCagr: null, years: yearsHeld });
-
-    return fetchIndexHistory().then(function (indexHistory) {
-      var indexData = indexHistory[indexKey];
-      var sortedDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
-      var indexHasCagrHistory = sortedDates.length >= 30 &&
-        (new Date(sortedDates[sortedDates.length - 1]) - new Date(sortedDates[0])) > 180 * 24 * 60 * 60 * 1000;
-      if (!indexHasCagrHistory) return { indexCagr: null, years: yearsHeld };
-
-      var prices = indexData.prices;
-      var startDateStr = formatDateISO(startDate);
-      var startPrice = null;
-      for (var i = 0; i < sortedDates.length; i++) {
-        if (sortedDates[i] >= startDateStr) { startPrice = prices[sortedDates[i]]; break; }
-      }
-      var endPrice = prices[sortedDates[sortedDates.length - 1]];
-      // Require at least 30 days between start and end price dates to avoid near-zero CAGR from same-day lookup
-      var startPriceDate = startPrice ? sortedDates.find(function(d) { return prices[d] === startPrice && d >= startDateStr; }) : null;
-      var spanDays = startPriceDate ? (new Date(sortedDates[sortedDates.length-1]) - new Date(startPriceDate)) / (24*60*60*1000) : 0;
-      var indexCagr = (startPrice && endPrice && spanDays > 30)
-        ? Math.pow(endPrice / startPrice, 1 / yearsHeld) - 1
-        : null;
-
-      return { indexCagr: indexCagr, years: yearsHeld };
-    });
+      return out;
+    }).catch(function () { return EMPTY; });
   }
 
   // Returns a Promise<number> — total portfolio value (MF + stocks) at a historical date.
@@ -4332,13 +4352,12 @@
       var periodYears = (_period && _period !== "all") ? parseFloat(_period) : null;
       Promise.all([
         computeBenchmarkXirr(indexKey, periodYears),
-        computeBenchmarkCagr(indexKey, periodYears),
-        computePortfolioCagr(periodYears)
+        // Portfolio + index CAGR over one identical window (see computeAlignedCagr).
+        computeAlignedCagr(indexKey, periodYears)
       ]).then(function (results) {
         if (gen !== _benchmarkGeneration) return;
         _lastXirrResult = results[0];
         _lastCagrResult = results[1] || {};
-        _lastCagrResult.portfolioCagr = results[2];
         statusEl.hidden = true;
         resultEl.hidden = false;
         renderResult(_mode, _lastXirrResult, _lastCagrResult);
