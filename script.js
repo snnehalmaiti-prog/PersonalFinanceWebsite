@@ -4831,7 +4831,7 @@
     }
     window.__seLastOpenRowsData = openOnly;
     renderSePortfolioCards(openOnly);
-    renderSeAllocation(openOnly);
+    renderSeAllocation(openOnly, usdInrToday);
     renderSeMarketCapSplit(openOnly);
     _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday);
     renderSeHoldingsCardList(rowsData, "india");
@@ -4955,13 +4955,20 @@
     }).join("");
   }
 
-  function renderSeAllocation(rowsData) {
+  function renderSeAllocation(rowsData, usdInrToday) {
     var listEl = document.getElementById("sealloc-list");
     if (!listEl) return;
     var india = 0, us = 0, iCount = 0, uCount = 0;
+    // Native-USD accumulators for the US leg, used to derive the average buy
+    // USD/INR rate: total INR actually paid ÷ total USD cost = the units-weighted
+    // rate at which dollars were bought, as and when the stocks were purchased.
+    var usInvestedINR = 0, usInvestedUSD = 0;
     rowsData.forEach(function (h) {
-      if (h.region === "US") { us += h.currentINR || 0; uCount++; }
-      else { india += h.currentINR || 0; iCount++; }
+      if (h.region === "US") {
+        us += h.currentINR || 0; uCount++;
+        usInvestedINR += h.investedINR || 0;
+        if (h.investedUSD != null) usInvestedUSD += h.investedUSD;
+      } else { india += h.currentINR || 0; iCount++; }
     });
     var total = india + us;
     if (total <= 0) { listEl.innerHTML = '<p class="muted small">No allocation data.</p>'; return; }
@@ -4972,7 +4979,27 @@
       '</div>';
     var rows = '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#10B981;"></span>India <span class="muted" style="font-weight:500;">· ' + iCount + ' holdings</span></span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(india) + '</span><span class="mfalloc-pct" style="color:#10B981;">' + iPct.toFixed(1) + '%</span></span></div>' +
       '<div class="mfalloc-row"><span class="mfalloc-name"><span class="mfalloc-dot" style="background:#E8623A;"></span>US <span class="muted" style="font-weight:500;">· ' + uCount + ' holdings</span></span><span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(us) + '</span><span class="mfalloc-pct" style="color:#E8623A;">' + uPct.toFixed(1) + '%</span></span></div>';
-    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>';
+
+    // USD/INR rate footnote — only meaningful when there are US holdings.
+    // Buy rate = weighted average ₹ paid per $1 across all US buys; Current
+    // rate = today's ₹ per $1 from stock_prices.json.
+    var fxRows = "";
+    if (uCount > 0) {
+      var buyRate = usInvestedUSD > 0 ? (usInvestedINR / usInvestedUSD) : null;
+      var curRate = (usdInrToday != null && usdInrToday > 0) ? usdInrToday : null;
+      function _fxLine(label, rate) {
+        return '<div class="mfalloc-fx-row">' +
+          '<span class="mfalloc-fx-label">' + label + '</span>' +
+          '<span class="mfalloc-fx-val">' + (rate != null ? '₹' + Number(rate).toFixed(2) : '—') + '</span>' +
+        '</div>';
+      }
+      fxRows = '<div class="mfalloc-fx" style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(150,150,150,0.18);">' +
+        '<div class="mfalloc-fx-title muted small" style="margin-bottom:6px;">US HOLDINGS · USD/INR</div>' +
+        _fxLine("Buy $ : ₹", buyRate) +
+        _fxLine("Current $ : ₹", curRate) +
+      '</div>';
+    }
+    listEl.innerHTML = bar + '<div class="mfalloc-rows">' + rows + '</div>' + fxRows;
   }
 
   var SECAP_STATE = { mode: "marketcap" };

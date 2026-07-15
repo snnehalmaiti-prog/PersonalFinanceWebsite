@@ -3681,6 +3681,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfalloc-nums { display: inline-flex; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; }
 .mfalloc-amount { font-size: 0.78rem; font-weight: 700; color: var(--text); }
 .mfalloc-pct { font-size: 0.68rem; font-weight: 700; min-width: 42px; text-align: right; }
+.mfalloc-fx-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.mfalloc-fx-label { font-size: 0.76rem; font-weight: 600; color: var(--text-muted, #6b7280); }
+.mfalloc-fx-val { font-size: 0.8rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* Phase 3: Holdings card list */
 .mfh-card { background: var(--surface); border-radius: var(--radius-md); padding: 20px 22px; box-shadow: var(--shadow-sm); }
