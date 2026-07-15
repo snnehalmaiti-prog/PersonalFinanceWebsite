@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=fxpctchg1" />
+<link rel="stylesheet" href="styles.css?v=currentlabel1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -346,7 +346,7 @@
           </div>
         </div>
         <div class="isc-total-block">
-          <span class="isc-total-label" id="isc-total-label">INVESTED TOTAL</span>
+          <span class="isc-total-label" id="isc-total-label">CURRENT TOTAL</span>
           <span class="isc-total-value" id="isc-total-value">—</span>
         </div>
         <div class="isc-bar" id="isc-bar" aria-hidden="true"></div>
@@ -360,7 +360,7 @@
           <h3 class="isc-title">Category Split</h3>
         </div>
         <div class="isc-total-block">
-          <span class="isc-total-label" id="iscat-total-label">INVESTED TOTAL</span>
+          <span class="isc-total-label" id="iscat-total-label">CURRENT TOTAL</span>
           <span class="isc-total-value" id="iscat-total-value">—</span>
         </div>
         <div class="isc-bar" id="iscat-bar" aria-hidden="true"></div>
@@ -3584,7 +3584,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=fxpctchg1"></script>
+  <script src="supabase-client.js?v=currentlabel1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -3624,8 +3624,8 @@
         });
     })();
   </script>
-  <script src="wf-math.js?v=fxpctchg1"></script>
-  <script src="script.js?v=fxpctchg1"></script>
+  <script src="wf-math.js?v=currentlabel1"></script>
+  <script src="script.js?v=currentlabel1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

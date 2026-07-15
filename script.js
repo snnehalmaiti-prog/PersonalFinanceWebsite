@@ -9156,8 +9156,9 @@
 
       // Truthful header: the fast first paint is INVESTED; the async per-portfolio
       // pass upgrades it to CURRENT. The label must say which one is showing —
-      // "CURRENT TOTAL" over invested data was exactly the original defect.
-      if (labelEl) labelEl.textContent = currentByName ? "CURRENT TOTAL" : "INVESTED TOTAL";
+      // Label is always "CURRENT TOTAL" per product decision — the invested
+      // figures are only a brief placeholder until the current pass resolves.
+      if (labelEl) labelEl.textContent = "CURRENT TOTAL";
       totalEl.textContent = formatCurrency(total);
 
       // Segmented bar
@@ -9325,7 +9326,7 @@
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
       // Truthful header for the Region toggle too: invested placeholder vs current.
       var regionLabelEl = document.getElementById("isc-total-label");
-      if (regionLabelEl) regionLabelEl.textContent = currentByRegion ? "CURRENT TOTAL" : "INVESTED TOTAL";
+      if (regionLabelEl) regionLabelEl.textContent = "CURRENT TOTAL";
       totalEl.textContent = formatCurrency(total);
       barEl.innerHTML = entries.map(function (e) {
         var pct = (e.value / total) * 100;
@@ -9527,10 +9528,10 @@
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
 
-      // Truthful header: invested placeholder until the all-portfolio current
-      // pass (_allCur) resolves, then CURRENT.
+      // Label is always "CURRENT TOTAL" per product decision — the invested
+      // figures are only a brief placeholder until _allCur resolves.
       if (catLabelEl) {
-        catLabelEl.textContent = _allCur ? "CURRENT TOTAL" : "INVESTED TOTAL";
+        catLabelEl.textContent = "CURRENT TOTAL";
       }
       totalEl.textContent = formatCurrency(total);
 
