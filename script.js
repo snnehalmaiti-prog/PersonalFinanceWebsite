@@ -4745,6 +4745,7 @@
           var isUs = h.region === "US";
           var investedUSD = isUs ? (h.investedNative || 0) : null;
           var currentUSD = null;
+          var ltpUSD = null;
           if (isClosed) {
             var detail = computeInstrumentRealizedDetail(h.txns || []);
             if (h.region === "US") {
@@ -4756,6 +4757,7 @@
               avgCostForDisplay = detail.avgBuyCost * sellRate;
               investedUSD = detail.costOfSoldUnits; // native USD cost of sold units
               currentUSD = detail.saleProceeds;     // native USD proceeds
+              ltpUSD = detail.lastSellPrice;        // native USD last traded price
             } else {
               ltpINR = detail.lastSellPrice;
               currentINR = detail.saleProceeds;
@@ -4767,7 +4769,7 @@
           } else if (eodRaw !== null) {
             ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
             currentINR = h.units * ltpINR;
-            if (isUs) currentUSD = h.units * eodRaw; // native USD current
+            if (isUs) { currentUSD = h.units * eodRaw; ltpUSD = eodRaw; } // native USD current + LTP
             pnl = currentINR - h.investedINR;
             pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
             if (prevRaw !== null) {
@@ -4785,6 +4787,7 @@
             currentINR: currentINR,
             investedUSD: investedUSD,
             currentUSD: currentUSD,
+            ltpUSD: ltpUSD,
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
@@ -5087,6 +5090,7 @@
       case "instrument": av = String(a.instrument || "").toLowerCase(); bv = String(b.instrument || "").toLowerCase(); return av < bv ? -1 : av > bv ? 1 : 0;
       case "invested": return (a.investedINR || 0) - (b.investedINR || 0);
       case "current": return (a.currentINR || 0) - (b.currentINR || 0);
+      case "ltp": return (a.ltpINR || 0) - (b.ltpINR || 0);
       case "pnl": return (a.pnl || 0) - (b.pnl || 0);
       case "day": return (a.dayChangeINR || 0) - (b.dayChangeINR || 0);
     }
@@ -5129,10 +5133,11 @@
     }
     if (!filtered.length) { list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + label.toLowerCase() + ' holdings.</p>'; return; }
     function _sArrow(k) { return sortKey === k ? (sortDir === -1 ? " ↓" : " ↑") : ""; }
-    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;">' +
+    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
       '<span class="mfh-sortable" data-seh-sort-col="instrument">Instrument' + _sArrow("instrument") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="invested">Invested' + _sArrow("invested") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="current">Current' + _sArrow("current") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="ltp">LTP' + _sArrow("ltp") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="pnl">P&amp;L · Return' + _sArrow("pnl") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="day">Day Chg.' + _sArrow("day") + '</span></div>';
     var subInv = 0, subCur = 0, subDay = 0, subInvUSD = 0, subCurUSD = 0;
@@ -5162,7 +5167,7 @@
       var badges = '';
       if (isEtf) badges += ' <span class="mfh-sip-badge" style="background:#F1EBDD;color:#7A7568;">ETF</span>';
       var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ₹' + Number(h.avgCostINR || 0).toFixed(2);
-      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;">' +
+      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr;">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
@@ -5172,6 +5177,9 @@
         '</div>' +
         _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null)) +
         _seAmtCell(h.currentINR || 0, (h.currentUSD != null ? h.currentUSD : null)) +
+        (h.ltpINR != null
+          ? _seAmtCell(h.ltpINR, (h.ltpUSD != null ? h.ltpUSD : null))
+          : '<div class="mfh-col-num mfh-num-primary">—</div>') +
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(pnl) + '>' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
@@ -5182,10 +5190,11 @@
     var subPnl = subCur - subInv;
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
-    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
       '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · INR / USD" : "") + '</div></div>' +
       _seAmtCell(subInv, (region === "us" ? subInvUSD : null)) +
       _seAmtCell(subCur, (region === "us" ? subCurUSD : null)) +
+      '<div class="mfh-col-num mfh-num-primary" style="color:var(--muted);">—</div>' +
       '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
       '</div>';
@@ -10697,6 +10706,7 @@
       case "instrument": av = String(a.instrument || "").toLowerCase(); bv = String(b.instrument || "").toLowerCase(); return av < bv ? -1 : av > bv ? 1 : 0;
       case "invested": return (a.invested || 0) - (b.invested || 0);
       case "current": return (a.current || 0) - (b.current || 0);
+      case "ltp": return (a.currNav || 0) - (b.currNav || 0);
       case "day": return ((a.dayChgPct || 0) * (a.current || 0) - (b.dayChgPct || 0) * (b.current || 0)) / 100;
       case "pnl": return (a.pnl || 0) - (b.pnl || 0);
       case "xirr": return (a.xirrPct == null ? -Infinity : a.xirrPct) - (b.xirrPct == null ? -Infinity : b.xirrPct);
@@ -10722,10 +10732,12 @@
       return;
     }
     function _arrow(k) { return sortKey === k ? (sortDir === -1 ? " ↓" : " ↑") : ""; }
-    var header = '<div class="mfh-list-header">' +
+    var mfhGrid = 'grid-template-columns: minmax(180px, 2.2fr) 0.9fr 0.9fr 0.9fr 0.85fr 1fr 0.85fr;';
+    var header = '<div class="mfh-list-header" style="' + mfhGrid + '">' +
       '<span class="mfh-sortable" data-mfh-sort-col="instrument">Instrument' + _arrow("instrument") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="invested">Invested' + _arrow("invested") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="current">Current' + _arrow("current") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="ltp">LTP' + _arrow("ltp") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="day">Day Chg' + _arrow("day") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="pnl">P&amp;L · Return' + _arrow("pnl") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="xirr">XIRR' + _arrow("xirr") + '</span>' +
@@ -10744,7 +10756,8 @@
       var pnlPos = r.pnl >= 0;
       var xirrCls = r.xirrPct == null ? "mfh-muted" : (r.xirrPct >= 0 ? "" : "mfh-negative");
       var xirrText = r.xirrPct == null ? "—" : ((r.xirrPct >= 0 ? "+" : "") + r.xirrPct.toFixed(2) + "%");
-      return '<div class="mfh-row mfh-color-' + pal.accent + '">' +
+      var ltpStr = (r.currNav != null && isFinite(r.currNav)) ? "₹" + Number(r.currNav).toFixed(2) : "—";
+      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="' + mfhGrid + '">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
@@ -10754,6 +10767,7 @@
         '</div>' +
         '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.current) + '>' + formatCurrency(r.current) + '</div>' +
+        '<div class="mfh-col-num mfh-num-primary">' + ltpStr + '</div>' +
         (function () {
           var dayVal = (r.dayChgPct == null || r.current == null) ? null : (r.current * r.dayChgPct / 100);
           return _mfhDayCell(dayVal, r.dayChgPct);
@@ -10767,10 +10781,11 @@
     }).join("");
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
-    var footer = '<div class="mfh-row" style="background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
+    var footer = '<div class="mfh-row" style="' + mfhGrid + 'background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
       '<div style="font-size:0.72rem;">' + (MFH_STATE.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
       '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subInv) + '>' + formatCurrency(subInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subCur) + '>' + formatCurrency(subCur) + '</div>' +
+      '<div class="mfh-col-num mfh-num-primary" style="color:var(--muted);">—</div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
       '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       '<div class="mfh-col-num mfh-num-xirr mfh-muted">—</div>' +
@@ -11810,6 +11825,7 @@
           var isUsRow = h.region === "US";
           var investedUSD = isUsRow ? (h.investedNative || 0) : null; // native USD
           var currentUSD = null;
+          var ltpUSD = null;
 
           if (isClosed) {
             // Mirrors MF closed position behaviour: show realized figures
@@ -11823,6 +11839,7 @@
               avgCostForDisplay = detail.avgBuyCost * sellRate;
               investedUSD = detail.costOfSoldUnits;
               currentUSD = detail.saleProceeds;
+              ltpUSD = detail.lastSellPrice;
             } else {
               ltpINR = detail.lastSellPrice;
               currentINR = detail.saleProceeds;
@@ -11839,7 +11856,7 @@
                 ltpINR = eodRaw;
               }
               currentINR = h.units * ltpINR;
-              if (isUsRow) currentUSD = h.units * eodRaw; // native USD current
+              if (isUsRow) { currentUSD = h.units * eodRaw; ltpUSD = eodRaw; } // native USD current + LTP
               pnl = currentINR - h.investedINR;
               pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
 
@@ -11879,6 +11896,7 @@
             currentINR: currentINR,
             investedUSD: investedUSD,
             currentUSD: currentUSD,
+            ltpUSD: ltpUSD,
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
