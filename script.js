@@ -5390,8 +5390,11 @@
         setDayChange(equityDayChangeEl, 0);
         document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
         fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-          _ov._mfCommDayChange = commodityDayChange;
-          setDayChange(overviewDayChangeEl, commodityDayChange + _ov.seDayChange);
+          // Gate by the FI toggle: when Fixed Income is excluded the commodity slice
+          // is zeroed from every other card, so its day change must be excluded too.
+          var commDc = isFixedIncomeExcluded() ? 0 : commodityDayChange;
+          _ov._mfCommDayChange = commDc;
+          setDayChange(overviewDayChangeEl, commDc + _ov.seDayChange);
         });
         return;
       }
@@ -5444,7 +5447,8 @@
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
           fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-            _ov._mfCommDayChange = equityDayChange + commodityDayChange;
+            var commDc = isFixedIncomeExcluded() ? 0 : commodityDayChange;
+            _ov._mfCommDayChange = equityDayChange + commDc;
             setDayChange(overviewDayChangeEl, _ov._mfCommDayChange + _ov.seDayChange);
           });
 
@@ -10778,18 +10782,31 @@
     var byInst = groupUnitTransactionsByInstrument(rows, portfolio);
     if (!byInst) return Promise.resolve({ current: 0, dayChange: 0 });
     return buildInstrumentSchemeMap().then(function (schemeMap) {
-      var names = Object.keys(byInst).filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
-      return Promise.all(names.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
+      var allNames = Object.keys(byInst);
+      var mapped = allNames.filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+      return Promise.all(mapped.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
         .then(function (histories) {
+          var histByName = {};
+          mapped.forEach(function (n, i) { histByName[n] = histories[i]; });
           var total = 0, prevTotal = 0;
-          names.forEach(function (n, i) {
+          allNames.forEach(function (n) {
             var lots = fifoRemainingLots(byInst[n]);
             var units = lots.reduce(function (s, l) { return s + l.units; }, 0);
-            var hist = histories[i];
+            if (units <= UNITS_EPSILON) return;
+            var hist = histByName[n];
             var nav = hist && hist.length ? hist[hist.length - 1].nav : 0;
-            var prevNav = previous_nav_for(hist);
-            if (units > UNITS_EPSILON && nav) total += units * nav;
-            if (units > UNITS_EPSILON && prevNav) prevTotal += units * prevNav;
+            if (nav) {
+              var prevNav = previous_nav_for(hist);
+              total += units * nav;
+              prevTotal += units * (prevNav || nav); // no day change if prev NAV missing
+            } else {
+              // Unmapped or NAV-missing fund: value at COST — matches the Overview's
+              // updateTotalCurrentValue fallback so the split cards reconcile with it
+              // (previously these funds were dropped, undercounting the split totals).
+              var cost = lots.reduce(function (s, l) { return s + l.units * l.price; }, 0);
+              total += cost;
+              prevTotal += cost; // cost-valued → no day change
+            }
           });
           return { current: total, dayChange: total - prevTotal };
         });
