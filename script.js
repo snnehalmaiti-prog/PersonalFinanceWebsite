@@ -7431,7 +7431,7 @@
   // excludeBalance: when true, drop Investment Corpus / Savings Account ("balance")
   // rows but keep Provident Fund — used by the Account Value chart under the
   // "Exclude Savings/Investment" filter so it matches the Overview cards.
-  function buildFdValueEvents(portfolioFilter, excludeBalance) {
+  function buildFdValueEvents(portfolioFilter, excludeBalance, includeFd) {
     var rows = getSheetRows("fd");
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -7442,6 +7442,9 @@
     var subCategoryIdx = header.indexOf("instrument sub category");
     var amountIdx = header.indexOf("invested amount");
     var dateIdx = header.indexOf("transaction date");
+    var typeIdx = header.indexOf("transaction type");
+    var maturityIdx = header.indexOf("maturity date/sell date");
+    if (maturityIdx === -1) maturityIdx = header.indexOf("maturity date");
     if (portfolioIdx === -1 || bankIdx === -1 || instrumentIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1) return [];
 
     var entries = [];
@@ -7452,17 +7455,41 @@
       var subCategory = normalizeText(row[subCategoryIdx]);
       var isBalance = (subCategory === "investment corpus" || subCategory === "savings account");
       var isPf = isProvidentFundSub(subCategory);
-      if (!isBalance && !isPf) return;
+      var isFd = (subCategory === "fixed deposit");
+      if (!isBalance && !isPf && !(isFd && includeFd)) return;
       if (excludeBalance && isBalance) return; // keep PF, drop parked cash
 
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date) return;
-      // Balance rows share a key per portfolio/bank/instrument (replacement).
-      // PF rows are discrete deposits, so use a unique key per row so each adds.
-      var key = isPf
-        ? "pf||" + rowIdx
-        : normalizeText(portfolio) + "||" + normalizeText(row[bankIdx]) + "||" + normalizeText(row[instrumentIdx]);
-      entries.push({ date: date, key: key, amount: parseNumber(row[amountIdx]) });
+      var amount = parseNumber(row[amountIdx]);
+
+      if (isFd) {
+        // A Fixed Deposit holds its principal from purchase to maturity, then the
+        // money leaves the FD (proceeds realized/reinvested). Model as +principal
+        // at purchase and →0 at maturity via a per-row key. (Accrued interest is
+        // omitted here — a minor understatement vs the headline, far better than
+        // the FD being absent from the chart entirely.)
+        var fdKey = "fd||" + rowIdx;
+        entries.push({ date: date, key: fdKey, amount: amount });
+        var mat = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+        if (mat) entries.push({ date: mat, key: fdKey, amount: 0 });
+        return;
+      }
+
+      if (isPf) {
+        // PF rows are discrete deposits/withdrawals; a withdrawal REDUCES the running
+        // balance. Previously every PF row was added positively (no type read), so a
+        // withdrawal inflated the FI value on the chart and the XIRR opening mark.
+        var type = typeIdx !== -1 ? normalizeText(row[typeIdx]) : "";
+        if (type.indexOf("withdraw") !== -1) amount = -Math.abs(amount);
+        entries.push({ date: date, key: "pf||" + rowIdx, amount: amount });
+        return;
+      }
+
+      // Balance rows (savings/corpus) share a key per portfolio/bank/instrument so a
+      // new balance replaces the old (running-balance snapshot).
+      var key = normalizeText(portfolio) + "||" + normalizeText(row[bankIdx]) + "||" + normalizeText(row[instrumentIdx]);
+      entries.push({ date: date, key: key, amount: amount });
     });
 
     entries.sort(function (a, b) { return a.date - b.date; });
@@ -7572,9 +7599,12 @@
       // FI excluded → drop the whole FD series. Savings/Investment excluded →
       // drop only Investment Corpus + Savings Account (parked cash), keep PF,
       // matching the Overview cards.
+      // includeFd=true: the Account Value chart shows total FI worth, so it needs
+      // Fixed Deposits too (the XIRR opening-mark caller values FDs separately and
+      // intentionally omits them here to avoid double-counting).
       var fdValueEventsAll = isFixedIncomeExcluded()
         ? []
-        : buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded());
+        : buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded(), true);
 
       // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
