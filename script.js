@@ -1180,7 +1180,7 @@
         var lots = [];
         tx[instr].forEach(function (t) {
           if (t.type === "buy") {
-            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            var r = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
             lots.push({ units: t.units, cost: t.price * r });
             return;
           }
@@ -1192,7 +1192,7 @@
             if (l.units <= 0) lots.shift();
           }
           if (mt <= 0) return;
-          var sr = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+          var sr = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
           total += mt * t.price * sr - cm;
         });
       });
@@ -1223,7 +1223,7 @@
         // matching then leaves the open lots whose INR cost is the invested amount.
         var lotTxns = tx[instr].map(function (t) {
           if (t.type === "buy") {
-            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            var r = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
             return { type: "buy", units: t.units, price: t.price * r };
           }
           return { type: "sell", units: t.units, price: 0 };
@@ -1255,7 +1255,7 @@
         var ticker = m && m.ticker;
         var lotTxns = tx[instr].map(function (t) {
           if (t.type === "buy") {
-            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            var r = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
             return { type: "buy", units: t.units, price: t.price * r };
           }
           return { type: "sell", units: t.units, price: 0 };
@@ -1295,7 +1295,7 @@
         var ticker = m && m.ticker;
         var lotTxns = tx[instr].map(function (t) {
           if (t.type === "buy") {
-            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            var r = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
             return { type: "buy", units: t.units, price: t.price * r };
           }
           return { type: "sell", units: t.units, price: 0 };
@@ -9622,7 +9622,7 @@
           var lots = [];
           tx[instr].forEach(function (t) {
             if (t.type === "buy") {
-              var buyRate = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+              var buyRate = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
               lots.push({ units: t.units, cost: t.price * buyRate });
               return;
             }
@@ -9637,7 +9637,7 @@
               if (l.units <= 0) lots.shift();
             }
             if (matched <= 0) return;
-            var sellRate = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            var sellRate = isUsd ? (lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday)) : 1;
             var realized = (matched * t.price * sellRate) - costMatched;
             var yr = t.date ? String(t.date.getFullYear()) : null;
             if (yr) add(yr, cat, sub, realized);
