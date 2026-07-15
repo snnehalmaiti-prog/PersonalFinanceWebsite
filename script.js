@@ -1253,6 +1253,45 @@
     });
   }
 
+  // Stocks/ETF CURRENT value in INR split by region — same valuation as
+  // computeStocksEtfCurrentINR (open FIFO units × live price, US at today's
+  // USD/INR, cost-basis fallback) but accumulated into { India, US } so the
+  // Region Split can show true current values per region. Returns Promise<object>.
+  function computeStocksEtfCurrentByRegion(portfolioFilter) {
+    return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+      var allPrices = (sp && sp.prices) || {};
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var out = { India: 0, US: 0 };
+      var rows = getSheetRows("stocksetf");
+      if (!rows) return out;
+      var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+      if (!tx) return out;
+      Object.keys(tx).forEach(function (instr) {
+        var m = seMap[normalizeText(instr)];
+        var isUsd = !!(m && normalizeText(m.region) === "us");
+        var ticker = m && m.ticker;
+        var lotTxns = tx[instr].map(function (t) {
+          if (t.type === "buy") {
+            var r = isUsd ? (usdInr[formatDateISO(t.date)] || usdToday) : 1;
+            return { type: "buy", units: t.units, price: t.price * r };
+          }
+          return { type: "sell", units: t.units, price: 0 };
+        });
+        var units = 0, costINR = 0;
+        fifoRemainingLots(lotTxns).forEach(function (l) { units += l.units; costINR += l.units * l.price; });
+        if (units <= UNITS_EPSILON) return;
+        var priceEntry = ticker ? allPrices[ticker] : null;
+        var val = (priceEntry && priceEntry.price != null)
+          ? units * (isUsd ? priceEntry.price * usdToday : priceEntry.price)
+          : costINR;
+        out[isUsd ? "US" : "India"] += val;
+      });
+      return out;
+    });
+  }
+
   // Per-portfolio CURRENT value broken into { equity, fixedIncome, commodity } in
   // INR, matching the Overview's own current aggregation (MF NAV + Stocks/ETF live
   // prices + FD/PF/EPF interest accrual + gold). Honours the Fixed-Income and
@@ -7783,6 +7822,11 @@
         // MF+SE at current prices) — and the overview-ready listener re-renders.
         (function snapLastPointToOverview() {
           if (!pointsAll.length) return;
+          // Race guard: this callback runs after async NAV/price fetches; if the
+          // user switched portfolio meanwhile, _ov now holds the NEW portfolio's
+          // totals while this series was built for the OLD one — snapping would
+          // splice a wrong tail. Skip; the portfolio-change re-render supersedes.
+          if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selectedPortfolio) return;
           var overviewTotal = (typeof getOverviewCurrentTotal === "function") ? getOverviewCurrentTotal() : null;
           if (overviewTotal && overviewTotal > 0) {
             var li = pointsAll.length - 1;
@@ -8908,11 +8952,17 @@
     // matching vs "all") is scaled away so both totals agree exactly.
     var allTotal = computeTotalInvestment("all", prefixes);
     var unassigned = allTotal - namedSum;
+    // The negative-remainder rescale is BOUNDED: a large mismatch means a real
+    // data/computation error, and silently scaling every portfolio would hide it.
+    var _rescaleBound = Math.max(1000, allTotal * 0.005); // ₹1000 or 0.5%
     if (unassigned > UNITS_EPSILON) {
       investedByName["Unassigned"] = unassigned;
-    } else if (unassigned < -UNITS_EPSILON && namedSum > 0) {
+    } else if (unassigned < -UNITS_EPSILON && namedSum > 0 && -unassigned <= _rescaleBound) {
       var scale = allTotal / namedSum;
       Object.keys(investedByName).forEach(function (n) { investedByName[n] *= scale; });
+    } else if (unassigned < -_rescaleBound) {
+      console.warn("Portfolio Split: per-portfolio invested exceeds the all-portfolios total by ₹" +
+        Math.round(-unassigned).toLocaleString("en-IN") + " — leaving unreconciled (possible data issue).");
     }
 
     function drawSplitPie() {
@@ -9045,30 +9095,46 @@
       draw();
     }).catch(function () {});
 
+    // Supersede the invested placeholder with true per-region CURRENT values:
+    // India = MF current + Fixed Income current + commodity (gold) + India-listed
+    // SE current; US = US-listed SE current. Uses the same helpers as Portfolio
+    // Split (all-portfolios scope), so the two toggles of this card agree and
+    // neither follows the Overview's portfolio selector.
+    var currentByRegion = null;
+    Promise.all([
+      computePortfolioCurrentBreakdown("all"),
+      computeStocksEtfCurrentByRegion("all")
+    ]).then(function (res) {
+      var b = res[0] || { equity: 0, fixedIncome: 0, commodity: 0 };
+      var se = res[1] || { India: 0, US: 0 };
+      // b.equity = MF + SE (both regions); isolate the MF part.
+      var mfCur = Math.max(0, (b.equity || 0) - (se.India || 0) - (se.US || 0));
+      var india = mfCur + (b.fixedIncome || 0) + (b.commodity || 0) + (se.India || 0);
+      var us = se.US || 0;
+      if (india + us <= UNITS_EPSILON) return;
+      currentByRegion = { India: india, US: us };
+      draw();
+    }).catch(function () {});
+
     var REGION_META = {
       "India": { bar: "#10B981", tint: "#D1FAE5", ink: "#065F46", flag: "🇮🇳" },
       "US":    { bar: "#6366F1", tint: "#E0E7FF", ink: "#3730A3", flag: "🇺🇸" }
     };
 
     function draw() {
-      var entries = Object.keys(investedByRegion)
-        .map(function (r) { return { name: r, value: investedByRegion[r] }; })
+      // True per-region CURRENT once resolved; invested placeholder until then.
+      // No rescaling to _ov/getOverviewCurrentTotal — that follows the Overview's
+      // SELECTED portfolio and assumes both regions earned the blended return
+      // (the same defect fixed in the Portfolio view of this card).
+      var valueByRegion = currentByRegion || investedByRegion;
+      var entries = Object.keys(valueByRegion)
+        .map(function (r) { return { name: r, value: valueByRegion[r] }; })
         .filter(function (e) { return e.value > UNITS_EPSILON; })
         .sort(function (a, b) { return b.value - a.value; });
       if (!entries.length) {
-        statusEl.textContent = "No invested amount found yet.";
+        statusEl.textContent = "No value found yet.";
         barEl.innerHTML = ""; listEl.innerHTML = ""; totalEl.textContent = "—";
         return;
-      }
-      // Reconcile to the Overview's authoritative CURRENT total (same treatment
-      // as the Portfolio view), so switching Portfolio↔Region keeps the same
-      // "Current Total". Region proportions are preserved by scaling the
-      // invested-basis slices onto the current total.
-      var rawSum = entries.reduce(function (s, e) { return s + e.value; }, 0);
-      var overviewTotal = getOverviewCurrentTotal();
-      if (overviewTotal && rawSum > 0 && Math.abs(overviewTotal - rawSum) > 100) {
-        var sc = overviewTotal / rawSum;
-        entries.forEach(function (e) { e.value *= sc; });
       }
       var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
       totalEl.textContent = formatCurrency(total);
