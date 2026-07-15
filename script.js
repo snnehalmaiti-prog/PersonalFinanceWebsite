@@ -11787,7 +11787,13 @@
             // a freshly-added instrument whose live price hasn't been fetched yet.
             // Only current value / P&L / day-change require a price.
             totalInvestedINR += h.investedINR;
-            if (eodRaw === null) return;
+            if (eodRaw === null) {
+              // No live price yet: value the holding at cost so the Overview
+              // Current reconciles with the split cards (which use the same cost
+              // fallback via computeStocksEtfCurrentINR). Day change stays 0.
+              totalCurrentINR += h.investedINR;
+              return;
+            }
             var ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
             var cur = h.units * ltpINR;
             totalCurrentINR += cur;
