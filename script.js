@@ -796,8 +796,9 @@
 
   // Current Value of ACTIVE (not-yet-matured) Fixed Deposits only. A matured FD is
   // treated as closed: its principal + interest leave the Current Value (the interest
-  // is booked as Realized Profit instead). Used for the displayed Current Value;
-  // XIRR keeps using sumFdMaturedCurrentValue (accrued maturity value as terminal).
+  // is booked as Realized Profit instead). Used both for the displayed Current Value
+  // AND as the XIRR terminal — matured FDs are excluded here because their proceeds
+  // are now emitted as a dated inflow at maturity by buildFdMaturedXirrCashFlows.
   function sumFdActiveCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
@@ -938,6 +939,11 @@
         subCategoryIdx = _ci.subCategory, dateIdx = _ci.transactionDate;
     if (portfolioIdx === -1 || amountIdx === -1 || subCategoryIdx === -1 || dateIdx === -1) return [];
 
+    var rateIdx = header.indexOf("rate of return");
+    var maturityIdx = header.indexOf("maturity date/sell date");
+    if (maturityIdx === -1) maturityIdx = header.indexOf("maturity date");
+    var today = new Date();
+
     var flows = [];
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
@@ -948,7 +954,20 @@
       var amount = parseNumber(row[amountIdx]);
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date || !amount) return;
-      flows.push({ date: date, amount: -amount });
+      flows.push({ date: date, amount: -amount }); // buy outflow at purchase
+
+      // A FD that has ALREADY matured returned its proceeds AT MATURITY — emit a
+      // positive inflow there, not in the today-dated terminal (the callers now use
+      // sumFdActiveCurrentValue, which excludes matured FDs). Without this the money
+      // is modelled as received today, understating the portfolio XIRR and letting
+      // the benchmark index over-compound the same rupees to the present.
+      var maturity = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
+      if (maturity && maturity < today) {
+        var rate = rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0;
+        var quarters = countElapsedQuarters(date, maturity);
+        var maturityValue = (quarters > 0 && rate) ? amount * Math.pow(1 + rate / 4, quarters) : amount;
+        flows.push({ date: maturity, amount: maturityValue });
+      }
     });
     return flows;
   }
@@ -2070,7 +2089,7 @@
 
       if (xirrEl) {
         var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
-        var currentValueForXirr = (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
+        var currentValueForXirr = (fdRows ? sumFdActiveCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
         var baseCashFlows = (fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [])
           .concat(fdRows ? buildProvidentFundXirrCashFlows(fdRows, selected) : []);
         buildCommodityXirrCashFlows(fdRows, selected, goldPrice).then(function (commodityFlows) {
@@ -2712,7 +2731,7 @@
         if (fdRows) {
           flows = flows.concat(buildFdMaturedXirrCashFlows(fdRows, pName) || []);
           flows = flows.concat(buildProvidentFundXirrCashFlows(fdRows, pName) || []);
-          terminal += (sumFdMaturedCurrentValue(fdRows, pName) || 0);
+          terminal += (sumFdActiveCurrentValue(fdRows, pName) || 0);
           terminal += (sumProvidentFundCurrentValue(fdRows, pName) || 0);
         }
         if (fiRows && typeof buildEpfXirrCashFlows === "function") {
@@ -3568,7 +3587,7 @@
         // out. (Matches the Overview / all-time treatment.)
         if (!isFixedIncomeExcluded() && fdRows) {
           startVal += fixedIncomeValueAtDate(fdRows, selected, cutoff);
-          periodCurrentVal += (sumFdMaturedCurrentValue(fdRows, selected) || 0)
+          periodCurrentVal += (sumFdActiveCurrentValue(fdRows, selected) || 0)
                             + (sumProvidentFundCurrentValue(fdRows, selected) || 0);
           buildFdMaturedXirrCashFlows(fdRows, selected)
             .concat(buildProvidentFundXirrCashFlows(fdRows, selected))
@@ -5309,7 +5328,7 @@
         // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded
         // from XIRR — its running-balance updates aren't real cash-flow events.
         var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
-        var fixedIncomeCurrentValue = (fdRows ? sumFdMaturedCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
+        var fixedIncomeCurrentValue = (fdRows ? sumFdActiveCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
         flows = flows
           .concat(fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [])
           .concat(fdRows ? buildProvidentFundXirrCashFlows(fdRows, selected) : []);
