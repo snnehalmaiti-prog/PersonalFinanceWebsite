@@ -3275,7 +3275,9 @@
 
       return holdings.map(function (h) {
         var investedINR = 0;
+        var investedNative = 0; // native currency (USD for US, INR for India)
         h.lots.forEach(function (lot) {
+          investedNative += lot.units * lot.price;
           if (h.region === "US") {
             var dateStr = formatDateISO(lot.date);
             var rate = lookupUsdInrRate(usdRateMap, dateStr, usdInrToday);
@@ -3293,6 +3295,7 @@
           units: h.remainingUnits,
           avgCostINR: avgCostINR,
           investedINR: investedINR,
+          investedNative: investedNative,
           txns: h.txns
         };
       });
@@ -4738,6 +4741,10 @@
           var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
           var investedForDisplay = h.investedINR;
           var avgCostForDisplay = h.avgCostINR;
+          // Native-currency (USD) figures for US rows — shown under the INR values.
+          var isUs = h.region === "US";
+          var investedUSD = isUs ? (h.investedNative || 0) : null;
+          var currentUSD = null;
           if (isClosed) {
             var detail = computeInstrumentRealizedDetail(h.txns || []);
             if (h.region === "US") {
@@ -4747,6 +4754,8 @@
               currentINR = detail.saleProceeds * sellRate;
               investedForDisplay = detail.costOfSoldUnits * sellRate;
               avgCostForDisplay = detail.avgBuyCost * sellRate;
+              investedUSD = detail.costOfSoldUnits; // native USD cost of sold units
+              currentUSD = detail.saleProceeds;     // native USD proceeds
             } else {
               ltpINR = detail.lastSellPrice;
               currentINR = detail.saleProceeds;
@@ -4758,6 +4767,7 @@
           } else if (eodRaw !== null) {
             ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
             currentINR = h.units * ltpINR;
+            if (isUs) currentUSD = h.units * eodRaw; // native USD current
             pnl = currentINR - h.investedINR;
             pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
             if (prevRaw !== null) {
@@ -4773,6 +4783,8 @@
             ltpINR: ltpINR,
             investedINR: investedForDisplay,
             currentINR: currentINR,
+            investedUSD: investedUSD,
+            currentUSD: currentUSD,
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
@@ -5123,7 +5135,16 @@
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="current">Current' + _sArrow("current") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="pnl">P&amp;L · Return' + _sArrow("pnl") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="day">Day Chg.' + _sArrow("day") + '</span></div>';
-    var subInv = 0, subCur = 0, subDay = 0;
+    var subInv = 0, subCur = 0, subDay = 0, subInvUSD = 0, subCurUSD = 0;
+    function _fmtUsd(v) { return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    // Amount cell: INR as the primary value, with the native USD amount beneath it
+    // for US rows (mirrors the P&L value/return two-line layout). usd==null → INR only.
+    function _seAmtCell(inr, usd) {
+      if (usd == null) return '<div class="mfh-col-num mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</div>';
+      return '<div class="mfh-col-num mfh-num-pnl">' +
+        '<span class="mfh-num-pnl-value"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
+        '<span class="mfh-num-pnl-pct" style="color:var(--muted);">' + _fmtUsd(usd) + '</span></div>';
+    }
     var body = filtered.map(function (h, i) {
       var pal = SE_AVATAR_PALETTE[i % SE_AVATAR_PALETTE.length];
       var m = mapping[normalizeText(h.instrument)];
@@ -5136,6 +5157,8 @@
       var pnlPct = h.pnlPct || 0;
       var day = h.dayChangeINR || 0;
       subInv += h.investedINR || 0; subCur += h.currentINR || 0; subDay += day;
+      if (h.investedUSD != null) subInvUSD += h.investedUSD;
+      if (h.currentUSD != null) subCurUSD += h.currentUSD;
       var badges = '';
       if (isEtf) badges += ' <span class="mfh-sip-badge" style="background:#F1EBDD;color:#7A7568;">ETF</span>';
       var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ₹' + Number(h.avgCostINR || 0).toFixed(2);
@@ -5147,8 +5170,8 @@
             '<div class="mfh-inst-sub">' + subLine + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(h.investedINR || 0) + '>' + formatCurrency(h.investedINR || 0) + '</div>' +
-        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(h.currentINR || 0) + '>' + formatCurrency(h.currentINR || 0) + '</div>' +
+        _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null)) +
+        _seAmtCell(h.currentINR || 0, (h.currentUSD != null ? h.currentUSD : null)) +
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(pnl) + '>' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
@@ -5160,9 +5183,9 @@
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
     var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
-      '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · IN INR" : "") + '</div></div>' +
-      '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subInv) + '>' + formatCurrency(subInv) + '</div>' +
-      '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subCur) + '>' + formatCurrency(subCur) + '</div>' +
+      '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · INR / USD" : "") + '</div></div>' +
+      _seAmtCell(subInv, (region === "us" ? subInvUSD : null)) +
+      _seAmtCell(subCur, (region === "us" ? subCurUSD : null)) +
       '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
       '</div>';
@@ -11784,6 +11807,9 @@
           var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
           var investedForDisplay = h.investedINR;
           var avgCostForDisplay = h.avgCostINR;
+          var isUsRow = h.region === "US";
+          var investedUSD = isUsRow ? (h.investedNative || 0) : null; // native USD
+          var currentUSD = null;
 
           if (isClosed) {
             // Mirrors MF closed position behaviour: show realized figures
@@ -11795,6 +11821,8 @@
               currentINR = detail.saleProceeds * sellRate;
               investedForDisplay = detail.costOfSoldUnits * sellRate;
               avgCostForDisplay = detail.avgBuyCost * sellRate;
+              investedUSD = detail.costOfSoldUnits;
+              currentUSD = detail.saleProceeds;
             } else {
               ltpINR = detail.lastSellPrice;
               currentINR = detail.saleProceeds;
@@ -11811,6 +11839,7 @@
                 ltpINR = eodRaw;
               }
               currentINR = h.units * ltpINR;
+              if (isUsRow) currentUSD = h.units * eodRaw; // native USD current
               pnl = currentINR - h.investedINR;
               pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
 
@@ -11848,6 +11877,8 @@
             ltpINR: ltpINR,
             investedINR: investedForDisplay,
             currentINR: currentINR,
+            investedUSD: investedUSD,
+            currentUSD: currentUSD,
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
