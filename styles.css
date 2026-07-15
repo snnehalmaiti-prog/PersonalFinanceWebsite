@@ -3318,6 +3318,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .rec-item-body { flex: 1; min-width: 0; }
 .rec-item-title { font-weight: 600; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rec-item-sub { font-size: 0.78rem; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-item-meta { font-size: 0.72rem; color: var(--muted); opacity: 0.85; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rec-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 80px; }
 .rec-item-amount { font-weight: 700; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
 .rec-item-time { font-size: 0.72rem; color: var(--muted); }

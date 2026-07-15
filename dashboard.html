@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=datepick1" />
+<link rel="stylesheet" href="styles.css?v=payernote1" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -2766,6 +2766,16 @@
         return [];
       }
 
+      // The `labels` column holds a small JSON metadata object (budget_split and,
+      // now, payer). There is no dedicated `payer` DB column, so payer rides
+      // inside this object — no schema migration required.
+      function recMeta(r) {
+        if (r && r.labels && typeof r.labels === "object" && !Array.isArray(r.labels)) return r.labels;
+        if (r && typeof r.labels === "string" && r.labels) { try { var p = JSON.parse(r.labels); return (p && typeof p === "object") ? p : {}; } catch (e) { return {}; } }
+        return {};
+      }
+      function recPayer(r) { var m = recMeta(r); return (m && typeof m.payer === "string") ? m.payer : ""; }
+
       function renderDashRecords() {
         var list = document.getElementById("rec-list");
         var empty = document.getElementById("rec-list-empty");
@@ -2896,12 +2906,22 @@
             var labelBadge = "";
             var lbls = recLabels(r);
             if (lbls.length) labelBadge = ' <span class="rec-label-badge">' + esc(String(lbls[0])) + '</span>';
+            // Payer + note (when present) shown on their own muted line below the
+            // category/payment/account line.
+            var payerVal = recPayer(r);
+            var metaParts = [];
+            if (payerVal) metaParts.push('Payer: ' + payerVal);
+            if (r.note) metaParts.push(String(r.note));
+            var metaLine = metaParts.length
+              ? '<div class="rec-item-meta">' + metaParts.map(esc).join(" · ") + '</div>'
+              : "";
             return '<div class="rec-item' + selClass + '" data-rec-id="' + esc(r.id) + '">' +
               '<input type="checkbox" class="rec-item-cb" data-rec-id="' + esc(r.id) + '" ' + checked + '>' +
               '<div class="rec-item-icon" style="background:' + iconColor.bg + ';color:' + iconColor.text + ';">' + iconLetter + '</div>' +
               '<div class="rec-item-body">' +
                 '<div class="rec-item-title">' + esc(cat.name || "(uncategorized)") + labelBadge + '</div>' +
                 '<div class="rec-item-sub">' + (subParts.length ? subParts.map(esc).join(" · ") : "—") + '</div>' +
+                metaLine +
               '</div>' +
               '<div class="rec-item-right">' +
                 '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) + '</div>' +
@@ -3115,6 +3135,7 @@
           setRecType(record.type || "expense");
           document.getElementById("rec-amount").value = record.amount || "";
           document.getElementById("rec-note").value = record.note || "";
+          document.getElementById("rec-payer").value = recPayer(record);
           initialDt = (function () {
             if (record.txn_at) {
               var d = new Date(record.txn_at);
@@ -3487,7 +3508,15 @@
           subcategory_id: (document.getElementById("rec-subcategory").value || null),
           payment_method_id: pmId,
           note: document.getElementById("rec-note").value || "",
-          labels: splitData ? JSON.stringify({ budget_split: splitData }) : null
+          labels: (function () {
+            // Bundle budget_split (if any) and payer (if any) into the labels
+            // metadata JSON. Null when both are empty so nothing is stored.
+            var meta = {};
+            if (splitData) meta.budget_split = splitData;
+            var pv = (document.getElementById("rec-payer").value || "").trim();
+            if (pv) meta.payer = pv;
+            return Object.keys(meta).length ? JSON.stringify(meta) : null;
+          })()
         };
         var btn = document.getElementById("rec-modal-save");
         // Template mode: save/update in localStorage instead of Supabase.
@@ -3597,7 +3626,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=datepick1"></script>
+  <script src="supabase-client.js?v=payernote1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -3637,8 +3666,8 @@
         });
     })();
   </script>
-  <script src="wf-math.js?v=datepick1"></script>
-  <script src="script.js?v=datepick1"></script>
+  <script src="wf-math.js?v=payernote1"></script>
+  <script src="script.js?v=payernote1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;
