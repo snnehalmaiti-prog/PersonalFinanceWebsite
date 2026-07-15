@@ -9257,17 +9257,27 @@
       if (!fxEl) return;
       // No US holdings → nothing to show (keeps the card compact).
       if (buyRate == null && curRate == null) { fxEl.innerHTML = ""; return; }
-      function _pair(label, rate) {
+      function _pair(label, valHtml) {
         return '<span class="isc-fx-pair">' +
           '<span class="isc-fx-label">' + label + '</span>' +
-          '<span class="isc-fx-val">' + (rate != null ? '₹' + Number(rate).toFixed(2) : '—') + '</span>' +
+          '<span class="isc-fx-val">' + valHtml + '</span>' +
         '</span>';
+      }
+      function _rate(rate) { return rate != null ? '₹' + Number(rate).toFixed(2) : '—'; }
+      // % change = how much the rupee-per-dollar has moved from the average buy
+      // rate to today (the unrealized FX gain/loss on the dollars deployed).
+      var pctHtml = '—', pctCls = '';
+      if (buyRate != null && buyRate > 0 && curRate != null) {
+        var pct = (curRate - buyRate) / buyRate * 100;
+        pctCls = pct > 0 ? ' isc-fx-pos' : pct < 0 ? ' isc-fx-neg' : '';
+        pctHtml = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
       }
       fxEl.innerHTML =
         '<div class="isc-fx-title">US · USD/INR</div>' +
         '<div class="isc-fx-row">' +
-          _pair("Buy $ : ₹", buyRate) +
-          _pair("Current $ : ₹", curRate) +
+          _pair("Buy $ : ₹", _rate(buyRate)) +
+          _pair("Current $ : ₹", _rate(curRate)) +
+          _pair("% change", '<span class="' + pctCls.trim() + '">' + pctHtml + '</span>') +
         '</div>';
     }
 

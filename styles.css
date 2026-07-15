@@ -3531,6 +3531,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .isc-fx-pair { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
 .isc-fx-label { font-size: 0.68rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .isc-fx-val { font-size: 0.72rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.isc-fx-val .isc-fx-pos { color: #10B981; }
+.isc-fx-val .isc-fx-neg { color: #E8623A; }
 /* Realized Profit by Category card */
 .pcat-group { border-top: 1px solid var(--border); }
 .pcat-group:first-child { border-top: none; }
