@@ -9861,6 +9861,8 @@
   var __monthlyInvestCatSplit = false; // off = single total bar per month
   var __monthlyInvestCatNet = false; // on = bars show invested minus withdrawn
   var __monthlyInvestCatFilter = null; // split mode: when set, show only this instrument category
+  var __monthlyInvestCatIdle = false; // on = show month-on-month parked-cash balances (Savings Account + Investment Corpus)
+  var __monthlyIdleCashData; // { byMonthInstr, instruments, yearList }
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
@@ -10005,7 +10007,92 @@
     return { byMonthCat: byMonthCat, byMonthCatOut: byMonthCatOut, yearList: Object.keys(allYears).sort() };
   }
 
+  // Month-on-month PARKED-CASH balances for the "Idle Cash" toggle. Savings
+  // Account and Investment Corpus rows in the fd sheet are running-balance
+  // snapshots per (portfolio, bank, instrument): each row REPLACES the prior
+  // balance for that key. To show the balance held each month we forward-fill
+  // every key's latest snapshot across the timeline and aggregate by instrument
+  // name. Returns { byMonthInstr: { "YYYY-MM": { instrument: balance } },
+  // instruments: [names], yearList: [years] }.
+  function buildMonthlyIdleCashData(portfolioOverride) {
+    var ovPortfolio = portfolioOverride || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var empty = { byMonthInstr: {}, instruments: [], yearList: [] };
+    var rows = getSheetRows("fd");
+    if (!rows || rows.length < 2) return empty;
+    var header = rows[0].map(normalizeText);
+    var portIdx = header.indexOf("portfolio name");
+    var bankIdx = header.indexOf("bank");
+    var instrIdx = header.indexOf("instrument name");
+    var catIdx = header.indexOf("instrument category");
+    var subIdx = header.indexOf("instrument sub category");
+    var amtIdx = header.indexOf("invested amount");
+    if (amtIdx === -1) amtIdx = header.indexOf("amount");
+    var dateIdx = header.indexOf("transaction date");
+    if (subIdx === -1 || amtIdx === -1 || dateIdx === -1) return empty;
+
+    function isParked(sub) {
+      var s = normalizeText(sub || "");
+      return s === "savings account" || s === "investment corpus";
+    }
+
+    // Collect balance snapshots per key.
+    var snapsByKey = {}; // key -> { instrument, snaps: [{date, balance}] }
+    var earliest = null;
+    rows.slice(1).forEach(function (row) {
+      if (ovPortfolio !== "all" && portIdx !== -1 &&
+          normalizeText((row[portIdx] || "").trim()) !== normalizeText(ovPortfolio)) return;
+      if (catIdx !== -1 && normalizeText(row[catIdx]) !== "fixed income") return;
+      if (!isParked(row[subIdx])) return;
+      var d = parseFlexibleDate(row[dateIdx]);
+      if (!d) return;
+      var bal = parseNumber(row[amtIdx]);
+      var portfolio = (portIdx !== -1 ? row[portIdx] : "") || "";
+      var bank = (bankIdx !== -1 ? row[bankIdx] : "") || "";
+      var instrument = ((instrIdx !== -1 ? row[instrIdx] : "") || "").trim() || bank.trim() || (row[subIdx] || "").trim() || "Idle Cash";
+      var key = normalizeText(portfolio) + "||" + normalizeText(bank) + "||" + normalizeText(instrument);
+      if (!snapsByKey[key]) snapsByKey[key] = { instrument: instrument, snaps: [] };
+      snapsByKey[key].snaps.push({ date: d, balance: bal });
+      if (!earliest || d < earliest) earliest = d;
+    });
+
+    var keys = Object.keys(snapsByKey);
+    if (!keys.length || !earliest) return empty;
+    keys.forEach(function (k) { snapsByKey[k].snaps.sort(function (a, b) { return a.date - b.date; }); });
+
+    // Month timeline: first snapshot month .. current month (balances persist).
+    var byMonthInstr = {};
+    var allYears = {};
+    var cur = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+    var today = new Date();
+    var end = new Date(today.getFullYear(), today.getMonth(), 1);
+    while (cur <= end) {
+      var mk = cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0");
+      // End-of-month cutoff: latest snapshot on or before this date is the held balance.
+      var eom = new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 23, 59, 59);
+      keys.forEach(function (k) {
+        var rec = snapsByKey[k];
+        var bal = null;
+        for (var i = 0; i < rec.snaps.length; i++) {
+          if (rec.snaps[i].date <= eom) bal = rec.snaps[i].balance; else break;
+        }
+        if (bal != null && Math.abs(bal) > 0.005) {
+          if (!byMonthInstr[mk]) byMonthInstr[mk] = {};
+          byMonthInstr[mk][rec.instrument] = (byMonthInstr[mk][rec.instrument] || 0) + bal;
+          allYears[String(cur.getFullYear())] = true;
+        }
+      });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+
+    var instrSet = {};
+    Object.keys(byMonthInstr).forEach(function (mk) {
+      Object.keys(byMonthInstr[mk]).forEach(function (n) { instrSet[n] = true; });
+    });
+    return { byMonthInstr: byMonthInstr, instruments: Object.keys(instrSet).sort(), yearList: Object.keys(allYears).sort() };
+  }
+
   function drawMonthlyInvestCatChart(yr) {
+    if (__monthlyInvestCatIdle) { drawMonthlyIdleCashChart(yr); return; }
     var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
     var MIC_GREEN = "#52B788"; var MIC_GREEN_PEAK = "#1B6E45"; var MIC_RED = "#E8623A";
@@ -10292,6 +10379,146 @@
     }
   }
 
+  // "Idle Cash" view: stacked month-on-month parked-cash balances per instrument
+  // (Savings Account + Investment Corpus). Balances, not flows — so there are no
+  // withdrawal lines and no Net; the stats show the latest total and the average.
+  function drawMonthlyIdleCashChart(yr) {
+    var MON_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var IDLE_PALETTE = ["#4DC0B5","#3B82F6","#8B5CF6","#F5A623","#E8623A","#10B981","#EC4899","#84CC16","#F97316","#6366F1"];
+    var wrap = document.getElementById("monthly-invest-cat-wrap");
+    var statusEl = document.getElementById("monthly-invest-cat-status");
+    if (!wrap || typeof Chart === "undefined") return;
+    try {
+      var data = __monthlyIdleCashData || buildMonthlyIdleCashData();
+      var byMonthInstr = data.byMonthInstr || {};
+
+      var monthKeys = [], labels = [];
+      if (yr === "all") {
+        var sortedKeys = Object.keys(byMonthInstr).sort();
+        if (sortedKeys.length) {
+          var first = sortedKeys[0].split("-"), last = sortedKeys[sortedKeys.length - 1].split("-");
+          var cur = new Date(parseInt(first[0], 10), parseInt(first[1], 10) - 1, 1);
+          var end = new Date(parseInt(last[0], 10), parseInt(last[1], 10) - 1, 1);
+          while (cur <= end) {
+            monthKeys.push(cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0"));
+            labels.push(MON_LABELS[cur.getMonth()] + " '" + String(cur.getFullYear()).slice(2));
+            cur.setMonth(cur.getMonth() + 1);
+          }
+        }
+      } else {
+        for (var mi = 0; mi < 12; mi++) {
+          monthKeys.push(yr + "-" + String(mi + 1).padStart(2, "0"));
+          labels.push(MON_LABELS[mi]);
+        }
+      }
+
+      var instrSet = {};
+      monthKeys.forEach(function (k) {
+        if (byMonthInstr[k]) Object.keys(byMonthInstr[k]).forEach(function (n) { instrSet[n] = true; });
+      });
+      var instruments = Object.keys(instrSet).sort();
+
+      function cell(k, instr) { return (byMonthInstr[k] && byMonthInstr[k][instr]) ? byMonthInstr[k][instr] : 0; }
+      function monthTotal(k) {
+        var m = byMonthInstr[k];
+        return m ? Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0) : 0;
+      }
+
+      if (!instruments.length) {
+        if (statusEl) statusEl.textContent = "No idle-cash balances for " + (yr === "all" ? "all time" : yr) + ".";
+        if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
+        wrap.innerHTML = "";
+        var legendElA = document.getElementById("monthly-invest-cat-legend");
+        if (legendElA) legendElA.innerHTML = "";
+        var statsElA = document.getElementById("monthly-invest-cat-stats");
+        if (statsElA) statsElA.innerHTML = "";
+        return;
+      }
+      if (statusEl) statusEl.textContent = "";
+
+      var datasets = instruments.map(function (instr, i) {
+        var col = IDLE_PALETTE[i % IDLE_PALETTE.length];
+        return {
+          label: instr,
+          data: monthKeys.map(function (k) { return cell(k, instr); }),
+          backgroundColor: col + "CC",
+          borderColor: col,
+          borderWidth: 0,
+          borderRadius: 3, categoryPercentage: 0.72, barPercentage: 0.9
+        };
+      });
+
+      // Stats: latest month's total idle cash (the balance held now) + average
+      // across months that had any balance.
+      var lastWithData = null;
+      for (var li = monthKeys.length - 1; li >= 0; li--) { if (monthTotal(monthKeys[li]) > 0) { lastWithData = monthKeys[li]; break; } }
+      var activeMonths = monthKeys.filter(function (k) { return monthTotal(k) > 0; });
+      var avg = activeMonths.length ? activeMonths.reduce(function (s, k) { return s + monthTotal(k); }, 0) / activeMonths.length : 0;
+      var latestTotal = lastWithData ? monthTotal(lastWithData) : 0;
+      var statsEl = document.getElementById("monthly-invest-cat-stats");
+      if (statsEl) {
+        statsEl.innerHTML =
+          '<div class="mic-stat"><span class="mic-stat-label">Idle Cash (latest)</span><span class="mic-stat-value">' + formatCurrency(latestTotal) + '</span></div>' +
+          '<div class="mic-stat"><span class="mic-stat-label">Avg / month</span><span class="mic-stat-value">' + formatCurrency(avg) + '</span></div>';
+      }
+
+      var legendEl = document.getElementById("monthly-invest-cat-legend");
+      if (legendEl) {
+        legendEl.innerHTML = instruments.map(function (instr, i) {
+          var col = IDLE_PALETTE[i % IDLE_PALETTE.length];
+          return '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + col + '"></div>' + escapeHtml(instr) + '</div>';
+        }).join("");
+      }
+
+      if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
+      wrap.innerHTML = "";
+      var canvas = document.createElement("canvas");
+      wrap.appendChild(canvas);
+
+      __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: "index", intersect: false,
+              filter: function (item) { return item.datasetIndex === 0; },
+              callbacks: {
+                label: function (ctx) {
+                  var k = monthKeys[ctx.dataIndex];
+                  if (!k) return "";
+                  var m = byMonthInstr[k] || {};
+                  var lines = ["Idle Cash: " + formatCurrency(monthTotal(k))];
+                  Object.keys(m).filter(function (c) { return m[c] > 0; })
+                    .sort(function (a, b) { return m[b] - m[a]; })
+                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(m[c])); });
+                  return lines;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: {
+              stacked: true, beginAtZero: true, position: "left",
+              grid: { color: "rgba(0,0,0,0.05)" },
+              ticks: { font: { size: 11 }, callback: function (v) {
+                var abs = Math.abs(v);
+                if (abs >= 1e5) return (v/1e5).toFixed(abs % 1e5 === 0 ? 0 : 1) + "L";
+                if (abs >= 1e3) return (v/1e3).toFixed(0) + "k";
+                return v;
+              }}
+            }
+          }
+        }
+      });
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "Chart error: " + e.message;
+    }
+  }
+
   function renderMonthlyInvestmentByCategory() {
     var statusEl = document.getElementById("monthly-invest-cat-status");
     var yearSel = document.getElementById("monthly-invest-cat-year");
@@ -10304,7 +10531,13 @@
 
     // Rebuild raw data
     __monthlyInvestCatData = buildMonthlyInvestCatData();
-    var yearList = __monthlyInvestCatData.yearList;
+    __monthlyIdleCashData = buildMonthlyIdleCashData();
+    // Year selector spans both the cash-flow data and the idle-cash balances, so
+    // toggling "Idle Cash" never leaves the user on a year with no idle data.
+    var yearSet = {};
+    (__monthlyInvestCatData.yearList || []).forEach(function (y) { yearSet[y] = true; });
+    (__monthlyIdleCashData.yearList || []).forEach(function (y) { yearSet[y] = true; });
+    var yearList = Object.keys(yearSet).sort();
     if (!yearList.length) {
       if (statusEl) statusEl.textContent = "No investment data found.";
       return;
@@ -10345,26 +10578,52 @@
       yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
     }
 
+    var idleBtn = document.getElementById("monthly-invest-cat-idle");
+    // Reflect Idle mode by dimming the flow-only toggles (Net / By instrument),
+    // which don't apply to a balance view.
+    function _syncMicToggleActive() {
+      var nB = document.getElementById("monthly-invest-cat-net");
+      var sB = document.getElementById("monthly-invest-cat-split");
+      if (nB) nB.classList.toggle("active", !__monthlyInvestCatIdle && !!__monthlyInvestCatNet);
+      if (sB) sB.classList.toggle("active", !__monthlyInvestCatIdle && !!__monthlyInvestCatSplit);
+      if (idleBtn) idleBtn.classList.toggle("active", !!__monthlyInvestCatIdle);
+    }
+
     var netBtn = document.getElementById("monthly-invest-cat-net");
     if (netBtn) {
-      netBtn.classList.toggle("active", !!__monthlyInvestCatNet);
       netBtn.onclick = function () {
+        __monthlyInvestCatIdle = false; // Net is a flow view — leave Idle Cash
         __monthlyInvestCatNet = !__monthlyInvestCatNet;
-        netBtn.classList.toggle("active", !!__monthlyInvestCatNet);
+        _syncMicToggleActive();
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
     }
 
     var splitBtn = document.getElementById("monthly-invest-cat-split");
     if (splitBtn) {
-      splitBtn.classList.toggle("active", !!__monthlyInvestCatSplit);
       splitBtn.onclick = function () {
+        __monthlyInvestCatIdle = false; // By instrument is a flow view — leave Idle Cash
         __monthlyInvestCatSplit = !__monthlyInvestCatSplit;
         __monthlyInvestCatFilter = null; // reset instrument filter when toggling split
-        splitBtn.classList.toggle("active", !!__monthlyInvestCatSplit);
+        _syncMicToggleActive();
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
     }
+
+    if (idleBtn) {
+      idleBtn.onclick = function () {
+        __monthlyInvestCatIdle = !__monthlyInvestCatIdle;
+        if (__monthlyInvestCatIdle) {
+          // Balance view — flow-only modes don't apply.
+          __monthlyInvestCatNet = false;
+          __monthlyInvestCatSplit = false;
+          __monthlyInvestCatFilter = null;
+        }
+        _syncMicToggleActive();
+        drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+      };
+    }
+    _syncMicToggleActive();
 
     var allBtn = document.getElementById("monthly-invest-cat-alltime");
     if (allBtn) {
