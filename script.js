@@ -10460,6 +10460,7 @@
           x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
           y: {
             stacked: true, beginAtZero: !net, position: "left",
+            title: { display: true, text: (net ? "Net Invested (₹)" : "Invested (₹)"), font: { size: 11, weight: "600" } },
             grid: { color: "rgba(0,0,0,0.05)" },
             ticks: { font: { size: 11 }, callback: function (v) {
               var abs = Math.abs(v);
@@ -10470,6 +10471,7 @@
           },
           yOut: {
             beginAtZero: true, position: "right", display: !net && outCatList.length > 0,
+            title: { display: !net && outCatList.length > 0, text: "Withdrawn (₹)", font: { size: 11, weight: "600" } },
             grid: { drawOnChartArea: false },
             ticks: { font: { size: 11 }, callback: function (v) {
               if (v >= 1e5) return (v/1e5).toFixed(0) + "L";
@@ -10609,6 +10611,7 @@
             x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
             y: {
               stacked: true, beginAtZero: true, position: "left",
+              title: { display: true, text: "Idle Cash (₹)", font: { size: 11, weight: "600" } },
               grid: { color: "rgba(0,0,0,0.05)" },
               ticks: { font: { size: 11 }, callback: function (v) {
                 var abs = Math.abs(v);
