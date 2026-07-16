@@ -649,6 +649,116 @@
            s === "employee provident fund" || s === "epf" || s === "employee pension fund";
   }
 
+  // EPF/PF interest rates configured in Settings → EPF Interest, keyed by the
+  // financial-year START year (April-based FY, e.g. 2024 → FY 2024–25).
+  // Returns { year: rateFraction } (8.10% → 0.081).
+  function getEpfRateMap() {
+    var map = {};
+    try {
+      var arr = JSON.parse(localStorage.getItem("wf-epf-interest-rates"));
+      if (Array.isArray(arr)) arr.forEach(function (r) {
+        if (r && r.year != null && r.rate != null) map[Number(r.year)] = Number(r.rate) / 100;
+      });
+    } catch (e) {}
+    return map;
+  }
+  // April-based financial-year start year for a date (Jan–Mar belong to the
+  // previous year's FY). getMonth() is 0-indexed, so April = 3.
+  function epfFyStart(d) { return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; }
+
+  // Value a single Provident Fund / EPF account with interest computed the EPFO
+  // way: monthly interest on the running balance (opening balance + that month's
+  // contribution) at the configured annual rate ÷ 12, ACCRUED monthly but
+  // CREDITED at the end of the financial year (31 Mar), then compounding into the
+  // next year. Within a year the accrued interest does not itself earn interest.
+  //   - A financial year that already has a manual "Interest" row keeps the user's
+  //     figure and is NOT auto-computed (manual wins, no double count).
+  //   - A financial year with no configured rate and no manual interest earns 0.
+  //   - Withdrawals reduce principal and interest proportionally (balance drops by
+  //     exactly the withdrawal amount).
+  // Returns { invested (remaining principal), current, realizedProfit }.
+  function computePfAccountValue(txns, rateMap, asOf) {
+    var valid = txns.filter(function (t) { return t.date; }).sort(function (a, b) { return a.date - b.date; });
+    // No usable dates → fall back to a simple, un-compounded sum (old behaviour).
+    if (!valid.length) {
+      var lotsF = [], intF = 0, realF = 0;
+      txns.forEach(function (t) {
+        if (t.type === "interest") intF += t.amount;
+        else if (t.type === "withdrawal") {
+          var pb = lotsF.reduce(function (s, l) { return s + l; }, 0), bb = pb + intF, w = Math.min(t.amount, bb);
+          if (bb > 0 && w > 0) { var pp = w * (pb / bb), ip = w - pp, rem = pp; while (rem > 1e-9 && lotsF.length) { if (lotsF[0] <= rem + 1e-9) { rem -= lotsF.shift(); } else { lotsF[0] -= rem; rem = 0; } } realF += ip; intF -= ip; }
+        } else lotsF.push(t.amount);
+      });
+      var invF = lotsF.reduce(function (s, l) { return s + l; }, 0);
+      return { invested: invF, current: invF + intF, realizedProfit: realF, realizedByYear: {} };
+    }
+    var realizedByYear = {};
+
+    // Manual interest per FY (any manual interest in a FY suppresses auto-calc for it).
+    var manualByFY = {};
+    valid.forEach(function (t) { if (t.type === "interest") { var fy = epfFyStart(t.date); manualByFY[fy] = (manualByFY[fy] || 0) + t.amount; } });
+
+    // Bucket transactions by calendar year-month.
+    var byYM = {};
+    valid.forEach(function (t) {
+      var k = t.date.getFullYear() + "-" + t.date.getMonth();
+      var c = byYM[k] || (byYM[k] = { dep: [], intr: 0, wd: [] });
+      if (t.type === "interest") c.intr += t.amount;
+      else if (t.type === "withdrawal") c.wd.push(t.amount);
+      else c.dep.push(t.amount);
+    });
+
+    var lots = [];        // remaining principal
+    var credited = 0;     // interest credited at prior FY-ends (earns interest)
+    var accrued = 0;      // interest accrued in the current FY (not yet credited)
+    var realized = 0;
+    var cur = new Date(valid[0].date.getFullYear(), valid[0].date.getMonth(), 1);
+    var end = new Date(asOf.getFullYear(), asOf.getMonth(), 1);
+    var curFY = epfFyStart(cur);
+    var fyHasManual = manualByFY[curFY] > 0;
+
+    while (cur <= end) {
+      var fy = epfFyStart(cur);
+      if (fy !== curFY) {           // rolled into a new FY → credit the prior FY's accrual
+        credited += accrued; accrued = 0;
+        curFY = fy; fyHasManual = manualByFY[curFY] > 0;
+      }
+      var cell = byYM[cur.getFullYear() + "-" + cur.getMonth()];
+      if (cell) {
+        cell.dep.forEach(function (a) { lots.push({ amount: a }); });
+        if (cell.intr) credited += cell.intr;   // manual interest = user's credited figure
+        cell.wd.forEach(function (wamt) {
+          var principalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+          var interestBefore = credited + accrued;
+          var balanceBefore = principalBefore + interestBefore;
+          var w = Math.min(wamt, balanceBefore);
+          if (balanceBefore > 0 && w > 0) {
+            var pp = w * (principalBefore / balanceBefore), ip = w - pp, rem = pp;
+            while (rem > 1e-9 && lots.length > 0) { if (lots[0].amount <= rem + 1e-9) { rem -= lots[0].amount; lots.shift(); } else { lots[0].amount -= rem; rem = 0; } }
+            realized += ip;
+            var wy = String(cur.getFullYear());
+            realizedByYear[wy] = (realizedByYear[wy] || 0) + ip;
+            var fromAccrued = Math.min(accrued, ip); accrued -= fromAccrued; credited -= (ip - fromAccrued);
+          }
+        });
+      }
+      // Auto monthly interest: only when a rate is configured for this FY and the
+      // user hasn't recorded a manual interest row for it. Base excludes the
+      // current FY's own accrual (it doesn't compound until year-end).
+      var rate = rateMap[curFY];
+      if (rate && !fyHasManual) {
+        var base = lots.reduce(function (s, l) { return s + l.amount; }, 0) + credited;
+        accrued += base * (rate / 12);
+      }
+      cur.setMonth(cur.getMonth() + 1);
+    }
+
+    var principal = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+    // Current value includes the in-progress FY's accrued interest (shown live,
+    // not only after 31 Mar); it is not yet moved into `credited`.
+    return { invested: principal, current: principal + credited + accrued, realizedProfit: realized, realizedByYear: realizedByYear };
+  }
+
   // Debug logger — off by default so holdings/scheme codes/emails aren't dumped
   // to the browser console in production. Enable with localStorage wf-debug=1.
   var WF_DEBUG = (function () { try { return localStorage.getItem("wf-debug") === "1"; } catch (e) { return false; } })();
@@ -904,34 +1014,15 @@
       var key = normalizeText(pf) + "||" + normalizeText(iI !== -1 ? (row[iI] || "") : "") + "||" + normalizeText(row[sI] || "");
       (byKey[key] = byKey[key] || []).push({ date: parseFlexibleDate(row[dI]), amount: parseNumber(row[aI]), type: tI !== -1 ? normalizeText(row[tI] || "") : "" });
     });
+    var rateMap = getEpfRateMap();
+    var now = new Date();
     Object.keys(byKey).forEach(function (k) {
-      var lots = [], totalInterest = 0;
-      // Match buildFdFixedIncomeHoldingsList: replay chronologically, else the FIFO
-      // realized-interest total (path-dependent) can differ from the source of truth.
-      byKey[k].sort(function (a, b) { return (a.date || 0) - (b.date || 0); });
-      byKey[k].forEach(function (tx) {
-        if (tx.type === "interest") { totalInterest += tx.amount; return; }
-        if (tx.type === "withdrawal") {
-          // Mirror buildFdFixedIncomeHoldingsList: proportional principal/interest
-          // split so the balance drops by exactly the withdrawal amount.
-          var principalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
-          var balanceBefore = principalBefore + totalInterest;
-          var w = Math.min(tx.amount, balanceBefore);
-          if (balanceBefore > 0 && w > 0) {
-            var principalPortion = w * (principalBefore / balanceBefore);
-            var interestPortion = w - principalPortion;
-            var remaining = principalPortion;
-            while (remaining > 1e-9 && lots.length > 0) {
-              if (lots[0].amount <= remaining + 1e-9) { remaining -= lots[0].amount; lots.shift(); }
-              else { lots[0].amount -= remaining; remaining = 0; }
-            }
-            totalInterest -= interestPortion;
-            var yr = tx.date ? String(tx.date.getFullYear()) : "all";
-            out[yr] = (out[yr] || 0) + interestPortion;
-          }
-          return;
-        }
-        lots.push({ amount: tx.amount });
+      // Delegate to the same engine as the current-value/realized total so the
+      // per-year attribution reconciles with sumProvidentFundRealizedProfit
+      // (including auto-computed interest from Settings → EPF Interest).
+      var v = computePfAccountValue(byKey[k], rateMap, now);
+      Object.keys(v.realizedByYear || {}).forEach(function (yr) {
+        out[yr] = (out[yr] || 0) + v.realizedByYear[yr];
       });
     });
     return out;
@@ -2414,48 +2505,13 @@
       holdings.push({ portfolio: entry.portfolio, bank: entry.bank, instrument: entry.instrument, subCategory: entry.subCategory, invested: invested, current: current });
     });
 
+    var epfRateMap = getEpfRateMap();
     Object.keys(providentFundByKey).forEach(function (key) {
       var pf = providentFundByKey[key];
-      pf.txns.sort(function (a, b) { return (a.date || 0) - (b.date || 0); });
-
-      var lots = []; // FIFO queue of deposit lots {amount}
-      var totalInterest = 0;
-      var realizedInterest = 0;
-
-      pf.txns.forEach(function (tx) {
-        if (tx.type === "interest") {
-          totalInterest += tx.amount;
-        } else if (tx.type === "withdrawal") {
-          // A withdrawal takes cash out of the corpus, which is principal +
-          // accrued interest. It reduces BOTH in proportion to their share of the
-          // balance, so the balance drops by EXACTLY the withdrawal amount.
-          // (Previously the full amount was charged to principal via FIFO AND a
-          // proportional slice of interest was ALSO realized/removed — that
-          // double-counted the withdrawal and understated the current value.)
-          var principalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
-          var balanceBefore = principalBefore + totalInterest;
-          var w = Math.min(tx.amount, balanceBefore);
-          if (balanceBefore > 0 && w > 0) {
-            var principalPortion = w * (principalBefore / balanceBefore);
-            var interestPortion = w - principalPortion;
-            // Reduce deposit lots FIFO by the principal portion only.
-            var remaining = principalPortion;
-            while (remaining > 1e-9 && lots.length > 0) {
-              if (lots[0].amount <= remaining + 1e-9) { remaining -= lots[0].amount; lots.shift(); }
-              else { lots[0].amount -= remaining; remaining = 0; }
-            }
-            // The interest portion of the withdrawal is realized (leaves current).
-            realizedInterest += interestPortion;
-            totalInterest -= interestPortion;
-          }
-        } else {
-          lots.push({ amount: tx.amount });
-        }
-      });
-
-      var invested = lots.reduce(function (s, l) { return s + l.amount; }, 0);
-      var current = invested + totalInterest;
-      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: invested, current: current, realizedProfit: realizedInterest });
+      // Interest is auto-computed from the rates in Settings → EPF Interest when a
+      // financial year has no manual "Interest" row; manual rows always win.
+      var v = computePfAccountValue(pf.txns, epfRateMap, today);
+      holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: v.invested, current: v.current, realizedProfit: v.realizedProfit });
     });
 
     return holdings;
