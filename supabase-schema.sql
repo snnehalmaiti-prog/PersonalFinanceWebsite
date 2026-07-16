@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   gh_branch text DEFAULT '',
   expense_templates jsonb,
   recurring_payments jsonb,
+  epf_interest_rates jsonb,
   updated_at timestamptz DEFAULT now()
 );
 
@@ -21,6 +22,10 @@ CREATE TABLE IF NOT EXISTS user_settings (
 -- ALL settings sync silently stops once a template/recurring payment exists.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS expense_templates jsonb;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS recurring_payments jsonb;
+-- EPF Interest tab: interest rate per financial year. Sync is resilient (the
+-- client drops this column and retries if it's missing), so this migration only
+-- enables cross-device sync — the tab works locally without it.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS epf_interest_rates jsonb;
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 

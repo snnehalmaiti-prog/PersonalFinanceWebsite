@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=pfwithdraw1" />
-<script src="supabase-client.js?v=pfwithdraw1"></script>
+<link rel="stylesheet" href="styles.css?v=epftab1" />
+<script src="supabase-client.js?v=epftab1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -136,6 +136,7 @@
       <button type="button" class="settings-tab" id="tab-mapping" role="tab" aria-selected="false" aria-controls="panel-mapping">Mapping</button>
       <button type="button" class="settings-tab" id="tab-expense" role="tab" aria-selected="false" aria-controls="panel-expense">Expense</button>
       <button type="button" class="settings-tab" id="tab-github" role="tab" aria-selected="false" aria-controls="panel-github">GitHub Integration</button>
+      <button type="button" class="settings-tab" id="tab-epf" role="tab" aria-selected="false" aria-controls="panel-epf">EPF Interest</button>
     </div>
 
     <section id="panel-profile" class="settings-panel" role="tabpanel" aria-labelledby="tab-profile">
@@ -361,6 +362,30 @@
           <button type="button" id="equity-refresh-nav" class="btn btn-outline btn-sm">Refresh NAV</button>
           <button type="button" id="stocksetf-refresh-price" class="btn btn-outline btn-sm">Refresh Price</button>
         </div>
+      </div>
+    </section>
+
+
+    <section id="panel-epf" class="settings-panel" role="tabpanel" aria-labelledby="tab-epf" hidden>
+      <h2 class="settings-section-title">EPF Interest</h2>
+      <p class="muted small" style="margin-bottom:16px;">Record the EPF/PF interest rate for each financial year (April&ndash;March). A year entered here is labelled by its <strong>start year</strong> &mdash; e.g. <code>2024</code> means FY&nbsp;2024&ndash;25. These rates are saved to your account and used as the reference for computing your Provident Fund interest.</p>
+      <div class="equity-card">
+        <div class="equity-card-header">
+          <h3>Interest Rate by Year</h3>
+        </div>
+        <div class="equity-link-row" style="gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <label style="display:flex;flex-direction:column;gap:4px;">
+            <span class="muted small">Financial Year (start year)</span>
+            <input type="number" id="epf-year" min="1990" max="2100" step="1" placeholder="e.g. 2024" style="min-width:150px;" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;">
+            <span class="muted small">Interest Rate (%)</span>
+            <input type="number" id="epf-rate" min="0" max="100" step="0.01" placeholder="e.g. 8.10" style="min-width:150px;" />
+          </label>
+          <button type="button" class="btn btn-primary" id="epf-add-btn">Add / Update</button>
+        </div>
+        <p id="epf-status" class="muted small" style="margin-top:10px;min-height:16px;"></p>
+        <div id="epf-list" style="margin-top:8px;"></div>
       </div>
     </section>
 
@@ -591,8 +616,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="wf-math.js?v=pfwithdraw1"></script>
-  <script src="script.js?v=pfwithdraw1"></script>
+  <script src="wf-math.js?v=epftab1"></script>
+  <script src="script.js?v=epftab1"></script>
   <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching
@@ -1193,6 +1218,72 @@
         WfAuth.signOut().then(function () { window.location.href = "index.html"; });
       });
     }
+
+    // ── EPF Interest: interest rate per financial year (start year -> rate %) ──
+    (function () {
+      var EPF_KEY = "wf-epf-interest-rates";
+      var yearInp = document.getElementById("epf-year");
+      var rateInp = document.getElementById("epf-rate");
+      var addBtn = document.getElementById("epf-add-btn");
+      var statusEl = document.getElementById("epf-status");
+      var listEl = document.getElementById("epf-list");
+      if (!addBtn || !listEl) return;
+      function escLocal(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+      function loadRates() {
+        try { var a = JSON.parse(localStorage.getItem(EPF_KEY)); return Array.isArray(a) ? a : []; }
+        catch (e) { return []; }
+      }
+      function saveRates(arr) {
+        arr.sort(function (a, b) { return a.year - b.year; });
+        localStorage.setItem(EPF_KEY, JSON.stringify(arr));
+        if (window.WfAuth && WfAuth.isLoggedIn() && WfAuth.saveSettingsToCloud) WfAuth.saveSettingsToCloud().catch(function () {});
+      }
+      function fyLabel(y) { return "FY " + y + "–" + String((y + 1) % 100).padStart(2, "0"); }
+      function setStatus(m) { if (statusEl) statusEl.textContent = m || ""; }
+      function render() {
+        var rates = loadRates();
+        if (!rates.length) { listEl.innerHTML = '<p class="muted small" style="margin:6px 0 0;">No rates added yet.</p>'; return; }
+        var body = rates.map(function (r) {
+          return '<tr>' +
+            '<td style="padding:6px 10px;border-bottom:1px solid var(--border);">' + escLocal(fyLabel(r.year)) + '</td>' +
+            '<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;">' + Number(r.rate).toFixed(2) + '%</td>' +
+            '<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);"><button type="button" class="btn btn-outline btn-sm epf-del" data-year="' + r.year + '">Delete</button></td>' +
+          '</tr>';
+        }).join("");
+        listEl.innerHTML =
+          '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;max-width:520px;">' +
+          '<thead><tr>' +
+            '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border);">Financial Year</th>' +
+            '<th style="text-align:right;padding:6px 10px;border-bottom:2px solid var(--border);">Rate</th>' +
+            '<th style="border-bottom:2px solid var(--border);"></th>' +
+          '</tr></thead><tbody>' + body + '</tbody></table>';
+        Array.prototype.forEach.call(listEl.querySelectorAll(".epf-del"), function (b) {
+          b.addEventListener("click", function () {
+            var y = Number(b.getAttribute("data-year"));
+            saveRates(loadRates().filter(function (r) { return r.year !== y; }));
+            render();
+            setStatus("Removed " + fyLabel(y) + ".");
+          });
+        });
+      }
+      function add() {
+        var y = parseInt(yearInp.value, 10);
+        var rate = parseFloat(rateInp.value);
+        if (!y || y < 1990 || y > 2100) { setStatus("Enter a valid start year, e.g. 2024 (for FY 2024–25)."); return; }
+        if (isNaN(rate) || rate < 0 || rate > 100) { setStatus("Enter a valid interest rate in %."); return; }
+        var rates = loadRates().filter(function (r) { return r.year !== y; });
+        rates.push({ year: y, rate: Math.round(rate * 100) / 100 });
+        saveRates(rates);
+        render();
+        setStatus("Saved " + fyLabel(y) + " at " + rate.toFixed(2) + "%.");
+        yearInp.value = ""; rateInp.value = "";
+        yearInp.focus();
+      }
+      addBtn.addEventListener("click", add);
+      rateInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
+      window.wfRenderEpfRates = render;
+      render();
+    })();
   </script>
   <script src="pwa-register.js?v=pwa2" defer></script>
 </body>

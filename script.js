@@ -295,7 +295,8 @@
       { tab: settingsTabTransactions, panel: document.getElementById("panel-transactions"), key: "transactions" },
       { tab: settingsTabMapping, panel: document.getElementById("panel-mapping"), key: "mapping" },
       { tab: document.getElementById("tab-expense"), panel: document.getElementById("panel-expense"), key: "expense" },
-      { tab: document.getElementById("tab-github"), panel: document.getElementById("panel-github"), key: "github" }
+      { tab: document.getElementById("tab-github"), panel: document.getElementById("panel-github"), key: "github" },
+      { tab: document.getElementById("tab-epf"), panel: document.getElementById("panel-epf"), key: "epf" }
     ];
 
     function showSettingsTab(tab) {
@@ -307,6 +308,7 @@
         entry.panel.hidden = !isActive;
       });
       if (tab === "expense" && window.WfExpense) window.WfExpense.onShow();
+      if (tab === "epf" && window.wfRenderEpfRates) window.wfRenderEpfRates();
     }
 
     settingsTabs.forEach(function (entry) {
