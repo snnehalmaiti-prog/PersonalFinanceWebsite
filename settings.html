@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=epfautocalc1" />
-<script src="supabase-client.js?v=epfautocalc1"></script>
+<link rel="stylesheet" href="styles.css?v=epfpfonly1" />
+<script src="supabase-client.js?v=epfpfonly1"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
@@ -368,7 +368,7 @@
 
     <section id="panel-epf" class="settings-panel" role="tabpanel" aria-labelledby="tab-epf" hidden>
       <h2 class="settings-section-title">EPF Interest</h2>
-      <p class="muted small" style="margin-bottom:16px;">Record the EPF/PF interest rate for each financial year (April&ndash;March). A year entered here is labelled by its <strong>start year</strong> &mdash; e.g. <code>2024</code> means FY&nbsp;2024&ndash;25. These rates are saved to your account and used as the reference for computing your Provident Fund interest.</p>
+      <p class="muted small" style="margin-bottom:16px;">Record the EPF/PF interest rate for each financial year (April&ndash;March). A year entered here is labelled by its <strong>start year</strong> &mdash; e.g. <code>2024</code> means FY&nbsp;2024&ndash;25. These rates are saved to your account and used to auto-compute interest for Fixed Income rows whose <strong>Instrument Sub Category is exactly &ldquo;Provident Fund&rdquo;</strong> (a financial year with a manual Interest row keeps that manual value).</p>
       <div class="equity-card">
         <div class="equity-card-header">
           <h3>Interest Rate by Year</h3>
@@ -616,8 +616,8 @@
   </main>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="wf-math.js?v=epfautocalc1"></script>
-  <script src="script.js?v=epfautocalc1"></script>
+  <script src="wf-math.js?v=epfpfonly1"></script>
+  <script src="script.js?v=epfpfonly1"></script>
   <script src="expense.js?v=mergev1"></script>
   <script>
     // Expense left-nav panel switching

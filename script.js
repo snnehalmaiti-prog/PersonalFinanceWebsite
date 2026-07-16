@@ -1018,9 +1018,11 @@
     var now = new Date();
     Object.keys(byKey).forEach(function (k) {
       // Delegate to the same engine as the current-value/realized total so the
-      // per-year attribution reconciles with sumProvidentFundRealizedProfit
-      // (including auto-computed interest from Settings → EPF Interest).
-      var v = computePfAccountValue(byKey[k], rateMap, now);
+      // per-year attribution reconciles with sumProvidentFundRealizedProfit.
+      // Auto interest applies only to Sub Category "Provident Fund" (the 3rd
+      // component of the key); others use manual-only (empty rate map).
+      var subOfKey = k.split("||")[2] || "";
+      var v = computePfAccountValue(byKey[k], subOfKey === "provident fund" ? rateMap : {}, now);
       Object.keys(v.realizedByYear || {}).forEach(function (yr) {
         out[yr] = (out[yr] || 0) + v.realizedByYear[yr];
       });
@@ -2508,9 +2510,11 @@
     var epfRateMap = getEpfRateMap();
     Object.keys(providentFundByKey).forEach(function (key) {
       var pf = providentFundByKey[key];
-      // Interest is auto-computed from the rates in Settings → EPF Interest when a
-      // financial year has no manual "Interest" row; manual rows always win.
-      var v = computePfAccountValue(pf.txns, epfRateMap, today);
+      // Auto interest-rate calculation applies ONLY to Instrument Sub Category
+      // "Provident Fund". Other PF-family sub-categories (e.g. Public Provident
+      // Fund) keep manual-interest-only behaviour (empty rate map → no auto-calc).
+      var autoRates = (normalizeText(pf.subCategory) === "provident fund") ? epfRateMap : {};
+      var v = computePfAccountValue(pf.txns, autoRates, today);
       holdings.push({ portfolio: pf.portfolio, bank: "", instrument: pf.instrument, subCategory: pf.subCategory, invested: v.invested, current: v.current, realizedProfit: v.realizedProfit });
     });
 
