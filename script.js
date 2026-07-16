@@ -11353,7 +11353,7 @@
     });
   }
 
-  var MFALLOC_MODE = { mode: "segment" };
+  var MFALLOC_MODE = { mode: "portfolio" };
   // Phase 2: allocation — segment (market cap) OR portfolio breakdown
   function renderMfAllocation(rowsData) {
     var listEl = document.getElementById("mfalloc-list");
