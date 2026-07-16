@@ -8307,7 +8307,9 @@
             scales: {
               x: {
                 type: "time",
-                time: { unit: "year", displayFormats: { year: "yyyy", month: "MMM" } },
+                // No fixed unit → Chart.js auto-selects the tick unit from the
+                // visible range, so zooming in switches from years to months.
+                time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
                 min: fullMinTime,
                 max: fullMaxTime,
                 grid: { display: false },
@@ -8451,7 +8453,12 @@
             }
           },
           scales: {
-            x: { type: "time", time: { unit: "year" }, grid: { display: false } },
+            x: {
+              type: "time",
+              // Auto-select the tick unit so zooming in shows months, not just years.
+              time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
+              grid: { display: false }
+            },
             y: {
               ticks: {
                 callback: function (v) {
