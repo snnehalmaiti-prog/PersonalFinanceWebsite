@@ -910,18 +910,22 @@
       byKey[k].forEach(function (tx) {
         if (tx.type === "interest") { totalInterest += tx.amount; return; }
         if (tx.type === "withdrawal") {
-          var totalPrincipalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
-          var remaining = tx.amount;
-          while (remaining > 0 && lots.length > 0) {
-            if (lots[0].amount <= remaining) { remaining -= lots[0].amount; lots.shift(); }
-            else { lots[0].amount -= remaining; remaining = 0; }
-          }
-          var withdrawnPrincipal = tx.amount - remaining;
-          if (totalPrincipalBefore > 0 && totalInterest > 0) {
-            var realized = totalInterest * (withdrawnPrincipal / totalPrincipalBefore);
-            totalInterest -= realized;
+          // Mirror buildFdFixedIncomeHoldingsList: proportional principal/interest
+          // split so the balance drops by exactly the withdrawal amount.
+          var principalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+          var balanceBefore = principalBefore + totalInterest;
+          var w = Math.min(tx.amount, balanceBefore);
+          if (balanceBefore > 0 && w > 0) {
+            var principalPortion = w * (principalBefore / balanceBefore);
+            var interestPortion = w - principalPortion;
+            var remaining = principalPortion;
+            while (remaining > 1e-9 && lots.length > 0) {
+              if (lots[0].amount <= remaining + 1e-9) { remaining -= lots[0].amount; lots.shift(); }
+              else { lots[0].amount -= remaining; remaining = 0; }
+            }
+            totalInterest -= interestPortion;
             var yr = tx.date ? String(tx.date.getFullYear()) : "all";
-            out[yr] = (out[yr] || 0) + realized;
+            out[yr] = (out[yr] || 0) + interestPortion;
           }
           return;
         }
@@ -2420,24 +2424,27 @@
         if (tx.type === "interest") {
           totalInterest += tx.amount;
         } else if (tx.type === "withdrawal") {
-          // FIFO consume deposit lots
-          var totalPrincipalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
-          var remaining = tx.amount;
-          while (remaining > 0 && lots.length > 0) {
-            if (lots[0].amount <= remaining) {
-              remaining -= lots[0].amount;
-              lots.shift();
-            } else {
-              lots[0].amount -= remaining;
-              remaining = 0;
+          // A withdrawal takes cash out of the corpus, which is principal +
+          // accrued interest. It reduces BOTH in proportion to their share of the
+          // balance, so the balance drops by EXACTLY the withdrawal amount.
+          // (Previously the full amount was charged to principal via FIFO AND a
+          // proportional slice of interest was ALSO realized/removed — that
+          // double-counted the withdrawal and understated the current value.)
+          var principalBefore = lots.reduce(function (s, l) { return s + l.amount; }, 0);
+          var balanceBefore = principalBefore + totalInterest;
+          var w = Math.min(tx.amount, balanceBefore);
+          if (balanceBefore > 0 && w > 0) {
+            var principalPortion = w * (principalBefore / balanceBefore);
+            var interestPortion = w - principalPortion;
+            // Reduce deposit lots FIFO by the principal portion only.
+            var remaining = principalPortion;
+            while (remaining > 1e-9 && lots.length > 0) {
+              if (lots[0].amount <= remaining + 1e-9) { remaining -= lots[0].amount; lots.shift(); }
+              else { lots[0].amount -= remaining; remaining = 0; }
             }
-          }
-          var withdrawnPrincipal = tx.amount - remaining;
-          // Proportional interest on the withdrawn principal becomes realized profit
-          if (totalPrincipalBefore > 0 && totalInterest > 0) {
-            var interestRealized = totalInterest * (withdrawnPrincipal / totalPrincipalBefore);
-            realizedInterest += interestRealized;
-            totalInterest -= interestRealized;
+            // The interest portion of the withdrawal is realized (leaves current).
+            realizedInterest += interestPortion;
+            totalInterest -= interestPortion;
           }
         } else {
           lots.push({ amount: tx.amount });
