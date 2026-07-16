@@ -1406,6 +1406,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   margin: 0;
   font-size: 1.05rem;
 }
+/* Compact variant — tight padding so the card is only as tall as its controls. */
+.equity-card.epf-compact { margin-top: 8px; padding: 8px 14px; }
+.equity-card.epf-compact .equity-card-header { margin-bottom: 4px; }
+.equity-card.epf-compact .equity-card-header h3 { font-size: 0.95rem; }
+.equity-card.epf-compact input[type="number"] { padding: 5px 8px; }
 .equity-icon { font-size: 1rem; color: var(--emerald); }
 
 .status-pill {
