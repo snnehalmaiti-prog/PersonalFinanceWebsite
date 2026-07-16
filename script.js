@@ -8418,6 +8418,9 @@
       var lastVal = points.length ? points[points.length - 1].y : 0;
       var lastEl = document.getElementById("pvc-current-value");
       if (lastEl) lastEl.textContent = "₹" + Math.round(lastVal).toLocaleString("en-IN");
+      // Zoom/pan bounds = the plotted data range so zoom-out can't reveal empty space.
+      var pvcXMin = points.length ? points[0].x.getTime() : undefined;
+      var pvcXMax = points.length ? points[points.length - 1].x.getTime() : undefined;
       window.__wfPortfolioValueChart = new Chart(ctx2, {
         type: "line",
         data: {
@@ -8440,6 +8443,11 @@
               callbacks: {
                 label: function (ctx) { return "₹" + Math.round(ctx.parsed.y).toLocaleString("en-IN"); }
               }
+            },
+            zoom: {
+              limits: { x: { min: pvcXMin, max: pvcXMax } },
+              pan: { enabled: true, mode: "x" },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" }
             }
           },
           scales: {
@@ -8458,6 +8466,8 @@
           }
         }
       });
+      // Double-click to reset the zoom back to the full range.
+      canvas2.ondblclick = function () { if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.resetZoom(); };
     }
 
     if (resetBtn && !resetBtn.dataset.bound) {
