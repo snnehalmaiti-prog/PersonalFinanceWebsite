@@ -8339,10 +8339,11 @@
               },
               zoom: {
                 limits: {
-                  x: {
-                    min: equityFirstTxnDate ? equityFirstTxnDate.getTime() : (firstTxnDate ? firstTxnDate.getTime() : undefined),
-                    max: lastTxnDate ? lastTxnDate.getTime() : undefined
-                  }
+                  // Clamp pan/zoom to the actually-plotted range so zooming OUT
+                  // can't reveal empty space. Using lastTxnDate here let the view
+                  // pan into the future because lastTxnDate is extended by
+                  // fixed-income events (e.g. an FD's future maturity date).
+                  x: { min: fullMinTime, max: fullMaxTime }
                 },
                 pan: {
                   enabled: true,
