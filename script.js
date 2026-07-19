@@ -8945,10 +8945,14 @@
 
     // Stats row
     if (statsEl) {
+      // Expense % = Expenses ÷ Income × 100 (share of income spent). "—" when
+      // there's no income to divide by.
+      var expPct = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : null;
       var stats = [
         { label: "Income", value: fmtC(totalIncome), cls: "positive" },
         { label: "Invested", value: fmtC(totalInvest), cls: "" },
-        { label: "Expenses", value: fmtC(totalExpense), cls: totalExpense > 0 ? "negative" : "" }
+        { label: "Expenses", value: fmtC(totalExpense), cls: totalExpense > 0 ? "negative" : "" },
+        { label: "Expense %", value: expPct == null ? "—" : expPct.toFixed(1) + "%", cls: expPct != null && expPct > 100 ? "negative" : "" }
       ];
       statsEl.innerHTML = stats.map(function(s){
         return '<div class="mic-stat"><span class="mic-stat-label">'+s.label+'</span>'
