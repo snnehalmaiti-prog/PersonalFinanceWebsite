@@ -43,6 +43,9 @@ jobs:
           if git diff --cached --quiet; then
             echo "No price changes — skipping commit."
           else
-            git commit -m "chore: update stock_prices.json [skip ci]"
+            # No [skip ci]: this push must trigger the Pages deploy so the updated
+            # prices are actually published to the live site. It will NOT re-trigger
+            # this workflow (which only runs on stocksetf_mapping.json changes).
+            git commit -m "chore: update stock_prices.json"
             git push
           fi
