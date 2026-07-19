@@ -7432,6 +7432,11 @@
   // market_data row for an AMFI map. Both hold { fetchedAt|updated_at, data:map };
   // Supabase (written by the daily workflow, no deploy needed) wins ties. Either
   // source failing falls back to the other. Resolves to the map (or null).
+  // Source of each market_data feed on the last resolution: 'supabase' | 'static'
+  // (+ the timestamp used), so the UI can show a "Live" indicator.
+  var _marketSource = {};
+  function getMarketSource(key) { return _marketSource[key] || null; }
+
   function _fetchAmfiMapHybrid(staticFile, marketKey) {
     var staticP = fetch(staticFile, { cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -7441,12 +7446,13 @@
       : Promise.resolve(null);
     return Promise.all([staticP, liveP]).then(function (res) {
       var sp = res[0], row = res[1];
-      var chosen = null, chosenTs = -1;
-      if (sp && sp.data && Object.keys(sp.data).length) { chosen = sp.data; chosenTs = sp.fetchedAt || 0; }
+      var chosen = null, chosenTs = -1, src = null, srcTs = null;
+      if (sp && sp.data && Object.keys(sp.data).length) { chosen = sp.data; chosenTs = sp.fetchedAt || 0; src = "static"; srcTs = sp.fetchedAt || null; }
       if (row && row.data && Object.keys(row.data).length) {
         var liveTs = row.updated_at ? Date.parse(row.updated_at) : 0;
-        if (!chosen || liveTs >= chosenTs) { chosen = row.data; dbg("[AMFI] using live Supabase", marketKey, row.updated_at); }
+        if (!chosen || liveTs >= chosenTs) { chosen = row.data; src = "supabase"; srcTs = row.updated_at || null; dbg("[AMFI] using live Supabase", marketKey, row.updated_at); }
       }
+      if (src) _marketSource[marketKey] = { source: src, at: srcTs };
       return chosen;
     });
   }
@@ -7484,6 +7490,7 @@
     try {
       var cached = JSON.parse(localStorage.getItem(AMFI_NAV_MAP_CACHE_KEY));
       if (cached && Date.now() - cached.fetchedAt < AMFI_NAV_MAP_MAX_AGE_MS) {
+        if (cached.source) _marketSource["amfi_nav"] = cached.source; // restore source for the indicator
         return Promise.resolve(cached.data);
       }
     } catch (e) {}
@@ -7491,7 +7498,7 @@
     return _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
       if (staticData && Object.keys(staticData).length) {
         try {
-          localStorage.setItem(AMFI_NAV_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData }));
+          localStorage.setItem(AMFI_NAV_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData, source: _marketSource["amfi_nav"] || null }));
         } catch (e) {}
         return staticData;
       }
@@ -11039,7 +11046,16 @@
 
     var today = new Date();
     var isStale = (today - latestDate) > (1000 * 60 * 60 * 24 * 3);
-    asOfTextEl.textContent = "NAV Data: " + latestDate.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+    var dateStr = latestDate.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+    // Live-source indicator: green "Live" when the AMFI NAV map came from Supabase
+    // (deploy-free live feed), otherwise a muted "File" for the static JSON.
+    var src = getMarketSource("amfi_nav");
+    var badge = src && src.source === "supabase"
+      ? ' <span style="color:#10B981;font-weight:700;" title="Live from Supabase">&#9679; Live</span>'
+      : (src && src.source === "static"
+        ? ' <span style="color:var(--muted);font-weight:600;" title="From the static JSON on Pages">&#9679; File</span>'
+        : '');
+    asOfTextEl.innerHTML = "NAV Data: " + dateStr + badge;
     asOfEl.classList.toggle("stale", isStale);
     asOfEl.hidden = false;
   }
