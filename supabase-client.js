@@ -363,6 +363,20 @@
     }).catch(function () { return []; });
   }
 
+  // ── Global market-data cache (prices/corporate actions; NAV later) ──────────
+  // Public, non-user-scoped rows in market_data. Readable with the anon key (no
+  // session required); the workflows write it server-side with the service role.
+  // Returns { data, updated_at } or null on any error (caller falls back to the
+  // static JSON on Pages).
+  function loadMarketData(key) {
+    return fetch(SUPABASE_URL + "/rest/v1/market_data?key=eq." + encodeURIComponent(key) + "&select=data,updated_at", {
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY }
+    }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json().then(function (rows) { return (rows && rows[0]) ? rows[0] : null; }).catch(function () { return null; });
+    }).catch(function () { return null; });
+  }
+
   // ── Generic per-user table CRUD (used by the Expense manager) ───────────────
   // All helpers scope to the signed-in user; RLS enforces it server-side too.
 
@@ -450,6 +464,7 @@
     saveSettingsToCloud: saveSettingsToCloud,
     saveSheetData: saveSheetData,
     loadAllSheetData: loadAllSheetData,
+    loadMarketData: loadMarketData,
     requireAuth: function (redirectTo) {
       if (!getAccessToken()) {
         window.location.href = redirectTo || "index.html";

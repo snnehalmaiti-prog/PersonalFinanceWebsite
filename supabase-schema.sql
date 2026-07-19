@@ -69,3 +69,20 @@ CREATE POLICY "own sheet data update"
   ON user_sheet_data FOR UPDATE
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+-- ── Global market-data cache (prices, corporate actions; NAV later) ──────────
+-- One shared row per feed key — this is public market data, identical for every
+-- user, so it is NOT under per-user RLS. The Fetch/Update workflows upsert it
+-- (server-side, using the service-role key) on every refresh; the dashboard
+-- reads it with the anon key and overlays it on the static JSON as a live,
+-- deploy-free source. Read-only for anon/authenticated; writes only via the
+-- service role (which bypasses RLS).
+CREATE TABLE IF NOT EXISTS market_data (
+  key        text PRIMARY KEY,          -- 'stock_prices' | 'amfi_nav' | 'amfi_isin'
+  data       jsonb NOT NULL,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE market_data ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS market_data_read ON market_data;
+CREATE POLICY market_data_read ON market_data FOR SELECT USING (true);
+GRANT SELECT ON market_data TO anon, authenticated;

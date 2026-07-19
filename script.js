@@ -3272,12 +3272,31 @@
       }
     } catch (e) {}
     if (_stockPricesPromise) return _stockPricesPromise;
-    _stockPricesPromise = fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_PRICES_CACHE_MAX_AGE_MS))
+    // Static JSON (on Pages) carries the bulky daily histories; Supabase carries
+    // the small LIVE subset (prices + corporate_actions), refreshed by the
+    // workflow with no deploy in the loop. Fetch both, then overlay the live
+    // prices when Supabase is present and at least as fresh as the static file.
+    // Supabase failing (or being empty) transparently falls back to the JSON.
+    var staticP = fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_PRICES_CACHE_MAX_AGE_MS))
       .then(function (r) {
         if (!r.ok) throw new Error("stock_prices.json not found (HTTP " + r.status + ")");
         return r.json();
-      })
-      .then(function (data) {
+      });
+    var liveP = (window.WfAuth && WfAuth.loadMarketData)
+      ? WfAuth.loadMarketData("stock_prices").catch(function () { return null; })
+      : Promise.resolve(null);
+    _stockPricesPromise = Promise.all([staticP, liveP])
+      .then(function (res) {
+        var data = res[0];
+        var row = res[1];
+        var live = row && row.data;
+        if (live && live.prices && live.updated && (!data.updated || live.updated >= data.updated)) {
+          data.prices = live.prices;
+          if (live.corporate_actions) data.corporate_actions = live.corporate_actions;
+          data._liveSource = "supabase";
+          data._liveUpdated = row.updated_at || live.updated;
+          dbg("[Prices] using live Supabase prices from", data._liveUpdated);
+        }
         try { localStorage.setItem(cacheKey, JSON.stringify({ data: data, fetchedAt: Date.now() })); } catch (e) {}
         _stockPricesPromise = null;
         return data;

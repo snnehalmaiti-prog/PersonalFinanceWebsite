@@ -57,3 +57,13 @@ jobs:
           else
             echo "No price changes — skipping commit."
           fi
+
+      - name: Publish live prices to Supabase
+        # Upsert the small live subset (prices + corporate actions) so the
+        # dashboard gets fresh data without waiting on a Pages deploy. No-ops if
+        # the secret isn't configured. Never blocks the workflow on failure.
+        continue-on-error: true
+        env:
+          SUPABASE_URL: https://jotirmhoohsquqvungrm.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python publish_market_data.py stock_prices
