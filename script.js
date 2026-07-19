@@ -425,9 +425,9 @@
 
     // On mobile the header tab buttons are hidden (CSS) in favour of a centred
     // title + hamburger drawer; every tab is reachable from the drawer. Land on
-    // Overview, matching the mobile design.
+    // the Expense tab on phones (quick expense entry is the primary mobile use).
     if (window.matchMedia && window.matchMedia("(max-width: 760px)").matches) {
-      showDashboardTab("overview");
+      showDashboardTab("expense");
     }
   }
 
