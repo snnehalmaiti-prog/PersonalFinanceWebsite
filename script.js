@@ -3375,6 +3375,17 @@
 
   var GOLD_PRICE_CACHE_KEY = "wf-gold-price-inr-per-gram";
   var GOLD_PRICE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
+  // Freshness of the last gold-rate resolution, surfaced under the rate so a
+  // cached/stale fallback (all live sources failed) is visibly distinct from a
+  // live value. fetchedAt = when the shown price was actually fetched.
+  var _goldRateMeta = { fetchedAt: null, stale: false };
+  function goldRateFreshnessText() {
+    if (!_goldRateMeta.fetchedAt) return "";
+    var mins = Math.max(0, Math.round((Date.now() - _goldRateMeta.fetchedAt) / 60000));
+    var rel = mins < 1 ? "just now" : mins < 60 ? mins + "m ago"
+      : mins < 1440 ? Math.round(mins / 60) + "h ago" : Math.round(mins / 1440) + "d ago";
+    return _goldRateMeta.stale ? "cached · last updated " + rel + " (live source unavailable)" : "updated " + rel;
+  }
   var GOLD_DAY_CHANGE_CACHE_KEY = "wf-gold-day-change-inr-per-gram";
   var GOLD_DAY_CHANGE_CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
   var TROY_OZ_TO_GRAM = 31.1035;
@@ -3480,6 +3491,7 @@
     try {
       var cached = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
       if (cached && Date.now() - cached.fetchedAt < GOLD_PRICE_CACHE_MAX_AGE_MS) {
+        _goldRateMeta = { fetchedAt: cached.fetchedAt, stale: false };
         return Promise.resolve(cached.price * getGoldPremiumMultiplier());
       }
     } catch (e) {}
@@ -3505,16 +3517,18 @@
     return tryUrls(0).then(function (xauInr) {
       dbg("[Gold] XAU/INR from currency-api:", xauInr);
       var priceInrPerGram = xauInr / TROY_OZ_TO_GRAM;
+      var now = Date.now();
+      _goldRateMeta = { fetchedAt: now, stale: false };
       try {
         // Cache the raw international spot price; premium applied on read.
-        localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), price: priceInrPerGram }));
+        localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: now, price: priceInrPerGram }));
       } catch (e) {}
       return priceInrPerGram * getGoldPremiumMultiplier();
     }).catch(function (err) {
       // Last resort: a stale cached price is far better than a blank rate.
       try {
         var c = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
-        if (c && c.price) { dbg("[Gold] all sources failed — using stale cache"); return c.price * getGoldPremiumMultiplier(); }
+        if (c && c.price) { dbg("[Gold] all sources failed — using stale cache"); _goldRateMeta = { fetchedAt: c.fetchedAt || null, stale: true }; return c.price * getGoldPremiumMultiplier(); }
       } catch (e) {}
       throw err;
     });
@@ -4750,9 +4764,12 @@
       });
     }
 
-    var asofText = rateDate ? "Gold rate as of " + rateDate + " · ₹" + Math.round(goldPrice).toLocaleString("en-IN") + "/g" : "";
-    if (asof) asof.textContent = asofText;
-    if (goldTop) goldTop.innerHTML = asofText ? "&#128337; " + asofText : "";
+    var freshness = goldRateFreshnessText();
+    var asofText = rateDate
+      ? "Gold rate as of " + rateDate + " · ₹" + Math.round(goldPrice).toLocaleString("en-IN") + "/g" + (freshness ? " · " + freshness : "")
+      : "";
+    if (asof) { asof.textContent = asofText; asof.style.color = _goldRateMeta.stale ? "#B45309" : ""; }
+    if (goldTop) { goldTop.innerHTML = asofText ? "&#128337; " + asofText : ""; goldTop.style.color = _goldRateMeta.stale ? "#B45309" : ""; }
 
     var holdings = (allHoldings || []).filter(function (h) {
       if (COMH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(COMH_STATE.portfolio)) return false;
