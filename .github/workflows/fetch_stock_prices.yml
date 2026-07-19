@@ -40,12 +40,20 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add stock_prices.json
-          if git diff --cached --quiet; then
-            echo "No price changes — skipping commit."
-          else
-            # No [skip ci]: this push must trigger the Pages deploy so the updated
-            # prices are actually published to the live site. It will NOT re-trigger
-            # this workflow (which only runs on stocksetf_mapping.json changes).
+          # No CI-skip marker on these commits: the push must trigger the Pages
+          # deploy so updated prices are published to the live site. It will NOT
+          # re-trigger this workflow (which only runs on stocksetf_mapping.json).
+          if ! git diff --cached --quiet; then
             git commit -m "chore: update stock_prices.json"
             git push
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual run: publish unconditionally, even with no diff, so a manual
+            # refresh always updates/deploys regardless of weekday/weekend or market
+            # hours. On a closed market this republishes the latest available
+            # (last-close) prices with a refreshed timestamp.
+            echo "Manual run with no file diff — forcing a commit to publish."
+            git commit --allow-empty -m "chore: manual stock price refresh"
+            git push
+          else
+            echo "No price changes — skipping commit."
           fi
