@@ -3440,11 +3440,14 @@
         });
     }
 
-    // Keyless: jsDelivr npm CDN dated snapshot for a given date. Weekend/holiday
-    // gaps are handled by the caller stepping back a few days.
+    // Keyless dated snapshot for a given date, tried across two mirrors of the
+    // same dataset (jsDelivr, then the project's pages.dev fallback) so one CDN
+    // failing doesn't blank the gold history. Weekend/holiday gaps are handled by
+    // the caller stepping back a few days.
     function tryDateAllSources(dStr) {
       var urlA = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + dStr + "/v1/currencies/xau.min.json";
-      return fetchFromCurrencyApi(urlA);
+      var urlB = "https://" + dStr + ".currency-api.pages.dev/v1/currencies/xau.min.json";
+      return fetchFromCurrencyApi(urlA).catch(function () { return fetchFromCurrencyApi(urlB); });
     }
 
     // Step back up to 3 days (handles weekends/holidays for currency-api dates)
@@ -3481,20 +3484,40 @@
       }
     } catch (e) {}
 
-    // jsDelivr CDN-hosted currency API — CORS-friendly, no API key, includes XAU (gold) in INR
-    return fetch("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.min.json")
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var xauInr = data && data.xau && data.xau.inr;
-        dbg("[Gold] XAU/INR from currency-api:", xauInr);
-        if (!xauInr) throw new Error("Invalid currency-api response");
-        var priceInrPerGram = xauInr / TROY_OZ_TO_GRAM;
-        try {
-          // Cache the raw international spot price; premium applied on read.
-          localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), price: priceInrPerGram }));
-        } catch (e) {}
-        return priceInrPerGram * getGoldPremiumMultiplier();
-      });
+    // Keyless, CORS-friendly XAU (gold) price in INR. Two mirrors of the same
+    // dataset — the jsDelivr CDN and the project's own pages.dev fallback — so a
+    // transient failure of one URL doesn't blank the gold rate.
+    var URLS = [
+      "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.min.json",
+      "https://latest.currency-api.pages.dev/v1/currencies/xau.min.json"
+    ];
+    function tryUrls(i) {
+      if (i >= URLS.length) return Promise.reject(new Error("all gold price sources failed"));
+      return fetch(URLS[i])
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(function (data) {
+          var xauInr = data && data.xau && data.xau.inr;
+          if (!xauInr) throw new Error("Invalid currency-api response");
+          return xauInr;
+        })
+        .catch(function () { return tryUrls(i + 1); });
+    }
+    return tryUrls(0).then(function (xauInr) {
+      dbg("[Gold] XAU/INR from currency-api:", xauInr);
+      var priceInrPerGram = xauInr / TROY_OZ_TO_GRAM;
+      try {
+        // Cache the raw international spot price; premium applied on read.
+        localStorage.setItem(GOLD_PRICE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), price: priceInrPerGram }));
+      } catch (e) {}
+      return priceInrPerGram * getGoldPremiumMultiplier();
+    }).catch(function (err) {
+      // Last resort: a stale cached price is far better than a blank rate.
+      try {
+        var c = JSON.parse(localStorage.getItem(GOLD_PRICE_CACHE_KEY));
+        if (c && c.price) { dbg("[Gold] all sources failed — using stale cache"); return c.price * getGoldPremiumMultiplier(); }
+      } catch (e) {}
+      throw err;
+    });
   }
 
   // ─── Benchmark index XIRR comparison ──────────────────────────────────────
