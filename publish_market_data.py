@@ -20,7 +20,18 @@ import sys
 import urllib.request
 import urllib.error
 
-# key -> (source file, function selecting the small live payload from the file)
+def _iso_from_ms(ms):
+    """Epoch-ms → ISO-8601 UTC string, or None."""
+    if not ms:
+        return None
+    try:
+        import datetime
+        return datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return None
+
+
+# key -> (source file, select payload from file, derive updated_at from file)
 FEEDS = {
     "stock_prices": (
         "stock_prices.json",
@@ -29,6 +40,19 @@ FEEDS = {
             "corporate_actions": d.get("corporate_actions", {}),
             "updated": d.get("updated"),
         },
+        lambda d: d.get("updated"),
+    ),
+    # AMFI maps: store the whole {ISIN|scheme: value} map; the client reads it as
+    # market_data.data and compares updated_at against the static file's fetchedAt.
+    "amfi_nav": (
+        "amfi_nav.json",
+        lambda d: d.get("data", {}),
+        lambda d: _iso_from_ms(d.get("fetchedAt")),
+    ),
+    "amfi_isin": (
+        "amfi_isin_map.json",
+        lambda d: d.get("data", {}),
+        lambda d: _iso_from_ms(d.get("fetchedAt")),
     ),
 }
 
@@ -38,7 +62,7 @@ def main():
         print(f"Usage: {sys.argv[0]} <{'|'.join(FEEDS)}>")
         sys.exit(2)
     key = sys.argv[1]
-    src_file, select = FEEDS[key]
+    src_file, select, updated_at_of = FEEDS[key]
 
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -48,7 +72,7 @@ def main():
 
     with open(src_file) as f:
         full = json.load(f)
-    payload = [{"key": key, "data": select(full), "updated_at": full.get("updated")}]
+    payload = [{"key": key, "data": select(full), "updated_at": updated_at_of(full)}]
     body = json.dumps(payload).encode("utf-8")
 
     req = urllib.request.Request(

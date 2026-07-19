@@ -35,3 +35,10 @@ jobs:
             git commit -m "Update AMFI NAV data"
             git push
           fi
+
+      - name: Publish AMFI NAV to Supabase
+        continue-on-error: true
+        env:
+          SUPABASE_URL: https://jotirmhoohsquqvungrm.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 publish_market_data.py amfi_nav

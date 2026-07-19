@@ -7428,6 +7428,29 @@
     return segmentMap[instrumentName] || segmentMap[normalizeText(instrumentName)] || "Unclassified";
   }
 
+  // Returns the FRESHER of the static JSON file (on Pages) and the Supabase
+  // market_data row for an AMFI map. Both hold { fetchedAt|updated_at, data:map };
+  // Supabase (written by the daily workflow, no deploy needed) wins ties. Either
+  // source failing falls back to the other. Resolves to the map (or null).
+  function _fetchAmfiMapHybrid(staticFile, marketKey) {
+    var staticP = fetch(staticFile, { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+    var liveP = (window.WfAuth && WfAuth.loadMarketData)
+      ? WfAuth.loadMarketData(marketKey).catch(function () { return null; })
+      : Promise.resolve(null);
+    return Promise.all([staticP, liveP]).then(function (res) {
+      var sp = res[0], row = res[1];
+      var chosen = null, chosenTs = -1;
+      if (sp && sp.data && Object.keys(sp.data).length) { chosen = sp.data; chosenTs = sp.fetchedAt || 0; }
+      if (row && row.data && Object.keys(row.data).length) {
+        var liveTs = row.updated_at ? Date.parse(row.updated_at) : 0;
+        if (!chosen || liveTs >= chosenTs) { chosen = row.data; dbg("[AMFI] using live Supabase", marketKey, row.updated_at); }
+      }
+      return chosen;
+    });
+  }
+
   // The browser can't fetch AMFI's NAVAll.txt directly or via public CORS
   // proxies (AMFI blocks both). fetch_amfi_isin_map.py fetches it server-side
   // and writes amfi_isin_map.json into the repo; reading that same-origin
@@ -7465,7 +7488,7 @@
       }
     } catch (e) {}
 
-    return fetchStaticAmfiNavMap().then(function (staticData) {
+    return _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
       if (staticData && Object.keys(staticData).length) {
         try {
           localStorage.setItem(AMFI_NAV_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData }));
@@ -7485,7 +7508,7 @@
     } catch (e) {}
 
     lastAmfiFetchFailures = [];
-    return fetchStaticAmfiIsinMap().then(function (staticData) {
+    return _fetchAmfiMapHybrid(AMFI_ISIN_MAP_STATIC_FILE, "amfi_isin").then(function (staticData) {
       if (staticData && Object.keys(staticData).length) {
         try {
           localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData }));
