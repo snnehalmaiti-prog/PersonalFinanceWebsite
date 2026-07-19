@@ -3268,6 +3268,7 @@
     try {
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && cached.fetchedAt && Date.now() - cached.fetchedAt < STOCK_PRICES_CACHE_MAX_AGE_MS) {
+        _rememberPriceSource(cached.data); // restore source for the "Live/File" badge
         return Promise.resolve(cached.data);
       }
     } catch (e) {}
@@ -3296,7 +3297,11 @@
           data._liveSource = "supabase";
           data._liveUpdated = row.updated_at || live.updated;
           dbg("[Prices] using live Supabase prices from", data._liveUpdated);
+        } else {
+          data._liveSource = "static";
+          data._liveUpdated = data.updated || null;
         }
+        _rememberPriceSource(data);
         try { localStorage.setItem(cacheKey, JSON.stringify({ data: data, fetchedAt: Date.now() })); } catch (e) {}
         _stockPricesPromise = null;
         return data;
@@ -7436,6 +7441,12 @@
   // (+ the timestamp used), so the UI can show a "Live" indicator.
   var _marketSource = {};
   function getMarketSource(key) { return _marketSource[key] || null; }
+  // Record the stock_prices source (set on the data object by fetchAllStockPrices)
+  // into _marketSource so the Stocks/ETF "Price Updated" pill can badge it.
+  function _rememberPriceSource(data) {
+    if (!data || !data._liveSource) return;
+    _marketSource["stock_prices"] = { source: data._liveSource, at: data._liveUpdated || data.updated || null };
+  }
 
   function _fetchAmfiMapHybrid(staticFile, marketKey) {
     var staticP = fetch(staticFile, { cache: "no-store" })
@@ -12344,7 +12355,14 @@
             var u = new Date(updatedTs);
             var dm = u.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit" });
             var hm = u.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
-            priceAsOfTextEl.textContent = "Price Updated: " + dm + " & " + hm;
+            // Live-source badge: green "Live" from Supabase, muted "File" from the static JSON.
+            var pSrc = getMarketSource("stock_prices");
+            var pBadge = pSrc && pSrc.source === "supabase"
+              ? ' <span style="color:#10B981;font-weight:700;" title="Live from Supabase">&#9679; Live</span>'
+              : (pSrc && pSrc.source === "static"
+                ? ' <span style="color:var(--muted);font-weight:600;" title="From the static JSON on Pages">&#9679; File</span>'
+                : '');
+            priceAsOfTextEl.innerHTML = "Price Updated: " + dm + " & " + hm + pBadge;
             var isStalePrice = (Date.now() - u.getTime()) > (1000 * 60 * 60 * 24);
             priceAsOfEl.classList.toggle("stale", isStalePrice);
             priceAsOfEl.hidden = false;
