@@ -315,6 +315,26 @@ def main():
     index_history = fetch_index_history()
     stock_history = fetch_stock_history(tickers_config)
 
+    # Reconcile the batch price against the per-ticker history. yfinance's batch
+    # yf.download() sometimes returns a stale (previous trading day) bar, while the
+    # per-ticker .history() call returns the latest — so when the history has a
+    # FRESHER dated bar than the batch price, adopt it. This corrects/recovers a
+    # ticker whose batch value regressed (e.g. HDFCBANK reverting to Friday's bar).
+    for _name, _p in list(prices.items()):
+        _sh = stock_history.get(_name)
+        hp = _sh.get("prices") if isinstance(_sh, dict) else None
+        if not hp:
+            continue
+        _hdates = sorted(hp.keys())
+        _hlatest = _hdates[-1]
+        if _p.get("date") and _hlatest <= _p["date"]:
+            continue  # batch is same-day or newer — trust it
+        _hprice = hp[_hlatest]
+        _hprev = hp[_hdates[-2]] if len(_hdates) >= 2 else _hprice
+        print(f"  RECONCILE {_name}: batch @ {_p.get('date')}={_p.get('price')} -> history @ {_hlatest}={_hprice}")
+        prices[_name] = {"price": round(_hprice, 4), "prev_close": round(_hprev, 4),
+                         "currency": _p.get("currency"), "date": _hlatest}
+
     corporate_actions = fetch_corporate_actions(tickers_config)
 
     output = {
