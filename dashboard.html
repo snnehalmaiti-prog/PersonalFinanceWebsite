@@ -17,10 +17,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=pricetsfix1" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<link rel="stylesheet" href="styles.css?v=perf1" />
+<!-- Preconnect so the chart libs (loaded at body-end, below) start their TLS
+     handshake early without blocking first paint. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
   <!-- Left nav drawer (mobile only) -->
@@ -3626,7 +3626,7 @@
 
   </main>
 
-  <script src="supabase-client.js?v=pricetsfix1"></script>
+  <script src="supabase-client.js?v=perf1"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
@@ -3666,8 +3666,13 @@
         });
     })();
   </script>
-  <script src="wf-math.js?v=pricetsfix1"></script>
-  <script src="script.js?v=pricetsfix1"></script>
+  <!-- Chart libs moved out of <head> so they don't block first paint; they load
+       here (in order) before script.js, which is the first code that uses Chart. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="wf-math.js?v=perf1"></script>
+  <script src="script.js?v=perf1"></script>
   <script>
     (function () {
       if (!window.WfAuth) return;

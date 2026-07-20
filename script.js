@@ -3230,8 +3230,14 @@
   }
 
   // ─── Stocks/ETF: stock_prices.json helpers ────────────────────────────────
-  var STOCK_PRICES_CACHE_MAX_AGE_MS = 3 * 60 * 1000; // 3 minutes
+  var STOCK_PRICES_CACHE_MAX_AGE_MS = 3 * 60 * 1000; // 3 minutes (merged: live-price cadence)
+  // The bulky *_history series in stock_prices.json change once/day, so the 2.24 MB
+  // file is cached far longer than the prices — the small live prices come from
+  // Supabase every few minutes instead. This cuts repeated 2 MB downloads ~10x.
+  var STOCK_STATIC_CACHE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes (bulky static file)
   var _stockPricesPromise = null;
+  var _stockStaticPromise = null;
+  var _stockMergedCache = null; // { data, at } — in-memory merged (static + live)
 
   function buildStockMappingTable() {
     var rows = getSheetRows("stocksetfmapping");
@@ -3262,41 +3268,56 @@
     return map;
   }
 
-  // Returns a Promise<{ updated, prices, usd_inr_history }> — cached 15 min in localStorage.
-  function fetchAllStockPrices() {
-    var cacheKey = "wf-stock-prices-json";
+  // The bulky static stock_prices.json (histories) — cached 30 min in localStorage
+  // and deduped in-flight. This is the 2.24 MB payload; keeping it out of the
+  // 3-minute refresh loop is the main performance win.
+  function _getStaticStockData() {
+    // Evict the old 2.24 MB merged cache key (replaced by the split static/live
+    // caches) so the two don't co-exist and blow the localStorage quota.
+    try { localStorage.removeItem("wf-stock-prices-json"); } catch (e) {}
     try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && cached.fetchedAt && Date.now() - cached.fetchedAt < STOCK_PRICES_CACHE_MAX_AGE_MS) {
-        _rememberPriceSource(cached.data); // restore source for the "Live/File" badge
-        return Promise.resolve(cached.data);
-      }
+      var c = JSON.parse(localStorage.getItem("wf-stock-prices-static"));
+      if (c && c.fetchedAt && Date.now() - c.fetchedAt < STOCK_STATIC_CACHE_MAX_AGE_MS) return Promise.resolve(c.data);
     } catch (e) {}
-    if (_stockPricesPromise) return _stockPricesPromise;
-    // Static JSON (on Pages) carries the bulky daily histories; Supabase carries
-    // the small LIVE subset (prices + corporate_actions), refreshed by the
-    // workflow with no deploy in the loop. Fetch both, then overlay the live
-    // prices when Supabase is present and at least as fresh as the static file.
-    // Supabase failing (or being empty) transparently falls back to the JSON.
-    var staticP = fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_PRICES_CACHE_MAX_AGE_MS))
+    if (_stockStaticPromise) return _stockStaticPromise;
+    _stockStaticPromise = fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_STATIC_CACHE_MAX_AGE_MS))
       .then(function (r) {
         if (!r.ok) throw new Error("stock_prices.json not found (HTTP " + r.status + ")");
         return r.json();
-      });
+      })
+      .then(function (data) {
+        try { localStorage.setItem("wf-stock-prices-static", JSON.stringify({ data: data, fetchedAt: Date.now() })); } catch (e) {}
+        _stockStaticPromise = null;
+        return data;
+      })
+      .catch(function (err) { _stockStaticPromise = null; throw err; });
+    return _stockStaticPromise;
+  }
+
+  // Returns a Promise<{ updated, prices, usd_inr_history, ... }>. The bulky static
+  // histories are cached 30 min; the small live prices overlay from Supabase every
+  // ~3 min (in-memory merged cache), so callers get fresh prices without re-pulling
+  // the 2.24 MB file. Supabase failing falls back to the static prices.
+  function fetchAllStockPrices() {
+    if (_stockMergedCache && Date.now() - _stockMergedCache.at < STOCK_PRICES_CACHE_MAX_AGE_MS) {
+      _rememberPriceSource(_stockMergedCache.data);
+      return Promise.resolve(_stockMergedCache.data);
+    }
+    if (_stockPricesPromise) return _stockPricesPromise;
+    var staticP = _getStaticStockData();
     var liveP = (window.WfAuth && WfAuth.loadMarketData)
       ? WfAuth.loadMarketData("stock_prices").catch(function () { return null; })
       : Promise.resolve(null);
     _stockPricesPromise = Promise.all([staticP, liveP])
       .then(function (res) {
-        var data = res[0];
+        // Shallow-copy so we never mutate the cached static object's prices/updated.
+        var base = res[0], data = {};
+        for (var k in base) { if (Object.prototype.hasOwnProperty.call(base, k)) data[k] = base[k]; }
         var row = res[1];
         var live = row && row.data;
         if (live && live.prices && live.updated && (!data.updated || live.updated >= data.updated)) {
           data.prices = live.prices;
           if (live.corporate_actions) data.corporate_actions = live.corporate_actions;
-          // Reflect the LIVE fetch time in "Price Updated" — otherwise the pill
-          // keeps showing the static JSON's timestamp (last Pages deploy) and
-          // never advances as Supabase refreshes intraday.
           data.updated = live.updated;
           data._liveSource = "supabase";
           data._liveUpdated = row.updated_at || live.updated;
@@ -3306,7 +3327,7 @@
           data._liveUpdated = data.updated || null;
         }
         _rememberPriceSource(data);
-        try { localStorage.setItem(cacheKey, JSON.stringify({ data: data, fetchedAt: Date.now() })); } catch (e) {}
+        _stockMergedCache = { data: data, at: Date.now() };
         _stockPricesPromise = null;
         return data;
       })
