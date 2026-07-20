@@ -121,13 +121,21 @@ def fetch_prices(tickers_config):
 
             price = float(series.iloc[-1])
             prev_close = float(series.iloc[-2]) if len(series) >= 2 else price
+            # Date of the latest bar — used by the anti-regression guard in main()
+            # so a flaky run that returns the previous trading day can't overwrite
+            # a newer price.
+            try:
+                bar_date = series.index[-1].strftime("%Y-%m-%d")
+            except Exception:
+                bar_date = None
 
             prices[name] = {
                 "price": round(price, 4),
                 "prev_close": round(prev_close, 4),
                 "currency": currency,
+                "date": bar_date,
             }
-            print(f"  {ticker}: {price:.4f} (prev: {prev_close:.4f}) [{currency}]")
+            print(f"  {ticker}: {price:.4f} (prev: {prev_close:.4f}) [{currency}] @ {bar_date}")
 
         except Exception as e:
             print(f"WARNING: Failed to fetch {ticker}: {e}")
@@ -283,6 +291,25 @@ def main():
 
     print(f"Fetching prices for {len(tickers_config)} tickers…")
     prices = fetch_prices(tickers_config)
+
+    # Anti-regression guard: yfinance's batch download intermittently returns the
+    # PREVIOUS trading day's bar for a ticker, which would otherwise overwrite a
+    # newer price with an older one. Compare each ticker's new bar date against
+    # what's already in stock_prices.json and keep the existing (newer) value
+    # when the new one is stale.
+    try:
+        with open(OUTPUT_FILE) as _pf:
+            _old_prices = json.load(_pf).get("prices", {})
+    except Exception:
+        _old_prices = {}
+    for _name, _new in list(prices.items()):
+        _old = _old_prices.get(_name)
+        if not _old:
+            continue
+        _nd, _od = _new.get("date"), _old.get("date")
+        if _nd and _od and _nd < _od:
+            print(f"  SKIP {_name}: fetched bar {_nd} is older than stored {_od} — keeping {_old.get('price')}")
+            prices[_name] = _old
 
     usd_inr_history = fetch_usd_inr_history()
     index_history = fetch_index_history()
