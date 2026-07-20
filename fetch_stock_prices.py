@@ -66,6 +66,32 @@ def load_tickers_from_mapping():
     return tickers
 
 
+def _fast_quote(ticker):
+    """Live/last quote from yfinance fast_info (what the Yahoo website shows),
+    which is current even when the daily-bar endpoints lag a day. Returns
+    (last_price, previous_close) as floats, or (None, None). Version-tolerant:
+    fast_info is dict-like in some versions and attribute-based in others."""
+    def _get(fi, key):
+        v = None
+        try:
+            v = fi[key]
+        except Exception:
+            v = getattr(fi, key, None)
+        try:
+            return float(v) if v is not None else None
+        except Exception:
+            return None
+    try:
+        fi = yf.Ticker(ticker).fast_info
+        lp = _get(fi, "last_price")
+        pc = _get(fi, "previous_close")
+        if lp and lp > 0:
+            return lp, (pc if (pc and pc > 0) else None)
+    except Exception:
+        pass
+    return None, None
+
+
 def fetch_prices(tickers_config):
     """Fetch current price and previous close for each ticker."""
     prices = {}
@@ -128,6 +154,16 @@ def fetch_prices(tickers_config):
                 bar_date = series.index[-1].strftime("%Y-%m-%d")
             except Exception:
                 bar_date = None
+
+            # Prefer the live/last quote (fast_info) — it matches the Yahoo website
+            # and is current even when the daily-bar endpoints serve a stale day.
+            live_price, live_prev = _fast_quote(ticker)
+            if live_price:
+                price = live_price
+                if live_prev:
+                    prev_close = live_prev
+                bar_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                print(f"  {ticker}: live quote {live_price:.4f} (fast_info)")
 
             prices[name] = {
                 "price": round(price, 4),
