@@ -3294,6 +3294,10 @@
         if (live && live.prices && live.updated && (!data.updated || live.updated >= data.updated)) {
           data.prices = live.prices;
           if (live.corporate_actions) data.corporate_actions = live.corporate_actions;
+          // Reflect the LIVE fetch time in "Price Updated" — otherwise the pill
+          // keeps showing the static JSON's timestamp (last Pages deploy) and
+          // never advances as Supabase refreshes intraday.
+          data.updated = live.updated;
           data._liveSource = "supabase";
           data._liveUpdated = row.updated_at || live.updated;
           dbg("[Prices] using live Supabase prices from", data._liveUpdated);
