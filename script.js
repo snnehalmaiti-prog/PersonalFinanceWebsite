@@ -1929,18 +1929,24 @@
     var overviewPctEl = document.getElementById("overview-return-pct");
     var overviewRealizedEl = document.getElementById("overview-realized-return");
     var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
-    var fiCurrent = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
     var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
     // Commodity lives in the Fixed Income/Commodity sheet and follows the FI
     // toggle — gate it the same way the category cards and getOverviewCurrentTotal
     // do, so the header total == Σ category cards == the split charts' total.
     var commInvested = isFixedIncomeExcluded() ? 0 : _ov.commInvested;
-    var commCurrent = isFixedIncomeExcluded() ? 0 : _ov.commCurrent;
     var commRealized = isFixedIncomeExcluded() ? 0 : _ov.commRealized;
-    // Use seCurrent if prices have loaded; fall back to seInvested so overview is never blank
+    // Each class's "current" is populated by its own async flow (NAV fetch, gold
+    // price, SE prices). Until it resolves the field is 0 while its *invested* is
+    // already known — so fall back to invested (0% P&L) instead of 0, otherwise
+    // the Overview Current shows a phantom total loss for that class during the
+    // fetch window. (Previously only seCurrent had this guard; mf/fi/commodity
+    // fell to 0 and understated Net Worth.)
+    var mfCurrent = _ov.mfCurrent > 0 ? _ov.mfCurrent : _ov.mfInvested;
     var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
+    var fiCurrent = isFixedIncomeExcluded() ? 0 : (_ov.fiCurrent > 0 ? _ov.fiCurrent : _ov.fiInvested);
+    var commCurrent = isFixedIncomeExcluded() ? 0 : (_ov.commCurrent > 0 ? _ov.commCurrent : _ov.commInvested);
     var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + commInvested;
-    var totalCurrent = _ov.mfCurrent + seCurrent + fiCurrent + commCurrent;
+    var totalCurrent = mfCurrent + seCurrent + fiCurrent + commCurrent;
     var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + commRealized;
     setMoneyText(overviewInvestedEl, formatCurrency(totalInvested), totalInvested);
     setMoneyText(overviewCurrentEl, formatCurrency(totalCurrent), totalCurrent);
@@ -9159,10 +9165,13 @@
   function getOverviewCurrentTotal() {
     if (typeof _ov === "undefined" || !_ov) return null;
     var fiEx = isFixedIncomeExcluded();
-    var fi = fiEx ? 0 : (_ov.fiCurrent || 0);
-    var comm = fiEx ? 0 : (_ov.commCurrent || 0);
+    // Same invested fallback per class as refreshOverviewStats, so the chart tail
+    // and benchmark terminal never use a zeroed (unresolved) component.
+    var fi = fiEx ? 0 : (_ov.fiCurrent > 0 ? _ov.fiCurrent : (_ov.fiInvested || 0));
+    var comm = fiEx ? 0 : (_ov.commCurrent > 0 ? _ov.commCurrent : (_ov.commInvested || 0));
     var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : (_ov.seInvested || 0);
-    var total = (_ov.mfCurrent || 0) + seCurrent + fi + comm;
+    var mfCurrent = _ov.mfCurrent > 0 ? _ov.mfCurrent : (_ov.mfInvested || 0);
+    var total = mfCurrent + seCurrent + fi + comm;
     return total > 0 ? total : null;
   }
 
