@@ -2044,7 +2044,8 @@
 
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
-    _ov.seInvested = 0; _ov.seRealized = 0; _ov._overviewBaseFlows = null; _ov._mfCommDayChange = null;
+    _ov.seInvested = 0; _ov.seRealized = 0; _ov._overviewBaseFlows = null;
+    _ov.mfDayChange = 0; _ov.commDayChange = 0; // per-component day changes (summed in updateOverviewDayChange)
     // The live Stocks/ETF current value (seCurrent/Unrealized/DayChange/XirrFlows)
     // is populated ASYNCHRONOUSLY by renderStockEtfHoldingsTable, which
     // updateDashboardStats does NOT trigger. Zeroing them here on every call
@@ -5479,6 +5480,18 @@
     if (cls) el.classList.add(cls);
   }
 
+  // Overview day change = MF + Stocks/ETF + commodity, each populated by its own
+  // async flow. Summing from _ov here (rather than each flow trying to add the
+  // others) removes the ordering race that previously dropped the SE component
+  // when _mfCommDayChange had been reset. Missing components are simply 0 until
+  // their flow resolves, then this is called again.
+  function updateOverviewDayChange() {
+    var el = document.getElementById("overview-day-change");
+    if (!el) return;
+    var comm = isFixedIncomeExcluded() ? 0 : (_ov.commDayChange || 0);
+    setDayChange(el, (_ov.mfDayChange || 0) + (_ov.seDayChange || 0) + comm);
+  }
+
   function previous_nav_for(navHistory) {
     if (!navHistory || navHistory.length < 2) return null;
     return navHistory[navHistory.length - 2].nav;
@@ -5644,9 +5657,9 @@
         fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
           // Gate by the FI toggle: when Fixed Income is excluded the commodity slice
           // is zeroed from every other card, so its day change must be excluded too.
-          var commDc = isFixedIncomeExcluded() ? 0 : commodityDayChange;
-          _ov._mfCommDayChange = commDc;
-          setDayChange(overviewDayChangeEl, commDc + _ov.seDayChange);
+          _ov.mfDayChange = 0;
+          _ov.commDayChange = isFixedIncomeExcluded() ? 0 : commodityDayChange;
+          updateOverviewDayChange();
         });
         return;
       }
@@ -5698,10 +5711,11 @@
           refreshOverviewStats(); refreshCategoryCards();
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
+          _ov.mfDayChange = equityDayChange;
+          updateOverviewDayChange(); // reflect MF immediately; commodity/SE fold in when they resolve
           fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-            var commDc = isFixedIncomeExcluded() ? 0 : commodityDayChange;
-            _ov._mfCommDayChange = equityDayChange + commDc;
-            setDayChange(overviewDayChangeEl, _ov._mfCommDayChange + _ov.seDayChange);
+            _ov.commDayChange = isFixedIncomeExcluded() ? 0 : commodityDayChange;
+            updateOverviewDayChange();
           });
 
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
@@ -12565,10 +12579,9 @@
           var seInvestedEl = document.getElementById("stocksetf-total-investment");
           if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
           refreshOverviewStats(); refreshCategoryCards();
-          if (_ov._mfCommDayChange !== null) {
-            var overviewDayChgEl = document.getElementById("overview-day-change");
-            if (overviewDayChgEl) setDayChange(overviewDayChgEl, _ov._mfCommDayChange + totalDayChangeINR);
-          }
+          // Fold the Stocks/ETF day change into the Overview total. No ordering
+          // guard: updateOverviewDayChange sums whatever components are ready.
+          updateOverviewDayChange();
 
           // Update stat cards
           var seCurrentEl = document.getElementById("stocksetf-current-value");
