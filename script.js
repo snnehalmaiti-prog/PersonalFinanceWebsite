@@ -4591,6 +4591,8 @@
     // before re-running the benchmark so it has a valid terminal value.
     var _pendingBenchmarkRefresh = false;
     var _benchmarkInitialRefreshDone = false;
+    var _lastBenchmarkHadSe = false; // did the last benchmark run include the SE leg?
+    function _seFlowsPresent() { return !!(typeof _ov !== "undefined" && _ov && _ov.seXirrFlows && _ov.seXirrFlows.length); }
     document.addEventListener("wf-exclusion-changed", function () {
       _pendingBenchmarkRefresh = true;
     });
@@ -4606,6 +4608,18 @@
       if (_benchmarkInitialRefreshDone && !_pendingBenchmarkRefresh && !portfolioBlank) return;
       _benchmarkInitialRefreshDone = true;
       _pendingBenchmarkRefresh = false;
+      _lastBenchmarkHadSe = _seFlowsPresent();
+      applyBenchmark(currentKey);
+    });
+    // Stocks/ETF cash flows resolve on their own async path (renderStockEtfHoldingsTable).
+    // If the benchmark already ran WITHOUT them (SE finished after the overview's
+    // first flows-ready), re-run it exactly once now that the SE leg is present —
+    // otherwise the portfolio XIRR/alpha permanently omits the Stocks/ETF slice.
+    document.addEventListener("wf-se-xirr-ready", function () {
+      if (!_benchmarkInitialRefreshDone || _lastBenchmarkHadSe || !_seFlowsPresent()) return;
+      var currentKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
+      if (!currentKey) return;
+      _lastBenchmarkHadSe = true;
       applyBenchmark(currentKey);
     });
   }
@@ -12651,6 +12665,11 @@
               setXirr(overviewXirrEl, calculateXIRR(_ov._overviewBaseFlows.concat(_ov.seXirrFlows)));
             }
           }
+          // Stocks/ETF flows arrive on a separate async path than the overview's
+          // wf-overview-flows-ready. Notify the benchmark card so its portfolio
+          // XIRR/alpha re-runs once with the SE leg included — otherwise it stays
+          // computed over MF+FI+commodity only when it ran before SE resolved.
+          document.dispatchEvent(new CustomEvent("wf-se-xirr-ready"));
       });
     }).catch(function (err) {
       var msg = "Couldn't load holdings: " + (err && err.message ? err.message : err);
