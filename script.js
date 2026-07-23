@@ -5509,7 +5509,9 @@
     var el = document.getElementById("overview-day-change");
     if (!el) return;
     var comm = isFixedIncomeExcluded() ? 0 : (_ov.commDayChange || 0);
-    setDayChange(el, (_ov.mfDayChange || 0) + (_ov.seDayChange || 0) + comm);
+    var mf = _ov.mfDayChange || 0, se = _ov.seDayChange || 0;
+    dbg("[Overview dayChange] mf=" + Math.round(mf) + " se=" + Math.round(se) + " comm=" + Math.round(comm) + " total=" + Math.round(mf + se + comm));
+    setDayChange(el, mf + se + comm);
   }
 
   function previous_nav_for(navHistory) {
