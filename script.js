@@ -7563,6 +7563,16 @@
       .catch(function () { return null; });
   }
 
+  // Session snapshot of the resolved NAV map. Without this, fetchAmfiNavMap
+  // re-runs the static-vs-Supabase hybrid on every caller, and because the live
+  // Supabase branch only becomes available once WfAuth finishes initializing,
+  // the map can resolve one way early in the load (static file) and a different,
+  // fresher way later (Supabase snapshot with a newer NAV date). withAmfiNavOverride
+  // then appends the newer point on the later pass, shifting the day-change baseline
+  // and making the Overview MF day change oscillate (e.g. -9,310 -> +891) between
+  // renders. Pinning the first non-empty resolution for the page session guarantees
+  // the Overview and the portfolio cards read the SAME NAV map, so day change is stable.
+  var _amfiNavMapSessionPromise = null;
   function fetchAmfiNavMap() {
     try {
       var cached = JSON.parse(localStorage.getItem(AMFI_NAV_MAP_CACHE_KEY));
@@ -7572,15 +7582,26 @@
       }
     } catch (e) {}
 
-    return _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
+    if (_amfiNavMapSessionPromise) return _amfiNavMapSessionPromise;
+
+    var p = _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
       if (staticData && Object.keys(staticData).length) {
         try {
           localStorage.setItem(AMFI_NAV_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData, source: _marketSource["amfi_nav"] || null }));
         } catch (e) {}
         return staticData;
       }
+      // Empty result (both sources unavailable): don't pin it — let the next
+      // caller retry so a transient miss doesn't freeze an empty map all session.
+      _amfiNavMapSessionPromise = null;
       return {};
+    }, function (err) {
+      _amfiNavMapSessionPromise = null;
+      throw err;
     });
+
+    _amfiNavMapSessionPromise = p;
+    return p;
   }
 
   function fetchAmfiIsinToSchemeMap() {
