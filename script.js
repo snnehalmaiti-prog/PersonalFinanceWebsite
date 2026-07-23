@@ -2051,7 +2051,6 @@
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
     _ov.seInvested = 0; _ov.seRealized = 0; _ov._overviewBaseFlows = null;
-    _ov.mfDayChange = 0; _ov.commDayChange = 0; // per-component day changes (summed in updateOverviewDayChange)
     // The live Stocks/ETF current value (seCurrent/Unrealized/DayChange/XirrFlows)
     // is populated ASYNCHRONOUSLY by renderStockEtfHoldingsTable, which
     // updateDashboardStats does NOT trigger. Zeroing them here on every call
@@ -2059,8 +2058,14 @@
     // Current to the seInvested fallback until the user forces an SE re-render.
     // Only clear them when the portfolio actually changes — then
     // renderStockEtfHoldingsTable will repopulate them.
+    // The per-component DAY CHANGE values (mf/se/comm) are reset the SAME way —
+    // only on a portfolio change. Zeroing mfDayChange/commDayChange on every
+    // call (as before) made a late re-render collapse the Overview day change to
+    // SE-only (18K→9K revert) during the async MF/commodity refetch window; the
+    // MF/commodity flows overwrite them with fresh values when they resolve.
     if (_ov._seComputedPortfolio !== selected) {
       _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seXirrFlows = []; _ov._seFlowsINR = [];
+      _ov.mfDayChange = 0; _ov.commDayChange = 0;
     }
     _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
     _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
