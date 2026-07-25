@@ -510,7 +510,7 @@
     if (portfolioLabel) portfolioLabel.textContent = label;
     // The Overview selector filters ONLY the Overview tab. Refresh the Overview
     // surfaces: cards (updateDashboardStats), Account Value / Growth chart,
-    // Portfolio & Category splits, and the Stocks/ETF _ov totals (which
+    // Portfolio & Category splits, and the Stocks/ETF overview totals (which
     // renderStockEtfHoldingsTable recomputes for the selected portfolio). The
     // Investments/Expense tabs are independent and are not re-rendered here.
     updateDashboardStats();
@@ -1916,24 +1916,44 @@
     else if (amount < 0) el.classList.add("negative");
   }
 
-  // Per-tab numeric values — refreshed by each tab's async computation; overview is their sum.
-  var _ov = { mfInvested: 0, mfCurrent: 0, mfUnrealized: 0, mfRealized: 0,
-               seInvested: 0, seCurrent: 0, seUnrealized: 0, seDayChange: 0, seRealized: 0, seXirrFlows: [], _seFlowsINR: [],
-               fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0,
-               commInvested: 0, commCurrent: 0, commUnrealized: 0, commRealized: 0 };
+  // Per-asset-class numeric values — each refreshed by its own async computation;
+  // the Overview is their aggregate (see wf-overview.js).
+  //
+  // Step 4 of the orchestrator refactor: this was one flat `_ov` bag mixing 19
+  // numeric fields with 5 pieces of cash-flow bookkeeping, addressed by string
+  // concatenation (`_ov[cls + "Current"]`). Splitting it in two makes the shape
+  // explicit — a class is now a value object with a fixed set of fields, so a
+  // typo reads as `undefined` on a known slice rather than silently creating a
+  // new key on a shared bag, and the XIRR flow state can no longer be confused
+  // for something the aggregator should sum.
+  function _ovEmptySlice() {
+    return { invested: 0, current: 0, unrealized: 0, realized: 0, dayChange: 0 };
+  }
+  var _ovSlice = { mf: _ovEmptySlice(), se: _ovEmptySlice(), fi: _ovEmptySlice(), comm: _ovEmptySlice() };
 
-  // Bridge the shared `_ov` accumulator into the pure aggregator's slice shape.
-  // Step 1 of the orchestrator refactor: the aggregation RULES (exclusion gating,
-  // the invested-fallback, which classes carry day change) now live in exactly one
-  // unit-tested place — wf-overview.js — instead of being restated in each of the
-  // consumers below. `_ov` itself is still mutated by the async flows; replacing
-  // that with per-class promises is step 3.
+  // Cash-flow bookkeeping for the XIRR/benchmark cards. Deliberately NOT part of
+  // a slice: these are flow arrays and scope tags, not values the Overview sums.
+  var _ovFlows = {
+    overviewBaseFlows: null,
+    seXirrFlows: [],
+    seFlowsINR: [],
+    seComputedPortfolio: null,
+    commodityXirrFlows: []
+  };
+
+  // The aggregation RULES (exclusion gating, the invested-fallback, which classes
+  // carry day change) live in exactly one unit-tested place — wf-overview.js —
+  // rather than being restated in each consumer. The store already matches the
+  // aggregator's slice shape, so this is a straight read.
+  //
+  // Fixed income is passed WITHOUT dayChange: it has no intraday mark, and
+  // omitting the field documents that at the call site.
   function _ovSlices() {
     return {
-      mf:   { invested: _ov.mfInvested, current: _ov.mfCurrent, unrealized: _ov.mfUnrealized, realized: _ov.mfRealized, dayChange: _ov.mfDayChange },
-      se:   { invested: _ov.seInvested, current: _ov.seCurrent, unrealized: _ov.seUnrealized, realized: _ov.seRealized, dayChange: _ov.seDayChange },
-      fi:   { invested: _ov.fiInvested, current: _ov.fiCurrent, unrealized: _ov.fiUnrealized, realized: _ov.fiRealized },
-      comm: { invested: _ov.commInvested, current: _ov.commCurrent, unrealized: _ov.commUnrealized, realized: _ov.commRealized, dayChange: _ov.commDayChange }
+      mf: _ovSlice.mf,
+      se: _ovSlice.se,
+      fi: { invested: _ovSlice.fi.invested, current: _ovSlice.fi.current, unrealized: _ovSlice.fi.unrealized, realized: _ovSlice.fi.realized },
+      comm: _ovSlice.comm
     };
   }
 
@@ -1941,7 +1961,7 @@
     return WfOverview.aggregateOverview(_ovSlices(), { excludeFixedIncome: isFixedIncomeExcluded() });
   }
 
-  // ---- Slice write choke point (steps 2-3 of the orchestrator refactor) -----
+  // ---- Slice write choke point (steps 2-4 of the orchestrator refactor) -----
   // Every async flow used to poke `_ov.<class><Field>` directly from a dozen
   // call sites, which is why one flow could silently clobber another's numbers
   // and why the reset rules had to be reasoned about per-field. All slice
@@ -1949,15 +1969,14 @@
   //   * one place that records WHICH flow last wrote a class and when
   //     (provenance), so a stale write is visible instead of invisible;
   //   * a NaN guard, so a bad parse can never reach an aggregate;
-  //   * a STALE-WRITE GUARD (step 3): a write tagged with the portfolio it was
-  //     computed for is dropped when the user has since switched portfolios.
-  // `_ov` is still the backing store, so all existing readers are unaffected.
+  //   * a STALE-WRITE GUARD: a write tagged with the portfolio it was computed
+  //     for is dropped when the user has since switched portfolios;
+  //   * an unknown-field guard, now that fields are real keys on a typed slice
+  //     rather than concatenated strings on a shared bag.
   var OV_SLICE_FIELDS = ["invested", "current", "unrealized", "realized", "dayChange"];
   var _ovProvenance = { mf: null, se: null, fi: null, comm: null };
   var _ovSeq = 0;
   var _ovStaleDrops = 0;
-
-  function _ovField(cls, field) { return cls + field.charAt(0).toUpperCase() + field.slice(1); }
 
   function _ovCurrentPortfolio() { return localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all"; }
 
@@ -1976,6 +1995,8 @@
   // definition).
   function _ovApply(cls, patch, source, forPortfolio) {
     if (!patch) return false;
+    var slice = _ovSlice[cls];
+    if (!slice) { console.error("_ovApply: unknown asset class '" + cls + "'"); return false; }
     if (forPortfolio !== undefined && forPortfolio !== _ovCurrentPortfolio()) {
       _ovStaleDrops++;
       dbg("[_ov] DROP stale " + cls + " write from " + (source || "unknown") +
@@ -1983,17 +2004,22 @@
       return false;
     }
     var written = [];
-    OV_SLICE_FIELDS.forEach(function (f) {
-      if (!(f in patch)) return;
+    Object.keys(patch).forEach(function (f) {
+      if (OV_SLICE_FIELDS.indexOf(f) === -1) {
+        // Catches typos at the call site instead of letting them accumulate as
+        // dead keys nobody reads — the failure mode of the old flat bag.
+        console.error("_ovApply: unknown field '" + f + "' for class '" + cls + "'");
+        return;
+      }
       var v = +patch[f];
       if (!isFinite(v)) v = 0; // never let NaN reach an aggregate
-      _ov[_ovField(cls, f)] = v;
+      slice[f] = v;
       written.push(f);
     });
     if (!written.length) return false;
     _ovProvenance[cls] = { source: source || "unknown", seq: ++_ovSeq, fields: written };
     dbg("[_ov] " + cls + " <- " + (source || "unknown") + " {" + written.map(function (f) {
-      return f + "=" + Math.round(_ov[_ovField(cls, f)]);
+      return f + "=" + Math.round(slice[f]);
     }).join(", ") + "}");
     return true;
   }
@@ -2045,7 +2071,7 @@
     setMoneyText(overviewCurrentEl, formatCurrency(totalCurrent), totalCurrent);
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
     if (overviewRealizedEl) setSignedCurrency(overviewRealizedEl, totalRealized);
-    // Keep the Account Value chart's tail in lockstep with this card. _ov is
+    // Keep the Account Value chart's tail in lockstep with this card. The store is
     // updated by several async callbacks; the card refreshes on each, so push
     // the exact same total into the chart's last point instead of letting the
     // chart snap once (and lag when FI/commodity arrive later).
@@ -2135,7 +2161,7 @@
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ovApply("mf", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
     _ovApply("se", { invested: 0, realized: 0 }, "updateDashboardStats:reset");
-    _ov._overviewBaseFlows = null;
+    _ovFlows.overviewBaseFlows = null;
     // The live Stocks/ETF current value (seCurrent/Unrealized/DayChange/XirrFlows)
     // is populated ASYNCHRONOUSLY by renderStockEtfHoldingsTable, which
     // updateDashboardStats does NOT trigger. Zeroing them here on every call
@@ -2148,9 +2174,9 @@
     // call (as before) made a late re-render collapse the Overview day change to
     // SE-only (18K→9K revert) during the async MF/commodity refetch window; the
     // MF/commodity flows overwrite them with fresh values when they resolve.
-    if (_ov._seComputedPortfolio !== selected) {
+    if (_ovFlows.seComputedPortfolio !== selected) {
       _ovApply("se", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
-      _ov.seXirrFlows = []; _ov._seFlowsINR = [];
+      _ovFlows.seXirrFlows = []; _ovFlows.seFlowsINR = [];
       _ovApply("mf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovApply("comm", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
     }
@@ -2262,7 +2288,7 @@
       });
 
       // Fold in the separate `fixedincome` sheet (EPF/PPF, "Amount" column). Its
-      // deposits already reach _ov.fiInvested via sumEpfAmount, but its CURRENT
+      // deposits already reach _ovSlice.fi.invested via sumEpfAmount, but its CURRENT
       // value (deposits + interest) was never added — so those holdings showed a
       // phantom loss. Add both sides here so invested/current stay in lockstep.
       var epfRows = getSheetRows("fixedincome");
@@ -3789,7 +3815,7 @@
 
     // INR-converted SE flows (US buys/sells converted at transaction-date FX). Fall
     // back to the raw sheet flows only until the SE render has populated _seFlowsINR.
-    var seFlowsINR = (_ov._seFlowsINR && _ov._seFlowsINR.length) ? _ov._seFlowsINR
+    var seFlowsINR = (_ovFlows.seFlowsINR && _ovFlows.seFlowsINR.length) ? _ovFlows.seFlowsINR
                      : (seRows ? buildXirrCashFlows(seRows, selected) : []);
 
     var allFlows = buildXirrCashFlows(equityRows, selected);
@@ -3819,15 +3845,15 @@
     // gold and the displayed alpha is overstated. Strip the commodity terminal (the
     // index builds its own terminal). Populated async by the overview; the card
     // re-runs on wf-overview-flows-ready so a transient miss self-heals.
-    var commodityIndexFlows = (_ov._commodityXirrFlows || []).filter(function (f) { return !f._terminal; });
+    var commodityIndexFlows = (_ovFlows.commodityXirrFlows || []).filter(function (f) { return !f._terminal; });
     if (commodityIndexFlows.length) allFlowsForIndex = allFlowsForIndex.concat(commodityIndexFlows.filter(afterCutoff));
 
     // All-time portfolio XIRR (used for "All" period and as fallback)
     var flowsWithTerminal;
-    if (_ov._overviewBaseFlows && _ov._overviewBaseFlows.length) {
-      flowsWithTerminal = _ov._overviewBaseFlows.concat(_ov.seXirrFlows || []);
+    if (_ovFlows.overviewBaseFlows && _ovFlows.overviewBaseFlows.length) {
+      flowsWithTerminal = _ovFlows.overviewBaseFlows.concat(_ovFlows.seXirrFlows || []);
     } else {
-      var currentVal = _ov.mfCurrent + (_ov.seCurrent > 0 ? _ov.seCurrent : 0) + (isFixedIncomeExcluded() ? 0 : _ov.fiCurrent) + _ov.commCurrent;
+      var currentVal = _ovSlice.mf.current + (_ovSlice.se.current > 0 ? _ovSlice.se.current : 0) + (isFixedIncomeExcluded() ? 0 : _ovSlice.fi.current) + _ovSlice.comm.current;
       flowsWithTerminal = allFlows.slice();
       if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
     }
@@ -3846,7 +3872,7 @@
         var startVal = result.value;
         // Terminal value in the same scope: MF current + stocks' current value
         // (post-cutoff purchases now included via computePortfolioValueAtDate).
-        var periodCurrentVal = _ov.mfCurrent + result.seCurrentIncluded;
+        var periodCurrentVal = _ovSlice.mf.current + result.seCurrentIncluded;
         // Period cash flows for MF + stocks (buys/sells after the cutoff).
         var periodFlows = [];
         var mfSeFlows = buildXirrCashFlows(equityRows, selected);
@@ -4683,12 +4709,12 @@
     if (savedKey) applyBenchmark(savedKey);
 
     // When exclusion changes, updateDashboardStats is async. Wait for the next
-    // wf-overview-flows-ready (fired once _ov._overviewBaseFlows is populated)
+    // wf-overview-flows-ready (fired once _ovFlows.overviewBaseFlows is populated)
     // before re-running the benchmark so it has a valid terminal value.
     var _pendingBenchmarkRefresh = false;
     var _benchmarkInitialRefreshDone = false;
     var _lastBenchmarkHadSe = false; // did the last benchmark run include the SE leg?
-    function _seFlowsPresent() { return !!(typeof _ov !== "undefined" && _ov && _ov.seXirrFlows && _ov.seXirrFlows.length); }
+    function _seFlowsPresent() { return !!(_ovFlows.seXirrFlows && _ovFlows.seXirrFlows.length); }
     document.addEventListener("wf-exclusion-changed", function () {
       _pendingBenchmarkRefresh = true;
     });
@@ -5597,15 +5623,15 @@
   }
 
   // Overview day change = MF + Stocks/ETF + commodity, each populated by its own
-  // async flow. Summing from _ov here (rather than each flow trying to add the
+  // async flow. Summing from the slice store here (rather than each flow trying to add the
   // others) removes the ordering race that previously dropped the SE component
   // when _mfCommDayChange had been reset. Missing components are simply 0 until
   // their flow resolves, then this is called again.
   function updateOverviewDayChange() {
     var el = document.getElementById("overview-day-change");
     if (!el) return;
-    var comm = isFixedIncomeExcluded() ? 0 : (_ov.commDayChange || 0);
-    var mf = _ov.mfDayChange || 0, se = _ov.seDayChange || 0;
+    var comm = isFixedIncomeExcluded() ? 0 : (_ovSlice.comm.dayChange || 0);
+    var mf = _ovSlice.mf.dayChange || 0, se = _ovSlice.se.dayChange || 0;
     var total = _ovAggregate().dayChange;
     dbg("[Overview dayChange] mf=" + Math.round(mf) + " se=" + Math.round(se) + " comm=" + Math.round(comm) + " total=" + Math.round(total));
     setDayChange(el, total);
@@ -5751,7 +5777,7 @@
       // Stash for the benchmark card so its index side can replay the same gold
       // rupees (the pre-terminal buy/sell flows) — otherwise the index never
       // "buys Nifty" with money the user put into gold, overstating alpha.
-      _ov._commodityXirrFlows = commodityFlows || [];
+      _ovFlows.commodityXirrFlows = commodityFlows || [];
 
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
       dbg("[NAV] instruments held:", Object.keys(unitEvents), "resolved scheme codes:", instruments.map(function (name) { return name + " -> " + lookupSchemeCode(schemeMap, name); }));
@@ -5768,8 +5794,8 @@
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
         var ovBaseFlows = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
-        _ov._overviewBaseFlows = ovBaseFlows;
-        setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows.concat(_ov.seXirrFlows)));
+        _ovFlows.overviewBaseFlows = ovBaseFlows;
+        setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows.concat(_ovFlows.seXirrFlows)));
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
         document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
@@ -5841,8 +5867,8 @@
           if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
           var xirr = calculateXIRR(xirrCashFlows);
           var ovBaseFlows2 = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
-          _ov._overviewBaseFlows = ovBaseFlows2;
-          setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows2.concat(_ov.seXirrFlows)));
+          _ovFlows.overviewBaseFlows = ovBaseFlows2;
+          setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows2.concat(_ovFlows.seXirrFlows)));
           setXirr(equityXirrEl, xirr);
           document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
         });
@@ -8299,7 +8325,7 @@
         (function snapLastPointToOverview() {
           if (!pointsAll.length) return;
           // Race guard: this callback runs after async NAV/price fetches; if the
-          // user switched portfolio meanwhile, _ov now holds the NEW portfolio's
+          // user switched portfolio meanwhile, the store now holds the NEW portfolio's
           // totals while this series was built for the OLD one — snapping would
           // splice a wrong tail. Skip; the portfolio-change re-render supersedes.
           if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selectedPortfolio) return;
@@ -9286,21 +9312,17 @@
   }
 
   // Overview's authoritative "Invested" total (built by updateDashboardStats).
-  // May return null on very early first render before _ov is populated.
+  // Returns null before any slice is populated, so callers can distinguish
+  // "not loaded yet" from a genuine zero.
   function getOverviewInvestedTotal() {
-    if (typeof _ov === "undefined" || !_ov) return null;
-    var fiEx = isFixedIncomeExcluded();
-    var fi = fiEx ? 0 : (_ov.fiInvested || 0);
-    var comm = fiEx ? 0 : (_ov.commInvested || 0);
-    var total = (_ov.mfInvested || 0) + (_ov.seInvested || 0) + fi + comm;
+    var total = _ovAggregate().invested;
     return total > 0 ? total : null;
   }
   // Overview's authoritative "Current" total (live prices + interest accrual).
+  // Shares refreshOverviewStats' exact aggregation (exclusion gating + the
+  // per-class invested fallback), so the chart tail and benchmark terminal can
+  // never disagree with the Overview card or use a zeroed component.
   function getOverviewCurrentTotal() {
-    if (typeof _ov === "undefined" || !_ov) return null;
-    // Shares refreshOverviewStats' exact aggregation (exclusion gating + the
-    // per-class invested fallback), so the chart tail and benchmark terminal can
-    // never disagree with the Overview card or use a zeroed component.
     var total = _ovAggregate().current;
     return total > 0 ? total : null;
   }
@@ -9505,7 +9527,7 @@
         totalEl.textContent = "—";
         return;
       }
-      // No reconciliation to _ov here: this card always covers ALL portfolios and
+      // No reconciliation to the overview store here: this card always covers ALL portfolios and
       // must ignore the Overview's portfolio selector (getOverviewCurrentTotal
       // reflects the SELECTED portfolio). The invested render is a fast placeholder;
       // the per-portfolio current pass supersedes it with authoritative values.
@@ -9679,7 +9701,7 @@
 
     function draw() {
       // True per-region CURRENT once resolved; invested placeholder until then.
-      // No rescaling to _ov/getOverviewCurrentTotal — that follows the Overview's
+      // No rescaling to getOverviewCurrentTotal — that follows the Overview's
       // SELECTED portfolio and assumes both regions earned the blended return
       // (the same defect fixed in the Portfolio view of this card).
       var valueByRegion = currentByRegion || investedByRegion;
@@ -9755,7 +9777,7 @@
 
     // Category Split always covers ALL portfolios and ignores the Overview's
     // portfolio selector entirely — totals are computed per portfolio and summed,
-    // never read from _ov (which reflects the SELECTED portfolio).
+    // never read from the overview store (which reflects the SELECTED portfolio).
     var selected = "all";
     var fiExcluded = isFixedIncomeExcluded();
 
@@ -9817,7 +9839,7 @@
 
     // Category TOTALS are the SUM of per-portfolio CURRENT values across ALL
     // portfolios (computePortfolioCurrentBreakdown — same helper Portfolio Split
-    // uses), never _ov (which follows the Overview's selected portfolio). Until the
+    // uses), never the overview store (which follows the Overview's selected portfolio). Until the
     // async currents resolve, invested sums serve as a fast placeholder. The only
     // adjustment is moving the commodity MF/ETF current value out of Equity into
     // Commodity (net-zero on the grand total). commCurrentByP holds physical +
@@ -12716,7 +12738,7 @@
           // (ovOpenHoldings scope) — NOT the tab's hardcoded "all". Tagging "all"
           // while a portfolio is selected made updateDashboardStats' stale guard
           // zero out correct SE totals on the next stats refresh.
-          _ov._seComputedPortfolio = ovPortfolio;
+          _ovFlows.seComputedPortfolio = ovPortfolio;
           var seInvestedEl = document.getElementById("stocksetf-total-investment");
           if (seInvestedEl) seInvestedEl.textContent = formatCurrency(totalInvestedINR);
           renderOverview();
@@ -12741,7 +12763,7 @@
           }
 
           // Portfolio-level XIRR — from the Overview-portfolio open positions so
-          // _ov.seXirrFlows (and the overview XIRR) honour the Overview selector,
+          // _ovFlows.seXirrFlows (and the overview XIRR) honour the Overview selector,
           // consistent with the totals above.
           var seXirrFlows = [];
           ovOpenHoldings.forEach(function (hh) {
@@ -12758,11 +12780,11 @@
           });
           // INR-converted SE cash flows WITHOUT terminal — reused by the benchmark
           // comparison and period XIRR so those paths stop using unconverted USD.
-          _ov._seFlowsINR = seXirrFlows.slice();
-          // Store flows WITH terminal in _ov so the overview XIRR has a positive terminal to converge on.
+          _ovFlows.seFlowsINR = seXirrFlows.slice();
+          // Store flows WITH terminal so the overview XIRR has a positive terminal to converge on.
           var seXirrFlowsWithTerminal = seXirrFlows.slice();
           if (totalCurrentINR > UNITS_EPSILON) seXirrFlowsWithTerminal.push({ date: new Date(), amount: totalCurrentINR });
-          _ov.seXirrFlows = seXirrFlowsWithTerminal;
+          _ovFlows.seXirrFlows = seXirrFlowsWithTerminal;
           if (seXirrEl) {
             var allFlows = seXirrFlowsWithTerminal;
             var portXirr = calculateXIRR(allFlows);
@@ -12775,12 +12797,12 @@
             }
           }
           // Refresh overview XIRR now that SE flows are available.
-          // _ov._overviewBaseFlows is set by updateTotalCurrentValue (equity+FI+commodity flows).
+          // _ovFlows.overviewBaseFlows is set by updateTotalCurrentValue (equity+FI+commodity flows).
           // If it's already been computed, we can recompute overview XIRR without re-fetching.
-          if (_ov._overviewBaseFlows) {
+          if (_ovFlows.overviewBaseFlows) {
             var overviewXirrEl = document.getElementById("overview-xirr");
             if (overviewXirrEl) {
-              setXirr(overviewXirrEl, calculateXIRR(_ov._overviewBaseFlows.concat(_ov.seXirrFlows)));
+              setXirr(overviewXirrEl, calculateXIRR(_ovFlows.overviewBaseFlows.concat(_ovFlows.seXirrFlows)));
             }
           }
           // Stocks/ETF flows arrive on a separate async path than the overview's
