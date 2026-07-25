@@ -3262,6 +3262,9 @@
             }
             return record.txn_date ? record.txn_date + "T00:00" : nowLocalDT();
           })();
+          // Rebuild with the saved account forced in, so editing never silently
+          // reassigns a record whose account no longer passes the type filter.
+          fillRecAccountOptions(record.type || "expense", record.account_id);
           document.getElementById("rec-account").value = record.account_id || "";
           document.getElementById("rec-category").value = record.category_id || "";
           fillRecSubcategories(record.category_id || "");
@@ -3407,6 +3410,9 @@
         if (acctSel && acctSel.closest(".rec-field")) {
           acctSel.closest(".rec-field").style.display = "";
         }
+        // Income accepts only contributing accounts, so the list is rebuilt for
+        // the active type on every switch.
+        fillRecAccountOptions(t);
         var isMonthMode = (t === "budget" || t === "income");
         var dtField = document.getElementById("rec-datetime-field");
         var mField = document.getElementById("rec-month-field");
@@ -3503,12 +3509,51 @@
         return Object.keys(split).length ? { split: split, total: total } : null;
       }
 
+      // Build the Account dropdown for a given record type.
+      //
+      // Income is money arriving from a person, so it can only land in a
+      // contributing (personal) account — a joint/shared account is funded by
+      // contributions from those accounts, not paid into directly. Every other
+      // type may use any account.
+      //
+      // Rebuilt on each type switch, so the list always matches the active type.
+      // The current selection is preserved when it is still valid.
+      // ensureId: an account that must remain selectable even if it fails the
+      // filter. Used when editing a saved record, so an income row whose account
+      // has since lost its contributing flag still shows its real account instead
+      // of silently snapping to a different one on the next save.
+      function fillRecAccountOptions(type, ensureId) {
+        var acctSel = document.getElementById("rec-account");
+        if (!acctSel) return;
+        var prev = acctSel.value;
+        var all = dashExpState.accounts || [];
+        var list = all;
+        if (type === "income") {
+          list = all.filter(function (a) {
+            return a.contributing_account || (ensureId && a.id === ensureId);
+          });
+        }
+        if (!list.length) {
+          // Explain the empty state rather than showing a blank control the save
+          // guard would then reject with a generic "Choose an account".
+          acctSel.innerHTML = '<option value="">' +
+            (type === "income" ? "No contributing accounts" : "No accounts") + "</option>";
+          return;
+        }
+        acctSel.innerHTML = list.map(function (a) {
+          return '<option value="' + a.id + '">' + esc(a.name) + '</option>';
+        }).join("");
+        if (prev && list.some(function (a) { return a.id === prev; })) acctSel.value = prev;
+      }
+
       function fillRecDropdowns() {
         var acctOpts = dashExpState.accounts.map(function (a) {
           return '<option value="' + a.id + '">' + esc(a.name) + '</option>';
         }).join("");
         var acctSel = document.getElementById("rec-account");
-        acctSel.innerHTML = acctOpts;
+        fillRecAccountOptions(dashExpState.recType);
+        // "To account" is only used by transfers, which are not income — it keeps
+        // the full list.
         document.getElementById("rec-account-to").innerHTML = acctOpts;
         // When Budget mode: choosing an account auto-picks its Budget category + updates split.
         acctSel.onchange = function () {
