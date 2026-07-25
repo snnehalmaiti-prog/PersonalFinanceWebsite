@@ -1941,6 +1941,61 @@
     return WfOverview.aggregateOverview(_ovSlices(), { excludeFixedIncome: isFixedIncomeExcluded() });
   }
 
+  // ---- Slice write choke point (step 2 of the orchestrator refactor) --------
+  // Every async flow used to poke `_ov.<class><Field>` directly from a dozen
+  // call sites, which is why one flow could silently clobber another's numbers
+  // and why the reset rules had to be reasoned about per-field. All slice
+  // mutation now goes through _ovApply/_ovResetSlice, giving us:
+  //   * one place that records WHICH flow last wrote a class and when
+  //     (provenance), so a stale write is visible instead of invisible;
+  //   * a debug-mode readback assertion that the write landed intact;
+  //   * the seam step 3 needs — swapping `_ov` for resolved per-class promises
+  //     means reimplementing these two functions, not re-editing every call site.
+  // `_ov` is still the backing store, so all existing readers are unaffected.
+  var OV_SLICE_FIELDS = ["invested", "current", "unrealized", "realized", "dayChange"];
+  var _ovProvenance = { mf: null, se: null, fi: null, comm: null };
+  var _ovSeq = 0;
+
+  function _ovField(cls, field) { return cls + field.charAt(0).toUpperCase() + field.slice(1); }
+
+  // Apply a partial slice for one asset class. `source` names the originating
+  // flow purely for diagnostics. Fields absent from `patch` are left untouched —
+  // a flow that only knows the day change must not blank out the current value.
+  function _ovApply(cls, patch, source) {
+    if (!patch) return;
+    var written = [];
+    OV_SLICE_FIELDS.forEach(function (f) {
+      if (!(f in patch)) return;
+      var v = +patch[f];
+      if (!isFinite(v)) v = 0; // never let NaN reach an aggregate
+      _ov[_ovField(cls, f)] = v;
+      written.push(f);
+    });
+    if (!written.length) return;
+    _ovProvenance[cls] = { source: source || "unknown", seq: ++_ovSeq, fields: written };
+    dbg("[_ov] " + cls + " <- " + (source || "unknown") + " {" + written.map(function (f) {
+      return f + "=" + Math.round(_ov[_ovField(cls, f)]);
+    }).join(", ") + "}");
+  }
+
+  // Zero a class's slice. Used by the portfolio-change reset; keeping it here
+  // (rather than inline field lists) is what makes the reset rules auditable.
+  function _ovResetSlice(cls, source) {
+    var patch = {};
+    OV_SLICE_FIELDS.forEach(function (f) { patch[f] = 0; });
+    _ovApply(cls, patch, source || "reset");
+  }
+
+  // Diagnostics: which flow last wrote each class, newest first. Surfaces a
+  // dropped or stale component at a glance instead of by bisecting renders.
+  function ovDebugProvenance() {
+    return Object.keys(_ovProvenance).map(function (cls) {
+      var p = _ovProvenance[cls];
+      return { cls: cls, source: p ? p.source : "(never written)", seq: p ? p.seq : 0, fields: p ? p.fields : [] };
+    }).sort(function (a, b) { return b.seq - a.seq; });
+  }
+  window.wfOvProvenance = ovDebugProvenance;
+
   function refreshOverviewStats() {
     var overviewInvestedEl = document.getElementById("overview-total-investment");
     var overviewCurrentEl = document.getElementById("overview-total-current-value");
@@ -2043,8 +2098,9 @@
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
 
     // Reset accumulator so stale tab values don't persist across portfolio changes
-    _ov.mfInvested = 0; _ov.mfCurrent = 0; _ov.mfUnrealized = 0; _ov.mfRealized = 0;
-    _ov.seInvested = 0; _ov.seRealized = 0; _ov._overviewBaseFlows = null;
+    _ovApply("mf", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
+    _ovApply("se", { invested: 0, realized: 0 }, "updateDashboardStats:reset");
+    _ov._overviewBaseFlows = null;
     // The live Stocks/ETF current value (seCurrent/Unrealized/DayChange/XirrFlows)
     // is populated ASYNCHRONOUSLY by renderStockEtfHoldingsTable, which
     // updateDashboardStats does NOT trigger. Zeroing them here on every call
@@ -2058,11 +2114,13 @@
     // SE-only (18K→9K revert) during the async MF/commodity refetch window; the
     // MF/commodity flows overwrite them with fresh values when they resolve.
     if (_ov._seComputedPortfolio !== selected) {
-      _ov.seCurrent = 0; _ov.seUnrealized = 0; _ov.seDayChange = 0; _ov.seXirrFlows = []; _ov._seFlowsINR = [];
-      _ov.mfDayChange = 0; _ov.commDayChange = 0;
+      _ovApply("se", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
+      _ov.seXirrFlows = []; _ov._seFlowsINR = [];
+      _ovApply("mf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
+      _ovApply("comm", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
     }
-    _ov.fiInvested = 0; _ov.fiCurrent = 0; _ov.fiUnrealized = 0; _ov.fiRealized = 0;
-    _ov.commInvested = 0; _ov.commCurrent = 0; _ov.commUnrealized = 0; _ov.commRealized = 0;
+    _ovApply("fi", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
+    _ovApply("comm", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
 
     var equityEl = document.getElementById("equity-total-investment");
     var fixedIncomeEl = document.getElementById("fixedincome-total-investment");
@@ -2077,24 +2135,24 @@
     if (equityEl) equityEl.textContent = formatCurrency(mfInvested);
     if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(seInvested);
     if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested);
-    _ov.mfInvested = mfInvested;
-    _ov.seInvested = seInvested;
-    _ov.fiInvested = fiBaseInvested;
+    _ovApply("mf", { invested: mfInvested }, "updateDashboardStats:sync");
+    _ovApply("se", { invested: seInvested }, "updateDashboardStats:sync");
+    _ovApply("fi", { invested: fiBaseInvested }, "updateDashboardStats:sync");
 
     // Realized profits (synchronous for MF and SE)
     var mfRealized = computeRealizedReturn(selected, ["equity"]);
     var seRealized = computeRealizedReturn(selected, ["stocksetf"]);
     if (equityRealizedEl) setSignedCurrency(equityRealizedEl, mfRealized);
     if (stocksEtfRealizedEl) setSignedCurrency(stocksEtfRealizedEl, seRealized);
-    _ov.mfRealized = mfRealized;
-    _ov.seRealized = seRealized;
+    _ovApply("mf", { realized: mfRealized }, "updateDashboardStats:sync");
+    _ovApply("se", { realized: seRealized }, "updateDashboardStats:sync");
     refreshOverviewStats(); refreshCategoryCards();
 
     // The sync seRealized above leaves US sells in USD. Recompute it in INR
     // (US converted at each leg's transaction-date rate) and refresh.
     computeStocksEtfRealizedINR(selected).then(function (seINR) {
       if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selected) return; // portfolio changed meanwhile
-      _ov.seRealized = seINR;
+      _ovApply("se", { realized: seINR }, "computeStocksEtfRealizedINR");
       if (stocksEtfRealizedEl) setSignedCurrency(stocksEtfRealizedEl, seINR);
       refreshOverviewStats(); refreshCategoryCards();
     }).catch(function () {});
@@ -2104,7 +2162,7 @@
     // top-line Invested, Return %, and Unrealized P&L are right for US holdings.
     computeStocksEtfInvestedINR(selected).then(function (seInvINR) {
       if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selected) return; // portfolio changed meanwhile
-      _ov.seInvested = seInvINR;
+      _ovApply("se", { invested: seInvINR }, "computeStocksEtfInvestedINR");
       if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(seInvINR);
       refreshOverviewStats(); refreshCategoryCards();
     }).catch(function () {});
@@ -2126,7 +2184,7 @@
       var commodityInvested = 0;
       fullHoldings.forEach(function (h) { commodityInvested += h.invested; });
       if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested + commodityInvested);
-      _ov.commInvested = commodityInvested;
+      _ovApply("comm", { invested: commodityInvested }, "updateDashboardStats:commodityInvested");
       refreshOverviewStats(); refreshCategoryCards();
     });
 
@@ -2186,12 +2244,16 @@
       var fiRealized = (fdRows ? sumFdRealizedProfit(fdRows, selected) : 0) + (fdRows ? sumProvidentFundRealizedProfit(fdRows, selected) : 0);
       if (realizedProfitEl) setSignedCurrency(realizedProfitEl, fiRealized + commodityRealizedProfit);
 
-      _ov.fiCurrent = fiCurrentValue;
-      _ov.fiUnrealized = fiCurrentValue - fiInvestment;
-      _ov.fiRealized = fiRealized;
-      _ov.commCurrent = commodityCurrent;
-      _ov.commUnrealized = commodityCurrent - commodityInvested;
-      _ov.commRealized = commodityRealizedProfit;
+      _ovApply("fi", {
+        current: fiCurrentValue,
+        unrealized: fiCurrentValue - fiInvestment,
+        realized: fiRealized
+      }, "updateEpfStats");
+      _ovApply("comm", {
+        current: commodityCurrent,
+        unrealized: commodityCurrent - commodityInvested,
+        realized: commodityRealizedProfit
+      }, "updateEpfStats");
       refreshOverviewStats(); refreshCategoryCards();
 
       if (xirrEl) {
@@ -5665,7 +5727,7 @@
           ? "Could not resolve any Instrument Name to a Scheme Code via the Mutual Fund Mapping sheet / AMFI." + (lastSchemeMapDiagnostic ? " (" + lastSchemeMapDiagnostic + ")" : "")
           : "None of your equity instruments matched a resolved Scheme Code.";
         if (equityEl) { equityEl.textContent = formatCurrency(0); equityEl.title = reason; }
-        _ov.mfCurrent = 0; _ov.mfUnrealized = 0;
+        _ovApply("mf", { current: 0, unrealized: 0 }, "updateTotalCurrentValue:noInstruments");
         refreshOverviewStats(); refreshCategoryCards();
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
@@ -5679,8 +5741,8 @@
         fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
           // Gate by the FI toggle: when Fixed Income is excluded the commodity slice
           // is zeroed from every other card, so its day change must be excluded too.
-          _ov.mfDayChange = 0;
-          _ov.commDayChange = isFixedIncomeExcluded() ? 0 : commodityDayChange;
+          _ovApply("mf", { dayChange: 0 }, "updateTotalCurrentValue:noInstruments");
+          _ovApply("comm", { dayChange: isFixedIncomeExcluded() ? 0 : commodityDayChange }, "fetchCommodityDayChange");
           updateOverviewDayChange();
         });
         return;
@@ -5729,14 +5791,14 @@
           var unrealizedProfit = total - investment;
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
-          _ov.mfCurrent = total; _ov.mfUnrealized = unrealizedProfit;
+          _ovApply("mf", { current: total, unrealized: unrealizedProfit }, "updateTotalCurrentValue:nav");
           refreshOverviewStats(); refreshCategoryCards();
           var equityDayChange = total - yesterdayTotal;
           setDayChange(equityDayChangeEl, equityDayChange);
-          _ov.mfDayChange = equityDayChange;
+          _ovApply("mf", { dayChange: equityDayChange }, "updateTotalCurrentValue:nav");
           updateOverviewDayChange(); // reflect MF immediately; commodity/SE fold in when they resolve
           fetchCommodityDayChange(fdRowsForOverview, selected).then(function (commodityDayChange) {
-            _ov.commDayChange = isFixedIncomeExcluded() ? 0 : commodityDayChange;
+            _ovApply("comm", { dayChange: isFixedIncomeExcluded() ? 0 : commodityDayChange }, "fetchCommodityDayChange");
             updateOverviewDayChange();
           });
 
@@ -12609,10 +12671,12 @@
 
           // Feed live totals back into overview accumulator and refresh dashboard
           // Use FIFO-adjusted invested (remaining lots only), not all-time buy total
-          _ov.seInvested   = totalInvestedINR;
-          _ov.seCurrent    = totalCurrentINR;
-          _ov.seUnrealized = totalPnlINR;
-          _ov.seDayChange  = totalDayChangeINR;
+          _ovApply("se", {
+            invested: totalInvestedINR,
+            current: totalCurrentINR,
+            unrealized: totalPnlINR,
+            dayChange: totalDayChangeINR
+          }, "renderStockEtfHoldingsTable");
           // Tag with the OVERVIEW portfolio these totals were computed for
           // (ovOpenHoldings scope) — NOT the tab's hardcoded "all". Tagging "all"
           // while a portfolio is selected made updateDashboardStats' stale guard
