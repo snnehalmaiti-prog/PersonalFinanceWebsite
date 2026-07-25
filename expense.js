@@ -1143,7 +1143,10 @@
             txn_at: new Date(dueIso + "T09:00:00").toISOString(),
             amount: amt,
             type: row.type || "expense",
-            account_id: (row.type === "income") ? null : (row.account_id || null),
+            // Income carries its account like every other type. This used to be
+            // forced to null, so a recurring salary posted a record that credited
+            // no account even once the definition stored one.
+            account_id: row.account_id || null,
             category_id: row.category_id || null,
             subcategory_id: row.subcategory_id || null,
             payment_method_id: (row.type === "expense") ? (row.payment_method_id || null) : null,

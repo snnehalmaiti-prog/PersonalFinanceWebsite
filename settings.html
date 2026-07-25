@@ -798,6 +798,32 @@
       sel.innerHTML = html;
     }
 
+    // Accounts offered for a record type. Income can only land in a contributing
+    // (personal) account — a joint/shared account is funded by contributions from
+    // those accounts, not paid into directly — so it is filtered here, matching
+    // the Add Record modal on the dashboard.
+    //
+    // ensureId keeps an already-saved account selectable even if it no longer
+    // passes the filter, so editing an existing template or recurring payment
+    // never silently reassigns it to a different account.
+    function tplAccountsForType(type, ensureId) {
+      var all = tplRefs.accounts || [];
+      if (type !== "income") return all;
+      return all.filter(function (a) {
+        return a.contributing_account || (ensureId && a.id === ensureId);
+      });
+    }
+
+    // Refill an account <select> for the given type, keeping the current
+    // selection when it is still valid.
+    function tplRefillAccountSelect(selId, type, selectedId) {
+      var sel = document.getElementById(selId);
+      if (!sel) return;
+      var want = (selectedId !== undefined) ? selectedId : sel.value;
+      var list = tplAccountsForType(type, want);
+      tplFillSelect(sel, list, want || "", "— none —");
+    }
+
     function tplFillCategoryDropdowns(type, selectedCatId, selectedSubId) {
       var catSel = document.getElementById("tpl-category");
       var subSel = document.getElementById("tpl-subcategory");
@@ -815,8 +841,12 @@
       });
       var acctField = document.getElementById("tpl-account").parentElement;
       var pmField = document.getElementById("tpl-payment-method").parentElement;
-      acctField.style.display = (type === "income") ? "none" : "";
+      // Account applies to Income too — it used to be hidden, so an income
+      // template carried no account and every record created from it landed
+      // without one.
+      acctField.style.display = "";
       pmField.style.display = (type === "expense") ? "" : "none";
+      tplRefillAccountSelect("tpl-account", type);
       tplFillCategoryDropdowns(type, "", "");
     }
 
@@ -831,7 +861,7 @@
         document.getElementById("tpl-name").value = existingTpl ? (existingTpl.name || "") : "";
         document.getElementById("tpl-amount").value = row.amount || "";
         document.getElementById("tpl-note").value = row.note || "";
-        tplFillSelect(document.getElementById("tpl-account"), tplRefs.accounts, row.account_id || "", "— none —");
+        tplRefillAccountSelect("tpl-account", type, row.account_id || "");
         tplFillSelect(document.getElementById("tpl-payment-method"), tplRefs.paymentMethods, row.payment_method_id || "", "— none —");
         tplSetType(type);
         tplFillCategoryDropdowns(type, row.category_id || "", row.subcategory_id || "");
@@ -970,8 +1000,11 @@
       });
       var acctField = document.getElementById("rp-account").parentElement;
       var pmField = document.getElementById("rp-payment-method").parentElement;
-      acctField.style.display = (type === "income") ? "none" : "";
+      // Account applies to Income too — it used to be hidden here and discarded
+      // on save, so recurring income posted records with no account.
+      acctField.style.display = "";
       pmField.style.display = (type === "expense") ? "" : "none";
+      tplRefillAccountSelect("rp-account", type);
       rpFillCategoryDropdowns(type, "", "");
     }
 
@@ -995,7 +1028,7 @@
         document.getElementById("rp-end-date").value = row.end_date || "";
         document.getElementById("rp-num-payments").value = row.num_payments || "";
         document.getElementById("rp-note").value = row.note || "";
-        tplFillSelect(document.getElementById("rp-account"), tplRefs.accounts, row.account_id || "", "— none —");
+        tplRefillAccountSelect("rp-account", type, row.account_id || "");
         tplFillSelect(document.getElementById("rp-payment-method"), tplRefs.paymentMethods, row.payment_method_id || "", "— none —");
         rpSetType(type);
         rpFillCategoryDropdowns(type, row.category_id || "", row.subcategory_id || "");
@@ -1039,7 +1072,6 @@
           if (!isFinite(np) || np < 1) { document.getElementById("rp-modal-error").textContent = "Installments must be a whole number of 1 or more."; return; }
           numPayments = np;
         }
-        var isIncome = rpRefs.type === "income";
         var isExpense = rpRefs.type === "expense";
         var row = {
           type: rpRefs.type,
@@ -1048,7 +1080,7 @@
           next_due: nextDue,
           end_date: endDate,
           num_payments: numPayments,
-          account_id: isIncome ? null : (document.getElementById("rp-account").value || null),
+          account_id: document.getElementById("rp-account").value || null,
           category_id: document.getElementById("rp-category").value || null,
           subcategory_id: document.getElementById("rp-subcategory").value || null,
           payment_method_id: isExpense ? (document.getElementById("rp-payment-method").value || null) : null,

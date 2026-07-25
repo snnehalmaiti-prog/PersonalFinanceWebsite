@@ -3740,6 +3740,9 @@
         setRecType(r.type || "expense");
         document.getElementById("rec-amount").value = r.amount || "";
         document.getElementById("rec-note").value = r.note || "";
+        // Force the template's own account into the list so applying a template
+        // cannot quietly substitute a different account.
+        fillRecAccountOptions(r.type || "expense", r.account_id);
         document.getElementById("rec-account").value = r.account_id || "";
         document.getElementById("rec-category").value = r.category_id || "";
         fillRecSubcategories(r.category_id || "");
