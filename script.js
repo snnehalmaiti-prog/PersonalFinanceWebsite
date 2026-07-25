@@ -1922,32 +1922,35 @@
                fiInvested: 0, fiCurrent: 0, fiUnrealized: 0, fiRealized: 0,
                commInvested: 0, commCurrent: 0, commUnrealized: 0, commRealized: 0 };
 
+  // Bridge the shared `_ov` accumulator into the pure aggregator's slice shape.
+  // Step 1 of the orchestrator refactor: the aggregation RULES (exclusion gating,
+  // the invested-fallback, which classes carry day change) now live in exactly one
+  // unit-tested place — wf-overview.js — instead of being restated in each of the
+  // consumers below. `_ov` itself is still mutated by the async flows; replacing
+  // that with per-class promises is step 3.
+  function _ovSlices() {
+    return {
+      mf:   { invested: _ov.mfInvested, current: _ov.mfCurrent, unrealized: _ov.mfUnrealized, realized: _ov.mfRealized, dayChange: _ov.mfDayChange },
+      se:   { invested: _ov.seInvested, current: _ov.seCurrent, unrealized: _ov.seUnrealized, realized: _ov.seRealized, dayChange: _ov.seDayChange },
+      fi:   { invested: _ov.fiInvested, current: _ov.fiCurrent, unrealized: _ov.fiUnrealized, realized: _ov.fiRealized },
+      comm: { invested: _ov.commInvested, current: _ov.commCurrent, unrealized: _ov.commUnrealized, realized: _ov.commRealized, dayChange: _ov.commDayChange }
+    };
+  }
+
+  function _ovAggregate() {
+    return WfOverview.aggregateOverview(_ovSlices(), { excludeFixedIncome: isFixedIncomeExcluded() });
+  }
+
   function refreshOverviewStats() {
     var overviewInvestedEl = document.getElementById("overview-total-investment");
     var overviewCurrentEl = document.getElementById("overview-total-current-value");
     var overviewReturnEl = document.getElementById("overview-unrealized-return");
     var overviewPctEl = document.getElementById("overview-return-pct");
     var overviewRealizedEl = document.getElementById("overview-realized-return");
-    var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
-    var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
-    // Commodity lives in the Fixed Income/Commodity sheet and follows the FI
-    // toggle — gate it the same way the category cards and getOverviewCurrentTotal
-    // do, so the header total == Σ category cards == the split charts' total.
-    var commInvested = isFixedIncomeExcluded() ? 0 : _ov.commInvested;
-    var commRealized = isFixedIncomeExcluded() ? 0 : _ov.commRealized;
-    // Each class's "current" is populated by its own async flow (NAV fetch, gold
-    // price, SE prices). Until it resolves the field is 0 while its *invested* is
-    // already known — so fall back to invested (0% P&L) instead of 0, otherwise
-    // the Overview Current shows a phantom total loss for that class during the
-    // fetch window. (Previously only seCurrent had this guard; mf/fi/commodity
-    // fell to 0 and understated Net Worth.)
-    var mfCurrent = _ov.mfCurrent > 0 ? _ov.mfCurrent : _ov.mfInvested;
-    var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
-    var fiCurrent = isFixedIncomeExcluded() ? 0 : (_ov.fiCurrent > 0 ? _ov.fiCurrent : _ov.fiInvested);
-    var commCurrent = isFixedIncomeExcluded() ? 0 : (_ov.commCurrent > 0 ? _ov.commCurrent : _ov.commInvested);
-    var totalInvested = _ov.mfInvested + _ov.seInvested + fiInvested + commInvested;
-    var totalCurrent = mfCurrent + seCurrent + fiCurrent + commCurrent;
-    var totalRealized = _ov.mfRealized + _ov.seRealized + fiRealized + commRealized;
+    var agg = _ovAggregate();
+    var totalInvested = agg.invested;
+    var totalCurrent = agg.current;
+    var totalRealized = agg.realized;
     setMoneyText(overviewInvestedEl, formatCurrency(totalInvested), totalInvested);
     setMoneyText(overviewCurrentEl, formatCurrency(totalCurrent), totalCurrent);
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
@@ -1977,19 +1980,10 @@
   }
 
   function refreshCategoryCards() {
-    var fiInvested = isFixedIncomeExcluded() ? 0 : _ov.fiInvested;
-    var fiCurrent  = isFixedIncomeExcluded() ? 0 : _ov.fiCurrent;
-    var fiUnrealized = isFixedIncomeExcluded() ? 0 : _ov.fiUnrealized;
-    var fiRealized = isFixedIncomeExcluded() ? 0 : _ov.fiRealized;
-    var commInvested  = isFixedIncomeExcluded() ? 0 : _ov.commInvested;
-    var commCurrent   = isFixedIncomeExcluded() ? 0 : _ov.commCurrent;
-    var commUnrealized = isFixedIncomeExcluded() ? 0 : _ov.commUnrealized;
-    var commRealized  = isFixedIncomeExcluded() ? 0 : _ov.commRealized;
-
-    var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : _ov.seInvested;
+    var cards = _ovAggregate().cards;
 
     // Mutual Funds
-    var mfInv = _ov.mfInvested, mfCur = _ov.mfCurrent;
+    var mfInv = cards.mf.invested, mfCur = cards.mf.current;
     var elMfInv = document.getElementById("cat-mf-invested");
     var elMfCur = document.getElementById("cat-mf-current");
     var elMfUnr = document.getElementById("cat-mf-unrealized");
@@ -1997,16 +1991,16 @@
     var elMfRet = document.getElementById("cat-mf-return");
     setMoneyText(elMfInv, formatCurrency(mfInv), mfInv);
     setMoneyText(elMfCur, formatCurrency(mfCur), mfCur);
-    if (elMfUnr) setSignedCurrency(elMfUnr, _ov.mfUnrealized);
-    if (elMfRlz) setSignedCurrency(elMfRlz, _ov.mfRealized);
+    if (elMfUnr) setSignedCurrency(elMfUnr, cards.mf.unrealized);
+    if (elMfRlz) setSignedCurrency(elMfRlz, cards.mf.realized);
     if (elMfRet) {
-      var mfPct = mfInv > 0 ? ((mfCur - mfInv) / mfInv * 100) : 0;
+      var mfPct = cards.mf.returnPct;
       elMfRet.textContent = (mfPct >= 0 ? "+" : "") + mfPct.toFixed(2) + "%";
       elMfRet.className = "cat-stat-value" + (mfPct > 0 ? " positive" : mfPct < 0 ? " negative" : "");
     }
 
     // Stocks / ETF
-    var seInv = _ov.seInvested, seCur = seCurrent;
+    var seInv = cards.se.invested, seCur = cards.se.current;
     var elSeInv = document.getElementById("cat-se-invested");
     var elSeCur = document.getElementById("cat-se-current");
     var elSeDc  = document.getElementById("cat-se-daychange");
@@ -2015,20 +2009,20 @@
     var elSeRet = document.getElementById("cat-se-return");
     setMoneyText(elSeInv, formatCurrency(seInv), seInv);
     setMoneyText(elSeCur, formatCurrency(seCur), seCur);
-    if (elSeDc)  setSignedCurrency(elSeDc, _ov.seDayChange);
-    if (elSeUnr) setSignedCurrency(elSeUnr, _ov.seUnrealized);
-    if (elSeRlz) setSignedCurrency(elSeRlz, _ov.seRealized);
+    if (elSeDc)  setSignedCurrency(elSeDc, cards.se.dayChange);
+    if (elSeUnr) setSignedCurrency(elSeUnr, cards.se.unrealized);
+    if (elSeRlz) setSignedCurrency(elSeRlz, cards.se.realized);
     if (elSeRet) {
-      var sePct = seInv > 0 ? ((seCur - seInv) / seInv * 100) : 0;
+      var sePct = cards.se.returnPct;
       elSeRet.textContent = (sePct >= 0 ? "+" : "") + sePct.toFixed(2) + "%";
       elSeRet.className = "cat-stat-value" + (sePct > 0 ? " positive" : sePct < 0 ? " negative" : "");
     }
 
     // Fixed Income + Commodity combined
-    var fiTotalInv = fiInvested + commInvested;
-    var fiTotalCur = fiCurrent + commCurrent;
-    var fiTotalUnr = fiUnrealized + commUnrealized;
-    var fiTotalRlz = fiRealized + commRealized;
+    var fiTotalInv = cards.fi.invested;
+    var fiTotalCur = cards.fi.current;
+    var fiTotalUnr = cards.fi.unrealized;
+    var fiTotalRlz = cards.fi.realized;
     var elFiInv = document.getElementById("cat-fi-invested");
     var elFiCur = document.getElementById("cat-fi-current");
     var elFiUnr = document.getElementById("cat-fi-unrealized");
@@ -5515,8 +5509,9 @@
     if (!el) return;
     var comm = isFixedIncomeExcluded() ? 0 : (_ov.commDayChange || 0);
     var mf = _ov.mfDayChange || 0, se = _ov.seDayChange || 0;
-    dbg("[Overview dayChange] mf=" + Math.round(mf) + " se=" + Math.round(se) + " comm=" + Math.round(comm) + " total=" + Math.round(mf + se + comm));
-    setDayChange(el, mf + se + comm);
+    var total = _ovAggregate().dayChange;
+    dbg("[Overview dayChange] mf=" + Math.round(mf) + " se=" + Math.round(se) + " comm=" + Math.round(comm) + " total=" + Math.round(total));
+    setDayChange(el, total);
   }
 
   function previous_nav_for(navHistory) {
@@ -9206,14 +9201,10 @@
   // Overview's authoritative "Current" total (live prices + interest accrual).
   function getOverviewCurrentTotal() {
     if (typeof _ov === "undefined" || !_ov) return null;
-    var fiEx = isFixedIncomeExcluded();
-    // Same invested fallback per class as refreshOverviewStats, so the chart tail
-    // and benchmark terminal never use a zeroed (unresolved) component.
-    var fi = fiEx ? 0 : (_ov.fiCurrent > 0 ? _ov.fiCurrent : (_ov.fiInvested || 0));
-    var comm = fiEx ? 0 : (_ov.commCurrent > 0 ? _ov.commCurrent : (_ov.commInvested || 0));
-    var seCurrent = _ov.seCurrent > 0 ? _ov.seCurrent : (_ov.seInvested || 0);
-    var mfCurrent = _ov.mfCurrent > 0 ? _ov.mfCurrent : (_ov.mfInvested || 0);
-    var total = mfCurrent + seCurrent + fi + comm;
+    // Shares refreshOverviewStats' exact aggregation (exclusion gating + the
+    // per-class invested fallback), so the chart tail and benchmark terminal can
+    // never disagree with the Overview card or use a zeroed component.
+    var total = _ovAggregate().current;
     return total > 0 ? total : null;
   }
 
