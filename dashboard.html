@@ -894,7 +894,6 @@
               <label class="rec-select-all-label"><input type="checkbox" id="rec-select-all" /> Select all</label>
               <span class="rec-actions-sep">|</span>
               <button type="button" class="rec-action-btn" id="rec-export-btn">Export</button>
-              <button type="button" class="rec-action-btn" id="rec-categorize-btn">Categorize</button>
               <button type="button" class="rec-action-btn rec-action-delete" id="rec-delete-btn">Delete</button>
               <span class="rec-actions-count" id="rec-count">0 records</span>
             </div>
@@ -3128,11 +3127,35 @@
           var csv = [r.txn_date || "", r.type, r.amount, acct.name || "", cat.name || "", pm.name || "", lbls, (r.note || "").replace(/[,\n]/g, " ")];
           lines.push(csv.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(","));
         });
-        var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+        // Export was silently doing nothing. Two reasons, both fixed here:
+        //   1. The anchor was never added to the document. A detached <a> is
+        //      ignored by .click() in several browsers, so no download started.
+        //   2. The object URL was revoked synchronously on the next statement,
+        //      which can invalidate the blob before the browser has finished
+        //      reading it — the download then aborts even where (1) worked.
+        // Also adds a BOM so Excel opens the UTF-8 file with rupee symbols and
+        // accented category names intact rather than as mojibake.
+        var csvText = "﻿" + lines.join("\r\n");
+        var blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+        var filename = "records-" + new Date().toISOString().slice(0, 10) + ".csv";
+
+        if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+          window.navigator.msSaveOrOpenBlob(blob, filename);
+          return;
+        }
         var url = URL.createObjectURL(blob);
         var a = document.createElement("a");
-        a.href = url; a.download = "records-" + new Date().toISOString().slice(0, 10) + ".csv";
-        a.click(); URL.revokeObjectURL(url);
+        a.href = url;
+        a.download = filename;
+        a.rel = "noopener";
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        // Give the browser a turn to start the download before tearing down.
+        setTimeout(function () {
+          if (a.parentNode) a.parentNode.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
       });
 
       // ── Record modal ──────────────────────────────────────────────────────
