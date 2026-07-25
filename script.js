@@ -9192,30 +9192,29 @@
       }
     }
 
-    // Drop months with neither income nor expense, so the chart shows only
-    // months that actually have activity. Year mode previously always drew all
-    // twelve, and All time drew a contiguous span, so gaps rendered as runs of
+    // Plot only months that have income. Year mode previously drew all twelve
+    // and All time drew a contiguous span, so months without income rendered as
     // empty slots that squeezed the real bars.
     //
-    // The test is income/expense only — matching how All time already chooses
-    // its range — so a month carrying nothing but an investment figure is
-    // treated as empty here too.
+    // Income alone is the test: a month with expenses (or investment) but no
+    // income is dropped along with its expense and invested bars, so every
+    // column on the chart has an income figure behind it.
     (function () {
       var keptKeys = [], keptLabels = [];
       monthKeys.forEach(function (k, i) {
         var b = byMonth[k];
-        if (b && ((b.income || 0) > 0 || (b.expense || 0) > 0)) {
+        if (b && (b.income || 0) > 0) {
           keptKeys.push(k); keptLabels.push(labels[i]);
         }
       });
       monthKeys = keptKeys; labels = keptLabels;
     })();
 
-    // Nothing left to plot (e.g. a year whose only rows are budget entries).
-    // Say so instead of rendering an empty axis.
+    // Nothing left to plot (a period with no income at all). Say so instead of
+    // rendering an empty axis.
     var mcfStatusEl = document.getElementById("mcf-status");
     if (!monthKeys.length) {
-      if (mcfStatusEl) mcfStatusEl.textContent = "No income or expense records in this period.";
+      if (mcfStatusEl) mcfStatusEl.textContent = "No income records in this period.";
       if (__mcfChart) { try { __mcfChart.destroy(); } catch (e) {} __mcfChart = null; }
       wrap.innerHTML = "";
       if (statsEl) statsEl.innerHTML = "";
