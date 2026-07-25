@@ -179,5 +179,53 @@ console.log("E. Robustness");
      "E2 junk values coerce to 0, totals stay finite", r.current + "/" + r.dayChange);
 }
 
+console.log("F. Partial-patch semantics (the _ovApply contract)");
+
+// The choke point applies only the fields present in a patch, so a flow that
+// knows one number cannot blank the others. These tests pin that contract at the
+// aggregate level: applying patches in sequence must accumulate, never reset.
+// (Mirrors _ovApply's field-merge behavior in script.js.)
+function applyPatch(store, cls, patch) {
+  store[cls] = Object.assign({}, store[cls] || {});
+  Object.keys(patch).forEach(k => {
+    const v = +patch[k];
+    store[cls][k] = Number.isFinite(v) ? v : 0;
+  });
+  return store;
+}
+
+// F1: the exact 18K→9K regression. A day-change-only write from a late flow must
+// not clear the current value an earlier flow established.
+{
+  let store = {};
+  applyPatch(store, "mf", { invested: 1173359, current: 1386282 });
+  applyPatch(store, "mf", { dayChange: -9310 });          // late day-change-only write
+  const r = aggregateOverview(store, {});
+  ok(approx(r.current, 1386282) && approx(r.dayChange, -9310),
+     "F1 day-change-only patch preserves current", r.current + "/" + r.dayChange);
+}
+
+// F2: interleaved writes from different classes never cross-contaminate.
+{
+  let store = {};
+  applyPatch(store, "mf", { invested: 100, current: 110, dayChange: -5 });
+  applyPatch(store, "se", { invested: 200, current: 190, dayChange: -10 });
+  applyPatch(store, "mf", { current: 115 });               // MF re-price only
+  const r = aggregateOverview(store, {});
+  ok(approx(r.current, 115 + 190) && approx(r.dayChange, -15),
+     "F2 per-class patches stay isolated", r.current + "/" + r.dayChange);
+}
+
+// F3: a patch carrying NaN/garbage coerces to 0 for that field only, leaving the
+// rest of the slice intact — a bad parse degrades, it does not wipe the class.
+{
+  let store = {};
+  applyPatch(store, "comm", { invested: 13668, current: 14301 });
+  applyPatch(store, "comm", { dayChange: NaN });
+  const r = aggregateOverview(store, {});
+  ok(approx(r.current, 14301) && r.dayChange === 0,
+     "F3 NaN patch zeroes only its own field", r.current + "/" + r.dayChange);
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
