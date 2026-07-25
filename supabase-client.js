@@ -178,6 +178,10 @@
       localStorage.removeItem("wf-gh-token");
       sessionStorage.removeItem("wf-cloud-synced");
     } catch (e) {}
+    // Drop the cached expense snapshot too. It holds this user's transaction
+    // records, so leaving it behind would let the next user on a shared device
+    // read them straight out of IndexedDB.
+    try { if (window.WfIdb) WfIdb.clear(); } catch (e) {}
     return fetch(SUPABASE_URL + "/auth/v1/logout", {
       method: "POST",
       headers: authHeaders(token)

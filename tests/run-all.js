@@ -30,6 +30,8 @@ const guards = [
   { name: "syntax: expense.js", cmd: "node", args: ["--check", path.join(ROOT, "expense.js")] },
   { name: "syntax: supabase-client.js", cmd: "node", args: ["--check", path.join(ROOT, "supabase-client.js")] },
   { name: "syntax: sw.js", cmd: "node", args: ["--check", path.join(ROOT, "sw.js")] },
+  { name: "syntax: wf-idb.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-idb.js")] },
+  { name: "syntax: inline <script> in HTML", cmd: "node", args: [path.join(TESTS_DIR, "check-inline-scripts.js")] },
   { name: "asset versions use placeholder", cmd: "node", args: [path.join(ROOT, "tools", "stamp-assets.js"), "--check"] },
 ];
 

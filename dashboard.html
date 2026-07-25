@@ -1469,34 +1469,108 @@
       var dashExpState = { accounts: [], categories: [], paymentMethods: [], records: [], recType: "expense" };
       window.dashExpState = dashExpState;
 
-      function loadDashAccounts() {
-        if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
-          setTimeout(loadDashAccounts, 200);
-          return;
-        }
-        Promise.all([
+      // ── Expense data load: cache-first (stale-while-revalidate) ─────────
+      // Previously this waited on four Supabase round trips before rendering
+      // anything, so on mobile the Expense tab — which is where phones now land —
+      // showed an empty shell for the whole network latency, every single visit.
+      // The records query is also unbounded (`select=*`), so it gets slower as
+      // history grows.
+      //
+      // Now: paint immediately from the last snapshot in IndexedDB, then
+      // revalidate over the network and repaint only if something actually
+      // changed. A repeat visit renders at local-storage speed regardless of
+      // connection, and the first visit behaves exactly as before.
+      //
+      // The cache is keyed per user and cleared on sign-out, so a shared device
+      // never shows one user's records to another.
+      var _expCacheKey = null;
+      var _expRenderedSig = null;
+
+      function expCacheKey() {
+        var uid = (window.WfAuth && WfAuth.getUserId && WfAuth.getUserId()) || null;
+        return uid ? "exp-snapshot:" + uid : null;
+      }
+
+      // Cheap change detector: row counts plus the newest record's timestamp.
+      // Avoids re-rendering (and re-drawing five charts) when the network returns
+      // data identical to what we already painted from cache — the common case.
+      function expSignature(s) {
+        var newest = (s.records && s.records.length)
+          ? (s.records[0].txn_date || "") + "|" + (s.records[0].created_at || "") + "|" + (s.records[0].id || "")
+          : "";
+        return [s.accounts.length, s.categories.length, s.paymentMethods.length, s.records.length, newest].join("~");
+      }
+
+      function renderAllExpense() {
+        renderDashAccountTiles(dashExpState.accounts);
+        fillRecFilterDropdowns();
+        fillAnaFilterDropdowns();
+        renderDashRecords();
+        renderExpMonthlyChart();
+        if (window.renderMonthlyCashFlow) window.renderMonthlyCashFlow();
+        renderExpWaterfallChart();
+        renderExpSpendMatrix();
+        renderPaymentToJoint();
+        renderAnalyticsTable();
+        _expRenderedSig = expSignature(dashExpState);
+      }
+
+      function applyExpSnapshot(snap) {
+        dashExpState.accounts = snap.accounts || [];
+        dashExpState.categories = snap.categories || [];
+        dashExpState.paymentMethods = snap.paymentMethods || [];
+        dashExpState.records = snap.records || [];
+      }
+
+      function fetchExpenseFromNetwork() {
+        return Promise.all([
           WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc"),
           WfDb.select("expense_categories", "select=*&order=sort_order.asc,created_at.asc"),
           WfDb.select("expense_payment_methods", "select=*&order=sort_order.asc,created_at.asc"),
           WfDb.select("expense_records", "select=*&order=txn_date.desc,created_at.desc")
         ]).then(function (res) {
-          dashExpState.accounts = res[0] || [];
-          dashExpState.categories = res[1] || [];
-          dashExpState.paymentMethods = res[2] || [];
-          dashExpState.records = res[3] || [];
-          renderDashAccountTiles(dashExpState.accounts);
-          fillRecFilterDropdowns();
-          fillAnaFilterDropdowns();
-          renderDashRecords();
-          renderExpMonthlyChart();
-          if (window.renderMonthlyCashFlow) window.renderMonthlyCashFlow();
-          renderExpWaterfallChart();
-          renderExpSpendMatrix();
-          renderPaymentToJoint();
-          renderAnalyticsTable();
-        }).catch(function (err) {
-          var status = document.getElementById("dash-exp-accounts-status");
-          if (status) status.textContent = "Could not load accounts: " + err.message;
+          return {
+            accounts: res[0] || [],
+            categories: res[1] || [],
+            paymentMethods: res[2] || [],
+            records: res[3] || []
+          };
+        });
+      }
+
+      // forceNetwork: skip the instant cache paint. Used after a write, where the
+      // caller already knows the cache is behind.
+      function loadDashAccounts(forceNetwork) {
+        if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
+          setTimeout(function () { loadDashAccounts(forceNetwork); }, 200);
+          return;
+        }
+        _expCacheKey = expCacheKey();
+
+        var painted = false;
+        var cacheStep = (forceNetwork || !_expCacheKey || !window.WfIdb)
+          ? Promise.resolve(null)
+          : WfIdb.get(_expCacheKey);
+
+        cacheStep.then(function (cached) {
+          if (cached && cached.accounts) {
+            applyExpSnapshot(cached);
+            renderAllExpense();
+            painted = true;
+          }
+        }).catch(function () {}).then(function () {
+          return fetchExpenseFromNetwork().then(function (fresh) {
+            applyExpSnapshot(fresh);
+            // Repaint only when the data actually differs from what's on screen.
+            if (!painted || expSignature(fresh) !== _expRenderedSig) renderAllExpense();
+            if (_expCacheKey && window.WfIdb) WfIdb.set(_expCacheKey, fresh);
+          }).catch(function (err) {
+            // Offline or server error: if the cache already painted, keep showing
+            // it rather than replacing real data with an error message.
+            if (painted) return;
+            var status = document.getElementById("dash-exp-accounts-status");
+            if (status) status.textContent = "Could not load accounts: " + err.message;
+          });
         });
       }
       loadDashAccounts();
@@ -3030,14 +3104,14 @@
         var delBtn = document.getElementById("rec-delete-btn");
         if (delBtn) delBtn.disabled = true;
         Promise.all(ids.map(function (id) { return WfDb.remove("expense_records", id); }))
-          .then(function () { recSelected = {}; if (delBtn) delBtn.disabled = false; loadDashAccounts(); })
+          .then(function () { recSelected = {}; if (delBtn) delBtn.disabled = false; loadDashAccounts(true); })
           .catch(function (err) {
             // Surface the failure and re-sync from server instead of freezing
             // silently with a stale selection/list.
             if (delBtn) delBtn.disabled = false;
             alert("Some records could not be deleted: " + ((err && err.message) || "network error") + "\nRefreshing to show current state.");
             recSelected = {};
-            loadDashAccounts();
+            loadDashAccounts(true);
           });
       });
 
@@ -3548,7 +3622,7 @@
           btn.disabled = false; btn.textContent = origLabel;
           editingRecId = null;
           closeRecModal();
-          loadDashAccounts();
+          loadDashAccounts(true);
         }).catch(function (err) {
           btn.disabled = false; btn.textContent = origLabel;
           document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
@@ -3626,6 +3700,7 @@
 
   </main>
 
+  <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
   <script src="supabase-client.js?v=__ASSET_VERSION__"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
