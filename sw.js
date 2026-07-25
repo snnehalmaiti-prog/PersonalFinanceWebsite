@@ -19,7 +19,7 @@
  * the default network path in Phase 2; runtime caching for it lands in Phase 3.
  */
 
-var VERSION = "v1";
+var VERSION = "__ASSET_VERSION__";
 var SHELL_CACHE = "pf-shell-" + VERSION;
 var RUNTIME_CACHE = "pf-runtime-" + VERSION;
 var FONT_CACHE = "pf-fonts-" + VERSION;

@@ -1,0 +1,29 @@
+name: CI
+
+# Runs the test suites and repo guards on every push and pull request.
+#
+# Until now the tests existed but nothing ran them automatically — whether a
+# change was verified depended on someone remembering to run four separate
+# commands locally. The asset-version guard in particular needs to run here: it
+# catches a hardcoded ?v= tag creeping back in, which is what previously let
+# index.html and dashboard.html drift onto different versions of the same files.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run tests and guards
+        run: node tests/run-all.js

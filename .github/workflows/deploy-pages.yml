@@ -38,6 +38,13 @@ jobs:
         uses: actions/checkout@v5
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      # Fill in the __ASSET_VERSION__ placeholder with this commit's SHA, so every
+      # deploy serves fresh cache-busting URLs for CSS/JS and a fresh service-worker
+      # cache name. Only the uploaded artifact is modified; the repo keeps the
+      # placeholder. This replaces bumping version tags by hand, which had already
+      # drifted (index.html served a different script.js version than dashboard.html).
+      - name: Stamp asset versions
+        run: node tools/stamp-assets.js
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
