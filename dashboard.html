@@ -1384,8 +1384,14 @@
           var d = new Date(r.txn_date);
           if (d < monthStart || d >= nextMonth) return;
           var amt = Number(r.amount) || 0;
+          // Only budget rows fund the tile's allowance. This used to be a bare
+          // `else`, which was harmless only because income carried no account_id
+          // and so never matched an account here. Now that income does carry one,
+          // an `else` would add income to the allowance and inflate every tile's
+          // budget and remaining figure — so the two types are distinguished
+          // explicitly, keeping the tiles reading exactly as they did before.
           if (r.type === "expense") spent += amt;
-          else budget += amt;
+          else if (r.type === "budget") budget += amt;
         });
         return { budget: budget, spent: spent, balance: budget - spent };
       }
@@ -3393,9 +3399,13 @@
         if (modalBody) modalBody.classList.toggle("rec-modal-body-single", singleCol);
         var modal = document.querySelector(".rec-modal");
         if (modal) modal.classList.toggle("rec-modal-narrow", singleCol);
+        // Account applies to Income too: income has to land somewhere, and the
+        // account tiles derive their balance from it. It used to be hidden for
+        // income (and the id discarded on save), so income never credited an
+        // account.
         var acctSel = document.getElementById("rec-account");
         if (acctSel && acctSel.closest(".rec-field")) {
-          acctSel.closest(".rec-field").style.display = (t === "income") ? "none" : "";
+          acctSel.closest(".rec-field").style.display = "";
         }
         var isMonthMode = (t === "budget" || t === "income");
         var dtField = document.getElementById("rec-datetime-field");
@@ -3572,9 +3582,10 @@
         // Amount is optional for templates; a stored template with amount = 0
         // simply leaves the field blank when applied.
         if (!editingTemplateMode && (!amt || amt <= 0)) { document.getElementById("rec-modal-error").textContent = "Enter an amount."; return; }
-        var acctId = document.getElementById("rec-account").value;
-        if (t !== "income" && !acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
-        if (t === "income") acctId = null;
+        // Income now carries an account like the other types, instead of having
+        // its selection thrown away here.
+        var acctId = document.getElementById("rec-account").value || null;
+        if (!acctId) { document.getElementById("rec-modal-error").textContent = "Choose an account."; return; }
         var catId = document.getElementById("rec-category").value;
         if (t !== "transfer" && !catId) { document.getElementById("rec-modal-error").textContent = "Choose a category."; return; }
         if (t === "expense") {
