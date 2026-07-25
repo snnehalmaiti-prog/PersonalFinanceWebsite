@@ -8896,11 +8896,14 @@
       byMonth[ym].investment += investByMonth[ym];
     });
 
-    // Build year list ONLY from years that have expense/income records,
-    // and only from 2026 onwards.
+    // Build the year list from every year that actually has income/expense
+    // records. There used to be a hardcoded `ym < "2026-01"` cutoff here, which
+    // silently hid earlier years (2025 and before) from the dropdown while the
+    // All time view — which has no such cutoff and bounds itself to months with
+    // real records — happily charted them. The two disagreed: the data was
+    // plotted but the year could not be selected.
     var yearSet = {};
     Object.keys(byMonth).forEach(function(ym) {
-      if (ym < "2026-01") return;
       if (byMonth[ym].income > 0 || byMonth[ym].expense > 0) yearSet[ym.slice(0,4)] = 1;
     });
     var yearList = Object.keys(yearSet).sort();
