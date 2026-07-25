@@ -2833,9 +2833,24 @@
         };
       }
 
+      // Always returns an ARRAY of label strings.
+      //
+      // The `labels` column is overloaded: originally a JSON array of tags, it
+      // now also carries a metadata OBJECT ({budget_split, payer}) — see recMeta
+      // below. This function used to return whatever JSON.parse produced, so for
+      // any record saved with a payer it handed back an object. Callers then did
+      // recLabels(r).join("|"), which threw "join is not a function" and killed
+      // whatever was running — that is why Export silently did nothing for
+      // anyone who had used the payer field.
       function recLabels(r) {
+        if (!r) return [];
         if (Array.isArray(r.labels)) return r.labels;
-        if (typeof r.labels === "string" && r.labels) { try { return JSON.parse(r.labels); } catch (e) { return []; } }
+        if (typeof r.labels === "string" && r.labels) {
+          try {
+            var parsed = JSON.parse(r.labels);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) { return []; }
+        }
         return [];
       }
 
