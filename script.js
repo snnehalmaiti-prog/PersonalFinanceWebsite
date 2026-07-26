@@ -10798,8 +10798,20 @@
       // Three rows: month, investment, withdrawal. All three are always emitted
       // (blank when the month has none) so the block's height never changes as
       // the pointer moves between months.
+      // Month row also carries that month's totals, so the figures the chips
+      // break down are stated next to the month rather than having to be added
+      // up by eye. Both honour the legend selection, exactly like the chips.
+      var mInv = investedTotal(k), mOut = outTotal(k);
       splitEl.innerHTML =
-        '<div class="mic-hs-row"><span class="mic-hs-month">' + escapeHtml(monthText) + '</span></div>' +
+        '<div class="mic-hs-row">' +
+          '<span class="mic-hs-month">' + escapeHtml(monthText) + '</span>' +
+          '<span class="mic-hs-tot"><span class="mic-hs-tot-label">Invested</span>' +
+            '<b>' + formatCurrency(mInv) + '</b></span>' +
+          (mOut > 0
+            ? '<span class="mic-hs-tot"><span class="mic-hs-tot-label">Withdrawal</span>' +
+              '<b class="negative">&minus;' + formatCurrency(mOut) + '</b></span>'
+            : '') +
+        '</div>' +
         '<div class="mic-hs-row">' +
           (invHtml ? '<span class="mic-hs-cap">Investment</span><span class="mic-hs-group">' + invHtml + '</span>' : '') +
         '</div>' +

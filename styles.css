@@ -3462,6 +3462,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   color: var(--muted);
 }
 .mic-hs-cap-out { color: #E8623A; }
+/* Month-row totals. Sit to the right of the month, ahead of the chip rows. */
+.mic-hs-tot { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.mic-hs-tot-label {
+  font-weight: 700;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.mic-hs-tot b { font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.mic-hs-tot b.negative { color: #E8623A; }
 .mic-hs-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .mic-hs-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 .mic-hs-item b { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
