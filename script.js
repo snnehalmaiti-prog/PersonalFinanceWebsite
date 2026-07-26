@@ -10600,6 +10600,7 @@
     // Same flows grouped by Instrument Category, used by the hover breakdown in
     // the aggregate view (see renderHoverSplit).
     var byMonthGrp = __monthlyInvestCatData.byMonthGrp || {};
+    var byMonthGrpOut = __monthlyInvestCatData.byMonthGrpOut || {};
 
     // Month keys and axis labels for the requested view:
     // all-time = every month from the first investment to the last,
@@ -10788,9 +10789,29 @@
     // always adds up to the Total Invested figure above it.
     var splitEl = document.getElementById("mic-hover-split");
     var __micHoverIdx = -1;
+
+    // Resting state: totals for the whole period on show, broken down by
+    // Instrument Category. Summing the plotted months means the current year
+    // naturally reads year-to-date (there is no future data to include), while a
+    // past year or the all-time view still totals correctly.
+    function periodGrpTotals(src) {
+      var out = {};
+      monthKeys.forEach(function (mk) {
+        var m = src[mk];
+        if (!m) return;
+        Object.keys(m).forEach(function (c) { out[c] = (out[c] || 0) + m[c]; });
+      });
+      return out;
+    }
+    function periodScopeLabel() {
+      if (__monthlyInvestCatAllTime) return "All time";
+      var y = String(yr);
+      return y === String(new Date().getFullYear()) ? y + " · Year to date" : y;
+    }
+
     function clearHoverSplit() {
       __micHoverIdx = -1;
-      if (splitEl) splitEl.innerHTML = ""; // keeps its reserved row; no layout shift
+      showPeriodSplit();
     }
     function renderHoverSplit(idx) {
       if (!splitEl) return;
@@ -10881,6 +10902,39 @@
           (outHtml ? '<span class="mic-hs-cap mic-hs-cap-out">Withdrawal</span><span class="mic-hs-group">' + outHtml + '</span>' : '') +
         '</div>';
     }
+    // Period breakdown by Instrument Category, shown whenever nothing is hovered.
+    // Uses the same three-row shape as the hovered-month view so the block's
+    // height is identical in both states and the chart never moves.
+    function showPeriodSplit() {
+      if (!splitEl) return;
+      var GRP_COLORS_P = { "Equity": "#10B981", "Fixed Income": "#3B82F6", "Commodity": "#F59E0B" };
+      function grpChips(totals, negative) {
+        return Object.keys(totals)
+          .filter(function (c) { return totals[c] > 0; })
+          .sort(function (a, b) { return totals[b] - totals[a]; })
+          .map(function (c) {
+            var col = GRP_COLORS_P[c] || MIC_GREEN;
+            return '<span class="mic-hs-item">' +
+              '<span class="mic-hs-dot" style="background:' + col + '"></span>' +
+              escapeHtml(c) + ' <b class="' + (negative ? 'negative' : '') + '">' +
+              (negative ? '&minus;' : '') + formatCurrency(totals[c]) + '</b></span>';
+          }).join("");
+      }
+      var inv = periodGrpTotals(byMonthGrp);
+      var out = periodGrpTotals(byMonthGrpOut);
+      var invHtml = grpChips(inv, false);
+      var outHtml = grpChips(out, true);
+      if (!invHtml && !outHtml) { splitEl.innerHTML = ""; return; }
+      splitEl.innerHTML =
+        '<div class="mic-hs-row"><span class="mic-hs-month">' + escapeHtml(periodScopeLabel()) + '</span></div>' +
+        '<div class="mic-hs-row">' +
+          (invHtml ? '<span class="mic-hs-cap">Investment</span><span class="mic-hs-group">' + invHtml + '</span>' : '') +
+        '</div>' +
+        '<div class="mic-hs-row mic-hs-out">' +
+          (outHtml ? '<span class="mic-hs-cap mic-hs-cap-out">Withdrawal</span><span class="mic-hs-group">' + outHtml + '</span>' : '') +
+        '</div>';
+    }
+
     clearHoverSplit();
 
     // Custom legend
