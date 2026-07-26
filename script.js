@@ -10887,8 +10887,12 @@
       data: { labels: labels, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
-        // Drives the per-instrument split panel under the stats row. The tooltip
-        // stays on for the month totals; only the breakdown moved out.
+        // Anywhere in a month's column identifies that month, so the thin
+        // withdrawal line never has to be hit precisely. This used to come from
+        // the tooltip's own mode; with the tooltip gone it lives here, where
+        // onHover reads it.
+        interaction: { mode: "index", intersect: false },
+        // Drives the month rows under the stats row — the only readout now.
         onHover: function (evt, els, chart) {
           var idx = els && els.length ? els[0].index : -1;
           if (idx < 0) {
@@ -10900,31 +10904,10 @@
         },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            // Show the full month summary from anywhere in the column, so the
-            // user never has to hover the thin withdrawal line.
-            mode: "index",
-            intersect: false,
-            // Collapse all datasets at this month into a single consolidated
-            // block (built in `label`), so keep only the first item.
-            filter: function (item) { return item.datasetIndex === 0; },
-            callbacks: {
-              label: function (ctx) {
-                var k = monthKeys[ctx.dataIndex];
-                if (!k) return "";
-                // Totals only. The per-instrument split moved out of the
-                // tooltip into the panel under the stats row, so the breakdown
-                // no longer floats over the bars it is describing.
-                var inv = investedTotal(k), out = outTotal(k);
-                var lines = ["Total Invested: " + formatCurrency(inv)];
-                if (out > 0) {
-                  lines.push("Total Withdrawn: " + formatCurrency(out));
-                  lines.push("Net: " + formatCurrency(inv - out));
-                }
-                return lines;
-              }
-            }
-          }
+          // No tooltip: the month's totals and its per-instrument split are both
+          // reported in the rows under the stats row, so a floating panel would
+          // only repeat them over the bars it is describing.
+          tooltip: { enabled: false }
         },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
