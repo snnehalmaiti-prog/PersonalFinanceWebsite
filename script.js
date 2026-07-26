@@ -10776,10 +10776,15 @@
           .filter(function (c) { return m[c] > 0 && catIncluded(c); })
           .sort(function (a, b) { return m[b] - m[a]; })
           .map(function (c) {
+            // The swatch identifies the INSTRUMENT, so it keeps that
+            // instrument's legend colour on both rows. It was forced to red on
+            // the withdrawal row, which broke the link to the legend and made
+            // every withdrawn instrument look alike. Direction is already
+            // carried by the row's caption, the minus sign and the red amount.
             var i = catList.indexOf(c);
             var col = i === -1 ? MIC_GREEN : MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
             return '<span class="mic-hs-item">' +
-              '<span class="mic-hs-dot" style="background:' + (negative ? MIC_RED : col) + '"></span>' +
+              '<span class="mic-hs-dot" style="background:' + col + '"></span>' +
               escapeHtml(c) + ' <b class="' + (negative ? 'negative' : '') + '">' +
               (negative ? '&minus;' : '') + formatCurrency(m[c]) + '</b></span>';
           }).join("");
