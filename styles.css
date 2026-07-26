@@ -3416,22 +3416,32 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    Reserves its own height so revealing it never pushes the chart down and
    shifts the bars out from under the pointer. */
 .mic-hover-split {
+  /* Two stacked rows: invested, then withdrawn beneath it. Fixed height with
+     both rows always rendered (blank when the month has none), so revealing the
+     split never reflows the chart and slides the bars out from under the
+     pointer. */
   display: flex;
-  align-items: center;
-  /* One line, fixed height, so revealing the split never reflows the chart and
-     slides the bars out from under the pointer. A month with more instruments
-     than fit scrolls sideways instead of wrapping onto a second row. */
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  height: 22px;
-  gap: 0 14px;
+  flex-direction: column;
+  justify-content: center;
+  height: 40px;
   padding: 0 20px 4px;
   font-size: 0.68rem;
   color: var(--muted);
-  white-space: nowrap;
 }
-.mic-hover-split::-webkit-scrollbar { display: none; }
+.mic-hs-row {
+  display: flex;
+  align-items: center;
+  gap: 0 14px;
+  /* A month with more instruments than fit scrolls sideways rather than
+     wrapping, which would change the block's height again. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  height: 20px;
+  flex: 0 0 20px;
+}
+.mic-hs-row::-webkit-scrollbar { display: none; }
 .mic-hs-month {
   font-weight: 800;
   font-size: 0.6rem;

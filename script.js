@@ -10788,10 +10788,17 @@
       var invHtml = chips(byMonthCat, false);
       var outHtml = chips(byMonthCatOut, true);
       if (!invHtml && !outHtml) { clearHoverSplit(); return; }
+      // Invested on the first line, withdrawn on its own line beneath it. Both
+      // rows are always emitted (empty when the month has none) so the block's
+      // height never changes as the pointer moves between months.
       splitEl.innerHTML =
-        '<span class="mic-hs-month">' + escapeHtml(labels[idx] || k) + '</span>' +
-        (invHtml ? '<span class="mic-hs-group">' + invHtml + '</span>' : '') +
-        (outHtml ? '<span class="mic-hs-group mic-hs-out"><span class="mic-hs-cap">Withdrawn</span>' + outHtml + '</span>' : '');
+        '<div class="mic-hs-row">' +
+          '<span class="mic-hs-month">' + escapeHtml(labels[idx] || k) + '</span>' +
+          (invHtml ? '<span class="mic-hs-group">' + invHtml + '</span>' : '') +
+        '</div>' +
+        '<div class="mic-hs-row mic-hs-out">' +
+          (outHtml ? '<span class="mic-hs-cap">Withdrawn</span><span class="mic-hs-group">' + outHtml + '</span>' : '') +
+        '</div>';
     }
     clearHoverSplit();
 
