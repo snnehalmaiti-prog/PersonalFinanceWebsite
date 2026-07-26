@@ -10788,16 +10788,23 @@
       var invHtml = chips(byMonthCat, false);
       var outHtml = chips(byMonthCatOut, true);
       if (!invHtml && !outHtml) { clearHoverSplit(); return; }
-      // Invested on the first line, withdrawn on its own line beneath it. Both
-      // rows are always emitted (empty when the month has none) so the block's
-      // height never changes as the pointer moves between months.
+      // The axis is abbreviated for space ("Feb", "Feb 26"); spell the month out
+      // here, where there is room and no ambiguity about which year is meant.
+      var MON_FULL = ["January","February","March","April","May","June",
+                      "July","August","September","October","November","December"];
+      var kp = String(k).split("-");
+      var monthText = (MON_FULL[parseInt(kp[1], 10) - 1] || labels[idx] || k) +
+                      (kp[0] ? " " + kp[0] : "");
+      // Three rows: month, investment, withdrawal. All three are always emitted
+      // (blank when the month has none) so the block's height never changes as
+      // the pointer moves between months.
       splitEl.innerHTML =
+        '<div class="mic-hs-row"><span class="mic-hs-month">' + escapeHtml(monthText) + '</span></div>' +
         '<div class="mic-hs-row">' +
-          '<span class="mic-hs-month">' + escapeHtml(labels[idx] || k) + '</span>' +
-          (invHtml ? '<span class="mic-hs-group">' + invHtml + '</span>' : '') +
+          (invHtml ? '<span class="mic-hs-cap">Investment</span><span class="mic-hs-group">' + invHtml + '</span>' : '') +
         '</div>' +
         '<div class="mic-hs-row mic-hs-out">' +
-          (outHtml ? '<span class="mic-hs-cap">Withdrawn</span><span class="mic-hs-group">' + outHtml + '</span>' : '') +
+          (outHtml ? '<span class="mic-hs-cap mic-hs-cap-out">Withdrawal</span><span class="mic-hs-group">' + outHtml + '</span>' : '') +
         '</div>';
     }
     clearHoverSplit();

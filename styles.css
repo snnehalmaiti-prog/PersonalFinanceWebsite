@@ -3423,7 +3423,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   display: flex;
   flex-direction: column;
   justify-content: center;
-  height: 40px;
+  height: 60px;
   padding: 0 20px 4px;
   font-size: 0.68rem;
   color: var(--muted);
@@ -3450,13 +3450,18 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   color: var(--text);
 }
 .mic-hs-group { display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 0 12px; }
+/* Row captions ("Investment" / "Withdrawal"). Fixed width so the chip lists on
+   both rows start at the same x — ragged starts made the two rows hard to scan
+   as a pair. */
 .mic-hs-cap {
+  flex: 0 0 74px;
   font-weight: 700;
   font-size: 0.58rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #E8623A;
+  color: var(--muted);
 }
+.mic-hs-cap-out { color: #E8623A; }
 .mic-hs-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .mic-hs-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 .mic-hs-item b { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
