@@ -3791,6 +3791,20 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfalloc-row:last-child { border-bottom: none; }
 .mfalloc-name { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; color: var(--text); }
 .mfalloc-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+/* Instrument Category tag beside a segment name (Equity / Fixed Income). Muted
+   and lighter than the segment so it reads as a qualifier, not a second label. */
+.mfalloc-cat {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg, rgba(0, 0, 0, 0.05));
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 2px;
+  white-space: nowrap;
+}
 .mfalloc-nums { display: inline-flex; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; }
 .mfalloc-amount { font-size: 0.78rem; font-weight: 700; color: var(--text); }
 .mfalloc-pct { font-size: 0.68rem; font-weight: 700; min-width: 42px; text-align: right; }

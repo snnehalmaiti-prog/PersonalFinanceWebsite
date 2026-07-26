@@ -12102,12 +12102,30 @@
     }
 
     if (eyebrow) eyebrow.textContent = "MARKET CAP/SEGMENT";
+    // A segment says nothing about asset class on its own — Arbitrage and Debt
+    // sit next to Small Cap and read alike. Tag each row with the Instrument
+    // Category its funds are mapped to, so equity and fixed income are
+    // distinguishable at a glance.
+    var mfTopCat = buildInstrumentTopCategoryMap();
     var bySeg = {};
+    var catBySeg = {};
     rowsData.forEach(function (r) {
       if (r.units < 1) return;
       var seg = lookupSegment(segmentMap, r.instrument);
       bySeg[seg] = (bySeg[seg] || 0) + (r.current || 0);
+      var cat = mfTopCat[normalizeText(r.instrument)] || "";
+      if (cat) {
+        if (!catBySeg[seg]) catBySeg[seg] = {};
+        catBySeg[seg][cat] = (catBySeg[seg][cat] || 0) + (r.current || 0);
+      }
     });
+    // A segment can hold more than one category; list them largest first rather
+    // than picking one and hiding the rest.
+    function segCatLabel(seg) {
+      var m = catBySeg[seg];
+      if (!m) return "";
+      return Object.keys(m).sort(function (a, b) { return m[b] - m[a]; }).join(" · ");
+    }
     var entries = Object.keys(bySeg).map(function (k) { return { name: k, value: bySeg[k] }; })
       .sort(function (a, b) { return b.value - a.value; });
     var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
@@ -12120,8 +12138,10 @@
     var rows = entries.map(function (e, i) {
       var pct = total > 0 ? (e.value / total) * 100 : 0;
       var col = PAL[i % PAL.length];
+      var catLabel = segCatLabel(e.name);
       return '<div class="mfalloc-row">' +
-        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) + '</span>' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + escapeHtml(e.name) +
+          (catLabel ? '<span class="mfalloc-cat">' + escapeHtml(catLabel) + '</span>' : '') + '</span>' +
         '<span class="mfalloc-nums">' +
           '<span class="mfalloc-amount">' + formatCurrency(e.value) + '</span>' +
           '<span class="mfalloc-pct" style="color:' + col + ';">' + pct.toFixed(1) + '%</span>' +
