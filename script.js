@@ -10865,7 +10865,9 @@
       var invHtml, outHtml;
       if (__monthlyInvestCatSplit) {
         invHtml = chips(byMonthCat, false);
-        outHtml = chips(byMonthCatOut, true);
+        // Net mode already nets withdrawals into each bar, so listing them again
+        // here would read as an additional outflow.
+        outHtml = net ? "" : chips(byMonthCatOut, true);
       } else {
         invHtml = chips(byMonthGrp, false);
         outHtml = "";
@@ -10885,12 +10887,18 @@
       // break down are stated next to the month rather than having to be added
       // up by eye. Both honour the legend selection, exactly like the chips.
       var mInv = investedTotal(k), mOut = outTotal(k);
+      // Net mode folds withdrawals into the bars, so reporting a withdrawal
+      // figure alongside them would double-count it in the reader's head. The
+      // month therefore states one number — the net the bar actually shows —
+      // and the withdrawal breakdown row is dropped below.
+      var netMode = !!net;
       splitEl.innerHTML =
         '<div class="mic-hs-row">' +
           '<span class="mic-hs-month">' + escapeHtml(monthText) + '</span>' +
-          '<span class="mic-hs-tot"><span class="mic-hs-tot-label">Invested</span>' +
-            '<b>' + formatCurrency(mInv) + '</b></span>' +
-          (mOut > 0
+          '<span class="mic-hs-tot"><span class="mic-hs-tot-label">' +
+            (netMode ? 'Net Invested' : 'Invested') + '</span>' +
+            '<b>' + formatCurrency(netMode ? (mInv - mOut) : mInv) + '</b></span>' +
+          (!netMode && mOut > 0
             ? '<span class="mic-hs-tot"><span class="mic-hs-tot-label">Withdrawal</span>' +
               '<b class="negative">&minus;' + formatCurrency(mOut) + '</b></span>'
             : '') +
