@@ -10751,6 +10751,50 @@
         (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '');
     }
 
+    // ── Hovered-month split, shown under the stats row ──────────────────────
+    // This is the per-instrument breakdown that used to sit inside the tooltip.
+    // Only the instruments passing the legend selection are listed, so the split
+    // always adds up to the Total Invested figure above it.
+    var splitEl = document.getElementById("mic-hover-split");
+    var __micHoverIdx = -1;
+    function clearHoverSplit() {
+      __micHoverIdx = -1;
+      if (splitEl) splitEl.innerHTML = ""; // keeps its reserved row; no layout shift
+    }
+    function renderHoverSplit(idx) {
+      if (!splitEl) return;
+      // Ignore repeats: Chart.js fires onHover on every pointer move, and
+      // rebuilding the row each time made the text flicker.
+      if (idx === __micHoverIdx) return;
+      __micHoverIdx = idx;
+      var k = monthKeys[idx];
+      if (!k) { clearHoverSplit(); return; }
+
+      function chips(map, negative) {
+        var m = map[k] || {};
+        return Object.keys(m)
+          .filter(function (c) { return m[c] > 0 && catIncluded(c); })
+          .sort(function (a, b) { return m[b] - m[a]; })
+          .map(function (c) {
+            var i = catList.indexOf(c);
+            var col = i === -1 ? MIC_GREEN : MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
+            return '<span class="mic-hs-item">' +
+              '<span class="mic-hs-dot" style="background:' + (negative ? MIC_RED : col) + '"></span>' +
+              escapeHtml(c) + ' <b class="' + (negative ? 'negative' : '') + '">' +
+              (negative ? '&minus;' : '') + formatCurrency(m[c]) + '</b></span>';
+          }).join("");
+      }
+
+      var invHtml = chips(byMonthCat, false);
+      var outHtml = chips(byMonthCatOut, true);
+      if (!invHtml && !outHtml) { clearHoverSplit(); return; }
+      splitEl.innerHTML =
+        '<span class="mic-hs-month">' + escapeHtml(labels[idx] || k) + '</span>' +
+        (invHtml ? '<span class="mic-hs-group">' + invHtml + '</span>' : '') +
+        (outHtml ? '<span class="mic-hs-group mic-hs-out"><span class="mic-hs-cap">Withdrawn</span>' + outHtml + '</span>' : '');
+    }
+    clearHoverSplit();
+
     // Custom legend
     var legendEl = document.getElementById("monthly-invest-cat-legend");
     if (legendEl) {
@@ -10808,11 +10852,26 @@
       }
     }
 
+    // onHover stops firing once the pointer leaves the canvas, so without this
+    // the split panel would stay stuck on the last month hovered.
+    canvas.addEventListener("mouseleave", clearHoverSplit);
+
     __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: labels, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
+        // Drives the per-instrument split panel under the stats row. The tooltip
+        // stays on for the month totals; only the breakdown moved out.
+        onHover: function (evt, els, chart) {
+          var idx = els && els.length ? els[0].index : -1;
+          if (idx < 0) {
+            var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
+            idx = pts && pts.length ? pts[0].index : -1;
+          }
+          if (idx < 0 || idx >= monthKeys.length) clearHoverSplit();
+          else renderHoverSplit(idx);
+        },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -10827,24 +10886,13 @@
               label: function (ctx) {
                 var k = monthKeys[ctx.dataIndex];
                 if (!k) return "";
+                // Totals only. The per-instrument split moved out of the
+                // tooltip into the panel under the stats row, so the breakdown
+                // no longer floats over the bars it is describing.
                 var inv = investedTotal(k), out = outTotal(k);
                 var lines = ["Total Invested: " + formatCurrency(inv)];
-                // In "By instrument" mode, break the invested total down by
-                // Instrument Sub Category.
-                if (__monthlyInvestCatSplit && inv > 0) {
-                  var invByCat = byMonthCat[k] || {};
-                  Object.keys(invByCat)
-                    .filter(function (c) { return invByCat[c] > 0 && catIncluded(c); })
-                    .sort(function (a, b) { return invByCat[b] - invByCat[a]; })
-                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(invByCat[c])); });
-                }
                 if (out > 0) {
                   lines.push("Total Withdrawn: " + formatCurrency(out));
-                  var byCat = byMonthCatOut[k] || {};
-                  Object.keys(byCat)
-                    .filter(function (c) { return byCat[c] > 0 && catIncluded(c); })
-                    .sort(function (a, b) { return byCat[b] - byCat[a]; })
-                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(byCat[c])); });
                   lines.push("Net: " + formatCurrency(inv - out));
                 }
                 return lines;

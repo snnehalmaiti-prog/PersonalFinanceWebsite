@@ -3411,6 +3411,46 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 #monthly-invest-cat-card .mic-stat-label { font-size: 0.55rem; }
 #monthly-invest-cat-card .mic-stat-value { font-size: 0.72rem; }
+
+/* Per-instrument split for the hovered month, shown under the stats row.
+   Reserves its own height so revealing it never pushes the chart down and
+   shifts the bars out from under the pointer. */
+.mic-hover-split {
+  display: flex;
+  align-items: center;
+  /* One line, fixed height, so revealing the split never reflows the chart and
+     slides the bars out from under the pointer. A month with more instruments
+     than fit scrolls sideways instead of wrapping onto a second row. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  height: 22px;
+  gap: 0 14px;
+  padding: 0 20px 4px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mic-hover-split::-webkit-scrollbar { display: none; }
+.mic-hs-month {
+  font-weight: 800;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.mic-hs-group { display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 0 12px; }
+.mic-hs-cap {
+  font-weight: 700;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #E8623A;
+}
+.mic-hs-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.mic-hs-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.mic-hs-item b { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.mic-hs-item b.negative { color: #E8623A; }
 .mic-eyebrow {
   font-size: 0.62rem;
   font-weight: 700;
