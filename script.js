@@ -10361,6 +10361,11 @@
 
     var byMonthCat = {};
     var byMonthCatOut = {}; // withdrawals / sells / redemptions
+    // Same flows rolled up to Instrument Category (Equity / Fixed Income /
+    // Commodity) instead of sub-category. The card's aggregate view has no
+    // per-instrument bars, so its hover breakdown reports these broader groups.
+    var byMonthGrp = {};
+    var byMonthGrpOut = {};
     var allYears = {};
     function addTo(target, d, cat, amount) {
       var yr = String(d.getFullYear());
@@ -10409,6 +10414,10 @@
           ? instrCatMap[instrName]
           : (subCatIdx !== -1 && row[subCatIdx] ? (row[subCatIdx] || "").trim() : "Other");
         addTo(isBuy ? byMonthCat : byMonthCatOut, d, cat, Math.abs(amount));
+        // Gold/commodity funds and ETFs live in these sheets but are not Equity;
+        // the resolved sub-category is what distinguishes them.
+        var grp = normalizeText(cat) === "commodity" ? "Commodity" : "Equity";
+        addTo(isBuy ? byMonthGrp : byMonthGrpOut, d, grp, Math.abs(amount));
       });
     });
 
@@ -10436,6 +10445,7 @@
         if (!amount) return;
         var cat = (row[subCatIdx] || "").trim() || "Fixed Income";
         addTo(isDep ? byMonthCat : byMonthCatOut, d, cat, Math.abs(amount));
+        addTo(isDep ? byMonthGrp : byMonthGrpOut, d, "Fixed Income", Math.abs(amount));
       });
     }());
 
@@ -10450,6 +10460,9 @@
       var subCatIdx = header.indexOf("instrument sub category");
       var typeIdx   = header.indexOf("transaction type");
       var portIdx   = header.indexOf("portfolio name");
+      // This sheet holds both fixed income and commodity rows, told apart by
+      // the Instrument Category column.
+      var instrCatIdx = header.indexOf("instrument category");
       if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         if (ovSkip(row, portIdx)) return;
@@ -10466,10 +10479,17 @@
         if (!amount) return;
         var cat = (row[subCatIdx] || "").trim() || "Fixed Deposit";
         addTo(isOut ? byMonthCatOut : byMonthCat, d, cat, Math.abs(amount));
+        var grp = (instrCatIdx !== -1 && normalizeText(row[instrCatIdx]) === "commodity")
+          ? "Commodity" : "Fixed Income";
+        addTo(isOut ? byMonthGrpOut : byMonthGrp, d, grp, Math.abs(amount));
       });
     }());
 
-    return { byMonthCat: byMonthCat, byMonthCatOut: byMonthCatOut, yearList: Object.keys(allYears).sort() };
+    return {
+      byMonthCat: byMonthCat, byMonthCatOut: byMonthCatOut,
+      byMonthGrp: byMonthGrp, byMonthGrpOut: byMonthGrpOut,
+      yearList: Object.keys(allYears).sort()
+    };
   }
 
   // Month-on-month PARKED-CASH balances for the "Idle Cash" toggle. Savings
@@ -10569,6 +10589,9 @@
     try {
     var byMonthCat = __monthlyInvestCatData.byMonthCat;
     var byMonthCatOut = __monthlyInvestCatData.byMonthCatOut || {};
+    // Same flows grouped by Instrument Category, used by the hover breakdown in
+    // the aggregate view (see renderHoverSplit).
+    var byMonthGrp = __monthlyInvestCatData.byMonthGrp || {};
 
     // Month keys and axis labels for the requested view:
     // all-time = every month from the first investment to the last,
@@ -10770,6 +10793,9 @@
       var k = monthKeys[idx];
       if (!k) { clearHoverSplit(); return; }
 
+      // Same category colours the Portfolio/Category split cards use, so a
+      // category reads the same wherever it appears.
+      var GRP_COLORS = { "Equity": "#10B981", "Fixed Income": "#3B82F6", "Commodity": "#F59E0B" };
       function chips(map, negative) {
         var m = map[k] || {};
         return Object.keys(m)
@@ -10781,8 +10807,11 @@
             // the withdrawal row, which broke the link to the legend and made
             // every withdrawn instrument look alike. Direction is already
             // carried by the row's caption, the minus sign and the red amount.
-            var i = catList.indexOf(c);
-            var col = i === -1 ? MIC_GREEN : MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
+            var col = GRP_COLORS[c];               // Instrument Category (aggregate view)
+            if (!col) {
+              var i = catList.indexOf(c);
+              col = i === -1 ? MIC_GREEN : MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
+            }
             return '<span class="mic-hs-item">' +
               '<span class="mic-hs-dot" style="background:' + col + '"></span>' +
               escapeHtml(c) + ' <b class="' + (negative ? 'negative' : '') + '">' +
@@ -10790,8 +10819,19 @@
           }).join("");
       }
 
-      var invHtml = chips(byMonthCat, false);
-      var outHtml = chips(byMonthCatOut, true);
+      // "By instrument" breaks the month down by Instrument Sub Category, matching
+      // the stacked bars. The aggregate view draws one bar per month, so a
+      // sub-category list there would describe something not on screen — it
+      // reports the broader Instrument Categories (Equity, Fixed Income,
+      // Commodity) instead, and investment only.
+      var invHtml, outHtml;
+      if (__monthlyInvestCatSplit) {
+        invHtml = chips(byMonthCat, false);
+        outHtml = chips(byMonthCatOut, true);
+      } else {
+        invHtml = chips(byMonthGrp, false);
+        outHtml = "";
+      }
       if (!invHtml && !outHtml) { clearHoverSplit(); return; }
       // The axis is abbreviated for space ("Feb", "Feb 26"); spell the month out
       // here, where there is room and no ambiguity about which year is meant.
