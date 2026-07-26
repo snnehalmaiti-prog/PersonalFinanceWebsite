@@ -3508,6 +3508,16 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-legend-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; transition: background 0.12s ease, opacity 0.12s ease; user-select: none; }
 .mic-legend-clickable:hover { background: var(--bg); }
 .mic-legend-dimmed { opacity: 0.4; }
+/* "Show all" reset chip — appears only while a subset of instruments is
+   selected. Outlined rather than carrying a colour swatch, so it reads as an
+   action instead of another instrument in the legend. */
+.mic-legend-clear {
+  font-weight: 600;
+  color: var(--text);
+  border: 1px solid var(--border, rgba(0,0,0,0.14));
+  padding: 2px 8px;
+  margin: -2px 0 -2px 2px;
+}
 
 /* Investment Split card (dashed border, segmented bar, portfolio list) */
 .isc-card {
