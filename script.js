@@ -10602,11 +10602,23 @@
     function investedCell(k, cat) { return (byMonthCat[k] && byMonthCat[k][cat]) ? byMonthCat[k][cat] : 0; }
     function outCell(k, cat) { return (byMonthCatOut[k] && byMonthCatOut[k][cat]) ? byMonthCatOut[k][cat] : 0; }
     function barCell(k, cat) { return net ? investedCell(k, cat) - outCell(k, cat) : investedCell(k, cat); }
+    // In "By instrument" mode a legend click filters the chart to one
+    // instrument. The bars honoured that filter but these totals did not, so the
+    // Total Invested / Withdrawn / Net figures kept showing every instrument
+    // while the chart showed one — the headline numbers disagreed with the bars
+    // beneath them. Everything derived from these helpers (the stats row, the
+    // tooltip totals, the peak-month highlight and the avg/month) now reflects
+    // the selected instrument.
+    function catIncluded(cat) {
+      return !__monthlyInvestCatFilter || cat === __monthlyInvestCatFilter;
+    }
     function investedTotal(k) {
-      var m = byMonthCat[k]; return m ? Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0) : 0;
+      var m = byMonthCat[k];
+      return m ? Object.keys(m).reduce(function (s, c) { return catIncluded(c) ? s + m[c] : s; }, 0) : 0;
     }
     function outTotal(k) {
-      var m = byMonthCatOut[k]; return m ? Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0) : 0;
+      var m = byMonthCatOut[k];
+      return m ? Object.keys(m).reduce(function (s, c) { return catIncluded(c) ? s + m[c] : s; }, 0) : 0;
     }
     function barTotal(k) { return net ? investedTotal(k) - outTotal(k) : investedTotal(k); }
 
@@ -10794,7 +10806,7 @@
                 if (__monthlyInvestCatSplit && inv > 0) {
                   var invByCat = byMonthCat[k] || {};
                   Object.keys(invByCat)
-                    .filter(function (c) { return invByCat[c] > 0; })
+                    .filter(function (c) { return invByCat[c] > 0 && catIncluded(c); })
                     .sort(function (a, b) { return invByCat[b] - invByCat[a]; })
                     .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(invByCat[c])); });
                 }
@@ -10802,7 +10814,7 @@
                   lines.push("Total Withdrawn: " + formatCurrency(out));
                   var byCat = byMonthCatOut[k] || {};
                   Object.keys(byCat)
-                    .filter(function (c) { return byCat[c] > 0; })
+                    .filter(function (c) { return byCat[c] > 0 && catIncluded(c); })
                     .sort(function (a, b) { return byCat[b] - byCat[a]; })
                     .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(byCat[c])); });
                   lines.push("Net: " + formatCurrency(inv - out));
