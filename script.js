@@ -10743,13 +10743,43 @@
     }
 
     var statsEl = document.getElementById("monthly-invest-cat-stats");
-    if (statsEl) {
-      var hasOut = totalOut > 0;
+
+    // The stats row doubles as the hover readout: pointing at a month rewrites
+    // these figures to that month's, replacing the old floating tooltip. Scope
+    // is null for the whole period, or a month label while hovering.
+    //
+    // "Withdrawn"/"Net" are shown whenever the PERIOD has withdrawals, not just
+    // when the hovered month does. Otherwise the row would gain and lose columns
+    // as the pointer moved across months, shifting the numbers sideways under
+    // the cursor.
+    var periodHasOut = totalOut > 0;
+    function renderMicStats(scopeLabel, inv, out) {
+      if (!statsEl) return;
+      var netV = inv - out;
       statsEl.innerHTML =
-        '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
-        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
-        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '');
+        (scopeLabel ? '<div class="mic-stat mic-stat-scope"><span class="mic-stat-label">Month</span><span class="mic-stat-value">' + escapeHtml(scopeLabel) + '</span></div>' : '') +
+        '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(inv) + '</span></div>' +
+        (periodHasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(out) + '</span></div>' : '') +
+        (periodHasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (netV >= 0 ? 'positive' : 'negative') + '">' + (netV >= 0 ? '+' : '−') + formatCurrency(Math.abs(netV)) + '</span></div>' : '');
     }
+    function showPeriodStats() { renderMicStats(null, totalInvested, totalOut); }
+    showPeriodStats();
+
+    // idx < 0 restores the period totals. Repeated calls for the same month are
+    // ignored: Chart.js fires onHover on every pointer move, and rewriting the
+    // row on each one made the digits visibly flicker.
+    var __micHoverIdx = -1;
+    function showHoveredMonth(idx) {
+      if (idx === __micHoverIdx) return;
+      __micHoverIdx = idx;
+      if (idx < 0) { showPeriodStats(); return; }
+      var k = monthKeys[idx];
+      if (!k) { showPeriodStats(); return; }
+      renderMicStats(labels[idx] || k, investedTotal(k), outTotal(k));
+    }
+    // onHover doesn't fire once the pointer leaves the canvas, so without this
+    // the row would stay stuck on the last month hovered.
+    canvas.addEventListener("mouseleave", function () { showHoveredMonth(-1); });
 
     // Custom legend
     var legendEl = document.getElementById("monthly-invest-cat-legend");
@@ -10813,44 +10843,23 @@
       data: { labels: labels, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
+        // Hovering anywhere in a month's column reports that month, so the thin
+        // withdrawal line never has to be hit precisely.
+        interaction: { mode: "index", intersect: false },
+        // The floating tooltip is replaced by the stats row above the chart,
+        // which rewrites itself to the hovered month.
+        onHover: function (evt, els, chart) {
+          var idx = els && els.length ? els[0].index
+            : (function () {
+                var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
+                return pts && pts.length ? pts[0].index : -1;
+              })();
+          if (idx < 0 || idx >= monthKeys.length) { showHoveredMonth(-1); return; }
+          showHoveredMonth(idx);
+        },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            // Show the full month summary from anywhere in the column, so the
-            // user never has to hover the thin withdrawal line.
-            mode: "index",
-            intersect: false,
-            // Collapse all datasets at this month into a single consolidated
-            // block (built in `label`), so keep only the first item.
-            filter: function (item) { return item.datasetIndex === 0; },
-            callbacks: {
-              label: function (ctx) {
-                var k = monthKeys[ctx.dataIndex];
-                if (!k) return "";
-                var inv = investedTotal(k), out = outTotal(k);
-                var lines = ["Total Invested: " + formatCurrency(inv)];
-                // In "By instrument" mode, break the invested total down by
-                // Instrument Sub Category.
-                if (__monthlyInvestCatSplit && inv > 0) {
-                  var invByCat = byMonthCat[k] || {};
-                  Object.keys(invByCat)
-                    .filter(function (c) { return invByCat[c] > 0 && catIncluded(c); })
-                    .sort(function (a, b) { return invByCat[b] - invByCat[a]; })
-                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(invByCat[c])); });
-                }
-                if (out > 0) {
-                  lines.push("Total Withdrawn: " + formatCurrency(out));
-                  var byCat = byMonthCatOut[k] || {};
-                  Object.keys(byCat)
-                    .filter(function (c) { return byCat[c] > 0 && catIncluded(c); })
-                    .sort(function (a, b) { return byCat[b] - byCat[a]; })
-                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(byCat[c])); });
-                  lines.push("Net: " + formatCurrency(inv - out));
-                }
-                return lines;
-              }
-            }
-          }
+          tooltip: { enabled: false }
         },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },

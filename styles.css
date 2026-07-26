@@ -3411,6 +3411,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 #monthly-invest-cat-card .mic-stat-label { font-size: 0.55rem; }
 #monthly-invest-cat-card .mic-stat-value { font-size: 0.72rem; }
+/* Hover readout: the month being pointed at. Separated by a rule so it reads as
+   the scope of the figures beside it rather than another figure. */
+#monthly-invest-cat-card .mic-stat-scope {
+  padding-right: 10px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border, rgba(0,0,0,0.14));
+}
+#monthly-invest-cat-card .mic-stat-scope .mic-stat-value { color: var(--muted); }
 .mic-eyebrow {
   font-size: 0.62rem;
   font-weight: 700;
