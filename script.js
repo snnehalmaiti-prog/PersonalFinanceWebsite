@@ -5416,6 +5416,11 @@
     if (eyebrow) eyebrow.textContent = "MARKET-CAP SPLIT · DIRECT EQUITY";
     var mapping = buildStockMappingTable();
     var byCap = { "Large-cap": 0, "Mid-cap": 0, "Small-cap": 0 };
+    // Instrument Category behind each cap bucket, so a holding mapped to
+    // something other than Equity is visible rather than being read as equity
+    // purely because it sits in a market-cap row. Same column the mapping sheet
+    // already supplies for this card.
+    var capCats = { "Large-cap": {}, "Mid-cap": {}, "Small-cap": {} };
     rowsData.forEach(function (h) {
       var m = mapping[normalizeText(h.instrument)];
       if (!m) return;
@@ -5425,8 +5430,19 @@
       var key = seg.indexOf("large") !== -1 ? "Large-cap"
         : seg.indexOf("mid") !== -1 ? "Mid-cap"
         : seg.indexOf("small") !== -1 ? "Small-cap" : null;
-      if (key) byCap[key] += h.currentINR || 0;
+      if (key) {
+        byCap[key] += h.currentINR || 0;
+        var tc = (m.category || "").trim();
+        if (tc) capCats[key][tc] = (capCats[key][tc] || 0) + (h.currentINR || 0);
+      }
     });
+    // A bucket can mix categories; list them largest first rather than showing
+    // one and hiding the others.
+    function capCatLabel(k) {
+      var m = capCats[k];
+      if (!m) return "";
+      return Object.keys(m).sort(function (a, b) { return m[b] - m[a]; }).join(" · ");
+    }
     var total = byCap["Large-cap"] + byCap["Mid-cap"] + byCap["Small-cap"];
     if (total <= 0) { bar.innerHTML = ""; rows.innerHTML = '<p class="muted small">No market-cap data. Expected values like "Large Cap" / "Mid Cap" / "Small Cap" in the Market Segment column of the Stocks/ETF mapping sheet.</p>'; return; }
     var COL = { "Large-cap": "#E8623A", "Mid-cap": "#D4A017", "Small-cap": "#10B981" };
@@ -5436,8 +5452,10 @@
     }).join("");
     rows.innerHTML = ["Large-cap", "Mid-cap", "Small-cap"].map(function (k) {
       var pct = byCap[k] / total * 100;
+      var capLabel = capCatLabel(k);
       return '<div class="mfalloc-row">' +
-        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + COL[k] + ';"></span>' + k + '</span>' +
+        '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + COL[k] + ';"></span>' + k +
+          (capLabel ? '<span class="mfalloc-cat">' + escapeHtml(capLabel) + '</span>' : '') + '</span>' +
         '<span class="mfalloc-nums">' +
           '<span class="mfalloc-amount">' + formatCurrency(byCap[k]) + '</span>' +
           '<span class="mfalloc-pct" style="color:' + COL[k] + ';">' + Math.round(pct) + '%</span>' +
