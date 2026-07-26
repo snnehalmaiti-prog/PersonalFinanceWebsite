@@ -1337,7 +1337,10 @@
   // today's USD/INR. If an instrument's live price hasn't loaded yet, falls back to
   // its INR cost basis so a freshly-added ticker still contributes. Returns
   // Promise<number>.
-  function computeStocksEtfCurrentINR(portfolioFilter) {
+  // outByCat (optional): accumulates current value per Instrument Category, so a
+  // bond ETF marked Fixed Income is not counted as equity. Return value is
+  // unchanged for existing callers.
+  function computeStocksEtfCurrentINR(portfolioFilter, outByCat) {
     return fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
       var allPrices = (sp && sp.prices) || {};
       var usdInr = (sp && sp.usd_inr_history) || {};
@@ -1348,6 +1351,12 @@
       var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
       if (!tx) return 0;
       var total = 0;
+      var _topCat = outByCat ? buildInstrumentTopCategoryMap() : null;
+      function _addCat(nm, v) {
+        if (!outByCat || !v) return;
+        var c = _topCat[normalizeText(nm)] || "Equity";
+        outByCat[c] = (outByCat[c] || 0) + v;
+      }
       Object.keys(tx).forEach(function (instr) {
         var m = seMap[normalizeText(instr)];
         var isUsd = !!(m && normalizeText(m.region) === "us");
@@ -1364,9 +1373,12 @@
         if (units <= UNITS_EPSILON) return;
         var priceEntry = ticker ? allPrices[ticker] : null;
         if (priceEntry && priceEntry.price != null) {
-          total += units * (isUsd ? priceEntry.price * usdToday : priceEntry.price);
+          var v = units * (isUsd ? priceEntry.price * usdToday : priceEntry.price);
+          total += v;
+          _addCat(instr, v);
         } else {
           total += costINR; // no live price yet → cost-basis fallback
+          _addCat(instr, costINR);
         }
       });
       return total;
@@ -1437,12 +1449,25 @@
           var c = 0; hs.forEach(function (h) { c += h.current; }); return c;
         }).catch(function () { return 0; })
       : Promise.resolve(0);
+    // Instruments carry their own Instrument Category, so a debt fund or bond ETF
+    // held in the Mutual Fund / Stocks-ETF sheets belongs to Fixed Income and a
+    // gold fund to Commodity. Collect their current values per category and move
+    // the non-equity ones across, instead of counting every sheet row as Equity.
+    var mfByCat = {}, seByCat = {};
     return Promise.all([
-      _computeMfCurrentValueForPortfolio(portfolio).then(function (r) { return r.current; }).catch(function () { return 0; }),
-      computeStocksEtfCurrentINR(portfolio).catch(function () { return 0; }),
+      _computeMfCurrentValueForPortfolio(portfolio, mfByCat).then(function (r) { return r.current; }).catch(function () { return 0; }),
+      computeStocksEtfCurrentINR(portfolio, seByCat).catch(function () { return 0; }),
       commodityPromise
     ]).then(function (parts) {
       var mfCur = parts[0] || 0, seCur = parts[1] || 0, commCur = parts[2] || 0;
+      var movedFi = 0, movedComm = 0;
+      [mfByCat, seByCat].forEach(function (m) {
+        Object.keys(m).forEach(function (c) {
+          var n = normalizeText(c);
+          if (n === "fixed income") movedFi += m[c];
+          else if (n === "commodity") movedComm += m[c];
+        });
+      });
       var fiCur = 0;
       if (!fiEx && fdRows) {
         fiCur = (sumFdCurrentValueAtPar(fdRows, portfolio) || 0)
@@ -1452,7 +1477,13 @@
       if (!fiEx && epfRows && epfRows.length) {
         (buildEpfFixedIncomeHoldingsList(epfRows, portfolio) || []).forEach(function (h) { fiCur += (h.current || 0); });
       }
-      return { equity: mfCur + seCur, fixedIncome: fiCur, commodity: commCur };
+      // Subtract what was reclassified so nothing is double-counted; the three
+      // buckets still sum to the same portfolio total as before.
+      return {
+        equity: Math.max(0, mfCur + seCur - movedFi - movedComm),
+        fixedIncome: fiCur + (fiEx ? 0 : movedFi),
+        commodity: commCur + (fiEx ? 0 : movedComm)
+      };
     }).catch(function () { return { equity: 0, fixedIncome: 0, commodity: 0 }; });
   }
 
@@ -3367,6 +3398,31 @@
   var _stockPricesPromise = null;
   var _stockStaticPromise = null;
   var _stockMergedCache = null; // { data, at } — in-memory merged (static + live)
+
+  // Instrument -> Instrument Category ("Equity", "Fixed Income", "Commodity", …)
+  // as stated in the Mutual Fund and Stocks/ETF mapping sheets.
+  //
+  // The sheet an instrument's transactions live in does NOT determine its
+  // category: a debt fund and a gold fund both sit in the Mutual Fund sheet but
+  // are Fixed Income and Commodity respectively. Anything holding a category
+  // must consult this map rather than assume "equity sheet ⇒ Equity".
+  function buildInstrumentTopCategoryMap() {
+    var map = {};
+    ["mfmapping", "stocksetfmapping"].forEach(function (mp) {
+      var rows = getSheetRows(mp);
+      if (!rows || rows.length < 2) return;
+      var header = rows[0].map(normalizeText);
+      var iIdx = header.indexOf("instrument name");
+      var cIdx = header.indexOf("instrument category");
+      if (iIdx === -1 || cIdx === -1) return;
+      rows.slice(1).forEach(function (r) {
+        var nm = (r[iIdx] || "").trim();
+        var cat = (r[cIdx] || "").trim();
+        if (nm && cat) map[normalizeText(nm)] = cat;
+      });
+    });
+    return map;
+  }
 
   function buildStockMappingTable() {
     var rows = getSheetRows("stocksetfmapping");
@@ -9463,8 +9519,14 @@
     var _mfCatMap_ps = {}, _seMap_ps = {};
     try { _mfCatMap_ps = buildMfCategoryMap(); } catch (e) {}
     try { _seMap_ps = buildStockMappingTable(); } catch (e) {}
-    function _commodityFromEquitySources(portfolioName) {
-      var total = 0;
+    // Invested amounts held in the Mutual Fund / Stocks-ETF sheets that do NOT
+    // belong to Equity, keyed by their Instrument Category. Previously this only
+    // looked for Commodity, so a debt fund marked Fixed Income stayed counted as
+    // Equity. Reads the category the mapping sheets state, whatever it is.
+    var _instrTopCat_ps = {};
+    try { _instrTopCat_ps = buildInstrumentTopCategoryMap(); } catch (e) {}
+    function _nonEquityFromEquitySources(portfolioName) {
+      var out = {};
       ["equity", "stocksetf"].forEach(function (prefix) {
         try {
           var rowsX = getSheetRows(prefix);
@@ -9472,20 +9534,16 @@
           var txByI = groupUnitTransactionsByInstrument(rowsX, portfolioName);
           if (!txByI) return;
           Object.keys(txByI).forEach(function (nm) {
-            var isCommodity = false;
-            if (prefix === "equity") {
-              isCommodity = _mfCatMap_ps[normalizeText(nm)] === "commodity";
-            } else {
-              var m = _seMap_ps[normalizeText(nm)];
-              isCommodity = !!(m && m.category && normalizeText(m.category) === "commodity");
-            }
-            if (!isCommodity) return;
-            var remaining = fifoRemainingLots(txByI[nm]);
-            remaining.forEach(function (l) { total += l.units * l.price; });
+            var cat = _instrTopCat_ps[normalizeText(nm)] || "";
+            var n = normalizeText(cat);
+            if (!n || n === "equity") return;
+            var amt = 0;
+            fifoRemainingLots(txByI[nm]).forEach(function (l) { amt += l.units * l.price; });
+            if (amt) out[n] = (out[n] || 0) + amt;
           });
         } catch (e) {}
       });
-      return total;
+      return out;
     }
 
     // US Stocks/ETF INR-conversion delta per portfolio — populated
@@ -9503,9 +9561,12 @@
         eq = cb.equity; fi = cb.fixedIncome; comm = cb.commodity;
       } else {
         eq = computeTotalInvestment(name, ["equity", "stocksetf"]) + (_seInrDeltaByName[name] || 0);
-        var extraComm = _commodityFromEquitySources(name);
-        eq -= extraComm; // reclassify commodity MF/ETF out of Equity
-        fi = fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"]);
+        var nonEq = _nonEquityFromEquitySources(name);
+        var extraComm = nonEq["commodity"] || 0;
+        var extraFi = nonEq["fixed income"] || 0;
+        // Move every non-equity category out of Equity, not just commodity.
+        Object.keys(nonEq).forEach(function (n) { eq -= nonEq[n]; });
+        fi = (fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"])) + extraFi;
         comm = (fiExcluded ? 0 : (commodityByName[name] || 0)) + extraComm;
       }
       var parts = [
@@ -11917,11 +11978,20 @@
     });
   }
 
-  function _computeMfCurrentValueForPortfolio(portfolio) {
+  // outByCat (optional): accumulates current value per Instrument Category, so
+  // callers can separate debt and gold funds from equity ones. The return shape
+  // is unchanged, so existing callers are unaffected.
+  function _computeMfCurrentValueForPortfolio(portfolio, outByCat) {
     var rows = getSheetRows("equity");
     if (!rows) return Promise.resolve({ current: 0, dayChange: 0 });
     var byInst = groupUnitTransactionsByInstrument(rows, portfolio);
     if (!byInst) return Promise.resolve({ current: 0, dayChange: 0 });
+    var _topCat = outByCat ? buildInstrumentTopCategoryMap() : null;
+    function _addCat(nm, v) {
+      if (!outByCat || !v) return;
+      var c = _topCat[normalizeText(nm)] || "Equity";
+      outByCat[c] = (outByCat[c] || 0) + v;
+    }
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var allNames = Object.keys(byInst);
       var mapped = allNames.filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
@@ -11939,6 +12009,7 @@
             if (nav) {
               var prevNav = previous_nav_for(hist);
               total += units * nav;
+              _addCat(n, units * nav);
               prevTotal += units * (prevNav || nav); // no day change if prev NAV missing
             } else {
               // Unmapped or NAV-missing fund: value at COST — matches the Overview's
@@ -11946,6 +12017,7 @@
               // (previously these funds were dropped, undercounting the split totals).
               var cost = lots.reduce(function (s, l) { return s + l.units * l.price; }, 0);
               total += cost;
+              _addCat(n, cost);
               prevTotal += cost; // cost-valued → no day change
             }
           });
