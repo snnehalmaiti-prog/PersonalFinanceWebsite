@@ -10359,6 +10359,26 @@
       });
     });
 
+    // Instrument -> Instrument Category ("Equity", "Commodity", "Fixed Income"),
+    // read from the mapping sheets' own column rather than inferred. Deriving it
+    // from the sub-category was wrong: a gold fund's sub-category reads "Gold",
+    // not "Commodity", so it was silently grouped under Equity and no Commodity
+    // row ever appeared.
+    var instrTopCatMap = {};
+    ["mfmapping", "stocksetfmapping"].forEach(function (mp) {
+      var mrows = getSheetRows(mp);
+      if (!mrows || mrows.length < 2) return;
+      var mhdr = mrows[0].map(normalizeText);
+      var miIdx = mhdr.indexOf("instrument name");
+      var mcIdx = mhdr.indexOf("instrument category");
+      if (miIdx === -1 || mcIdx === -1) return;
+      mrows.slice(1).forEach(function (r) {
+        var instr = (r[miIdx] || "").trim();
+        var tcat = (r[mcIdx] || "").trim();
+        if (instr && tcat) instrTopCatMap[normalizeText(instr)] = tcat;
+      });
+    });
+
     var byMonthCat = {};
     var byMonthCatOut = {}; // withdrawals / sells / redemptions
     // Same flows rolled up to Instrument Category (Equity / Fixed Income /
@@ -10414,9 +10434,11 @@
           ? instrCatMap[instrName]
           : (subCatIdx !== -1 && row[subCatIdx] ? (row[subCatIdx] || "").trim() : "Other");
         addTo(isBuy ? byMonthCat : byMonthCatOut, d, cat, Math.abs(amount));
-        // Gold/commodity funds and ETFs live in these sheets but are not Equity;
-        // the resolved sub-category is what distinguishes them.
-        var grp = normalizeText(cat) === "commodity" ? "Commodity" : "Equity";
+        // Gold funds and ETFs live in these sheets but are not Equity. Take the
+        // category the mapping sheet states; fall back to Equity only when the
+        // instrument has no mapping row at all.
+        var grp = (instrName && instrTopCatMap[instrName]) ||
+                  (normalizeText(cat) === "commodity" ? "Commodity" : "Equity");
         addTo(isBuy ? byMonthGrp : byMonthGrpOut, d, grp, Math.abs(amount));
       });
     });
@@ -10479,8 +10501,10 @@
         if (!amount) return;
         var cat = (row[subCatIdx] || "").trim() || "Fixed Deposit";
         addTo(isOut ? byMonthCatOut : byMonthCat, d, cat, Math.abs(amount));
-        var grp = (instrCatIdx !== -1 && normalizeText(row[instrCatIdx]) === "commodity")
-          ? "Commodity" : "Fixed Income";
+        // Take the sheet's own Instrument Category so any value it uses shows up,
+        // instead of collapsing everything that isn't the literal string
+        // "commodity" into Fixed Income.
+        var grp = (instrCatIdx !== -1 && (row[instrCatIdx] || "").trim()) || "Fixed Income";
         addTo(isOut ? byMonthGrpOut : byMonthGrp, d, grp, Math.abs(amount));
       });
     }());
@@ -10824,7 +10848,9 @@
 
       // Same category colours the Portfolio/Category split cards use, so a
       // category reads the same wherever it appears.
-      var GRP_COLORS = { "Equity": "#10B981", "Fixed Income": "#3B82F6", "Commodity": "#F59E0B" };
+      // Keyed on the normalised name so a category still gets its colour however
+      // it is capitalised or spaced in the sheet ("Fixed Income", "fixed income").
+      var GRP_COLORS = { "equity": "#10B981", "fixed income": "#3B82F6", "commodity": "#F59E0B" };
       function chips(map, negative) {
         var m = map[k] || {};
         return Object.keys(m)
@@ -10836,7 +10862,7 @@
             // the withdrawal row, which broke the link to the legend and made
             // every withdrawn instrument look alike. Direction is already
             // carried by the row's caption, the minus sign and the red amount.
-            var col = GRP_COLORS[c];               // Instrument Category (aggregate view)
+            var col = GRP_COLORS[normalizeText(c)]; // Instrument Category (aggregate view)
             if (!col) {
               var i = catList.indexOf(c);
               // Position in catList keeps the chip in step with the bars and the
@@ -10915,13 +10941,20 @@
     // height is identical in both states and the chart never moves.
     function showPeriodSplit() {
       if (!splitEl) return;
-      var GRP_COLORS_P = { "Equity": "#10B981", "Fixed Income": "#3B82F6", "Commodity": "#F59E0B" };
+      var GRP_COLORS_P = { "equity": "#10B981", "fixed income": "#3B82F6", "commodity": "#F59E0B" };
       function grpChips(totals, negative) {
         return Object.keys(totals)
           .filter(function (c) { return totals[c] > 0; })
           .sort(function (a, b) { return totals[b] - totals[a]; })
           .map(function (c) {
-            var col = GRP_COLORS_P[c] || MIC_GREEN;
+            // Unknown categories get a stable colour from the palette rather than
+            // all sharing one, so two of them remain distinguishable.
+            var col = GRP_COLORS_P[normalizeText(c)];
+            if (!col) {
+              var h = 0;
+              for (var hj = 0; hj < c.length; hj++) h = (h * 31 + c.charCodeAt(hj)) >>> 0;
+              col = MIC_SPLIT_PALETTE[h % MIC_SPLIT_PALETTE.length];
+            }
             return '<span class="mic-hs-item">' +
               '<span class="mic-hs-dot" style="background:' + col + '"></span>' +
               escapeHtml(c) + ' <b class="' + (negative ? 'negative' : '') + '">' +
