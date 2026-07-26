@@ -10582,7 +10582,15 @@
     var MIC_PALETTE = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
     var MIC_GREEN = "#52B788"; var MIC_GREEN_PEAK = "#1B6E45"; var MIC_RED = "#E8623A";
     // Warm palette for split-by-instrument mode (matches screenshot)
-    var MIC_SPLIT_PALETTE = ["#E8623A","#F5A623","#4DC0B5","#8B5CF6","#3B82F6","#10B981","#EC4899","#84CC16"];
+    // Colours are assigned by position and wrap with the modulo below, so with
+    // only eight entries a ninth sub-category repeated the first one's colour —
+    // two different instruments then looked identical in the bars, the legend
+    // and the hover split. Sixteen distinct hues push that collision out past
+    // any realistic sub-category count.
+    var MIC_SPLIT_PALETTE = [
+      "#E8623A","#F5A623","#4DC0B5","#8B5CF6","#3B82F6","#10B981","#EC4899","#84CC16",
+      "#0EA5E9","#D946EF","#F97316","#14B8A6","#6366F1","#EAB308","#DC2626","#7C3AED"
+    ];
     var wrap = document.getElementById("monthly-invest-cat-wrap");
     var statusEl = document.getElementById("monthly-invest-cat-status");
     if (!wrap || typeof Chart === "undefined" || !__monthlyInvestCatData) return;
@@ -10810,7 +10818,16 @@
             var col = GRP_COLORS[c];               // Instrument Category (aggregate view)
             if (!col) {
               var i = catList.indexOf(c);
-              col = i === -1 ? MIC_GREEN : MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
+              // Position in catList keeps the chip in step with the bars and the
+              // legend. A name that isn't in the list falls back to a hash of
+              // itself rather than a shared colour, so two such names stay
+              // distinguishable instead of both rendering the same green.
+              if (i === -1) {
+                var hsh = 0;
+                for (var hi = 0; hi < c.length; hi++) hsh = (hsh * 31 + c.charCodeAt(hi)) >>> 0;
+                i = hsh;
+              }
+              col = MIC_SPLIT_PALETTE[i % MIC_SPLIT_PALETTE.length];
             }
             return '<span class="mic-hs-item">' +
               '<span class="mic-hs-dot" style="background:' + col + '"></span>' +
