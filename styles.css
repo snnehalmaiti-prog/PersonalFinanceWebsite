@@ -3398,6 +3398,19 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Overview "Monthly investment" card: eyebrow + stats sit on one line. */
 #monthly-invest-cat-card .mic-title-group { flex-direction: row; align-items: center; gap: 18px; flex-wrap: wrap; }
 #monthly-invest-cat-card .mic-stats-row { padding: 0; }
+/* Put each label and its figure on one line, a little smaller than the default
+   stacked treatment. Baseline alignment (not centre) so the two sizes sit on a
+   shared text baseline.
+   Scoped to this card on purpose: Income & Expenses uses the same .mic-stat in a
+   half-width card carrying four stats, and its row is nowrap — going inline
+   there would push the last stat out of view. */
+#monthly-invest-cat-card .mic-stat {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+#monthly-invest-cat-card .mic-stat-label { font-size: 0.55rem; }
+#monthly-invest-cat-card .mic-stat-value { font-size: 0.72rem; }
 .mic-eyebrow {
   font-size: 0.62rem;
   font-weight: 700;
