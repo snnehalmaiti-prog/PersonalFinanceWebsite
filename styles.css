@@ -3412,6 +3412,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #monthly-invest-cat-card .mic-stat-label { font-size: 0.55rem; }
 #monthly-invest-cat-card .mic-stat-value { font-size: 0.72rem; }
 
+/* Tighten the run from the stats row into the hover split. The header reserved
+   12px below itself and the status paragraph held another 4px while empty, which
+   left the month line floating well clear of the totals it belongs with.
+   The !important is needed only because that paragraph carries inline padding. */
+#monthly-invest-cat-card .mic-header { padding-bottom: 4px; }
+#monthly-invest-cat-card #monthly-invest-cat-status:empty { padding-bottom: 0 !important; }
+
 /* Per-instrument split for the hovered month, shown under the stats row.
    Reserves its own height so revealing it never pushes the chart down and
    shifts the bars out from under the pointer. */
