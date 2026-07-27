@@ -11198,17 +11198,63 @@
       if (!list.length) {
         bodyEl.innerHTML = '<p class="muted small" style="padding:14px 20px;margin:0;">Nothing to show.</p>';
       } else {
+        // Roll repeat transactions of the same instrument into one line, keyed by
+        // instrument AND direction. Buys and sells are therefore summed
+        // separately and never netted against each other: an instrument bought
+        // and sold in the same month shows both a positive and a negative line,
+        // which is what makes the month's gross activity readable.
+        var MON_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        function aggregateTxns(rows) {
+          var m = {};
+          rows.forEach(function (t) {
+            var key = (t.instrument || t.cat || "—") + "|" + (t.out ? "out" : "in");
+            if (!m[key]) {
+              m[key] = {
+                instrument: t.instrument, cat: t.cat, grp: t.grp, out: t.out,
+                amount: 0, count: 0, types: {}, min: t.date, max: t.date
+              };
+            }
+            var g = m[key];
+            g.amount += t.amount;
+            g.count += 1;
+            if (t.type) g.types[t.type] = true;
+            if (t.date < g.min) g.min = t.date;
+            if (t.date > g.max) g.max = t.date;
+          });
+          // Investments first, then withdrawals, each largest first.
+          return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) {
+            if (a.out !== b.out) return a.out ? 1 : -1;
+            return b.amount - a.amount;
+          });
+        }
+
         function txnRow(t) {
           var col = MIC_SPLIT_PALETTE[Math.max(0, catList.indexOf(t.cat)) % MIC_SPLIT_PALETTE.length];
           var name = t.instrument || t.cat || "—";
+          // One transaction keeps its date; several show how many were combined
+          // and the span they cover, so the summed figure is never mistaken for
+          // a single purchase.
+          var dateCell;
+          if (t.count > 1) {
+            var span = t.min.getDate() === t.max.getDate()
+              ? t.min.getDate() + " " + MON_SHORT[t.min.getMonth()]
+              : t.min.getDate() + "–" + t.max.getDate() + " " + MON_SHORT[t.max.getMonth()];
+            dateCell = '<span>' + t.count + ' txns</span>' +
+                       '<br><span class="mic-txn-sub-cat">' + escapeHtml(span) + '</span>';
+          } else {
+            dateCell = escapeHtml(formatDateISO(t.min) || "");
+          }
+          var typeKeys = Object.keys(t.types);
+          var typeLabel = typeKeys.length === 1 ? typeKeys[0]
+            : (typeKeys.length > 1 ? typeKeys.join(" / ") : (t.out ? "Withdrawal" : "Investment"));
           return '<tr>' +
-            '<td>' + escapeHtml(formatDateISO(t.date) || "") + '</td>' +
+            '<td>' + dateCell + '</td>' +
             '<td><span class="mic-txn-inst"><span class="mic-txn-dot" style="background:' + col + '"></span>' +
               '<span>' + escapeHtml(name) +
               (t.cat ? '<br><span class="mic-txn-sub-cat">' + escapeHtml(t.cat) + '</span>' : '') +
               '</span></span></td>' +
             '<td>' + escapeHtml(t.grp || "") + '</td>' +
-            '<td>' + escapeHtml(t.type || (t.out ? "Withdrawal" : "Investment")) + '</td>' +
+            '<td>' + escapeHtml(typeLabel) + '</td>' +
             '<td class="num' + (t.out ? ' out' : '') + '">' + (t.out ? '&minus;' : '') + formatCurrency(t.amount) + '</td>' +
           '</tr>';
         }
@@ -11242,7 +11288,7 @@
                 (rows.length === 1 ? ' transaction' : ' transactions') + '</span></td>' +
               '<td class="num">' + totals + '</td>' +
             '</tr>' +
-            rows.map(txnRow).join("") +
+            aggregateTxns(rows).map(txnRow).join("") +
           '</tbody>';
         }).join("");
 
