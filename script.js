@@ -11122,6 +11122,30 @@
       // break down are stated next to the month rather than having to be added
       // up by eye. Both honour the legend selection, exactly like the chips.
       var mInv = investedTotal(k), mOut = outTotal(k);
+
+      // Realized P&L for the month's sales. Summed per portfolio+instrument from
+      // the same FIFO pools the Sold view uses, and restricted to instruments the
+      // legend is currently showing so it agrees with the Invested and Withdrawal
+      // figures beside it. Null when the month has no priced sales, so a month
+      // without one simply omits the figure.
+      var mPnl = (function () {
+        var data = __micRealizedData && __micRealizedData[k];
+        if (!data) return null;
+        var seen = {}, total = 0, any = false;
+        (txnsByMonth[k] || []).forEach(function (t) {
+          if (!t.out || !catIncluded(t.cat)) return;
+          var pf = t.portfolio || "";
+          var n = normalizeText(t.instrument || "");
+          var key = pf + "|" + n;
+          if (seen[key]) return;                    // one entry per instrument per portfolio
+          var r = data[pf] && data[pf][n];
+          if (!r || !(r.units > 0)) return;
+          seen[key] = 1;
+          total += r.proceeds - r.cost;
+          any = true;
+        });
+        return any ? total : null;
+      })();
       // Net mode folds withdrawals into the bars, so reporting a withdrawal
       // figure alongside them would double-count it in the reader's head. The
       // month therefore states one number — the net the bar actually shows —
@@ -11136,6 +11160,11 @@
           (!netMode && mOut > 0
             ? '<span class="mic-hs-tot"><span class="mic-hs-tot-label">Withdrawal</span>' +
               '<b class="negative">&minus;' + formatCurrency(mOut) + '</b></span>'
+            : '') +
+          (mPnl !== null
+            ? '<span class="mic-hs-tot"><span class="mic-hs-tot-label">P&amp;L</span>' +
+              '<b class="' + (mPnl >= 0 ? 'mic-hs-pos' : 'negative') + '">' +
+              (mPnl >= 0 ? '+' : '&minus;') + formatCurrency(Math.abs(mPnl)) + '</b></span>'
             : '') +
         '</div>' +
         '<div class="mic-hs-row">' +
@@ -11250,6 +11279,13 @@
 
     // ── Drill-down: click a month to list the transactions behind it ────────
     var txnsByMonth = (__monthlyInvestCatData && __monthlyInvestCatData.byMonthTxns) || {};
+    // Start resolving realized P&L now rather than on first use: the hover
+    // readout wants it, and it needs USD/INR history, so waiting until the
+    // pointer arrives would leave the figure missing on the first hover.
+    if (!__micRealizedData) {
+      buildRealizedByMonthInstrument(localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all")
+        .then(function (d) { __micRealizedData = d; });
+    }
 
     function openTxnModal(idx) {
       var overlay = document.getElementById("mic-txn-overlay");

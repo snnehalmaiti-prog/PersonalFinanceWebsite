@@ -3480,6 +3480,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .mic-hs-tot b { font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
 .mic-hs-tot b.negative { color: #E8623A; }
+.mic-hs-tot b.mic-hs-pos { color: #10B981; }
 .mic-hs-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .mic-hs-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 .mic-hs-item b { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
