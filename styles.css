@@ -4215,6 +4215,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-txn-table td { padding: 7px 20px; border-top: 1px solid var(--border, rgba(0, 0, 0, 0.07)); color: var(--text); }
 .mic-txn-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
 .mic-txn-table td.num.out { color: #E8623A; }
+.mic-txn-table td.num.pos { color: #10B981; }
+/* Value genuinely unavailable (no unit price on the row), not zero. */
+.mic-txn-table td.mic-txn-na { color: var(--muted); font-weight: 500; }
 .mic-txn-inst { display: flex; align-items: center; gap: 7px; }
 .mic-txn-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 .mic-txn-sub-cat { font-size: 0.66rem; color: var(--muted); }

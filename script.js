@@ -10174,6 +10174,88 @@
   }
 
   // Computes realized (booked) profit — sale proceeds minus FIFO-matched cost —
+  // Realized detail for each SOLD instrument, bucketed by the month of the sale:
+  // { "YYYY-MM": { normalisedInstrument: { units, cost, proceeds } } }.
+  //
+  // Deliberately the same FIFO as buildRealizedProfitByCategory — lots consumed
+  // oldest first across the instrument's whole history, units clamped to what was
+  // actually matched so overselling cannot credit zero-cost proceeds, and US legs
+  // converted at each transaction's own USD/INR rate. Only sells are attributed
+  // to a month; the buys that funded them keep their original dates, which is
+  // what makes the cost basis right.
+  //
+  // Only the unit-priced sheets are covered. FD/PF/commodity rows carry no unit
+  // price, so the drill-down leaves their price and P&L columns blank rather than
+  // inventing a number.
+  var __micRealizedCache = {};
+  function buildRealizedByMonthInstrument(portfolioFilter) {
+    var cacheKey = portfolioFilter || "all";
+    if (__micRealizedCache[cacheKey]) return __micRealizedCache[cacheKey];
+    var pr = fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var out = {};
+      // Keyed by portfolio as well as instrument. The drill-down lists rows under
+      // a portfolio heading, and running one combined FIFO would report the same
+      // realized figure against every portfolio that sold the instrument that
+      // month — double counting it. A per-portfolio pool also matches how the
+      // rest of the app derives per-portfolio numbers.
+      function add(d, pf, instr, units, cost, proceeds) {
+        if (!d || units <= 0) return;
+        var key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+        out[key] = out[key] || {};
+        out[key][pf] = out[key][pf] || {};
+        var e = out[key][pf][instr] = out[key][pf][instr] || { units: 0, cost: 0, proceeds: 0 };
+        e.units += units; e.cost += cost; e.proceeds += proceeds;
+      }
+      var pfNames = collectPortfolioNamesFromSheets(["equity", "stocksetf"]) || [];
+      // When the chart is already filtered to one portfolio, that is the only
+      // pool that can appear.
+      if (portfolioFilter && portfolioFilter !== "all") pfNames = [portfolioFilter];
+      pfNames.forEach(function (pf) {
+      ["equity", "stocksetf"].forEach(function (prefix) {
+        var rows = getSheetRows(prefix);
+        if (!rows) return;
+        var tx = groupUnitTransactionsByInstrument(rows, pf);
+        if (!tx) return;
+        Object.keys(tx).forEach(function (instr) {
+          var norm = normalizeText(instr);
+          var isUsd = false;
+          if (prefix === "stocksetf") {
+            var m = seMap[norm];
+            isUsd = !!(m && normalizeText(m.region) === "us");
+          }
+          var lots = [];
+          tx[instr].forEach(function (t) {
+            if (t.type === "buy") {
+              var buyRate = isUsd ? lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday) : 1;
+              lots.push({ units: t.units, cost: t.price * buyRate });
+              return;
+            }
+            var toMatch = t.units, costMatched = 0, matched = 0;
+            while (toMatch > 0 && lots.length) {
+              var l = lots[0];
+              var mq = Math.min(toMatch, l.units);
+              costMatched += mq * l.cost;
+              matched += mq;
+              l.units -= mq;
+              toMatch -= mq;
+              if (l.units <= 0) lots.shift();
+            }
+            if (matched <= 0) return;
+            var sellRate = isUsd ? lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday) : 1;
+            add(t.date, pf, norm, matched, costMatched, matched * t.price * sellRate);
+          });
+        });
+      });
+      });
+      return out;
+    }).catch(function () { return {}; });
+    __micRealizedCache[cacheKey] = pr;
+    return pr;
+  }
+
   // from Mutual Fund + Stocks/ETF sells, bucketed by year → category → sub
   // category. US sells/costs are converted to INR at each leg's transaction-date
   // rate. Returns Promise<{ buckets, years }>, where buckets[year|"all"][cat][sub].
@@ -10409,6 +10491,7 @@
   // current render so the filter buttons — bound once, outside the chart's
   // per-render closure — can redraw the open month.
   var __micTxnFilter = "all";
+  var __micRealizedData = null;
   var __micTxnRerender = null;
   var __monthlyInvestCatIdle = false; // on = show month-on-month parked-cash balances (Savings Account + Investment Corpus)
   var __monthlyIdleCashData; // { byMonthInstr, instruments, yearList }
@@ -11220,6 +11303,21 @@
       if (__micTxnFilter === "in") list = base.filter(function (t) { return !t.out; });
       else if (__micTxnFilter === "out") list = base.filter(function (t) { return t.out; });
       __micTxnRerender = function () { openTxnModal(idx); };
+
+      // Realized detail for the extra Sold columns. Resolved asynchronously (it
+      // needs USD/INR history), so render now and repaint if it lands later —
+      // the modal must not sit blank waiting for it.
+      var soldView = __micTxnFilter === "out";
+      var realizedMonth = (__micRealizedData && __micRealizedData[k]) || null;
+      if (soldView && !realizedMonth) {
+        buildRealizedByMonthInstrument(localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all")
+          .then(function (data) {
+            __micRealizedData = data;
+            var ov = document.getElementById("mic-txn-overlay");
+            // Only repaint if the same view is still on screen.
+            if (ov && !ov.hidden && __micTxnFilter === "out") openTxnModal(idx);
+          });
+      }
       // Newest first, then largest — the order someone scanning for a specific
       // transaction expects.
       list = list.slice().sort(function (a, b) {
@@ -11252,6 +11350,11 @@
             if (!m[key]) {
               m[key] = {
                 instrument: t.instrument, cat: t.cat, grp: t.grp, out: t.out,
+                // Carried through because the realized lookup is keyed by
+                // portfolio; without it every Sold row lost its Buy/Sell price
+                // and P&L. Aggregation happens within a portfolio group, so all
+                // rows folded into a line share this value.
+                portfolio: t.portfolio,
                 amount: 0, count: 0, types: {}, min: t.date, max: t.date
               };
             }
@@ -11288,6 +11391,48 @@
           var typeKeys = Object.keys(t.types);
           var typeLabel = typeKeys.length === 1 ? typeKeys[0]
             : (typeKeys.length > 1 ? typeKeys.join(" / ") : (t.out ? "Withdrawal" : "Investment"));
+          // Sold view adds Buy Price / Sell Price / P&L, taken from the FIFO
+          // realized figures. An instrument with no unit price (FD, PF,
+          // commodity) shows blanks rather than a fabricated 0.
+          var extra = "";
+          if (soldView) {
+            var pfKey = t.portfolio || "";
+            var r = realizedMonth && realizedMonth[pfKey] &&
+                    realizedMonth[pfKey][normalizeText(t.instrument || "")];
+            if (r && r.units > 0) {
+              var buyPx = r.cost / r.units, sellPx = r.proceeds / r.units, pnl = r.proceeds - r.cost;
+              extra =
+                '<td class="num">' + formatCurrency(buyPx) + '</td>' +
+                '<td class="num">' + formatCurrency(sellPx) + '</td>';
+              var pnlCell = '<td class="num ' + (pnl >= 0 ? 'pos' : 'out') + '">' +
+                (pnl >= 0 ? '+' : '&minus;') + formatCurrency(Math.abs(pnl)) + '</td>';
+              return '<tr>' +
+                '<td>' + dateCell + '</td>' +
+                '<td><span class="mic-txn-inst"><span class="mic-txn-dot" style="background:' + col + '"></span>' +
+                  '<span>' + escapeHtml(name) +
+                  (t.cat ? '<br><span class="mic-txn-sub-cat">' + escapeHtml(t.cat) + '</span>' : '') +
+                  '</span></span></td>' +
+                '<td>' + escapeHtml(t.grp || "") + '</td>' +
+                '<td>' + escapeHtml(typeLabel) + '</td>' +
+                extra +
+                '<td class="num out">&minus;' + formatCurrency(t.amount) + '</td>' +
+                pnlCell +
+              '</tr>';
+            }
+            extra = '<td class="num mic-txn-na">—</td><td class="num mic-txn-na">—</td>';
+            return '<tr>' +
+              '<td>' + dateCell + '</td>' +
+              '<td><span class="mic-txn-inst"><span class="mic-txn-dot" style="background:' + col + '"></span>' +
+                '<span>' + escapeHtml(name) +
+                (t.cat ? '<br><span class="mic-txn-sub-cat">' + escapeHtml(t.cat) + '</span>' : '') +
+                '</span></span></td>' +
+              '<td>' + escapeHtml(t.grp || "") + '</td>' +
+              '<td>' + escapeHtml(typeLabel) + '</td>' +
+              extra +
+              '<td class="num out">&minus;' + formatCurrency(t.amount) + '</td>' +
+              '<td class="num mic-txn-na">—</td>' +
+            '</tr>';
+          }
           return '<tr>' +
             '<td>' + dateCell + '</td>' +
             '<td><span class="mic-txn-inst"><span class="mic-txn-dot" style="background:' + col + '"></span>' +
@@ -11318,8 +11463,21 @@
 
         var bodyHtml = groupNames.map(function (pf) {
           var rows = groups[pf];
-          var gIn = 0, gOut = 0;
+          var gIn = 0, gOut = 0, gPnl = 0, gPnlKnown = false;
           rows.forEach(function (t) { if (t.out) gOut += t.amount; else gIn += t.amount; });
+          if (soldView && realizedMonth && realizedMonth[pf]) {
+            // Sum each sold instrument once, from the per-portfolio pool.
+            var seen = {};
+            rows.forEach(function (t) {
+              var n = normalizeText(t.instrument || "");
+              if (!n || seen[n]) return;
+              var r = realizedMonth[pf][n];
+              if (!r || !(r.units > 0)) return;
+              seen[n] = 1;
+              gPnl += r.proceeds - r.cost;
+              gPnlKnown = true;
+            });
+          }
           // Same rule as the footer: with a direction filter on, don't print the
           // other side's "₹0".
           var totals =
@@ -11329,10 +11487,14 @@
               : '');
           return '<tbody class="mic-txn-group">' +
             '<tr class="mic-txn-group-row">' +
-              '<td colspan="4"><span class="mic-txn-group-name">' + escapeHtml(pf) + '</span>' +
+              '<td colspan="' + (soldView ? 6 : 4) + '"><span class="mic-txn-group-name">' + escapeHtml(pf) + '</span>' +
                 '<span class="mic-txn-group-count">' + rows.length +
                 (rows.length === 1 ? ' transaction' : ' transactions') + '</span></td>' +
               '<td class="num">' + totals + '</td>' +
+              (soldView
+                ? '<td class="num ' + (gPnlKnown ? (gPnl >= 0 ? 'pos' : 'out') : 'mic-txn-na') + '">' +
+                  (gPnlKnown ? (gPnl >= 0 ? '+' : '&minus;') + formatCurrency(Math.abs(gPnl)) : '—') + '</td>'
+                : '') +
             '</tr>' +
             aggregateTxns(rows).map(txnRow).join("") +
           '</tbody>';
@@ -11340,7 +11502,10 @@
 
         bodyEl.innerHTML =
           '<table class="mic-txn-table"><thead><tr>' +
-            '<th>Date</th><th>Instrument</th><th>Category</th><th>Type</th><th style="text-align:right;">Amount</th>' +
+            '<th>Date</th><th>Instrument</th><th>Category</th><th>Type</th>' +
+            (soldView ? '<th style="text-align:right;">Buy Price</th><th style="text-align:right;">Sell Price</th>' : '') +
+            '<th style="text-align:right;">Amount</th>' +
+            (soldView ? '<th style="text-align:right;">P&amp;L</th>' : '') +
           '</tr></thead>' + bodyHtml + '</table>' +
           // With a direction filter on, only that side is meaningful: showing
           // "Invested ₹0" and a Net equal to the single figure just adds noise.
