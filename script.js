@@ -11184,12 +11184,38 @@
 
       // Honour the legend selection, so the list matches the bars on screen
       // rather than showing instruments the user has filtered out.
-      var list = (txnsByMonth[k] || []).filter(function (t) { return catIncluded(t.cat); });
+      var base = (txnsByMonth[k] || []).filter(function (t) { return catIncluded(t.cat); });
+
+      // Offer a direction only when the month actually has it: a Sold button
+      // that leads to an empty list reads as a bug rather than as "nothing was
+      // sold". Disabling it says that up front.
+      var hasIn = base.some(function (t) { return !t.out; });
+      var hasOut = base.some(function (t) { return t.out; });
+      // If the active filter has just become unavailable, fall back rather than
+      // showing an empty table under a disabled button.
+      if ((__micTxnFilter === "out" && !hasOut) || (__micTxnFilter === "in" && !hasIn)) {
+        __micTxnFilter = "all";
+      }
+      var filterElNow = document.getElementById("mic-txn-filter");
+      if (filterElNow) {
+        filterElNow.querySelectorAll("[data-txn-filter]").forEach(function (b) {
+          var f = b.getAttribute("data-txn-filter");
+          var off = (f === "out" && !hasOut) || (f === "in" && !hasIn);
+          b.disabled = off;
+          b.classList.toggle("is-disabled", off);
+          b.title = off
+            ? (f === "out" ? "Nothing sold this month" : "Nothing bought this month")
+            : "";
+          b.classList.toggle("active", f === __micTxnFilter);
+        });
+      }
+
       // Bought / Sold filter. Applied before anything is counted, so the header
       // count, the group subtotals and the footer all describe what is actually
       // listed rather than the unfiltered month.
-      if (__micTxnFilter === "in") list = list.filter(function (t) { return !t.out; });
-      else if (__micTxnFilter === "out") list = list.filter(function (t) { return t.out; });
+      var list = base;
+      if (__micTxnFilter === "in") list = base.filter(function (t) { return !t.out; });
+      else if (__micTxnFilter === "out") list = base.filter(function (t) { return t.out; });
       __micTxnRerender = function () { openTxnModal(idx); };
       // Newest first, then largest — the order someone scanning for a specific
       // transaction expects.
@@ -11353,7 +11379,7 @@
       if (filterEl) {
         filterEl.addEventListener("click", function (e) {
           var btn = e.target.closest("[data-txn-filter]");
-          if (!btn) return;
+          if (!btn || btn.disabled) return;
           __micTxnFilter = btn.getAttribute("data-txn-filter");
           filterEl.querySelectorAll("[data-txn-filter]").forEach(function (b) {
             b.classList.toggle("active", b === btn);

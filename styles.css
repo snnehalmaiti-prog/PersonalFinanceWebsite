@@ -4187,6 +4187,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   white-space: nowrap;
 }
 .mic-txn-filter button.active { background: var(--text); color: var(--bg, #fff); }
+.mic-txn-filter button.is-disabled,
+.mic-txn-filter button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--muted);
+}
 .mic-txn-close {
   background: none; border: none; cursor: pointer;
   font-size: 1.4rem; line-height: 1; color: var(--muted); padding: 0 4px;
