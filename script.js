@@ -11329,6 +11329,17 @@
     function closeTxnModal() {
       var overlay = document.getElementById("mic-txn-overlay");
       if (overlay) overlay.hidden = true;
+      // Reopening always starts from All. A filter carried over from a previous
+      // visit would silently hide most of the next month — an empty or oddly
+      // short list with no visible cause, since the control is only noticed once
+      // the modal is already open.
+      __micTxnFilter = "all";
+      var filterEl = document.getElementById("mic-txn-filter");
+      if (filterEl) {
+        filterEl.querySelectorAll("[data-txn-filter]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-txn-filter") === "all");
+        });
+      }
     }
     // Bound once per element, not per redraw, or each re-render would stack
     // another copy of these listeners.
