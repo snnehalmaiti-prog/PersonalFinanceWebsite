@@ -345,7 +345,14 @@
                 <h3 class="mic-txn-title" id="mic-txn-title">Transactions</h3>
                 <p class="mic-txn-sub" id="mic-txn-sub"></p>
               </div>
-              <button type="button" class="mic-txn-close" id="mic-txn-close" aria-label="Close">&times;</button>
+              <div class="mic-txn-head-right">
+                <div class="mic-txn-filter" id="mic-txn-filter" role="group" aria-label="Filter transactions">
+                  <button type="button" data-txn-filter="all" class="active">All</button>
+                  <button type="button" data-txn-filter="in">Bought</button>
+                  <button type="button" data-txn-filter="out">Sold</button>
+                </div>
+                <button type="button" class="mic-txn-close" id="mic-txn-close" aria-label="Close">&times;</button>
+              </div>
             </div>
             <div class="mic-txn-body" id="mic-txn-body"></div>
           </div>

@@ -10405,6 +10405,11 @@
   // instrument. Multiple may be selected, so the chart can compare a chosen
   // subset rather than only one instrument at a time.
   var __monthlyInvestCatFilters = [];
+  // Drill-down modal: "all" | "in" (bought) | "out" (sold), plus a handle to the
+  // current render so the filter buttons — bound once, outside the chart's
+  // per-render closure — can redraw the open month.
+  var __micTxnFilter = "all";
+  var __micTxnRerender = null;
   var __monthlyInvestCatIdle = false; // on = show month-on-month parked-cash balances (Savings Account + Investment Corpus)
   var __monthlyIdleCashData; // { byMonthInstr, instruments, yearList }
 
@@ -11180,6 +11185,12 @@
       // Honour the legend selection, so the list matches the bars on screen
       // rather than showing instruments the user has filtered out.
       var list = (txnsByMonth[k] || []).filter(function (t) { return catIncluded(t.cat); });
+      // Bought / Sold filter. Applied before anything is counted, so the header
+      // count, the group subtotals and the footer all describe what is actually
+      // listed rather than the unfiltered month.
+      if (__micTxnFilter === "in") list = list.filter(function (t) { return !t.out; });
+      else if (__micTxnFilter === "out") list = list.filter(function (t) { return t.out; });
+      __micTxnRerender = function () { openTxnModal(idx); };
       // Newest first, then largest — the order someone scanning for a specific
       // transaction expects.
       list = list.slice().sort(function (a, b) {
@@ -11190,9 +11201,10 @@
       var inTot = 0, outTot = 0;
       list.forEach(function (t) { if (t.out) outTot += t.amount; else inTot += t.amount; });
       if (subEl) {
+        var what = __micTxnFilter === "out" ? " sold" : (__micTxnFilter === "in" ? " bought" : "");
         subEl.textContent = list.length
-          ? list.length + (list.length === 1 ? " transaction" : " transactions")
-          : "No transactions for this month.";
+          ? list.length + (list.length === 1 ? " transaction" : " transactions") + what
+          : ("No" + (what || "") + " transactions for this month.");
       }
 
       if (!list.length) {
@@ -11279,8 +11291,13 @@
           var rows = groups[pf];
           var gIn = 0, gOut = 0;
           rows.forEach(function (t) { if (t.out) gOut += t.amount; else gIn += t.amount; });
-          var totals = formatCurrency(gIn) +
-            (gOut > 0 ? ' <span class="out">&minus;' + formatCurrency(gOut) + '</span>' : '');
+          // Same rule as the footer: with a direction filter on, don't print the
+          // other side's "₹0".
+          var totals =
+            (__micTxnFilter !== "out" ? formatCurrency(gIn) : '') +
+            (__micTxnFilter !== "in" && gOut > 0
+              ? (__micTxnFilter === "all" ? ' ' : '') + '<span class="out">&minus;' + formatCurrency(gOut) + '</span>'
+              : '');
           return '<tbody class="mic-txn-group">' +
             '<tr class="mic-txn-group-row">' +
               '<td colspan="4"><span class="mic-txn-group-name">' + escapeHtml(pf) + '</span>' +
@@ -11296,10 +11313,14 @@
           '<table class="mic-txn-table"><thead><tr>' +
             '<th>Date</th><th>Instrument</th><th>Category</th><th>Type</th><th style="text-align:right;">Amount</th>' +
           '</tr></thead>' + bodyHtml + '</table>' +
+          // With a direction filter on, only that side is meaningful: showing
+          // "Invested ₹0" and a Net equal to the single figure just adds noise.
           '<div class="mic-txn-foot">' +
-            '<span>Invested <b>' + formatCurrency(inTot) + '</b></span>' +
-            (outTot > 0 ? '<span>Withdrawn <b class="out">&minus;' + formatCurrency(outTot) + '</b></span>' : '') +
-            '<span>Net <b>' + formatCurrency(inTot - outTot) + '</b></span>' +
+            (__micTxnFilter !== "out" ? '<span>Invested <b>' + formatCurrency(inTot) + '</b></span>' : '') +
+            (__micTxnFilter !== "in" && outTot > 0
+              ? '<span>Withdrawn <b class="out">&minus;' + formatCurrency(outTot) + '</b></span>' : '') +
+            (__micTxnFilter === "all"
+              ? '<span>Net <b>' + formatCurrency(inTot - outTot) + '</b></span>' : '') +
           '</div>';
       }
       overlay.hidden = false;
@@ -11317,6 +11338,18 @@
       overlay.dataset.bound = "1";
       var closeBtn = document.getElementById("mic-txn-close");
       if (closeBtn) closeBtn.addEventListener("click", closeTxnModal);
+      var filterEl = document.getElementById("mic-txn-filter");
+      if (filterEl) {
+        filterEl.addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-txn-filter]");
+          if (!btn) return;
+          __micTxnFilter = btn.getAttribute("data-txn-filter");
+          filterEl.querySelectorAll("[data-txn-filter]").forEach(function (b) {
+            b.classList.toggle("active", b === btn);
+          });
+          if (__micTxnRerender) __micTxnRerender();
+        });
+      }
       overlay.addEventListener("click", function (e) { if (e.target === overlay) closeTxnModal(); });
       document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && !overlay.hidden) closeTxnModal();
