@@ -337,6 +337,19 @@
              so the breakdown reads as a continuation of Total Invested /
              Withdrawn / Net rather than floating over the bars. -->
         <div class="mic-hover-split" id="mic-hover-split"></div>
+        <!-- Drill-down: transactions behind a clicked month's bar. -->
+        <div id="mic-txn-overlay" class="mic-txn-overlay" hidden>
+          <div class="mic-txn-modal" role="dialog" aria-modal="true" aria-labelledby="mic-txn-title">
+            <div class="mic-txn-header">
+              <div>
+                <h3 class="mic-txn-title" id="mic-txn-title">Transactions</h3>
+                <p class="mic-txn-sub" id="mic-txn-sub"></p>
+              </div>
+              <button type="button" class="mic-txn-close" id="mic-txn-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="mic-txn-body" id="mic-txn-body"></div>
+          </div>
+        </div>
         <div id="monthly-invest-cat-wrap" style="position:relative;height:280px;"></div>
         <div class="mic-legend" id="monthly-invest-cat-legend"></div>
       </div>

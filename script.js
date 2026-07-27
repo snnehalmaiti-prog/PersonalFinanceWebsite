@@ -10465,7 +10465,16 @@
     // per-instrument bars, so its hover breakdown reports these broader groups.
     var byMonthGrp = {};
     var byMonthGrpOut = {};
+    // Row-level detail behind each month, captured here rather than re-derived
+    // later so the drill-down can never disagree with the bars: it comes from
+    // the same pass, past the same portfolio, parked-cash and transaction-type
+    // filters.
+    var byMonthTxns = {};
     var allYears = {};
+    function recordTxn(d, rec) {
+      var key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      (byMonthTxns[key] = byMonthTxns[key] || []).push(rec);
+    }
     function addTo(target, d, cat, amount) {
       var yr = String(d.getFullYear());
       var key = yr + "-" + String(d.getMonth() + 1).padStart(2, "0");
@@ -10519,6 +10528,15 @@
         var grp = (instrName && instrTopCatMap[instrName]) ||
                   (normalizeText(cat) === "commodity" ? "Commodity" : "Equity");
         addTo(isBuy ? byMonthGrp : byMonthGrpOut, d, grp, Math.abs(amount));
+        recordTxn(d, {
+          date: d,
+          instrument: instrIdx !== -1 ? (row[instrIdx] || "").trim() : "",
+          cat: cat, grp: grp,
+          amount: Math.abs(amount),
+          out: !isBuy,
+          type: (row[typeIdx] || "").trim(),
+          source: prefix === "equity" ? "Mutual Fund" : "Stocks/ETF"
+        });
       });
     });
 
@@ -10532,6 +10550,7 @@
       var amtIdx    = header.indexOf("amount");
       var subCatIdx = header.indexOf("instrument sub category");
       var portIdx   = header.indexOf("portfolio name");
+      var fiInstrIdx = header.indexOf("instrument name");
       if (typeIdx === -1 || dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         if (ovSkip(row, portIdx)) return;
@@ -10547,6 +10566,15 @@
         var cat = (row[subCatIdx] || "").trim() || "Fixed Income";
         addTo(isDep ? byMonthCat : byMonthCatOut, d, cat, Math.abs(amount));
         addTo(isDep ? byMonthGrp : byMonthGrpOut, d, "Fixed Income", Math.abs(amount));
+        recordTxn(d, {
+          date: d,
+          instrument: fiInstrIdx !== -1 ? (row[fiInstrIdx] || "").trim() : "",
+          cat: cat, grp: "Fixed Income",
+          amount: Math.abs(amount),
+          out: !isDep,
+          type: (row[typeIdx] || "").trim(),
+          source: "Fixed Income"
+        });
       });
     }());
 
@@ -10564,6 +10592,7 @@
       // This sheet holds both fixed income and commodity rows, told apart by
       // the Instrument Category column.
       var instrCatIdx = header.indexOf("instrument category");
+      var fdInstrIdx = header.indexOf("instrument name");
       if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         if (ovSkip(row, portIdx)) return;
@@ -10585,12 +10614,22 @@
         // "commodity" into Fixed Income.
         var grp = (instrCatIdx !== -1 && (row[instrCatIdx] || "").trim()) || "Fixed Income";
         addTo(isOut ? byMonthGrpOut : byMonthGrp, d, grp, Math.abs(amount));
+        recordTxn(d, {
+          date: d,
+          instrument: fdInstrIdx !== -1 ? (row[fdInstrIdx] || "").trim() : "",
+          cat: cat, grp: grp,
+          amount: Math.abs(amount),
+          out: isOut,
+          type: typeIdx !== -1 ? (row[typeIdx] || "").trim() : "",
+          source: grp
+        });
       });
     }());
 
     return {
       byMonthCat: byMonthCat, byMonthCatOut: byMonthCatOut,
       byMonthGrp: byMonthGrp, byMonthGrpOut: byMonthGrpOut,
+      byMonthTxns: byMonthTxns,
       yearList: Object.keys(allYears).sort()
     };
   }
@@ -11117,6 +11156,97 @@
     // onHover stops firing once the pointer leaves the canvas, so without this
     // the split panel would stay stuck on the last month hovered.
     canvas.addEventListener("mouseleave", clearHoverSplit);
+
+    // ── Drill-down: click a month to list the transactions behind it ────────
+    var txnsByMonth = (__monthlyInvestCatData && __monthlyInvestCatData.byMonthTxns) || {};
+
+    function openTxnModal(idx) {
+      var overlay = document.getElementById("mic-txn-overlay");
+      var bodyEl = document.getElementById("mic-txn-body");
+      var subEl = document.getElementById("mic-txn-sub");
+      var titleEl = document.getElementById("mic-txn-title");
+      if (!overlay || !bodyEl) return;
+      var k = monthKeys[idx];
+      if (!k) return;
+
+      var MON_FULL = ["January","February","March","April","May","June",
+                      "July","August","September","October","November","December"];
+      var kp = String(k).split("-");
+      var monthText = (MON_FULL[parseInt(kp[1], 10) - 1] || k) + (kp[0] ? " " + kp[0] : "");
+
+      // Honour the legend selection, so the list matches the bars on screen
+      // rather than showing instruments the user has filtered out.
+      var list = (txnsByMonth[k] || []).filter(function (t) { return catIncluded(t.cat); });
+      // Newest first, then largest — the order someone scanning for a specific
+      // transaction expects.
+      list = list.slice().sort(function (a, b) {
+        return (b.date - a.date) || (b.amount - a.amount);
+      });
+
+      if (titleEl) titleEl.textContent = "Transactions · " + monthText;
+      var inTot = 0, outTot = 0;
+      list.forEach(function (t) { if (t.out) outTot += t.amount; else inTot += t.amount; });
+      if (subEl) {
+        subEl.textContent = list.length
+          ? list.length + (list.length === 1 ? " transaction" : " transactions")
+          : "No transactions for this month.";
+      }
+
+      if (!list.length) {
+        bodyEl.innerHTML = '<p class="muted small" style="padding:14px 20px;margin:0;">Nothing to show.</p>';
+      } else {
+        var rowsHtml = list.map(function (t) {
+          var col = MIC_SPLIT_PALETTE[Math.max(0, catList.indexOf(t.cat)) % MIC_SPLIT_PALETTE.length];
+          var name = t.instrument || t.cat || "—";
+          return '<tr>' +
+            '<td>' + escapeHtml(formatDateISO(t.date) || "") + '</td>' +
+            '<td><span class="mic-txn-inst"><span class="mic-txn-dot" style="background:' + col + '"></span>' +
+              '<span>' + escapeHtml(name) +
+              (t.cat ? '<br><span class="mic-txn-sub-cat">' + escapeHtml(t.cat) + '</span>' : '') +
+              '</span></span></td>' +
+            '<td>' + escapeHtml(t.grp || "") + '</td>' +
+            '<td>' + escapeHtml(t.type || (t.out ? "Withdrawal" : "Investment")) + '</td>' +
+            '<td class="num' + (t.out ? ' out' : '') + '">' + (t.out ? '&minus;' : '') + formatCurrency(t.amount) + '</td>' +
+          '</tr>';
+        }).join("");
+        bodyEl.innerHTML =
+          '<table class="mic-txn-table"><thead><tr>' +
+            '<th>Date</th><th>Instrument</th><th>Category</th><th>Type</th><th style="text-align:right;">Amount</th>' +
+          '</tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
+          '<div class="mic-txn-foot">' +
+            '<span>Invested <b>' + formatCurrency(inTot) + '</b></span>' +
+            (outTot > 0 ? '<span>Withdrawn <b class="out">&minus;' + formatCurrency(outTot) + '</b></span>' : '') +
+            '<span>Net <b>' + formatCurrency(inTot - outTot) + '</b></span>' +
+          '</div>';
+      }
+      overlay.hidden = false;
+    }
+
+    function closeTxnModal() {
+      var overlay = document.getElementById("mic-txn-overlay");
+      if (overlay) overlay.hidden = true;
+    }
+    // Bound once per element, not per redraw, or each re-render would stack
+    // another copy of these listeners.
+    (function bindTxnModalOnce() {
+      var overlay = document.getElementById("mic-txn-overlay");
+      if (!overlay || overlay.dataset.bound) return;
+      overlay.dataset.bound = "1";
+      var closeBtn = document.getElementById("mic-txn-close");
+      if (closeBtn) closeBtn.addEventListener("click", closeTxnModal);
+      overlay.addEventListener("click", function (e) { if (e.target === overlay) closeTxnModal(); });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !overlay.hidden) closeTxnModal();
+      });
+    })();
+
+    canvas.addEventListener("click", function (evt) {
+      if (!__monthlyInvestCatChart) return;
+      var pts = __monthlyInvestCatChart.getElementsAtEventForMode(
+        evt, "index", { intersect: false }, false);
+      if (!pts || !pts.length) return;
+      openTxnModal(pts[0].index);
+    });
 
     __monthlyInvestCatChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
