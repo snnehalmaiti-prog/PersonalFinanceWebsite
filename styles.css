@@ -4190,6 +4190,27 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-txn-inst { display: flex; align-items: center; gap: 7px; }
 .mic-txn-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 .mic-txn-sub-cat { font-size: 0.66rem; color: var(--muted); }
+/* Portfolio grouping inside the drill-down. The header row is sticky under the
+   column headings so the portfolio a row belongs to stays visible while its
+   transactions scroll. */
+.mic-txn-group-row td {
+  background: var(--bg, #f7f7f5);
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+  padding-top: 6px;
+  padding-bottom: 6px;
+  position: sticky;
+  top: 29px;
+}
+.mic-txn-group-name {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.mic-txn-group-count { font-size: 0.64rem; color: var(--muted); margin-left: 8px; }
+.mic-txn-group-row .num { font-size: 0.7rem; }
+.mic-txn-group-row .out { color: #E8623A; }
 .mic-txn-foot {
   display: flex; gap: 18px; justify-content: flex-end;
   padding: 10px 20px; border-top: 1px solid var(--border, rgba(0, 0, 0, 0.1));

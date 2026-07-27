@@ -10531,6 +10531,7 @@
         recordTxn(d, {
           date: d,
           instrument: instrIdx !== -1 ? (row[instrIdx] || "").trim() : "",
+          portfolio: portIdx !== -1 ? (row[portIdx] || "").trim() : "",
           cat: cat, grp: grp,
           amount: Math.abs(amount),
           out: !isBuy,
@@ -10569,6 +10570,7 @@
         recordTxn(d, {
           date: d,
           instrument: fiInstrIdx !== -1 ? (row[fiInstrIdx] || "").trim() : "",
+          portfolio: portIdx !== -1 ? (row[portIdx] || "").trim() : "",
           cat: cat, grp: "Fixed Income",
           amount: Math.abs(amount),
           out: !isDep,
@@ -10617,6 +10619,7 @@
         recordTxn(d, {
           date: d,
           instrument: fdInstrIdx !== -1 ? (row[fdInstrIdx] || "").trim() : "",
+          portfolio: portIdx !== -1 ? (row[portIdx] || "").trim() : "",
           cat: cat, grp: grp,
           amount: Math.abs(amount),
           out: isOut,
@@ -11195,7 +11198,7 @@
       if (!list.length) {
         bodyEl.innerHTML = '<p class="muted small" style="padding:14px 20px;margin:0;">Nothing to show.</p>';
       } else {
-        var rowsHtml = list.map(function (t) {
+        function txnRow(t) {
           var col = MIC_SPLIT_PALETTE[Math.max(0, catList.indexOf(t.cat)) % MIC_SPLIT_PALETTE.length];
           var name = t.instrument || t.cat || "—";
           return '<tr>' +
@@ -11208,11 +11211,45 @@
             '<td>' + escapeHtml(t.type || (t.out ? "Withdrawal" : "Investment")) + '</td>' +
             '<td class="num' + (t.out ? ' out' : '') + '">' + (t.out ? '&minus;' : '') + formatCurrency(t.amount) + '</td>' +
           '</tr>';
+        }
+
+        // Group by portfolio. Rows with no portfolio name are collected under
+        // "Unassigned" rather than dropped, so the group subtotals still add up
+        // to the month's total.
+        var groups = {};
+        list.forEach(function (t) {
+          var pf = t.portfolio || "Unassigned";
+          (groups[pf] = groups[pf] || []).push(t);
+        });
+        function groupNet(rows) {
+          return rows.reduce(function (n, t) { return n + (t.out ? -t.amount : t.amount); }, 0);
+        }
+        // Largest net first, so the portfolio that drove the bar is at the top.
+        var groupNames = Object.keys(groups).sort(function (a, b) {
+          return groupNet(groups[b]) - groupNet(groups[a]);
+        });
+
+        var bodyHtml = groupNames.map(function (pf) {
+          var rows = groups[pf];
+          var gIn = 0, gOut = 0;
+          rows.forEach(function (t) { if (t.out) gOut += t.amount; else gIn += t.amount; });
+          var totals = formatCurrency(gIn) +
+            (gOut > 0 ? ' <span class="out">&minus;' + formatCurrency(gOut) + '</span>' : '');
+          return '<tbody class="mic-txn-group">' +
+            '<tr class="mic-txn-group-row">' +
+              '<td colspan="4"><span class="mic-txn-group-name">' + escapeHtml(pf) + '</span>' +
+                '<span class="mic-txn-group-count">' + rows.length +
+                (rows.length === 1 ? ' transaction' : ' transactions') + '</span></td>' +
+              '<td class="num">' + totals + '</td>' +
+            '</tr>' +
+            rows.map(txnRow).join("") +
+          '</tbody>';
         }).join("");
+
         bodyEl.innerHTML =
           '<table class="mic-txn-table"><thead><tr>' +
             '<th>Date</th><th>Instrument</th><th>Category</th><th>Type</th><th style="text-align:right;">Amount</th>' +
-          '</tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
+          '</tr></thead>' + bodyHtml + '</table>' +
           '<div class="mic-txn-foot">' +
             '<span>Invested <b>' + formatCurrency(inTot) + '</b></span>' +
             (outTot > 0 ? '<span>Withdrawn <b class="out">&minus;' + formatCurrency(outTot) + '</b></span>' : '') +
