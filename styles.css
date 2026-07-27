@@ -4243,12 +4243,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-txn-group-count { font-size: 0.64rem; color: var(--muted); margin-left: 8px; }
 .mic-txn-group-row .num { font-size: 0.7rem; }
 .mic-txn-group-row .out { color: #E8623A; }
-.mic-txn-foot {
-  display: flex; gap: 18px; justify-content: flex-end;
-  padding: 10px 20px; border-top: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+/* Totals bar above the list. Outside the scrolling body, so it stays put while
+   the rows scroll. */
+.mic-txn-totals {
+  display: flex; gap: 18px; justify-content: flex-end; flex-wrap: wrap;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.1));
   font-size: 0.72rem; color: var(--muted);
 }
-.mic-txn-foot b { color: var(--text); font-variant-numeric: tabular-nums; }
-.mic-txn-foot b.out { color: #E8623A; }
+.mic-txn-totals:empty { display: none; }
+.mic-txn-totals b { color: var(--text); font-variant-numeric: tabular-nums; }
+.mic-txn-totals b.out { color: #E8623A; }
+.mic-txn-totals b.pos { color: #10B981; }
 /* Only offer the pointer where clicking actually drills in. */
 #monthly-invest-cat-wrap canvas { cursor: pointer; }

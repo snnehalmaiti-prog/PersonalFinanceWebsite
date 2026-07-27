@@ -11290,6 +11290,7 @@
     function openTxnModal(idx) {
       var overlay = document.getElementById("mic-txn-overlay");
       var bodyEl = document.getElementById("mic-txn-body");
+      var totalsEl = document.getElementById("mic-txn-totals");
       var subEl = document.getElementById("mic-txn-sub");
       var titleEl = document.getElementById("mic-txn-title");
       if (!overlay || !bodyEl) return;
@@ -11372,6 +11373,7 @@
 
       if (!list.length) {
         bodyEl.innerHTML = '<p class="muted small" style="padding:14px 20px;margin:0;">Nothing to show.</p>';
+        if (totalsEl) totalsEl.innerHTML = "";
       } else {
         // Roll repeat transactions of the same instrument into one line, keyed by
         // instrument AND direction. Buys and sells are therefore summed
@@ -11497,6 +11499,7 @@
           return groupNet(groups[b]) - groupNet(groups[a]);
         });
 
+        var pnlTot = 0, pnlKnown = false;
         var bodyHtml = groupNames.map(function (pf) {
           var rows = groups[pf];
           var gIn = 0, gOut = 0, gPnl = 0, gPnlKnown = false;
@@ -11513,6 +11516,8 @@
               gPnl += r.proceeds - r.cost;
               gPnlKnown = true;
             });
+            pnlTot += gPnl;
+            if (gPnlKnown) pnlKnown = true;
           }
           // Same rule as the footer: with a direction filter on, don't print the
           // other side's "₹0".
@@ -11545,13 +11550,23 @@
           '</tr></thead>' + bodyHtml + '</table>' +
           // With a direction filter on, only that side is meaningful: showing
           // "Invested ₹0" and a Net equal to the single figure just adds noise.
-          '<div class="mic-txn-foot">' +
+          '';
+
+        // Totals render above the list, outside the scrolling body, so they are
+        // read before the rows rather than found by scrolling to the end.
+        if (totalsEl) {
+          totalsEl.innerHTML =
             (__micTxnFilter !== "out" ? '<span>Invested <b>' + formatCurrency(inTot) + '</b></span>' : '') +
             (__micTxnFilter !== "in" && outTot > 0
               ? '<span>Withdrawn <b class="out">&minus;' + formatCurrency(outTot) + '</b></span>' : '') +
             (__micTxnFilter === "all"
               ? '<span>Net <b>' + formatCurrency(inTot - outTot) + '</b></span>' : '') +
-          '</div>';
+            // P&L only when the Sold view has priced sales behind it.
+            (soldView && pnlKnown
+              ? '<span>P&amp;L <b class="' + (pnlTot >= 0 ? 'pos' : 'out') + '">' +
+                (pnlTot >= 0 ? '+' : '&minus;') + formatCurrency(Math.abs(pnlTot)) + '</b></span>'
+              : '');
+        }
       }
       overlay.hidden = false;
     }
