@@ -11186,26 +11186,29 @@
       // rather than showing instruments the user has filtered out.
       var base = (txnsByMonth[k] || []).filter(function (t) { return catIncluded(t.cat); });
 
-      // Offer a direction only when the month actually has it: a Sold button
-      // that leads to an empty list reads as a bug rather than as "nothing was
-      // sold". Disabling it says that up front.
+      // The direction buttons only earn their place on a month that has both.
+      // On a one-sided month one of them is empty and the other returns exactly
+      // what All already shows, so neither changes anything — both switch off
+      // and All is left as the only option.
       var hasIn = base.some(function (t) { return !t.out; });
       var hasOut = base.some(function (t) { return t.out; });
-      // If the active filter has just become unavailable, fall back rather than
-      // showing an empty table under a disabled button.
-      if ((__micTxnFilter === "out" && !hasOut) || (__micTxnFilter === "in" && !hasIn)) {
-        __micTxnFilter = "all";
-      }
+      var mixed = hasIn && hasOut;
+      // A filter that is no longer offered must not stay selected, or the table
+      // would sit empty (or unchanged) beneath a disabled button.
+      if (!mixed) __micTxnFilter = "all";
       var filterElNow = document.getElementById("mic-txn-filter");
       if (filterElNow) {
         filterElNow.querySelectorAll("[data-txn-filter]").forEach(function (b) {
           var f = b.getAttribute("data-txn-filter");
-          var off = (f === "out" && !hasOut) || (f === "in" && !hasIn);
+          var off = f !== "all" && !mixed;
           b.disabled = off;
           b.classList.toggle("is-disabled", off);
-          b.title = off
-            ? (f === "out" ? "Nothing sold this month" : "Nothing bought this month")
-            : "";
+          // Say which of the two reasons applies, so a greyed button is never
+          // ambiguous between "none of these" and "these are all of them".
+          b.title = !off ? ""
+            : (f === "out"
+                ? (hasOut ? "Everything this month was sold" : "Nothing sold this month")
+                : (hasIn ? "Everything this month was bought" : "Nothing bought this month"));
           b.classList.toggle("active", f === __micTxnFilter);
         });
       }
