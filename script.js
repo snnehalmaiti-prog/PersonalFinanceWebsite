@@ -5538,13 +5538,13 @@
     }
     if (!filtered.length) { list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + label.toLowerCase() + ' holdings.</p>'; return; }
     function _sArrow(k) { return sortKey === k ? (sortDir === -1 ? " ↓" : " ↑") : ""; }
-    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr 0.85fr;">' +
+    var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;">' +
       '<span class="mfh-sortable" data-seh-sort-col="instrument">Instrument' + _sArrow("instrument") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="invested">Invested' + _sArrow("invested") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="current">Current' + _sArrow("current") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="ltp">LTP' + _sArrow("ltp") + '</span>' +
+      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="day">Day Chg' + _sArrow("day") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="pnl">P&amp;L · Return' + _sArrow("pnl") + '</span>' +
-      '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="day">Day Chg.' + _sArrow("day") + '</span>' +
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="xirr">XIRR' + _sArrow("xirr") + '</span></div>';
     var subInv = 0, subCur = 0, subDay = 0, subInvUSD = 0, subCurUSD = 0;
     function _fmtUsd(v) { return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -5580,7 +5580,7 @@
         ? _fmtUsd(h.avgCostUSD)
         : '₹' + Number(h.avgCostINR || 0).toFixed(2);
       var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ' + avgCostStr;
-      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr 0.85fr;">' +
+      return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
@@ -5593,11 +5593,11 @@
         (h.ltpINR != null
           ? _seAmtCell(h.ltpINR, (h.ltpUSD != null ? h.ltpUSD : null))
           : '<div class="mfh-col-num mfh-num-primary">—</div>') +
+        _mfhDayCell(Math.abs(day) < 0.01 ? null : day, (h.currentINR - day) > 0 ? (day / (h.currentINR - day)) * 100 : null) +
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(pnl) + '>' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
         '</div>' +
-        _mfhDayCell(Math.abs(day) < 0.01 ? null : day, (h.currentINR - day) > 0 ? (day / (h.currentINR - day)) * 100 : null) +
         // xirrPct is already computed per holding when the rows are built, with
         // the same method the Mutual Fund list uses: that instrument's own buy and
         // sell flows (US legs converted at each transaction's USD/INR rate) plus
@@ -5611,13 +5611,13 @@
     var subPnl = subCur - subInv;
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
-    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 1fr 0.9fr 0.85fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
       '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · INR / USD" : "") + '</div></div>' +
       _seAmtCell(subInv, (region === "us" ? subInvUSD : null)) +
       _seAmtCell(subCur, (region === "us" ? subCurUSD : null)) +
       '<div class="mfh-col-num mfh-num-primary" style="color:var(--muted);">—</div>' +
-      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
+      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
       // Region XIRR is left blank, as the Mutual Fund subtotal does: adding up
       // per-holding rates is meaningless, and a true region rate needs the
       // combined cash flows rather than an average of percentages.
