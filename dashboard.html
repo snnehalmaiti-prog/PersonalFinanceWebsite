@@ -718,6 +718,23 @@
         </div>
       </div>
 
+      <!-- Debt ETF / Mutual holdings — funds and ETFs whose Instrument Category
+           is Fixed Income. Same columns and behaviour as Mutual Fund Holding. -->
+      <div class="mfh-card" id="dbth-card" style="margin-top:16px;">
+        <div class="mfh-header">
+          <div class="mfh-header-left">
+            <span class="mfh-eyebrow" id="dbth-eyebrow">HOLDINGS &middot; — OPEN</span>
+            <h3 class="mfh-title">Debt ETF/Mutual</h3>
+            <p class="muted small" style="margin:2px 0 0;font-size:0.7rem;">Funds &amp; ETFs marked <strong>Fixed Income</strong> in the mapping sheets.</p>
+          </div>
+          <div class="mfh-header-right">
+            <button type="button" class="mfh-btn" id="dbth-open-toggle" data-mfh-state="open">Open</button>
+          </div>
+        </div>
+        <p class="muted small" id="dbth-status">Loading holdings…</p>
+        <div class="mfh-list" id="dbth-list"></div>
+      </div>
+
       <!-- Physical Commodity card list -->
       <div class="mfh-card" id="cmh-card" style="margin-top:16px;">
         <div class="mfh-header">

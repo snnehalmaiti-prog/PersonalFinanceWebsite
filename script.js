@@ -5215,7 +5215,58 @@
     });
   }
 
+  // Debt ETF/Mutual: debt funds from the equity sheet plus debt ETFs from the
+  // Stocks/ETF sheet, normalised onto the Mutual Fund row shape so the shared
+  // renderer can draw them side by side.
+  function renderDebtHoldings() {
+    var statusEl = document.getElementById("dbth-status");
+    var mfRows = window.__mfDebtRows || [];
+    var seRows = (window.__seDebtRows || []).map(function (r) {
+      return {
+        instrument: r.instrument,
+        units: r.units,
+        // The list prints avg cost and LTP as ₹ figures, so US rows use their
+        // INR values here rather than native USD — otherwise a $ amount would
+        // render behind a ₹ sign.
+        avgNav: r.avgCostINR || 0,
+        currNav: r.ltpINR,
+        invested: r.investedINR || 0,
+        current: r.currentINR || 0,
+        pnl: r.pnl || 0,
+        pnlPct: r.pnlPct || 0,
+        // The shared renderer works in day-change PERCENT and re-derives the
+        // rupee figure from it; the SE rows carry rupees, so convert.
+        dayChgPct: (r.dayChangeINR != null && r.currentINR && (r.currentINR - r.dayChangeINR) > 0)
+          ? (r.dayChangeINR / (r.currentINR - r.dayChangeINR)) * 100 : null,
+        dayChgINR: r.dayChangeINR != null ? r.dayChangeINR : null,
+        xirrPct: r.xirrPct
+      };
+    });
+    var all = mfRows.concat(seRows);
+    if (statusEl) {
+      statusEl.textContent = all.length
+        ? ""
+        : "No debt funds or ETFs found. Mark an instrument's Instrument Category as \"Fixed Income\" in the Mutual Fund or Stocks/ETF mapping sheet.";
+    }
+    try {
+      renderMfHoldingsCardList(all, {
+        listId: "dbth-list", eyebrowId: "dbth-eyebrow", state: DBTH_STATE
+      });
+    } catch (e) {}
+  }
+
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
+    // Debt ETFs belong to Debt ETF/Mutual, not the India/US equity lists — an
+    // instrument must appear in exactly one holdings table or its value reads
+    // twice. Split before anything downstream consumes these rows.
+    var _seCat = buildInstrumentTopCategoryMap();
+    window.__seDebtRows = rowsData.filter(function (r) {
+      return normalizeText(_seCat[normalizeText(r.instrument || "")] || "") === "fixed income";
+    });
+    rowsData = rowsData.filter(function (r) {
+      return normalizeText(_seCat[normalizeText(r.instrument || "")] || "") !== "fixed income";
+    });
+    try { renderDebtHoldings(); } catch (e) {}
     // Portfolio Cards / Geography / Market-cap panels ALWAYS reflect the
     // OPEN positions regardless of the Open/Closed toggle. Holdings lists
     // filter independently per region below.
@@ -12302,14 +12353,24 @@
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
           window.__mfLastRowsData = rowsData;
-          try { renderMfHoldingsCardList(rowsData); } catch (e) {}
+          // Split debt funds out of the equity list. An instrument marked Fixed
+          // Income in the mapping sheet belongs in Debt ETF/Mutual, and showing it
+          // in both would double count it to the reader.
+          var _dbtCat = buildInstrumentTopCategoryMap();
+          function _isDebt(name) {
+            return normalizeText(_dbtCat[normalizeText(name || "")] || "") === "fixed income";
+          }
+          var mfOnlyRows = rowsData.filter(function (r) { return !_isDebt(r.instrument); });
+          window.__mfDebtRows = rowsData.filter(function (r) { return _isDebt(r.instrument); });
+          try { renderMfHoldingsCardList(mfOnlyRows); } catch (e) {}
+          try { renderDebtHoldings(); } catch (e) {}
           // Portfolio cards + allocation + performance are top-level summaries
           // and must NOT shift when the user filters the Holdings list to a
           // specific portfolio via the holdings pill toggle.
           var _mfOverride = window.__mfHoldingsPortfolioOverride;
           if (!_mfOverride || _mfOverride === "all") {
             try { renderMfPortfolioCards(); } catch (e) {}
-            try { renderMfAllocation(rowsData); } catch (e) {}
+            try { renderMfAllocation(mfOnlyRows); } catch (e) {}
             try { renderMfPerformanceChart(); } catch (e) {}
           }
 
@@ -12382,20 +12443,27 @@
     }
     return 0;
   }
-  function renderMfHoldingsCardList(rowsData) {
-    var list = document.getElementById("mfh-list");
-    var eyebrow = document.getElementById("mfh-eyebrow");
+  // Debt ETF/Mutual reuses this list wholesale, so both tables share one
+  // implementation and cannot drift apart in columns, sorting or formatting.
+  // `opts` names the target elements and the sort/open state to read.
+  var DBTH_STATE = { showClosed: false, sort: "pnl-desc" };
+  function renderMfHoldingsCardList(rowsData, opts) {
+    opts = opts || {};
+    var listId = opts.listId || "mfh-list";
+    var state = opts.state || MFH_STATE;
+    var list = document.getElementById(listId);
+    var eyebrow = document.getElementById(opts.eyebrowId || "mfh-eyebrow");
     if (!list) return;
     var filtered = rowsData.filter(function (r) {
       var closed = r.units < 1;
-      return MFH_STATE.showClosed ? closed : !closed;
+      return state.showClosed ? closed : !closed;
     });
-    var parts = String(MFH_STATE.sort || "pnl-desc").split("-");
+    var parts = String(state.sort || "pnl-desc").split("-");
     var sortKey = parts[0];
     var sortDir = parts[1] === "asc" ? 1 : -1;
     filtered.sort(function (a, b) { return sortDir * _mfhSortCompare(a, b, sortKey); });
     var segmentMap = buildInstrumentSegmentMap();
-    if (eyebrow) eyebrow.textContent = "HOLDINGS · " + filtered.length + (MFH_STATE.showClosed ? " CLOSED" : " OPEN");
+    if (eyebrow) eyebrow.textContent = "HOLDINGS · " + filtered.length + (state.showClosed ? " CLOSED" : " OPEN");
     if (!filtered.length) {
       list.innerHTML = '<p class="muted small" style="padding:20px;text-align:center;">No holdings to show.</p>';
       return;
@@ -12416,7 +12484,8 @@
       subInv += r.invested || 0;
       subCur += r.current || 0;
       subPnl += r.pnl || 0;
-      if (r.dayChgPct != null && r.current != null) subDay += r.current * r.dayChgPct / 100;
+      if (r.dayChgINR != null) subDay += r.dayChgINR;
+      else if (r.dayChgPct != null && r.current != null) subDay += r.current * r.dayChgPct / 100;
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
       var seg = lookupSegment(segmentMap, r.instrument);
@@ -12438,6 +12507,12 @@
         '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.current) + '>' + formatCurrency(r.current) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + ltpStr + '</div>' +
         (function () {
+          // Rupee day change is normally derived from the percent, which is
+          // measured against the PREVIOUS close — so multiplying by the current
+          // value is very slightly off. Rows that already know the exact rupee
+          // figure (the Stocks/ETF-sourced debt rows) pass it through instead of
+          // having it re-derived and rounded.
+          if (r.dayChgINR != null) return _mfhDayCell(r.dayChgINR, r.dayChgPct);
           var dayVal = (r.dayChgPct == null || r.current == null) ? null : (r.current * r.dayChgPct / 100);
           return _mfhDayCell(dayVal, r.dayChgPct);
         })() +
@@ -12451,7 +12526,7 @@
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
     var footer = '<div class="mfh-row" style="' + mfhGrid + 'background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
-      '<div style="font-size:0.72rem;">' + (MFH_STATE.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
+      '<div style="font-size:0.72rem;">' + (state.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
       '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subInv) + '>' + formatCurrency(subInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subCur) + '>' + formatCurrency(subCur) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary" style="color:var(--muted);">—</div>' +
@@ -12460,13 +12535,13 @@
       '<div class="mfh-col-num mfh-num-xirr mfh-muted">—</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
-    try { applyHoldingsFold("mfh-list"); } catch (e) {}
+    try { applyHoldingsFold(listId); } catch (e) {}
     list.querySelectorAll("[data-mfh-sort-col]").forEach(function (el) {
       el.addEventListener("click", function () {
         var col = el.dataset.mfhSortCol;
-        var cur = String(MFH_STATE.sort || "").split("-");
-        MFH_STATE.sort = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
-        renderMfHoldingsCardList(rowsData);
+        var cur = String(state.sort || "").split("-");
+        state.sort = (cur[0] === col && cur[1] === "desc") ? (col + "-asc") : (col + "-desc");
+        renderMfHoldingsCardList(rowsData, opts);
       });
     });
   }
@@ -12864,6 +12939,15 @@
   (function wireMfControls() {
     var openBtn = document.getElementById("mfh-open-toggle");
     var sortBtn = document.getElementById("mfh-sort-toggle");
+    // Debt ETF/Mutual has its own Open/Closed state, so switching one table does
+    // not move the other. It re-renders from the rows already split out, with no
+    // refetch needed.
+    var dbtBtn = document.getElementById("dbth-open-toggle");
+    if (dbtBtn) dbtBtn.addEventListener("click", function () {
+      DBTH_STATE.showClosed = !DBTH_STATE.showClosed;
+      dbtBtn.textContent = DBTH_STATE.showClosed ? "Closed" : "Open";
+      try { renderDebtHoldings(); } catch (e) {}
+    });
     if (openBtn) openBtn.addEventListener("click", function () {
       MFH_STATE.showClosed = !MFH_STATE.showClosed;
       openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
