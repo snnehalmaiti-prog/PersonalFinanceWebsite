@@ -5160,6 +5160,33 @@
               dayChangeINR = (ltpINR - prevINR) * h.units;
             }
           }
+          // Per-holding XIRR, same method as the Mutual Fund list: this
+          // instrument's own flows for THIS portfolio, plus its current value as
+          // a terminal inflow. US legs convert at each transaction's own USD/INR
+          // rate so the currency move is part of the return.
+          //
+          // This was previously hardcoded to null here, which is why the India
+          // and US lists showed a dash on every row: the figure was computed in
+          // the other builder, but these lists are fed by this one.
+          var xirrFlows = [];
+          if (h.region === "US") {
+            (h.txns || []).forEach(function (txn) {
+              if (!txn.date || !txn.units || !txn.price) return;
+              var rateForDate = usdInrHistMap[formatDateISO(txn.date)] || usdInrToday;
+              var amountINR = txn.units * txn.price * rateForDate;
+              xirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -amountINR : amountINR });
+            });
+          } else {
+            xirrFlows = buildXirrCashFlows(rows, p, h.instrument);
+          }
+          // A closed position is already valued by its proceeds; adding a
+          // terminal for a holding that no longer exists would double count it.
+          if (!isClosed && currentINR !== null && currentINR > UNITS_EPSILON) {
+            xirrFlows.push({ date: new Date(), amount: currentINR });
+          }
+          var xirrVal = calculateXIRR(xirrFlows);
+          var xirrPct = (xirrVal === null || xirrVal === undefined || !isFinite(xirrVal)) ? null : xirrVal * 100;
+
           return {
             instrument: h.instrument,
             region: h.region,
@@ -5175,7 +5202,7 @@
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
-            xirrPct: null,
+            xirrPct: xirrPct,
             isClosed: isClosed,
             _portfolio: p
           };

@@ -528,5 +528,20 @@ function holdingXirr(txns, currentINR, opts) {
   ok(x !== null && x < 0, "H8 a holding below cost reports a negative XIRR", String(x));
 }
 
+// ── Source guard: XIRR must be computed, not stubbed ────────────────────────
+// The India/US lists rendered a dash on every row because the builder that feeds
+// them set `xirrPct: null` outright, while the figure was being computed in a
+// different builder those lists never use. Nothing failed and no error appeared —
+// the column simply stayed empty. This pins the stub so it cannot come back.
+console.log("\nI. Source guard");
+{
+  const src = fs.readFileSync(path.join(ROOT, "script.js"), "utf8");
+  ok(!/xirrPct:\s*null/.test(src),
+     "I1 no holding builder hardcodes xirrPct to null");
+  // Each of the two Stocks/ETF row builders must derive it.
+  const derived = (src.match(/xirrPct\s*=\s*\(xirrVal/g) || []).length;
+  ok(derived >= 2, "I2 both Stocks/ETF builders derive xirrPct", "found " + derived);
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
