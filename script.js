@@ -891,10 +891,30 @@
     return quarters;
   }
 
+  // Elapsed quarters INCLUDING the part-quarter in progress, so a deposit's value
+  // grows every day instead of standing still until the next quarter boundary and
+  // then stepping. The whole-quarter count is exact; the remainder is the fraction
+  // of the current quarter that has elapsed, measured against that quarter's own
+  // length (91 or 92 days) so uneven months don't distort it. On a quarter
+  // boundary this returns exactly the integer, so quarter-end values are
+  // unchanged from countElapsedQuarters.
+  function elapsedQuartersFractional(start, asOf) {
+    var whole = countElapsedQuarters(start, asOf);
+    if (!start || !asOf || asOf <= start) return 0;
+    var qStart = _addMonthsClamped(start, whole * 3);
+    var qEnd = _addMonthsClamped(start, (whole + 1) * 3);
+    var span = qEnd - qStart;
+    if (!(span > 0)) return whole;
+    var frac = (asOf - qStart) / span;
+    if (frac < 0) frac = 0;
+    if (frac > 1) frac = 1;
+    return whole + frac;
+  }
+
   // Fixed Deposit rows: Current Value = Invested Amount + interest accrued from Transaction
-  // Date to today (capped at Maturity Date), compounded quarterly at Rate of Return.
-  // Fixed Deposit rows: Current Value via the same quarterly-compounding logic as the
-  // "Fixed Deposit Holding" table (each row stands alone, no dedup needed).
+  // Date to today (capped at Maturity Date), compounded quarterly at Rate of Return,
+  // with the quarter in progress accrued pro-rata (see elapsedQuartersFractional).
+  // Each row stands alone, so no dedup is needed.
   function sumFdMaturedCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
@@ -984,7 +1004,7 @@
       if (!(matD && matD < todayD)) return; // not matured
       var principal = parseNumber(row[aI]);
       var rate = parsePercentRate(row[rI]);
-      var q = countElapsedQuarters(parseFlexibleDate(row[dI]), matD);
+      var q = elapsedQuartersFractional(parseFlexibleDate(row[dI]), matD);
       var matVal = (q > 0 && rate) ? principal * Math.pow(1 + rate / 4, q) : principal;
       var interest = matVal - principal;
       if (!interest) return;
@@ -1063,7 +1083,7 @@
       var maturity = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
       if (maturity && maturity < today) {
         var rate = rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0;
-        var quarters = countElapsedQuarters(date, maturity);
+        var quarters = elapsedQuartersFractional(date, maturity);
         var maturityValue = (quarters > 0 && rate) ? amount * Math.pow(1 + rate / 4, quarters) : amount;
         flows.push({ date: maturity, amount: maturityValue });
       }
@@ -2558,7 +2578,7 @@
         fdMatured = !!(maturityDate && maturityDate < today);
         if (startDate) {
           var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
-          var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
+          var elapsedQuarters = elapsedQuartersFractional(startDate, asOfDate);
           if (elapsedQuarters > 0 && rate) {
             current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
           }
@@ -2669,7 +2689,7 @@
         fdMatured = !!(maturityDate && maturityDate < today);
         if (startDate) {
           var asOfDate = maturityDate && maturityDate < today ? maturityDate : today;
-          var elapsedQuarters = countElapsedQuarters(startDate, asOfDate);
+          var elapsedQuarters = elapsedQuartersFractional(startDate, asOfDate);
           if (elapsedQuarters > 0 && rate) current = invested * Math.pow(1 + rate / 4, elapsedQuarters);
         }
       }
