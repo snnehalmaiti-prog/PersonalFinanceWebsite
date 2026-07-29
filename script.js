@@ -12533,7 +12533,6 @@
 
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
-          window.__mfLastRowsData = rowsData;
           // Split debt funds out of the equity list. An instrument marked Fixed
           // Income in the mapping sheet belongs in Debt ETF/Mutual, and showing it
           // in both would double count it to the reader.
@@ -12543,6 +12542,10 @@
           }
           var mfOnlyRows = rowsData.filter(function (r) { return !_isDebt(r.instrument); });
           window.__mfDebtRows = rowsData.filter(function (r) { return _isDebt(r.instrument); });
+          // Cached for the allocation toggle to re-render from. It holds the
+          // debt-EXCLUDED rows so a later repaint can't reintroduce debt funds
+          // into the Mutual Fund allocation.
+          window.__mfLastRowsData = mfOnlyRows;
           try { renderMfHoldingsCardList(mfOnlyRows); } catch (e) {}
           try { renderDebtHoldings(); } catch (e) {}
           // Portfolio cards + allocation + performance are top-level summaries
