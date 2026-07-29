@@ -440,5 +440,93 @@ console.log("\nG. Aggregation invariants");
   ok(pct(5000, 0) === null, "G10 no income → percentage undefined, not Infinity");
 }
 
+// ───────────── H. Per-holding XIRR (Mutual Fund / India / US lists) ─────────────
+// Every holdings list derives a row's XIRR the same way: that instrument's own
+// buy and sell flows, plus its current value as a terminal inflow. US rows differ
+// only in converting each leg at that transaction's own USD/INR rate, so the rate
+// move is part of the return an Indian investor actually earned.
+console.log("\nH. Per-holding XIRR");
+
+function holdingXirr(txns, currentINR, opts) {
+  opts = opts || {};
+  const rate = opts.rate || (() => 1);
+  const flows = txns
+    .filter((t) => t.date && t.units && t.price)
+    .map((t) => ({
+      date: t.date,
+      amount: (t.type === "buy" ? -1 : 1) * t.units * t.price * rate(t.date),
+    }));
+  // A closed position has no holding left to value, so no terminal flow.
+  if (!opts.isClosed && currentINR > 0) flows.push({ date: opts.asOf || new Date(), amount: currentINR });
+  const r = calculateXIRR(flows);
+  return (r === null || !isFinite(r)) ? null : r * 100;
+}
+
+{
+  // India: 10 units at ₹100, worth ₹110 a year on = 10%.
+  const x = holdingXirr(
+    [{ type: "buy", units: 10, price: 100, date: D("2024-01-01") }],
+    1100, { asOf: D("2025-01-01") });
+  ok(near(x, 10, 0.05), "H1 India holding: one year, +10% value → ~10% XIRR", String(x));
+}
+{
+  // Two purchases at different times: the later money is invested for less of the
+  // period, so the rate must exceed the simple total-return percentage.
+  const x = holdingXirr([
+    { type: "buy", units: 10, price: 100, date: D("2024-01-01") },
+    { type: "buy", units: 10, price: 100, date: D("2024-10-01") },
+  ], 2300, { asOf: D("2025-01-01") });
+  const simple = (2300 - 2000) / 2000 * 100;   // 15% over the whole period
+  ok(x > simple, "H2 later contributions raise the annualised rate above simple return",
+     x + " vs " + simple);
+}
+{
+  // US: bought at $100 with USD/INR 80, now $110 with USD/INR 90. In dollars the
+  // gain is 10%; in rupees it is (110×90)/(100×80) − 1 = 23.75%.
+  const x = holdingXirr(
+    [{ type: "buy", units: 10, price: 100, date: D("2024-01-01") }],
+    10 * 110 * 90,
+    { asOf: D("2025-01-01"), rate: () => 80 });
+  // 23.75% is the period return; the annualised figure comes out a shade under
+  // because 2024 is a leap year — 366 days measured against a 365-day year.
+  ok(near(x, 23.75, 0.1), "H3 US holding: XIRR includes the currency move", String(x));
+  ok(x > 10, "H4 rupee return exceeds the dollar return when USD strengthens");
+}
+{
+  // Each leg uses its own rate, not one rate applied to both ends. Buying when the
+  // dollar was cheap must not be revalued at today's rate.
+  const rates = { "2024-01-01": 80, "2024-07-01": 85 };
+  const x = holdingXirr([
+    { type: "buy", units: 10, price: 100, date: D("2024-01-01") },
+    { type: "buy", units: 10, price: 100, date: D("2024-07-01") },
+  ], 20 * 110 * 90, { asOf: D("2025-01-01"), rate: (d) => rates[d.toISOString().slice(0, 10)] || 90 });
+  const flat = holdingXirr([
+    { type: "buy", units: 10, price: 100, date: D("2024-01-01") },
+    { type: "buy", units: 10, price: 100, date: D("2024-07-01") },
+  ], 20 * 110 * 90, { asOf: D("2025-01-01"), rate: () => 90 });
+  ok(Math.abs(x - flat) > 1, "H5 per-leg rates give a different answer than one flat rate",
+     x + " vs " + flat);
+}
+{
+  // A sold-out position is valued by its proceeds alone; adding a terminal for a
+  // holding that no longer exists would double count it.
+  const x = holdingXirr([
+    { type: "buy", units: 10, price: 100, date: D("2024-01-01") },
+    { type: "sell", units: 10, price: 120, date: D("2025-01-01") },
+  ], 0, { isClosed: true });
+  ok(near(x, 20, 0.05), "H6 closed position: XIRR from proceeds, no terminal added", String(x));
+}
+{
+  const x = holdingXirr([{ type: "buy", units: 10, price: 100, date: D("2024-01-01") }], 0,
+                        { isClosed: true });
+  ok(x === null, "H7 no sale and no current value → no rate, not 0%");
+}
+{
+  const x = holdingXirr(
+    [{ type: "buy", units: 10, price: 100, date: D("2024-01-01") }],
+    800, { asOf: D("2025-01-01") });
+  ok(x !== null && x < 0, "H8 a holding below cost reports a negative XIRR", String(x));
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
