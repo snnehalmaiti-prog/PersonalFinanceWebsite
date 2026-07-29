@@ -5468,8 +5468,10 @@
     }
     // Seed byPort with every portfolio that appears in the sheet — so cards
     // still render for portfolios whose positions are all closed.
+    // Seeded from the debt-filtered sheet: a portfolio holding only Fixed Income
+    // instruments has no Stocks/ETF position, so it gets no card here.
     var byPort = {};
-    (collectPortfolioNamesFromSheets(["stocksetf"]) || []).forEach(function (p) {
+    (collectPortfolioNamesFromRows(xirrRows) || []).forEach(function (p) {
       byPort[p] = { invested: 0, current: 0, india: 0, us: 0, day: 0 };
     });
     rowsData.forEach(function (h) {
@@ -5482,6 +5484,7 @@
       else byPort[p].india += h.currentINR || 0;
     });
     var names = Object.keys(byPort).sort(function (a, b) { return byPort[b].current - byPort[a].current; });
+    if (!names.length) { row.innerHTML = ""; return; }
     var combined = { invested: 0, current: 0, india: 0, us: 0, day: 0 };
     names.forEach(function (n) { combined.invested += byPort[n].invested; combined.current += byPort[n].current; combined.india += byPort[n].india; combined.us += byPort[n].us; combined.day += byPort[n].day; });
     var namedList = names.map(function (n) { var p = byPort[n]; p.name = n; return p; });
@@ -9651,6 +9654,24 @@
     }
   }
 
+  // Same as collectPortfolioNamesFromSheets but for an already-loaded rows array,
+  // so callers working on a filtered copy of a sheet (e.g. debt excluded) list
+  // only the portfolios that survive the filter.
+  function collectPortfolioNamesFromRows(rows) {
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = findHeaderIndex(header, "portfolio name");
+    if (portfolioIdx === -1) return [];
+    var names = [], seen = {};
+    rows.slice(1).forEach(function (row) {
+      var name = (row[portfolioIdx] == null ? "" : String(row[portfolioIdx])).trim();
+      if (!name) return;
+      var key = normalizeText(name);
+      if (!seen[key]) { seen[key] = true; names.push(name); }
+    });
+    return names;
+  }
+
   function collectPortfolioNamesFromSheets(prefixes) {
     var names = [];
     var seen = {};
@@ -12712,12 +12733,14 @@
     if (!row) return;
     var allRows = getSheetRows("equity");
     if (!allRows) { row.innerHTML = ""; return; }
-    var names = collectPortfolioNamesFromSheets(["equity"]);
-    if (!names.length) { row.innerHTML = ""; return; }
     // Debt funds are reported under Debt ETF/Mutual, so they are excluded from
     // these cards' invested, current, day change and XIRR alike — computing all
     // four from the same non-debt population keeps the card internally consistent.
     var rows = excludeFixedIncomeRows(allRows);
+    // Portfolios are drawn from the filtered sheet: one whose every instrument is
+    // Fixed Income has no mutual fund holding, so it gets no card here at all.
+    var names = collectPortfolioNamesFromRows(rows);
+    if (!names.length) { row.innerHTML = ""; return; }
 
     var combinedInv = 0, combinedCur = 0, combinedDay = 0;
     Promise.all(names.map(function (name) {

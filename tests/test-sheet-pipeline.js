@@ -418,5 +418,21 @@ eval(extract("function onlyFixedIncomeRows(rows, catMap)"));
      "J14 exclude and only partition the sheet (header counted twice)");
 }
 
+eval(extract("function collectPortfolioNamesFromRows(rows)"));
+{
+  var cat3 = { "hdfc gilt fund": "Fixed Income", "nifty bees": "Equity" };
+  var rows3 = [
+    ["Transaction Date", "Portfolio Name", "Instrument Name", "Units", "Price"],
+    ["01/01/2024", "Snnehal", "HDFC Gilt Fund", "10", "20"],
+    ["01/01/2024", "Riya", "Nifty Bees", "5", "100"]
+  ];
+  ok(collectPortfolioNamesFromRows(rows3).join(",") === "Snnehal,Riya", "J15 names collected in first-seen order");
+  var kept = collectPortfolioNamesFromRows(excludeFixedIncomeRows(rows3, cat3));
+  ok(kept.join(",") === "Riya", "J16 a debt-only portfolio drops out of the filtered sheet");
+  ok(collectPortfolioNamesFromRows(onlyFixedIncomeRows(rows3, cat3)).join(",") === "Snnehal", "J17 and appears in the debt-only sheet");
+  ok(collectPortfolioNamesFromRows([rows3[0]]).length === 0, "J18 header-only sheet yields no portfolios");
+  ok(collectPortfolioNamesFromRows(null).length === 0, "J19 null rows yield no portfolios");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
