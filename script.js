@@ -1960,7 +1960,12 @@
   function _ovEmptySlice() {
     return { invested: 0, current: 0, unrealized: 0, realized: 0, dayChange: 0 };
   }
-  var _ovSlice = { mf: _ovEmptySlice(), se: _ovEmptySlice(), fi: _ovEmptySlice(), comm: _ovEmptySlice() };
+  var _ovSlice = {
+    mf: _ovEmptySlice(), se: _ovEmptySlice(), fi: _ovEmptySlice(), comm: _ovEmptySlice(),
+    // Debt funds/ETFs pulled out of mf and se. Kept per source so the two
+    // independent flows cannot overwrite each other's contribution.
+    debtMf: _ovEmptySlice(), debtSe: _ovEmptySlice()
+  };
 
   // Cash-flow bookkeeping for the XIRR/benchmark cards. Deliberately NOT part of
   // a slice: these are flow arrays and scope tags, not values the Overview sums.
@@ -1984,7 +1989,9 @@
       mf: _ovSlice.mf,
       se: _ovSlice.se,
       fi: { invested: _ovSlice.fi.invested, current: _ovSlice.fi.current, unrealized: _ovSlice.fi.unrealized, realized: _ovSlice.fi.realized },
-      comm: _ovSlice.comm
+      comm: _ovSlice.comm,
+      debtMf: _ovSlice.debtMf,
+      debtSe: _ovSlice.debtSe
     };
   }
 
@@ -2005,7 +2012,7 @@
   //   * an unknown-field guard, now that fields are real keys on a typed slice
   //     rather than concatenated strings on a shared bag.
   var OV_SLICE_FIELDS = ["invested", "current", "unrealized", "realized", "dayChange"];
-  var _ovProvenance = { mf: null, se: null, fi: null, comm: null };
+  var _ovProvenance = { mf: null, se: null, fi: null, comm: null, debtMf: null, debtSe: null };
   var _ovSeq = 0;
   var _ovStaleDrops = 0;
 
@@ -2207,11 +2214,14 @@
     // MF/commodity flows overwrite them with fresh values when they resolve.
     if (_ovFlows.seComputedPortfolio !== selected) {
       _ovApply("se", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
+      _ovApply("debtSe", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
+      _ovApply("debtMf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovFlows.seXirrFlows = []; _ovFlows.seFlowsINR = [];
       _ovApply("mf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovApply("comm", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
     }
     _ovApply("fi", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
+    _ovApply("debtMf", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
     _ovApply("comm", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
 
     var equityEl = document.getElementById("equity-total-investment");
@@ -2227,7 +2237,24 @@
     if (equityEl) equityEl.textContent = formatCurrency(mfInvested);
     if (stocksEtfEl) stocksEtfEl.textContent = formatCurrency(seInvested);
     if (fixedIncomeEl) fixedIncomeEl.textContent = formatCurrency(fiBaseInvested);
-    _ovApply("mf", { invested: mfInvested }, "updateDashboardStats:sync");
+    // Debt funds are reported as Fixed Income, so their cost leaves the Mutual
+    // Fund invested figure. Same FIFO remaining-lot basis as the total it is
+    // subtracted from, so the two cannot disagree by a rounding of method.
+    var _dbtCatMap = buildInstrumentTopCategoryMap();
+    var mfDebtInvested = (function () {
+      var eqRows = getSheetRows("equity");
+      if (!eqRows) return 0;
+      var byInst = groupUnitTransactionsByInstrument(eqRows, selected);
+      if (!byInst) return 0;
+      var t = 0;
+      Object.keys(byInst).forEach(function (nm) {
+        if (normalizeText(_dbtCatMap[normalizeText(nm)] || "") !== "fixed income") return;
+        fifoRemainingLots(byInst[nm]).forEach(function (l) { t += l.units * l.price; });
+      });
+      return t;
+    })();
+    _ovApply("mf", { invested: mfInvested - mfDebtInvested }, "updateDashboardStats:sync");
+    _ovApply("debtMf", { invested: mfDebtInvested }, "updateDashboardStats:sync");
     _ovApply("se", { invested: seInvested }, "updateDashboardStats:sync");
     _ovApply("fi", { invested: fiBaseInvested }, "updateDashboardStats:sync");
 
@@ -6021,8 +6048,42 @@
             yesterdayTotal += c;
             heldInstruments.push(name);
           });
+          // Debt funds are Fixed Income, so their value leaves the Mutual Fund
+          // figures and is reported separately. Splitting here — after valuation,
+          // before the totals are published — keeps one valuation path and means
+          // net worth is unchanged: what mf loses, debtMf gains.
+          var _dbtMap = buildInstrumentTopCategoryMap();
+          function _isDebtName(n) {
+            return normalizeText(_dbtMap[normalizeText(n || "")] || "") === "fixed income";
+          }
+          var debtNames = heldInstruments.filter(_isDebtName);
+          var mfNames = heldInstruments.filter(function (n) { return !_isDebtName(n); });
+          var debtCurrent = 0, debtYesterday = 0;
+          debtNames.forEach(function (name) {
+            var idx = instruments.indexOf(name);
+            var evs = unitEvents[name] || [];
+            var u = evs.length ? evs[evs.length - 1].cumulativeUnits : 0;
+            if (u <= UNITS_EPSILON) return;
+            var nh = idx === -1 ? null : navHistories[idx];
+            var nv = nh ? latest_nav_for(nh) : null;
+            var pv = nh ? previous_nav_for(nh) : null;
+            if (nv) { debtCurrent += u * nv; debtYesterday += u * (pv || nv); }
+            else { var c = investedCostFor([name]); debtCurrent += c; debtYesterday += c; }
+          });
+          var debtInvested = debtNames.length ? investedCostFor(debtNames) : 0;
+          total -= debtCurrent;
+          yesterdayTotal -= debtYesterday;
+          heldInstruments = mfNames;
+
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
+          // invested is owned by updateDashboardStats; only the live figures are
+          // written here, so the two flows never contend for the same field.
+          _ovApply("debtMf", {
+            current: debtCurrent,
+            unrealized: debtCurrent - debtInvested,
+            dayChange: debtCurrent - debtYesterday
+          }, "updateTotalCurrentValue:debt", selected);
           if (equityEl) equityEl.textContent = formatCurrency(total);
           setUnrealizedReturn(equityReturnEl, equityPctEl, total, investment);
           _ovApply("mf", { current: total, unrealized: unrealizedProfit }, "updateTotalCurrentValue:nav", selected);
@@ -13702,30 +13763,51 @@
           // open positions, so the Overview cards honour the Overview selector
           // while the tab itself shows all portfolios.
           var totalCurrentINR = 0, totalInvestedINR = 0, totalDayChangeINR = 0, totalPnlINR = 0;
+          // Debt ETFs are Fixed Income, so they are totalled separately and
+          // reported under that class instead of Stocks/ETF. Same loop and the
+          // same price fallbacks, so what one total loses the other gains and net
+          // worth is unchanged.
+          var dbtCurrentINR = 0, dbtInvestedINR = 0, dbtDayChangeINR = 0, dbtPnlINR = 0;
+          var _seDbtMap = buildInstrumentTopCategoryMap();
           ovOpenHoldings.forEach(function (h) {
+            var _isDbt = normalizeText(_seDbtMap[normalizeText(h.instrument || "")] || "") === "fixed income";
             var priceEntry = allPrices[h.ticker] || null;
             var eodRaw = priceEntry ? priceEntry.price : null;
             var prevRaw = priceEntry ? priceEntry.prev_close : null;
             // Invested (cost basis) is price-independent — always count it, even for
             // a freshly-added instrument whose live price hasn't been fetched yet.
             // Only current value / P&L / day-change require a price.
-            totalInvestedINR += h.investedINR;
+            if (_isDbt) dbtInvestedINR += h.investedINR; else totalInvestedINR += h.investedINR;
             if (eodRaw === null) {
               // No live price yet: value the holding at cost so the Overview
               // Current reconciles with the split cards (which use the same cost
               // fallback via computeStocksEtfCurrentINR). Day change stays 0.
-              totalCurrentINR += h.investedINR;
+              if (_isDbt) dbtCurrentINR += h.investedINR; else totalCurrentINR += h.investedINR;
               return;
             }
             var ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
             var cur = h.units * ltpINR;
-            totalCurrentINR += cur;
-            totalPnlINR += cur - h.investedINR;
+            var dayC = 0;
             if (prevRaw !== null) {
               var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
-              totalDayChangeINR += (ltpINR - prevINR) * h.units;
+              dayC = (ltpINR - prevINR) * h.units;
+            }
+            if (_isDbt) {
+              dbtCurrentINR += cur;
+              dbtPnlINR += cur - h.investedINR;
+              dbtDayChangeINR += dayC;
+            } else {
+              totalCurrentINR += cur;
+              totalPnlINR += cur - h.investedINR;
+              totalDayChangeINR += dayC;
             }
           });
+          _ovApply("debtSe", {
+            invested: dbtInvestedINR,
+            current: dbtCurrentINR,
+            unrealized: dbtPnlINR,
+            dayChange: dbtDayChangeINR
+          }, "renderStockEtfHoldingsTable:debt", ovPortfolio);
 
           var indiaRowsData = rowsData.filter(function(r) { return r.region !== "US"; });
           var usRowsData = rowsData.filter(function(r) { return r.region === "US"; });

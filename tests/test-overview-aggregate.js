@@ -227,5 +227,71 @@ function applyPatch(store, cls, patch) {
      "F3 NaN patch zeroes only its own field", r.current + "/" + r.dayChange);
 }
 
+console.log("G. Debt funds/ETFs reclassified out of MF and Stocks/ETF");
+
+// An instrument marked Fixed Income in the mapping sheets is tracked in the
+// Mutual Fund or Stocks/ETF sheet but reported under Fixed Income. The value has
+// to MOVE, not disappear: whatever the equity cards lose, the fixed income card
+// must gain, and net worth must not budge.
+{
+  const before = aggregateOverview({
+    mf: { invested: 1200000, current: 1200000 },
+    se: { invested: 800000, current: 800000 },
+    fi: { invested: 500000, current: 500000 },
+    comm: { invested: 0, current: 0 },
+  }, {});
+  const after = aggregateOverview({
+    mf: { invested: 1150000, current: 1150000 },
+    se: { invested: 760000, current: 760000 },
+    fi: { invested: 500000, current: 500000 },
+    comm: { invested: 0, current: 0 },
+    debtMf: { invested: 50000, current: 50000 },
+    debtSe: { invested: 40000, current: 40000 },
+  }, {});
+  ok(approx(before.current, after.current), "G1 net worth unchanged by the reclassification",
+     before.current + " vs " + after.current);
+  ok(approx(after.cards.mf.current, 1150000), "G2 Mutual Funds card drops the debt funds");
+  ok(approx(after.cards.se.current, 760000), "G3 Stocks & ETF card drops the debt ETFs");
+  ok(approx(after.cards.fi.current, 590000), "G4 Fixed Income card gains both",
+     String(after.cards.fi.current));
+  ok(approx(after.cards.mf.current + after.cards.se.current + after.cards.fi.current, after.current),
+     "G5 the three cards still total net worth");
+  ok(approx(after.invested, before.invested), "G6 invested is moved, not double counted",
+     after.invested + " vs " + before.invested);
+}
+{
+  // Two independent buckets, because the MF and Stocks/ETF flows resolve
+  // separately: one arriving must not erase the other's contribution.
+  const onlyMf = aggregateOverview({ debtMf: { invested: 50000, current: 50000 } }, {});
+  const both = aggregateOverview({
+    debtMf: { invested: 50000, current: 50000 },
+    debtSe: { invested: 40000, current: 40000 },
+  }, {});
+  ok(approx(onlyMf.current, 50000), "G7 MF debt counts before the Stocks/ETF flow resolves");
+  ok(approx(both.current, 90000), "G8 both buckets add up once both have resolved");
+}
+{
+  // Debt funds are priced daily, unlike deposits, so their day change counts.
+  const r = aggregateOverview({
+    mf: { current: 100, dayChange: -10 },
+    debtMf: { current: 100, dayChange: 3 },
+    debtSe: { current: 100, dayChange: 2 },
+    fi: { current: 100, dayChange: 999 },
+  }, {});
+  ok(approx(r.dayChange, -5), "G9 debt day change counts; deposit fixed income still does not",
+     String(r.dayChange));
+}
+{
+  // Excluding fixed income must drop the debt buckets too — they are fixed income.
+  const r = aggregateOverview({
+    mf: { invested: 100, current: 100 },
+    debtMf: { invested: 50, current: 50 },
+    debtSe: { invested: 40, current: 40 },
+    fi: { invested: 500, current: 500 },
+  }, { excludeFixedIncome: true });
+  ok(approx(r.current, 100), "G10 the exclusion toggle drops debt with the rest of fixed income",
+     String(r.current));
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

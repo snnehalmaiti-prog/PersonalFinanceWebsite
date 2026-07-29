@@ -75,18 +75,36 @@
     var se = norm(slices.se);
     var fi = gate(norm(slices.fi), excluded);
     var comm = gate(norm(slices.comm), excluded);
+    // Debt funds and ETFs are tracked in the Mutual Fund and Stocks/ETF sheets but
+    // belong to Fixed Income. Two buckets, not one, because the MF and Stocks/ETF
+    // flows resolve independently — a single shared bucket would let whichever
+    // finished last overwrite the other's contribution.
+    // They are gated with fixed income, since that is what they are.
+    var debtMf = gate(norm(slices.debtMf), excluded);
+    var debtSe = gate(norm(slices.debtSe), excluded);
+    var debt = {
+      invested: debtMf.invested + debtSe.invested,
+      current: debtMf.current + debtSe.current,
+      unrealized: debtMf.unrealized + debtSe.unrealized,
+      realized: debtMf.realized + debtSe.realized,
+      dayChange: debtMf.dayChange + debtSe.dayChange
+    };
 
     // --- Header ---------------------------------------------------------
-    var invested = mf.invested + se.invested + fi.invested + comm.invested;
-    var current = currentOrCost(mf) + currentOrCost(se) + currentOrCost(fi) + currentOrCost(comm);
-    var realized = mf.realized + se.realized + fi.realized + comm.realized;
-    // Fixed income has no intraday mark, so it contributes no day change.
-    var dayChange = mf.dayChange + se.dayChange + comm.dayChange;
+    var invested = mf.invested + se.invested + fi.invested + comm.invested + debt.invested;
+    var current = currentOrCost(mf) + currentOrCost(se) + currentOrCost(fi) + currentOrCost(comm) +
+                  currentOrCost(debtMf) + currentOrCost(debtSe);
+    var realized = mf.realized + se.realized + fi.realized + comm.realized + debt.realized;
+    // Deposit-style fixed income has no intraday mark, but debt funds and ETFs do
+    // — they are priced daily — so their day change still counts.
+    var dayChange = mf.dayChange + se.dayChange + comm.dayChange + debt.dayChange;
 
     // --- Category cards -------------------------------------------------
     var seCardCurrent = currentOrCost(se);
-    var fiCardInvested = fi.invested + comm.invested;
-    var fiCardCurrent = fi.current + comm.current;
+    // The Fixed Income card carries the debt funds and ETFs that were taken out of
+    // the Mutual Fund and Stocks/ETF cards, so the three cards still total net worth.
+    var fiCardInvested = fi.invested + comm.invested + debt.invested;
+    var fiCardCurrent = fi.current + comm.current + debt.current;
 
     return {
       invested: invested,
@@ -114,7 +132,7 @@
         fi: {
           invested: fiCardInvested,
           current: fiCardCurrent,
-          unrealized: fi.unrealized + comm.unrealized,
+          unrealized: fi.unrealized + comm.unrealized + debt.unrealized,
           realized: fi.realized + comm.realized,
           returnPct: pct(fiCardCurrent, fiCardInvested)
         }
