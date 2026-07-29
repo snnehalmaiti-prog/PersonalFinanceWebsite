@@ -3434,6 +3434,10 @@
     var subCatIdx     = header.indexOf("instrument sub category");
     var segmentIdx    = header.findIndex(function(h) { return h.indexOf("market segment") !== -1; });
     var regionIdx     = header.findIndex(function(h) { return h === "region"; });
+    // Sector. Matched exactly first, then loosely, so a sheet labelling the
+    // column "GICS Sector" or "Sector Name" still resolves.
+    var sectorIdx     = header.indexOf("sector");
+    if (sectorIdx === -1) sectorIdx = header.findIndex(function (h) { return h.indexOf("sector") !== -1; });
     var identifierIdx = header.findIndex(function(h) { return h.indexOf("identifier") !== -1; });
     if (instrumentIdx === -1 || regionIdx === -1 || identifierIdx === -1) return map;
     rows.slice(1).forEach(function (row) {
@@ -3447,7 +3451,8 @@
         exchange: region === "India" ? "NSE" : null,
         segment:  segmentIdx  !== -1 ? (row[segmentIdx]  || "").trim() : "",
         subCat:   subCatIdx   !== -1 ? (row[subCatIdx]   || "").trim() : "",
-        category: categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : ""
+        category: categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "",
+        sector:   sectorIdx   !== -1 ? (row[sectorIdx]   || "").trim() : ""
       };
     });
     return map;

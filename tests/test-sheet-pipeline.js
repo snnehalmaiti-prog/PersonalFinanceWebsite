@@ -326,5 +326,56 @@ storage.clear();
 localStorage.setItem("wf-equity-sheets", "{corrupt");
 ok(loadSheetConfigs("equity").length === 0, "I3 corrupt JSON handled (no crash)");
 
+// ── Stocks/ETF mapping: Sector column ────────────────────────────────────────
+// buildStockMappingTable reads the sheet's Sector column. Header matching is
+// exact-first then loose, so a sheet labelling it "GICS Sector" still resolves —
+// pinned here because a silent miss would leave every holding sector-less with no
+// error to notice.
+console.log("\nStocks/ETF mapping — Sector column");
+function buildStockMappingTableRows(rows) {
+  var map = {};
+  if (!rows || rows.length < 2) return map;
+  var header = rows[0].map(normalizeText);
+  var instrumentIdx = header.indexOf("instrument name");
+  var regionIdx     = header.findIndex(function (h) { return h === "region"; });
+  var identifierIdx = header.findIndex(function (h) { return h.indexOf("identifier") !== -1; });
+  var sectorIdx     = header.indexOf("sector");
+  if (sectorIdx === -1) sectorIdx = header.findIndex(function (h) { return h.indexOf("sector") !== -1; });
+  if (instrumentIdx === -1 || regionIdx === -1 || identifierIdx === -1) return map;
+  rows.slice(1).forEach(function (row) {
+    var name = (row[instrumentIdx] || "").trim();
+    if (!name) return;
+    map[normalizeText(name)] = {
+      sector: sectorIdx !== -1 ? (row[sectorIdx] || "").trim() : ""
+    };
+  });
+  return map;
+}
+{
+  var m = buildStockMappingTableRows([
+    ["Instrument Name", "Identifier", "Region", "Sector"],
+    ["HDFC Bank", "HDFCBANK", "India", "Financial Services"],
+    ["Infosys", "INFY", "India", "Information Technology"],
+    ["No Sector Co", "NOSEC", "India", ""]
+  ]);
+  ok(m["hdfc bank"].sector === "Financial Services", "Sector column is read");
+  ok(m["infosys"].sector === "Information Technology", "Sector read for each row");
+  ok(m["no sector co"].sector === "", "blank sector stays blank, not undefined");
+}
+{
+  var m = buildStockMappingTableRows([
+    ["Instrument Name", "Identifier", "Region", "GICS Sector"],
+    ["HDFC Bank", "HDFCBANK", "India", "Financials"]
+  ]);
+  ok(m["hdfc bank"].sector === "Financials", "loose match resolves a prefixed Sector header");
+}
+{
+  var m = buildStockMappingTableRows([
+    ["Instrument Name", "Identifier", "Region"],
+    ["HDFC Bank", "HDFCBANK", "India"]
+  ]);
+  ok(m["hdfc bank"].sector === "", "a sheet without the column yields an empty sector, not a crash");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
