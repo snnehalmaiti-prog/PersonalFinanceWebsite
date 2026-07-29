@@ -5423,7 +5423,8 @@
   function _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday) {
     var seRows = getSheetRows("stocksetf");
     if (!seRows) return;
-    var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["stocksetf"]) || []);
+    // See the Mutual Fund pills: debt-only portfolios have no Stocks/ETF holding.
+    var portfolios = ["all"].concat(collectPortfolioNamesFromRows(excludeFixedIncomeRows(getSheetRows("stocksetf"))) || []);
     // Each region's toggle updates only its own state and re-renders only its list.
     [
       { id: "seh-portfolio-toggle", region: "india" },
@@ -13007,7 +13008,13 @@
       var indexPrices = indexHistory && indexHistory[indexKey] && indexHistory[indexKey].prices;
 
       var unitEvents = buildInstrumentUnitEvents(portfolio);
-      var instruments = Object.keys(unitEvents).filter(function (n) { return !!lookupSchemeCode(schemeMap, n); });
+      // Debt funds are reported under Fixed Income, so this chart — the Mutual
+      // Fund tab's performance vs benchmark — must track the same holdings the
+      // rest of the tab shows.
+      var _perfCat = buildInstrumentTopCategoryMap();
+      var instruments = Object.keys(unitEvents).filter(function (n) {
+        return !!lookupSchemeCode(schemeMap, n) && !isFixedIncomeInstrument(n, _perfCat);
+      });
       if (!instruments.length) return;
 
       Promise.all(instruments.map(function (n) { return fetchNavHistory(lookupSchemeCode(schemeMap, n)); }))
@@ -13168,7 +13175,9 @@
     // Portfolio filter for the Holdings list (All / <each portfolio>).
     var pfToggle = document.getElementById("mfh-portfolio-toggle");
     if (pfToggle) {
-      var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["equity"]) || []);
+      // From the debt-filtered sheet: a portfolio holding only Fixed Income funds
+      // has nothing in this list, so it gets no pill.
+      var portfolios = ["all"].concat(collectPortfolioNamesFromRows(excludeFixedIncomeRows(getSheetRows("equity"))) || []);
       var current = window.__mfHoldingsPortfolioOverride || "all";
       pfToggle.innerHTML = portfolios.map(function (p) {
         var label = p === "all" ? "All" : p;
