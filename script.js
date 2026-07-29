@@ -2878,7 +2878,11 @@
     renderFiPortfolioCards(active);
     renderFiAllocation(active);
     renderFiInterestSplit(active);
-    renderFiHoldingsCardList(holdings);
+    // Debt funds/ETFs count toward the FI totals above, but they have their own
+    // Debt ETF/Mutual table — listing them here too would show them twice.
+    renderFiHoldingsCardList(holdings.filter(function (h) {
+      return String(h.subCategory || "").toLowerCase().indexOf("debt") !== 0;
+    }));
   }
 
   // Collects Fixed Income holdings from BOTH the fd sheet (FD/Corpus/Savings/PF)
@@ -2922,6 +2926,50 @@
         Object.keys(byKey).forEach(function (k) { out.push(byKey[k]); });
       }
     }
+    out = out.concat(_buildDebtFundHoldingsForFi());
+    return out;
+  }
+
+  // Debt funds/ETFs (Instrument Category = Fixed Income in a mapping sheet) are
+  // reported under Fixed Income, so the FI cards, allocation and split must see
+  // them too — not just the Debt ETF/Mutual list. Normalised onto the FI holding
+  // shape. Portfolio comes from the row when tagged (Stocks/ETF), else from the
+  // instrument's first appearance in the equity sheet.
+  function _buildDebtFundHoldingsForFi() {
+    var out = [];
+    var portfolioByInst = {};
+    ["equity", "stocksetf"].forEach(function (prefix) {
+      var eqRows = getSheetRows(prefix);
+      if (!eqRows || !eqRows.length) return;
+      var hdr = eqRows[0].map(normalizeText);
+      var pI = hdr.indexOf("portfolio name");
+      var iI = hdr.indexOf("instrument name");
+      if (pI === -1 || iI === -1) return;
+      eqRows.slice(1).forEach(function (r) {
+        var nm = (r[iI] || "").trim();
+        if (nm && !portfolioByInst[normalizeText(nm)]) portfolioByInst[normalizeText(nm)] = (r[pI] || "").trim();
+      });
+    });
+    (window.__mfDebtRows || []).forEach(function (r) {
+      if ((r.units || 0) < UNITS_EPSILON) return;
+      out.push({
+        portfolio: r._portfolio || portfolioByInst[normalizeText(r.instrument)] || "",
+        instrument: r.instrument,
+        subCategory: "Debt Fund",
+        invested: r.invested || 0,
+        current: r.current || 0
+      });
+    });
+    (window.__seDebtRows || []).forEach(function (r) {
+      if ((r.units || 0) < UNITS_EPSILON || r.isClosed) return;
+      out.push({
+        portfolio: r._portfolio || portfolioByInst[normalizeText(r.instrument)] || "",
+        instrument: r.instrument,
+        subCategory: "Debt ETF",
+        invested: r.investedINR || 0,
+        current: r.currentINR || 0
+      });
+    });
     return out;
   }
 
@@ -3003,6 +3051,18 @@
             }
           });
         }
+        // Debt funds/ETFs contribute their buy/sell flows and their current value,
+        // so the card's XIRR covers everything the card's value covers.
+        var _fiCatMap = buildInstrumentTopCategoryMap();
+        ["equity", "stocksetf"].forEach(function (prefix) {
+          var dRows = onlyFixedIncomeRows(getSheetRows(prefix), _fiCatMap);
+          if (dRows && dRows.length > 1) flows = flows.concat(buildXirrCashFlows(dRows, pName) || []);
+        });
+        holdings.forEach(function (h) {
+          var s = (h.subCategory || "").toLowerCase();
+          if (s.indexOf("debt") !== 0) return;
+          if (p.isCombined || normalizeText(h.portfolio) === normalizeText(p.name)) terminal += (h.current || 0);
+        });
         if (terminal > 0) flows.push({ date: new Date(), amount: terminal });
         var x = calculateXIRR(flows);
         if (x != null && isFinite(x)) xirrPct = x * 100;
@@ -3469,6 +3529,17 @@
     var m = catMap || buildInstrumentTopCategoryMap();
     return [rows[0]].concat(rows.slice(1).filter(function (r) {
       return !isFixedIncomeInstrument(r[iIdx], m);
+    }));
+  }
+
+  // Complement of excludeFixedIncomeRows: keeps ONLY the debt transactions.
+  function onlyFixedIncomeRows(rows, catMap) {
+    if (!rows || rows.length < 2) return rows;
+    var iIdx = rows[0].map(normalizeText).indexOf("instrument name");
+    if (iIdx === -1) return [rows[0]];
+    var m = catMap || buildInstrumentTopCategoryMap();
+    return [rows[0]].concat(rows.slice(1).filter(function (r) {
+      return isFixedIncomeInstrument(r[iIdx], m);
     }));
   }
 
@@ -5301,6 +5372,10 @@
         listId: "dbth-list", eyebrowId: "dbth-eyebrow", state: DBTH_STATE
       });
     } catch (e) {}
+    // The debt rows arrive from the MF/Stocks-ETF pipelines, which finish after
+    // the Fixed Income tab has drawn. Repaint the FI cards/allocation/split now
+    // that these holdings exist, otherwise they'd report only FD/PF.
+    try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) {}
   }
 
   function renderStocksEtfRedesign(rowsData, usdInrToday) {

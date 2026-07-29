@@ -402,5 +402,21 @@ eval(extract("function excludeFixedIncomeRows(rows, catMap)"));
   ok(excludeFixedIncomeRows(null, cat) === null, "J10 null rows tolerated");
 }
 
+eval(extract("function onlyFixedIncomeRows(rows, catMap)"));
+{
+  var cat2 = { "hdfc gilt fund": "Fixed Income", "nifty bees": "Equity" };
+  var rows2 = [
+    ["Transaction Date", "Portfolio Name", "Instrument Name", "Units", "Price"],
+    ["01/01/2024", "A", "HDFC Gilt Fund", "10", "20"],
+    ["01/01/2024", "A", "Nifty Bees", "5", "100"]
+  ];
+  var only = onlyFixedIncomeRows(rows2, cat2);
+  ok(only.length === 2 && only[1][2] === "HDFC Gilt Fund", "J11 onlyFixedIncomeRows keeps just the debt rows");
+  ok(only[0] === rows2[0], "J12 onlyFixedIncomeRows preserves the header");
+  ok(onlyFixedIncomeRows([["Portfolio Name"]], cat2).length === 1, "J13 header-only result when Instrument Name is missing");
+  ok(excludeFixedIncomeRows(rows2, cat2).length + onlyFixedIncomeRows(rows2, cat2).length === rows2.length + 1,
+     "J14 exclude and only partition the sheet (header counted twice)");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
