@@ -3451,6 +3451,27 @@
     return map;
   }
 
+  // An instrument mapped to Instrument Category "Fixed Income" is debt, wherever
+  // it is traded. It is reported under Fixed Income / Debt ETF-Mutual and must be
+  // kept out of the Mutual Fund and Stocks/ETF lists AND their totals.
+  function isFixedIncomeInstrument(name, catMap) {
+    var m = catMap || buildInstrumentTopCategoryMap();
+    return normalizeText(m[normalizeText(name || "")] || "") === "fixed income";
+  }
+
+  // Returns a copy of a transaction sheet with Fixed Income instruments removed,
+  // header preserved. Used so per-portfolio invested/XIRR are computed from the
+  // same population as the valuation.
+  function excludeFixedIncomeRows(rows, catMap) {
+    if (!rows || rows.length < 2) return rows;
+    var iIdx = rows[0].map(normalizeText).indexOf("instrument name");
+    if (iIdx === -1) return rows;
+    var m = catMap || buildInstrumentTopCategoryMap();
+    return [rows[0]].concat(rows.slice(1).filter(function (r) {
+      return !isFixedIncomeInstrument(r[iIdx], m);
+    }));
+  }
+
   function buildStockMappingTable() {
     var rows = getSheetRows("stocksetfmapping");
     var map = {};
@@ -5355,6 +5376,9 @@
     if (!row) return;
     var rows = getSheetRows("stocksetf");
     if (!rows) { row.innerHTML = ""; return; }
+    // rowsData already excludes Fixed Income holdings; drop those transactions
+    // too so the card's XIRR is computed over the same population as its value.
+    var xirrRows = excludeFixedIncomeRows(rows);
     // Map instrument → portfolio (first occurrence in transactions).
     var header = rows[0].map(normalizeText);
     var pIdx = header.indexOf("portfolio name");
@@ -5412,7 +5436,7 @@
       // XIRR
       var xirrPct = null;
       try {
-        var flows = buildXirrCashFlows(rows, p.isCombined ? "all" : p.name) || [];
+        var flows = buildXirrCashFlows(xirrRows, p.isCombined ? "all" : p.name) || [];
         if (p.current > 0) flows.push({ date: new Date(), amount: p.current });
         var x = calculateXIRR(flows);
         if (x != null && isFinite(x)) xirrPct = x * 100;
@@ -12611,15 +12635,19 @@
   function renderMfPortfolioCards() {
     var row = document.getElementById("mfpc-row");
     if (!row) return;
-    var rows = getSheetRows("equity");
-    if (!rows) { row.innerHTML = ""; return; }
+    var allRows = getSheetRows("equity");
+    if (!allRows) { row.innerHTML = ""; return; }
     var names = collectPortfolioNamesFromSheets(["equity"]);
     if (!names.length) { row.innerHTML = ""; return; }
+    // Debt funds are reported under Debt ETF/Mutual, so they are excluded from
+    // these cards' invested, current, day change and XIRR alike — computing all
+    // four from the same non-debt population keeps the card internally consistent.
+    var rows = excludeFixedIncomeRows(allRows);
 
     var combinedInv = 0, combinedCur = 0, combinedDay = 0;
     Promise.all(names.map(function (name) {
-      var invested = computeTotalInvestment(name, ["equity"]);
-      return _computeMfCurrentValueForPortfolio(name).then(function (res) {
+      var invested = sumUnitBasedBuyInvestment(rows, name);
+      return _computeMfCurrentValueForPortfolio(name, null, true).then(function (res) {
         var current = res.current, dayChange = res.dayChange;
         var flows = buildXirrCashFlows(rows, name);
         if (current > 0) flows = flows.concat([{ date: new Date(), amount: current }]);
@@ -12629,8 +12657,7 @@
       });
     })).then(function (perPortfolio) {
       perPortfolio.sort(function (a, b) { return b.current - a.current; });
-      var equityRows = getSheetRows("equity");
-      var comboFlows = buildXirrCashFlows(equityRows, "all");
+      var comboFlows = buildXirrCashFlows(rows, "all");
       if (combinedCur > 0) comboFlows.push({ date: new Date(), amount: combinedCur });
       var comboXirr = calculateXIRR(comboFlows);
       var all = [{ name: "Combined", invested: combinedInv, current: combinedCur, xirr: comboXirr, dayChange: combinedDay, isCombined: true }].concat(perPortfolio);
@@ -12685,12 +12712,17 @@
   // outByCat (optional): accumulates current value per Instrument Category, so
   // callers can separate debt and gold funds from equity ones. The return shape
   // is unchanged, so existing callers are unaffected.
-  function _computeMfCurrentValueForPortfolio(portfolio, outByCat) {
+  function _computeMfCurrentValueForPortfolio(portfolio, outByCat, excludeDebt) {
     var rows = getSheetRows("equity");
     if (!rows) return Promise.resolve({ current: 0, dayChange: 0 });
     var byInst = groupUnitTransactionsByInstrument(rows, portfolio);
     if (!byInst) return Promise.resolve({ current: 0, dayChange: 0 });
-    var _topCat = outByCat ? buildInstrumentTopCategoryMap() : null;
+    var _topCat = (outByCat || excludeDebt) ? buildInstrumentTopCategoryMap() : null;
+    if (excludeDebt) {
+      Object.keys(byInst).forEach(function (n) {
+        if (isFixedIncomeInstrument(n, _topCat)) delete byInst[n];
+      });
+    }
     function _addCat(nm, v) {
       if (!outByCat || !v) return;
       var c = _topCat[normalizeText(nm)] || "Equity";

@@ -377,5 +377,30 @@ function buildStockMappingTableRows(rows) {
   ok(m["hdfc bank"].sector === "", "a sheet without the column yields an empty sector, not a crash");
 }
 
+console.log("\nJ. Fixed Income reclassification helpers");
+eval(extract("function isFixedIncomeInstrument(name, catMap)"));
+eval(extract("function excludeFixedIncomeRows(rows, catMap)"));
+{
+  var cat = { "hdfc gilt fund": "Fixed Income", "nifty bees": "Equity" };
+  ok(isFixedIncomeInstrument("HDFC Gilt Fund", cat) === true, "J1 Fixed Income instrument detected (case/space insensitive)");
+  ok(isFixedIncomeInstrument("Nifty Bees", cat) === false, "J2 Equity instrument is not debt");
+  ok(isFixedIncomeInstrument("Unknown Fund", cat) === false, "J3 unmapped instrument defaults to non-debt");
+  ok(isFixedIncomeInstrument("", cat) === false, "J4 blank name is not debt");
+
+  var rows = [
+    ["Transaction Date", "Portfolio Name", "Instrument Name", "Units", "Price"],
+    ["01/01/2024", "A", "HDFC Gilt Fund", "10", "20"],
+    ["01/01/2024", "A", "Nifty Bees", "5", "100"],
+    ["01/02/2024", "B", "HDFC Gilt Fund", "1", "20"]
+  ];
+  var fiOut = excludeFixedIncomeRows(rows, cat);
+  ok(fiOut.length === 2, "J5 debt transactions dropped", fiOut.length);
+  ok(fiOut[0] === rows[0], "J6 header preserved");
+  ok(fiOut[1][2] === "Nifty Bees", "J7 non-debt row kept");
+  ok(rows.length === 4, "J8 source rows are not mutated");
+  ok(excludeFixedIncomeRows([["Portfolio Name"]], cat).length === 1, "J9 sheet without Instrument Name column passes through");
+  ok(excludeFixedIncomeRows(null, cat) === null, "J10 null rows tolerated");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
