@@ -64,6 +64,25 @@ check(/_setOpenClosedPill\(box, SEH_STATE\.showClosed\[spec\.region\]\)/.test(SR
 check((SRC.match(/if \(wantClosed === !!/g) || []).length >= 3,
   "clicking the active segment should be a no-op, not a repaint");
 
+// The Closed segment must disable itself when there is nothing closed.
+check(/b\.disabled = !hasClosed/.test(SRC),
+  "the Closed segment is never disabled — an enabled control leading to an empty list reads as a bug");
+check(/if \(state\.showClosed && !hasClosed\) state\.showClosed = false/.test(SRC),
+  "showing Closed with nothing closed must fall back to Open, not strand an empty view");
+check(/if \(regionShowClosed && !hasClosed\)/.test(SRC),
+  "the Stocks/ETF regions need the same fallback");
+// The MF row set is pre-filtered by the toggle upstream, so asking it whether any
+// position is closed always answers "no" and permanently disables the segment.
+check(/var hasClosed = \(state === MFH_STATE && window\.__mfAnyClosed !== undefined\)/.test(SRC),
+  "Mutual Fund Holding must answer 'has closed' from the transaction set, not from its filtered rows");
+check(/window\.__mfAnyClosed = anyClosedMf/.test(SRC),
+  "...and that flag must actually be published by the render that computes it");
+check(/var anyClosedMf = false/.test(SRC), "anyClosedMf is computed before the open/closed filter");
+// Debt instruments must bypass the MF open/closed filter or their own table can
+// only ever see one side.
+check(/if \(!isDebtInst\) \{/.test(SRC),
+  "debt instruments must not be filtered by the Mutual Fund toggle — their table has its own");
+
 check(/<h3 class="mfh-title">Debt ETF\/Mutual Holding<\/h3>/.test(HTML),
   'the debt card must be titled "Debt ETF/Mutual Holding"');
 

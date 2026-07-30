@@ -5504,7 +5504,8 @@
     }
     try {
       renderMfHoldingsCardList(all, {
-        listId: "dbth-list", eyebrowId: "dbth-eyebrow", state: DBTH_STATE
+        listId: "dbth-list", eyebrowId: "dbth-eyebrow", state: DBTH_STATE,
+        toggleId: "dbth-open-toggle"
       });
     } catch (e) {}
     // The debt rows arrive from the MF/Stocks-ETF pipelines, which finish after
@@ -5854,16 +5855,28 @@
     var regionShowClosed = !!SEH_STATE.showClosed[region];
     var regionPortfolio = SEH_STATE.portfolio[region] || "all";
     var regionSort = SEH_STATE.sort[region] || "pnl-desc";
-    var filtered = rowsData.filter(function (h) {
+    // Everything this region/portfolio would show, before the open/closed split —
+    // so "are there any closed positions" is answered for what the user is actually
+    // looking at, and changing the portfolio pill updates the Closed segment.
+    var inScope = rowsData.filter(function (h) {
       var isUS = h.region === "US";
       if (region === "us" && !isUS) return false;
       if (region === "india" && isUS) return false;
-      var isClosed = (h.units || 0) < UNITS_EPSILON || h.isClosed;
-      if (regionShowClosed ? !isClosed : isClosed) return false;
       if (regionPortfolio && regionPortfolio !== "all") {
         if (normalizeText(h._portfolio || "") !== normalizeText(regionPortfolio)) return false;
       }
       return true;
+    });
+    function _isClosedRow(h) { return (h.units || 0) < UNITS_EPSILON || h.isClosed; }
+    var hasClosed = inScope.some(_isClosedRow);
+    if (regionShowClosed && !hasClosed) {
+      SEH_STATE.showClosed[region] = false;
+      regionShowClosed = false;
+    }
+    _setOpenClosedPill(document.getElementById(region === "us" ? "seh-us-open-toggle" : "seh-open-toggle"),
+      regionShowClosed, hasClosed);
+    var filtered = inScope.filter(function (h) {
+      return regionShowClosed ? _isClosedRow(h) : !_isClosedRow(h);
     });
     var sParts = String(regionSort).split("-");
     var sortKey = sParts[0];
@@ -5982,12 +5995,21 @@
   // both visible, so the state has to be shown by which one is highlighted rather
   // than by the label — a single button reading "Open" was ambiguous about whether
   // that was the current state or the action.
-  function _setOpenClosedPill(container, showClosed) {
+  // hasClosed: when false the Closed segment is disabled — there is nothing behind
+  // it, and an enabled control that leads to an empty list reads as a bug. Pass
+  // undefined to leave the enabled state alone (initial wire-up, before any rows
+  // exist).
+  function _setOpenClosedPill(container, showClosed, hasClosed) {
     if (!container) return;
     container.querySelectorAll(".isc-toggle-btn").forEach(function (b) {
       var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open") || b.getAttribute("data-mfh-open");
-      b.classList.toggle("active", (wants === "closed") === !!showClosed);
-      b.setAttribute("aria-pressed", String((wants === "closed") === !!showClosed));
+      var isClosedSeg = wants === "closed";
+      b.classList.toggle("active", isClosedSeg === !!showClosed);
+      b.setAttribute("aria-pressed", String(isClosedSeg === !!showClosed));
+      if (isClosedSeg && hasClosed !== undefined) {
+        b.disabled = !hasClosed;
+        b.title = hasClosed ? "" : "No closed positions";
+      }
     });
   }
 
@@ -12635,14 +12657,27 @@
     var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
 
     var holdings = [];
+    // Whether ANY mutual fund is fully closed, judged before the open/closed filter
+    // below removes one side. The rendered rows cannot answer this: in Open mode the
+    // closed instruments have already been dropped, so asking the row set would
+    // always say "no closed positions" and permanently disable the Closed segment.
+    var anyClosedMf = false;
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
-      if (showClosedOnly) {
-        if (remainingUnits >= 1) return;
-      } else if (remainingUnits < 1) {
-        return;
+      var isDebtInst = isFixedIncomeInstrument(instrument);
+      if (remainingUnits < 1 && !isDebtInst) anyClosedMf = true;
+      // Debt instruments are never filtered by the MUTUAL FUND toggle. They are
+      // split out below into the Debt ETF/Mutual Holding table, which has its own
+      // Open/Closed state — and while this filter applied to them, that table could
+      // only ever see one side, so its Closed view was permanently empty.
+      if (!isDebtInst) {
+        if (showClosedOnly) {
+          if (remainingUnits >= 1) return;
+        } else if (remainingUnits < 1) {
+          return;
+        }
       }
       var avgNav;
       if (remainingUnits > UNITS_EPSILON) {
@@ -12653,6 +12688,7 @@
       holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: avgNav });
     });
 
+    window.__mfAnyClosed = anyClosedMf;
     if (!holdings.length) {
       statusEl.textContent = MFH_STATE.showClosed
         ? "No closed mutual fund holdings for this filter."
@@ -12671,6 +12707,10 @@
       if (!resolvable.length) {
         statusEl.textContent = "None of your holdings could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI.";
         tableWrap.hidden = true;
+        // Nothing renders on this path, so the Closed segment would keep whatever
+        // state the markup shipped with. There is definitely nothing closed here.
+        MFH_STATE.showClosed = false;
+        _setOpenClosedPill(document.getElementById("mfh-open-toggle"), false, anyClosedMf);
         return;
       }
 
@@ -12828,6 +12868,19 @@
     var list = document.getElementById(listId);
     var eyebrow = document.getElementById(opts.eyebrowId || "mfh-eyebrow");
     if (!list) return;
+    // Nothing closed → the Closed segment is disabled. And if we are already on
+    // Closed when that becomes true (the list was re-rendered from a smaller set),
+    // fall back to Open rather than stranding the user on an empty view behind a
+    // control they can no longer press.
+    // Debt rows carry both sides, so the row set answers for that table. The MF
+    // table's rows are pre-filtered upstream, so it answers from the flag computed
+    // there before the filter.
+    var hasClosed = (state === MFH_STATE && window.__mfAnyClosed !== undefined)
+      ? !!window.__mfAnyClosed
+      : rowsData.some(function (r) { return r.units < 1; });
+    if (state.showClosed && !hasClosed) state.showClosed = false;
+    _setOpenClosedPill(document.getElementById(opts.toggleId ||
+      (state === MFH_STATE ? "mfh-open-toggle" : "dbth-open-toggle")), state.showClosed, hasClosed);
     var filtered = rowsData.filter(function (r) {
       var closed = r.units < 1;
       return state.showClosed ? closed : !closed;
