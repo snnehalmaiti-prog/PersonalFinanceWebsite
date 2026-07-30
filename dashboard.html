@@ -1419,22 +1419,49 @@
         });
       })();
 
+      // Intl formatters are expensive to construct and were being built fresh on
+      // every call — fmtMoney runs several times per record row, and each row's
+      // timestamp built a DateTimeFormat of its own. Building them once was the
+      // biggest win in the record list: of 172 ms to render 180 rows, only 22 ms was
+      // the DOM parse; the rest was almost all formatter construction. Output is
+      // byte-identical — Number.toLocaleString and Date.toLocaleTimeString construct
+      // one of these internally on every call.
+      var _inrFmt = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+      var _timeFmt = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" });
+      var _weekdayFmt = new Intl.DateTimeFormat("en-US", { weekday: "long" });
+      var _dayLabelFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", year: "numeric" });
+      var _dayShortFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit" });
       function fmtMoney(n) {
         var v = Number(n) || 0;
-        return "₹" + Math.round(v).toLocaleString("en-IN");
+        return "₹" + _inrFmt.format(Math.round(v));
       }
       function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
-      function computeAccountMonthly(accountId) {
+      // One pass over the records for ALL accounts, cached on the records array and
+      // the current month. computeAccountMonthly used to scan every record once per
+      // account tile and build a Date object for each one, so the tiles cost
+      // O(accounts x records) Date allocations on every repaint.
+      //
+      // The month test now compares the "YYYY-MM" prefix of txn_date instead of
+      // constructing a Date. That is also timezone-independent: new Date("2026-07-01")
+      // parses as UTC midnight and was compared against LOCAL midnight, so west of
+      // UTC the first of the month fell outside its own month. IST is unaffected.
+      var _acctMonthlyCache = null;
+      function accountMonthlyMap() {
+        var recs = dashExpState.records || [];
         var now = new Date();
-        var monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        var nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        var budget = 0, spent = 0;
-        dashExpState.records.forEach(function (r) {
-          if (r.account_id !== accountId) return;
-          var d = new Date(r.txn_date);
-          if (d < monthStart || d >= nextMonth) return;
+        var ym = now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2);
+        if (_acctMonthlyCache && _acctMonthlyCache.recs === recs && _acctMonthlyCache.ym === ym) {
+          return _acctMonthlyCache.map;
+        }
+        var map = Object.create(null);
+        for (var i = 0; i < recs.length; i++) {
+          var r = recs[i];
+          if (String(r.txn_date || "").slice(0, 7) !== ym) continue;
+          var acct = r.account_id;
+          if (!acct) continue;
+          var e = map[acct] || (map[acct] = { budget: 0, spent: 0 });
           var amt = Number(r.amount) || 0;
           // Only budget rows fund the tile's allowance. This used to be a bare
           // `else`, which was harmless only because income carried no account_id
@@ -1442,9 +1469,16 @@
           // an `else` would add income to the allowance and inflate every tile's
           // budget and remaining figure — so the two types are distinguished
           // explicitly, keeping the tiles reading exactly as they did before.
-          if (r.type === "expense") spent += amt;
-          else if (r.type === "budget") budget += amt;
-        });
+          if (r.type === "expense") e.spent += amt;
+          else if (r.type === "budget") e.budget += amt;
+        }
+        _acctMonthlyCache = { recs: recs, ym: ym, map: map };
+        return map;
+      }
+
+      function computeAccountMonthly(accountId) {
+        var e = accountMonthlyMap()[accountId];
+        var budget = e ? e.budget : 0, spent = e ? e.spent : 0;
         return { budget: budget, spent: spent, balance: budget - spent };
       }
 
@@ -1587,6 +1621,10 @@
         function () { renderAnalyticsTable(); }
       ];
       var _expRenderToken = 0;
+      // Exposed for the perf harness in tests/ — measuring each step separately is
+      // the only way to see which panel is costing the phone its frame budget.
+      window.__expRenderSteps = _expRenderSteps;
+      Object.defineProperty(window, "__expRecordCount", { get: function () { return (dashExpState.records || []).length; } });
       function renderAllExpense() {
         // Supersede any in-flight sequence so two calls in quick succession (cache
         // paint then network paint) don't interleave halfway-rendered panels.
@@ -1628,6 +1666,7 @@
         dashExpState.records = (dashExpState.records || []).filter(function (r) { return !gone[r.id]; });
         renderAllExpense();
         if (_expCacheKey && window.WfIdb) {
+          _expCachedSig = expSignature(dashExpState);
           WfIdb.set(_expCacheKey, {
             accounts: dashExpState.accounts,
             categories: dashExpState.categories,
@@ -1651,6 +1690,7 @@
         renderAllExpense();
         // Keep the offline snapshot in step, so a reload doesn't lose the record.
         if (_expCacheKey && window.WfIdb) {
+          _expCachedSig = expSignature(dashExpState);
           WfIdb.set(_expCacheKey, {
             accounts: dashExpState.accounts,
             categories: dashExpState.categories,
@@ -1701,6 +1741,9 @@
       // device. They now start together.
       var _expCachePainted = false;
       var _expCacheInFlight = null;
+      // Signature of what is currently stored in IndexedDB, so an unchanged refresh
+      // skips the write entirely.
+      var _expCachedSig = null;
       function paintExpenseFromCache() {
         if (_expCacheInFlight) return _expCacheInFlight;
         _expCacheKey = _expCacheKey || expCacheKey();
@@ -1710,6 +1753,7 @@
           applyExpSnapshot(cached);
           renderAllExpense();
           _expCachePainted = true;
+          _expCachedSig = expSignature(cached);
           return true;
         }).catch(function () { return false; })
           .then(function (r) { _expCacheInFlight = null; return r; });
@@ -1733,8 +1777,16 @@
           return fetchExpenseFromNetwork().then(function (fresh) {
             applyExpSnapshot(fresh);
             // Repaint only when the data actually differs from what's on screen.
-            if (!painted || expSignature(fresh) !== _expRenderedSig) renderAllExpense();
-            if (_expCacheKey && window.WfIdb) WfIdb.set(_expCacheKey, fresh);
+            var sig = expSignature(fresh);
+            if (!painted || sig !== _expRenderedSig) renderAllExpense();
+            // Only write when the data actually changed. The snapshot is the whole
+            // record set, so WfIdb.set structured-clones it on the main thread — the
+            // single largest JS cost in a profile of the expense tab. Writing it back
+            // unchanged on every refresh (the common case) paid that for nothing.
+            if (_expCacheKey && window.WfIdb && sig !== _expCachedSig) {
+              _expCachedSig = sig;
+              WfIdb.set(_expCacheKey, fresh);
+            }
           }).catch(function (err) {
             // Offline or server error: if the cache already painted, keep showing
             // it rather than replacing real data with an error message.
@@ -2670,7 +2722,25 @@
         expWfChart = new Chart(canvas.getContext("2d"), { data: data, options: opts, type: "bar" });
       }
 
-      function findById(list, id) { return list.find(function (x) { return x.id === id; }); }
+      // Indexed lookup. This is called from inside per-record loops — the record
+      // list does four of them per row, and the click handlers scanned the whole
+      // record array — so a linear .find() made rendering O(records x lookups).
+      // The index is keyed on the ARRAY, in a WeakMap, so replacing a list (which
+      // is how every update path works: applyExpSnapshot assigns, the local splice
+      // and delete build a new array) invalidates it automatically.
+      var _byIdIndex = new WeakMap();
+      function findById(list, id) {
+        if (!list || id == null) return undefined;
+        var idx = _byIdIndex.get(list);
+        if (!idx) {
+          idx = Object.create(null);
+          for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].id != null) idx[list[i].id] = list[i];
+          }
+          _byIdIndex.set(list, idx);
+        }
+        return idx[id];
+      }
 
       function fillRecFilterDropdowns() {
         var acctSel = document.getElementById("rec-filter-account");
@@ -3136,8 +3206,8 @@
             return r.type === "expense" ? s - Number(r.amount) : s + Number(r.amount);
           }, 0);
           var d = new Date(date + "T12:00:00");
-          var weekday = d.toLocaleDateString("en-US", { weekday: "long" });
-          var dayLabel = d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+          var weekday = _weekdayFmt.format(d);
+          var dayLabel = _dayLabelFmt.format(d);
           var dayNetColor = dayNet < 0 ? "#EF4444" : "#10B981";
           var dayHdr = '<div class="rec-day-header">' +
             '<div class="rec-day-left"><span class="rec-day-weekday">' + esc(weekday) + '</span>' +
@@ -3162,7 +3232,7 @@
             if (sub.name) subParts.push(sub.name);
             if (pm.name) subParts.push(pm.name);
             if (acct.name) subParts.push(acct.name);
-            var timeStr = r.txn_at ? new Date(r.txn_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+            var timeStr = r.txn_at ? _timeFmt.format(new Date(r.txn_at)) : "";
             var labelBadge = "";
             var lbls = recLabels(r);
             if (lbls.length) labelBadge = ' <span class="rec-label-badge">' + esc(String(lbls[0])) + '</span>';
@@ -3190,7 +3260,7 @@
               '<button class="rec-item-more" data-rec-id="' + esc(r.id) + '" title="More">···</button>' +
             '</div>';
           }).join("");
-          var addRow = '<div class="rec-day-add" data-add-date="' + esc(date) + '">+ Add record to ' + d.toLocaleDateString("en-US", { month: "short", day: "2-digit" }) + '</div>';
+          var addRow = '<div class="rec-day-add" data-add-date="' + esc(date) + '">+ Add record to ' + _dayShortFmt.format(d) + '</div>';
           return dayHdr + '<div class="rec-day-group">' + items + addRow + '</div>';
         }).join("");
 

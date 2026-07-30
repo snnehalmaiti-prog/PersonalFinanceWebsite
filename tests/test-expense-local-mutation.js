@@ -32,10 +32,12 @@ var _expCacheKey = "exp-snapshot:u1";
 var renderCount = 0;
 function renderAllExpense() { renderCount++; }
 var idbWrites = [];
+var _expCachedSig = null;
 var WfIdb = { set: function (k, v) { idbWrites.push({ key: k, value: v }); } };
 var window = { WfIdb: WfIdb };
 
 eval([
+  extract("function expSignature(s)"),
   extract("function _expRecordCmp(a, b)"),
   extract("function applySavedRecordLocally(saved)"),
   extract("function removeRecordsLocally(ids)"),
