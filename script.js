@@ -5985,7 +5985,7 @@
   function _setOpenClosedPill(container, showClosed) {
     if (!container) return;
     container.querySelectorAll(".isc-toggle-btn").forEach(function (b) {
-      var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open");
+      var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open") || b.getAttribute("data-mfh-open");
       b.classList.toggle("active", (wants === "closed") === !!showClosed);
       b.setAttribute("aria-pressed", String((wants === "closed") === !!showClosed));
     });
@@ -13345,14 +13345,21 @@
         try { renderDebtHoldings(); } catch (e) {}
       });
     }
-    if (openBtn) openBtn.addEventListener("click", function () {
-      MFH_STATE.showClosed = !MFH_STATE.showClosed;
-      openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
-      var cb = document.getElementById("equity-holdings-show-closed-only");
-      if (cb) cb.checked = MFH_STATE.showClosed;
-      dbg("MF Open toggle → showClosed:", MFH_STATE.showClosed, "checkbox.checked:", cb && cb.checked);
-      renderEquityHoldingsTable();
-    });
+    if (openBtn) {
+      _setOpenClosedPill(openBtn, MFH_STATE.showClosed);
+      openBtn.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-mfh-open]");
+        if (!btn) return;
+        var wantClosed = btn.getAttribute("data-mfh-open") === "closed";
+        if (wantClosed === !!MFH_STATE.showClosed) return;
+        MFH_STATE.showClosed = wantClosed;
+        _setOpenClosedPill(openBtn, wantClosed);
+        var cb = document.getElementById("equity-holdings-show-closed-only");
+        if (cb) cb.checked = MFH_STATE.showClosed;
+        dbg("MF Open toggle → showClosed:", MFH_STATE.showClosed, "checkbox.checked:", cb && cb.checked);
+        renderEquityHoldingsTable();
+      });
+    }
     if (sortBtn) sortBtn.addEventListener("click", function () {
       MFH_STATE.sort = MFH_STATE.sort === "pnl-desc" ? "pnl-asc" : "pnl-desc";
       sortBtn.innerHTML = "Sort P&amp;L " + (MFH_STATE.sort === "pnl-desc" ? "&darr;" : "&uarr;");

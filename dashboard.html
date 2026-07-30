@@ -504,7 +504,10 @@
           </div>
           <div class="mfh-header-right">
             <div class="mfh-portfolio-toggle" id="mfh-portfolio-toggle" role="group" aria-label="Portfolio filter"></div>
-            <button type="button" class="mfh-btn" id="mfh-open-toggle" data-mfh-state="open">Open</button>
+            <div id="mfh-open-toggle"><div class="isc-toggle" role="group" aria-label="Show open or closed holdings">
+              <button type="button" class="isc-toggle-btn active" data-mfh-open="open">Open</button>
+              <button type="button" class="isc-toggle-btn" data-mfh-open="closed">Closed</button>
+            </div></div>
           </div>
         </div>
         <p class="muted small" id="equity-holdings-status">Loading holdings…</p>
