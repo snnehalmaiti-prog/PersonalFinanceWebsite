@@ -1550,18 +1550,96 @@
         return [s.accounts.length, s.categories.length, s.paymentMethods.length, s.records.length, newest].join("~");
       }
 
+      // Painting every expense panel is one long task: four Chart.js charts, the
+      // spend matrix and the analytics table. Run as a single block it blocks the
+      // main thread long enough that a tap on Add Record does nothing — the phone
+      // looks frozen. Split into steps and yield between them, so input is handled
+      // in the gaps. The order matters: the tiles and the record list are what the
+      // user is looking at, so they paint in the first frames; charts follow.
+      var _expRenderSteps = [
+        function () { renderDashAccountTiles(dashExpState.accounts); },
+        function () { renderDashRecords(); },
+        function () { fillRecFilterDropdowns(); fillAnaFilterDropdowns(); },
+        function () { renderExpMonthlyChart(); },
+        function () { if (window.renderMonthlyCashFlow) window.renderMonthlyCashFlow(); },
+        function () { renderExpWaterfallChart(); },
+        function () { renderExpSpendMatrix(); },
+        function () { renderPaymentToJoint(); },
+        function () { renderAnalyticsTable(); }
+      ];
+      var _expRenderToken = 0;
       function renderAllExpense() {
-        renderDashAccountTiles(dashExpState.accounts);
-        fillRecFilterDropdowns();
-        fillAnaFilterDropdowns();
-        renderDashRecords();
-        renderExpMonthlyChart();
-        if (window.renderMonthlyCashFlow) window.renderMonthlyCashFlow();
-        renderExpWaterfallChart();
-        renderExpSpendMatrix();
-        renderPaymentToJoint();
-        renderAnalyticsTable();
-        _expRenderedSig = expSignature(dashExpState);
+        // Supersede any in-flight sequence so two calls in quick succession (cache
+        // paint then network paint) don't interleave halfway-rendered panels.
+        var token = ++_expRenderToken;
+        var i = 0;
+        // The first step runs synchronously: an empty screen that waits a frame
+        // before showing anything reads as a slower load, not a smoother one.
+        _expRenderSteps[i++]();
+        (function step() {
+          if (token !== _expRenderToken) return;
+          if (i >= _expRenderSteps.length) {
+            _expRenderedSig = expSignature(dashExpState);
+            return;
+          }
+          var fn = _expRenderSteps[i++];
+          var yield_ = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); };
+          yield_(function () {
+            if (token !== _expRenderToken) return;
+            try { fn(); } catch (e) { console.warn("expense render step failed:", e); }
+            step();
+          });
+        })();
+      }
+
+      // The server returns records ordered txn_date desc, created_at desc. A row
+      // spliced in locally has to land in that same order or the list, the "newest
+      // record" change detector and the next network payload disagree.
+      function _expRecordCmp(a, b) {
+        var d = String(b.txn_date || "").localeCompare(String(a.txn_date || ""));
+        if (d) return d;
+        return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+      }
+
+      // Drop deleted rows from the painted snapshot. The deletes already succeeded
+      // on the server, so there is nothing to re-read.
+      function removeRecordsLocally(ids) {
+        var gone = {};
+        ids.forEach(function (id) { gone[id] = true; });
+        dashExpState.records = (dashExpState.records || []).filter(function (r) { return !gone[r.id]; });
+        renderAllExpense();
+        if (_expCacheKey && window.WfIdb) {
+          WfIdb.set(_expCacheKey, {
+            accounts: dashExpState.accounts,
+            categories: dashExpState.categories,
+            paymentMethods: dashExpState.paymentMethods,
+            records: dashExpState.records
+          });
+        }
+      }
+
+      // Merge a just-saved record into the painted snapshot. Returns false if the
+      // response wasn't usable, so the caller can fall back to a full refetch.
+      function applySavedRecordLocally(saved) {
+        var rec = Array.isArray(saved) ? saved[0] : saved;
+        if (!rec || !rec.id) return false;
+        var recs = (dashExpState.records || []).slice();
+        var at = -1;
+        for (var i = 0; i < recs.length; i++) { if (recs[i].id === rec.id) { at = i; break; } }
+        if (at >= 0) recs[at] = rec; else recs.push(rec);
+        recs.sort(_expRecordCmp);
+        dashExpState.records = recs;
+        renderAllExpense();
+        // Keep the offline snapshot in step, so a reload doesn't lose the record.
+        if (_expCacheKey && window.WfIdb) {
+          WfIdb.set(_expCacheKey, {
+            accounts: dashExpState.accounts,
+            categories: dashExpState.categories,
+            paymentMethods: dashExpState.paymentMethods,
+            records: recs
+          });
+        }
+        return true;
       }
 
       function applyExpSnapshot(snap) {
@@ -3168,7 +3246,12 @@
         var delBtn = document.getElementById("rec-delete-btn");
         if (delBtn) delBtn.disabled = true;
         Promise.all(ids.map(function (id) { return WfDb.remove("expense_records", id); }))
-          .then(function () { recSelected = {}; if (delBtn) delBtn.disabled = false; loadDashAccounts(true); })
+          .then(function () {
+            recSelected = {}; if (delBtn) delBtn.disabled = false;
+            // Same reasoning as saving: drop the deleted rows locally and repaint,
+            // rather than re-downloading every expense table to learn they are gone.
+            removeRecordsLocally(ids);
+          })
           .catch(function (err) {
             // Surface the failure and re-sync from server instead of freezing
             // silently with a stale selection/list.
@@ -3756,11 +3839,18 @@
         var origLabel = editingRecId ? "Save Changes" : "Add Record";
         btn.disabled = true; btn.textContent = "Saving…";
         var op = editingRecId ? WfDb.update("expense_records", editingRecId, row) : WfDb.insert("expense_records", row);
-        op.then(function () {
+        op.then(function (saved) {
           btn.disabled = false; btn.textContent = origLabel;
           editingRecId = null;
           closeRecModal();
-          loadDashAccounts(true);
+          // Splice the row the server actually stored into the local snapshot and
+          // repaint from that, instead of re-downloading all four expense tables to
+          // learn about one record. The refetch used to run before anything on
+          // screen changed, so on a phone adding a record looked like a hang.
+          // Everything on the tiles is derived from dashExpState.records, so a
+          // local splice is as correct as a refetch — and it is the server's own
+          // row (Prefer: return=representation), not a guess.
+          if (!applySavedRecordLocally(saved)) loadDashAccounts(true);
         }).catch(function (err) {
           btn.disabled = false; btn.textContent = origLabel;
           document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
