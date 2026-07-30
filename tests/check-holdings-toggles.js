@@ -91,12 +91,30 @@ check(/if \(state\.showClosed && !hasClosed && hasOpen\) state\.showClosed = fal
 check(/if \(regionShowClosed && !hasClosed && hasOpen\)/.test(SRC) &&
       /else if \(!regionShowClosed && !hasOpen && hasClosed\)/.test(SRC),
   "the Stocks/ETF regions need the same two-way fallback");
-// The MF row set is pre-filtered by the toggle upstream, so asking it whether any
-// position is closed always answers "no" and permanently disables the segment.
-check(/var mfFlags = state === MFH_STATE && window\.__mfAnyClosed !== undefined/.test(SRC),
-  "Mutual Fund Holding must answer from the transaction set, not from its filtered rows");
-check(/window\.__mfAnyClosed = anyClosedMf/.test(SRC) && /window\.__mfAnyOpen = anyOpenMf/.test(SRC),
-  "...and both flags must be published by the render that computes them");
+// Every holdings table builds ALL portfolios and BOTH sides once, then filters in
+// the renderer — the shape Fixed Income Holding always had. Baking the pills into
+// the build makes each click wait on the network and leaves the row set holding
+// only one side, which is what forced the old __mfAnyClosed special case.
+const mfBuild = SRC.slice(SRC.indexOf("function renderEquityHoldingsTable"),
+                          SRC.indexOf("function renderEquityHoldingsTable") + 1500);
+check(/var selectedPortfolio = "all";/.test(mfBuild) &&
+      mfBuild.indexOf("__mfHoldingsPortfolioOverride") === -1,
+  "the Mutual Fund build must not be scoped to the portfolio pill");
+check(!/window\.__mfAnyClosed/.test(SRC),
+  "the __mfAnyClosed workaround should be gone once the rows carry both sides");
+check(/var _allRows = _buildEquityRowsPerPortfolio\(rows, _navByInst, function \(\) \{ return true; \}\)/.test(SRC),
+  "Mutual Fund rows must be built for every portfolio and both sides");
+check(/var scoped = \(state\.portfolio && state\.portfolio !== "all"\)/.test(SRC),
+  "the renderer must apply the portfolio filter itself");
+check(/var hasClosed = scoped\.some/.test(SRC) && /var hasOpen = scoped\.some/.test(SRC),
+  "Open/Closed availability must be answered AFTER the portfolio filter, so it reflects what is on screen");
+// The point of the exercise: filtering must not re-run the pipeline.
+const mfPill = SRC.slice(SRC.indexOf('closest("[data-mfh-portfolio]")'), SRC.indexOf('closest("[data-mfh-portfolio]")') + 500);
+check(mfPill.indexOf("renderEquityHoldingsTable") === -1,
+  "the Mutual Fund portfolio pill must filter the built rows, not re-run the pipeline (and its NAV fetches)");
+const mfOc = SRC.slice(SRC.indexOf('closest("[data-mfh-open]")'), SRC.indexOf('closest("[data-mfh-open]")') + 600);
+check(mfOc.indexOf("renderEquityHoldingsTable") === -1,
+  "the Mutual Fund Open/Closed pill must filter the built rows, not re-run the pipeline");
 // Stocks/ETF only builds the closed set once the user has asked for it, so the
 // answer has to come from the sheet instead.
 check(/function _seOpenClosedAvailability\(region, portfolioFilter\)/.test(SRC),
@@ -110,11 +128,6 @@ check(mfhDecl !== -1 && mfhDecl < SRC.indexOf("function renderEquityHoldingsTabl
   "MFH_STATE must be declared before renderEquityHoldingsTable, which reads it during init");
 check(SRC.indexOf("var DBTH_STATE =") < SRC.indexOf("function renderMfHoldingsCardList"),
   "DBTH_STATE must be declared before the renderer that reads it");
-check(/var anyClosedMf = false/.test(SRC), "anyClosedMf is computed before the open/closed filter");
-// Debt instruments must bypass the MF open/closed filter or their own table can
-// only ever see one side.
-check(/if \(!isDebtInst\) \{/.test(SRC),
-  "debt instruments must not be filtered by the Mutual Fund toggle — their table has its own");
 
 check(/if \(FIH_STATE\.showClosed && !fihHasClosed && fihHasOpen\)/.test(SRC),
   "Fixed Income Holding needs the same two-way fallback as the other tables");
@@ -131,15 +144,14 @@ check(/_setOpenClosedPill\(document\.getElementById\("cmh-open-closed"\), COMH_S
 // portfolio's units would be merged into one unfilterable row.
 check(/function _buildDebtRowsPerPortfolio\(rows, navByInst, isDebt\)/.test(SRC),
   "debt rows must be built per portfolio");
-check(/window\.__mfDebtRows = _buildDebtRowsPerPortfolio\(/.test(SRC),
-  "...and that builder must be what feeds the debt table");
+check(/window\.__mfDebtRows = _allRows\.filter\(/.test(SRC),
+  "...and the debt table must be a filter over that same build");
 check(/portfolio: "all"/.test(SRC) && /DBTH_STATE = \{[^}]*portfolio: "all"/.test(SRC),
   "DBTH_STATE needs a portfolio field");
 check(/data-dbth-portfolio/.test(SRC), "the debt portfolio pill is not wired");
 check(/_portfolio: r\._portfolio \|\| ""/.test(SRC),
   "Stocks/ETF debt rows must carry their portfolio through the normalisation, or the filter drops them");
-check(/if \(!names\.length\) \{/.test(SRC),
-  "with no portfolio on any debt row, show no pill rather than a dead All");
+
 check(/r\._portfolio \? escapeHtml\(r\._portfolio\)/.test(SRC),
   "the same instrument can appear once per portfolio — the row must name which one");
 

@@ -109,11 +109,16 @@ console.log("\nD. Names are escaped, in the label and in the attribute");
 
 console.log("\nE. Every card uses the shared painter");
 {
-  ["data-mfh-portfolio", "data-seh-portfolio", "data-dbth-portfolio",
-   "data-fih-portfolio", "data-cmh-portfolio"].forEach(function (attr) {
-    ok(new RegExp('_renderPortfolioPills\\([\\s\\S]{0,120}"' + attr + '"').test(SRC),
+  // Stocks/ETF, Fixed Income and Commodity name their attribute at the call site;
+  // the Mutual Fund and Debt tables share one renderer and pass it in a variable.
+  ["data-seh-portfolio", "data-fih-portfolio", "data-cmh-portfolio"].forEach(function (attr) {
+    ok(new RegExp('_renderPortfolioPills\\([\\s\\S]{0,140}"' + attr + '"').test(SRC),
        "E " + attr + " is painted by the shared helper");
   });
+  ok(/var pfAttr = state === MFH_STATE \? "data-mfh-portfolio" : "data-dbth-portfolio"/.test(SRC),
+     "E4 the Mutual Fund and Debt tables pick their attribute from the shared renderer");
+  ok(/_renderPortfolioPills\(\s*document\.getElementById\(pfBoxId\), pfAttr,/.test(SRC),
+     "E5 ...and paint through the same helper");
   // Clicking a disabled pill must never change the filter.
   const guards = (SRC.match(/if \(!btn \|\| btn\.disabled/g) || []).length;
   ok(guards >= 4, "E6 the delegated handlers ignore clicks on disabled pills", guards);

@@ -5366,7 +5366,7 @@
   // source order while function declarations hoist, and renderEquityHoldingsTable
   // reads MFH_STATE during module init — from ABOVE the old declaration site, so it
   // saw undefined and threw whenever the first render had no holdings.
-  var MFH_STATE = { showClosed: false, sort: "pnl-desc" };
+  var MFH_STATE = { showClosed: false, sort: "pnl-desc", portfolio: "all" };
   var DBTH_STATE = { showClosed: false, sort: "pnl-desc", portfolio: "all" };
 
   var SEH_STATE = {
@@ -5512,6 +5512,13 @@
   // the Mutual Fund rows; the difference is only that the grouping is per portfolio,
   // which is what lets the Debt table carry its own portfolio filter.
   function _buildDebtRowsPerPortfolio(rows, navByInst, isDebt) {
+    return _buildEquityRowsPerPortfolio(rows, navByInst, isDebt);
+  }
+
+  // Same, for any subset of the equity sheet. `include(instrument)` picks which
+  // instruments to emit, so the Mutual Fund and Debt tables are two filters over one
+  // build rather than two pipelines.
+  function _buildEquityRowsPerPortfolio(rows, navByInst, isDebt) {
     var out = [];
     if (!rows || rows.length < 2) return out;
     var portfolios = collectPortfolioNamesFromRows(rows) || [];
@@ -5592,34 +5599,16 @@
     });
     var all = mfRows.concat(seRows);
 
-    // Portfolio pill. Built from the portfolios that actually hold debt, so it does
-    // not offer a filter that can only ever return nothing. Rebuilt on each render
-    // because the debt set arrives asynchronously from two pipelines.
+    // The portfolio pill and the open/closed filter are applied by the shared
+    // renderer below, so this table behaves exactly like the others.
     var pfBox = document.getElementById("dbth-portfolio-toggle");
-    if (pfBox) {
-      var names = [];
-      all.forEach(function (r) {
-        var pn = (r._portfolio || "").trim();
-        if (pn && names.indexOf(pn) === -1) names.push(pn);
-      });
-      // Same list as every other card, with the portfolios that hold no debt
-      // disabled — consistent with the rest rather than hiding them here alone.
-      DBTH_STATE.portfolio = _renderPortfolioPills(
-        pfBox, "data-dbth-portfolio", _allPortfolioNames(["equity", "stocksetf"]),
-        DBTH_STATE.portfolio, function (pn) { return names.indexOf(pn) !== -1; });
-      if (!pfBox.dataset.bound) {
-        pfBox.dataset.bound = "1";
-        pfBox.addEventListener("click", function (ev) {
-          var btn = ev.target.closest("[data-dbth-portfolio]");
-          if (!btn || btn.disabled || btn.dataset.dbthPortfolio === DBTH_STATE.portfolio) return;
-          DBTH_STATE.portfolio = btn.dataset.dbthPortfolio;
-          renderDebtHoldings();
-        });
-      }
-    }
-    if (DBTH_STATE.portfolio !== "all") {
-      all = all.filter(function (r) {
-        return normalizeText(r._portfolio || "") === normalizeText(DBTH_STATE.portfolio);
+    if (pfBox && !pfBox.dataset.bound) {
+      pfBox.dataset.bound = "1";
+      pfBox.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-dbth-portfolio]");
+        if (!btn || btn.disabled || btn.dataset.dbthPortfolio === DBTH_STATE.portfolio) return;
+        DBTH_STATE.portfolio = btn.dataset.dbthPortfolio;
+        renderDebtHoldings();
       });
     }
 
@@ -6241,14 +6230,15 @@
         if (wantClosed === !!SEH_STATE.showClosed[spec.region]) return; // already there
         SEH_STATE.showClosed[spec.region] = wantClosed;
         _setOpenClosedPill(box, wantClosed);
-        // Sync legacy checkboxes so the outer buildStockHoldings call can
-        // fetch closed positions when either region needs them. When either
-        // region is Closed we must re-fetch; otherwise re-render is enough.
+        // The rows already hold BOTH sides for every portfolio
+        // (_buildPerPortfolioSeRowsData builds open and closed), so this is a
+        // re-filter, not a refetch — same as Fixed Income Holding. The legacy
+        // checkboxes are still synced because other paths read them.
         var cb = document.getElementById("stocksetf-show-closed");
         var cb2 = document.getElementById("stocksetf-us-show-closed");
         if (cb) cb.checked = SEH_STATE.showClosed.india;
         if (cb2) cb2.checked = SEH_STATE.showClosed.us;
-        renderStockEtfHoldingsTable();
+        renderSeHoldingsCardList(_seWiredRows.rowsData, spec.region, _seWiredRows.usdInrToday);
       });
     });
   })();
@@ -12857,7 +12847,13 @@
       return;
     }
 
-    var selectedPortfolio = window.__mfHoldingsPortfolioOverride || "all";
+    // Built for EVERY portfolio and BOTH sides, then filtered in the renderer — the
+    // shape Fixed Income Holding already had. Baking the pills into the build meant
+    // every click on a portfolio or on Open/Closed re-ran the whole pipeline,
+    // including the NAV fetches, so filtering stalled on the network instead of
+    // being instant. It also left the row set holding only one side, which is what
+    // forced the __mfAnyClosed flag and the debt bypass.
+    var selectedPortfolio = "all";
     var transactionsByInstrument = groupUnitTransactionsByInstrument(rows, selectedPortfolio);
     if (!transactionsByInstrument) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -12865,32 +12861,11 @@
       return;
     }
 
-    var showClosedOnlyCheckbox = document.getElementById("equity-holdings-show-closed-only");
-    var showClosedOnly = !!(showClosedOnlyCheckbox && showClosedOnlyCheckbox.checked);
-
     var holdings = [];
-    // Whether ANY mutual fund is fully closed, judged before the open/closed filter
-    // below removes one side. The rendered rows cannot answer this: in Open mode the
-    // closed instruments have already been dropped, so asking the row set would
-    // always say "no closed positions" and permanently disable the Closed segment.
-    var anyClosedMf = false, anyOpenMf = false;
     Object.keys(transactionsByInstrument).forEach(function (instrument) {
       var remainingLots = fifoRemainingLots(transactionsByInstrument[instrument]);
       var remainingUnits = 0, investedCost = 0;
       remainingLots.forEach(function (lot) { remainingUnits += lot.units; investedCost += lot.units * lot.price; });
-      var isDebtInst = isFixedIncomeInstrument(instrument);
-      if (!isDebtInst) { if (remainingUnits < 1) anyClosedMf = true; else anyOpenMf = true; }
-      // Debt instruments are never filtered by the MUTUAL FUND toggle. They are
-      // split out below into the Debt ETF/Mutual Fund Holding table, which has its own
-      // Open/Closed state — and while this filter applied to them, that table could
-      // only ever see one side, so its Closed view was permanently empty.
-      if (!isDebtInst) {
-        if (showClosedOnly) {
-          if (remainingUnits >= 1) return;
-        } else if (remainingUnits < 1) {
-          return;
-        }
-      }
       var avgNav;
       if (remainingUnits > UNITS_EPSILON) {
         avgNav = investedCost / remainingUnits;
@@ -12900,15 +12875,6 @@
       holdings.push({ instrument: instrument, units: remainingUnits, invested: investedCost, avgNav: avgNav });
     });
 
-    window.__mfAnyClosed = anyClosedMf;
-    window.__mfAnyOpen = anyOpenMf;
-    // Repainted here, not at wire-up: which portfolios hold a mutual fund is only
-    // known once the sheet has been read, and it changes as data syncs.
-    var _mfWith = collectPortfolioNamesFromRows(excludeFixedIncomeRows(getSheetRows("equity"))) || [];
-    window.__mfHoldingsPortfolioOverride = _renderPortfolioPills(
-      document.getElementById("mfh-portfolio-toggle"), "data-mfh-portfolio",
-      _allPortfolioNames(["equity"]), window.__mfHoldingsPortfolioOverride || "all",
-      function (p) { return _mfWith.indexOf(p) !== -1; });
     if (!holdings.length) {
       statusEl.textContent = MFH_STATE.showClosed
         ? "No closed mutual fund holdings for this filter."
@@ -12936,6 +12902,13 @@
 
       return Promise.all(resolvable.map(function (h) { return h.units < 1 ? Promise.resolve([]) : fetchNavHistory(lookupSchemeCode(schemeMap, h.instrument)); }))
         .then(function (navHistories) {
+          var _navByInst = {};
+          resolvable.forEach(function (h, i) { _navByInst[h.instrument] = navHistories[i] || []; });
+          // One build for every portfolio and both sides. The Mutual Fund and Debt
+          // tables are two filters over it, and the pills below filter it again
+          // without touching the network.
+          var _allRows = _buildEquityRowsPerPortfolio(rows, _navByInst, function () { return true; });
+          window.__mfAllRows = _allRows;
           var rowsData = [];
           resolvable.forEach(function (h, i) {
             var isClosed = h.units < 1;
@@ -12990,15 +12963,11 @@
           function _isDebt(name) {
             return normalizeText(_dbtCat[normalizeText(name || "")] || "") === "fixed income";
           }
-          var mfOnlyRows = rowsData.filter(function (r) { return !_isDebt(r.instrument); });
-          // Debt rows are rebuilt PER PORTFOLIO rather than lifted out of rowsData.
-          // The Mutual Fund pipeline groups by the Mutual Fund pill's portfolio, so a
-          // debt row taken from it would silently follow that pill instead of the Debt
-          // table's own filter — and with the pill on "all" every portfolio's units
-          // would be merged into one row that no filter could separate.
-          var _navByInst = {};
-          resolvable.forEach(function (h, i) { _navByInst[h.instrument] = navHistories[i] || []; });
-          window.__mfDebtRows = _buildDebtRowsPerPortfolio(rows, _navByInst, _isDebt);
+          // Two filters over the one per-portfolio build. Both tables therefore hold
+          // every portfolio and both sides, and their pills are pure view state.
+          var mfOnlyRows = _allRows.filter(function (r) { return !_isDebt(r.instrument); });
+          window.__mfDebtRows = _allRows.filter(function (r) { return _isDebt(r.instrument); });
+          window.__mfAllRows = mfOnlyRows;
           // Cached for the allocation toggle to re-render from. It holds the
           // debt-EXCLUDED rows so a later repaint can't reintroduce debt funds
           // into the Mutual Fund allocation.
@@ -13097,18 +13066,32 @@
     // Closed when that becomes true (the list was re-rendered from a smaller set),
     // fall back to Open rather than stranding the user on an empty view behind a
     // control they can no longer press.
-    // Debt rows carry both sides, so the row set answers for that table. The MF
-    // table's rows are pre-filtered upstream, so it answers from the flags computed
-    // there before the filter.
-    var mfFlags = state === MFH_STATE && window.__mfAnyClosed !== undefined;
-    var hasClosed = mfFlags ? !!window.__mfAnyClosed : rowsData.some(function (r) { return r.units < 1; });
-    var hasOpen = mfFlags ? !!window.__mfAnyOpen : rowsData.some(function (r) { return r.units >= 1; });
+    // Both tables now receive every portfolio and both sides, so the pills are pure
+    // view state over one row set — the shape Fixed Income Holding always had. The
+    // portfolio filter is applied FIRST so the Open/Closed availability answers for
+    // the portfolio on screen.
+    var pfBoxId = opts.portfolioToggleId || (state === MFH_STATE ? "mfh-portfolio-toggle" : "dbth-portfolio-toggle");
+    var pfAttr = state === MFH_STATE ? "data-mfh-portfolio" : "data-dbth-portfolio";
+    var pfHave = [];
+    rowsData.forEach(function (r) {
+      var pn = (r._portfolio || "").trim();
+      if (pn && pfHave.indexOf(pn) === -1) pfHave.push(pn);
+    });
+    state.portfolio = _renderPortfolioPills(
+      document.getElementById(pfBoxId), pfAttr,
+      _allPortfolioNames(state === MFH_STATE ? ["equity"] : ["equity", "stocksetf"]),
+      state.portfolio || "all", function (p) { return pfHave.indexOf(p) !== -1; });
+    var scoped = (state.portfolio && state.portfolio !== "all")
+      ? rowsData.filter(function (r) { return normalizeText(r._portfolio || "") === normalizeText(state.portfolio); })
+      : rowsData;
+    var hasClosed = scoped.some(function (r) { return r.units < 1; });
+    var hasOpen = scoped.some(function (r) { return r.units >= 1; });
     // Land on a side that has something, when there is one.
     if (state.showClosed && !hasClosed && hasOpen) state.showClosed = false;
     else if (!state.showClosed && !hasOpen && hasClosed) state.showClosed = true;
     _setOpenClosedPill(document.getElementById(opts.toggleId ||
       (state === MFH_STATE ? "mfh-open-toggle" : "dbth-open-toggle")), state.showClosed, hasClosed, hasOpen);
-    var filtered = rowsData.filter(function (r) {
+    var filtered = scoped.filter(function (r) {
       var closed = r.units < 1;
       return state.showClosed ? closed : !closed;
     });
@@ -13636,11 +13619,10 @@
         var wantClosed = btn.getAttribute("data-mfh-open") === "closed";
         if (wantClosed === !!MFH_STATE.showClosed) return;
         MFH_STATE.showClosed = wantClosed;
-        _setOpenClosedPill(openBtn, wantClosed);
         var cb = document.getElementById("equity-holdings-show-closed-only");
         if (cb) cb.checked = MFH_STATE.showClosed;
-        dbg("MF Open toggle → showClosed:", MFH_STATE.showClosed, "checkbox.checked:", cb && cb.checked);
-        renderEquityHoldingsTable();
+        dbg("MF Open toggle → showClosed:", MFH_STATE.showClosed);
+        renderMfHoldingsCardList(window.__mfAllRows || []);
       });
     }
     if (sortBtn) sortBtn.addEventListener("click", function () {
@@ -13665,9 +13647,12 @@
       // depends on data that arrives after this wiring runs) without rebinding.
       pfToggle.addEventListener("click", function (ev) {
         var btn = ev.target.closest("[data-mfh-portfolio]");
-        if (!btn || btn.disabled) return;
-        window.__mfHoldingsPortfolioOverride = btn.dataset.mfhPortfolio;
-        renderEquityHoldingsTable();
+        if (!btn || btn.disabled || btn.dataset.mfhPortfolio === MFH_STATE.portfolio) return;
+        MFH_STATE.portfolio = btn.dataset.mfhPortfolio;
+        // Filter the rows already built, like Fixed Income Holding — re-running the
+        // pipeline here meant every click waited on the NAV fetches.
+        window.__mfHoldingsPortfolioOverride = MFH_STATE.portfolio;
+        renderMfHoldingsCardList(window.__mfAllRows || []);
       });
     }
   })();
