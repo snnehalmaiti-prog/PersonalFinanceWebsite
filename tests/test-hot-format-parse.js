@@ -5,7 +5,11 @@
 // for it to finish, which is what "Add Record freezes when the page is loaded"
 // was. The self time was concentrated in formatCurrencyFull (205 ms) and
 // parseFlexibleDate (253 ms) — both called tens of thousands of times while the
-// sheets are processed. After: 215 ms blocked, worst task 60 ms.
+// sheets are processed.
+//
+// NOTE: the "215 ms blocked" first measured after this change was an artifact —
+// parseFlexibleDate was throwing on every early call (see section E), so the work
+// never ran. With that fixed the honest figure is 2068 ms, down from 3130 ms.
 //
 // Both fixes are caches, so what matters is that they cannot change a value or
 // leak a mutable object. That is what these tests check.
@@ -95,6 +99,25 @@ console.log("\nC. The memo never hands out a shared, mutable Date");
   a.setFullYear(1999);
   const c = parseFlexibleDate("01/04/2024");
   ok(c.getFullYear() === 2024, "C3 a mutated result does not poison the cache", c.getFullYear());
+}
+
+console.log("\nE. The memo must survive being called before its initialiser runs");
+{
+  // script.js declares the memo with `var`, and parseFlexibleDate is called during
+  // module init from far ABOVE that line. Function declarations hoist; assignments
+  // do not — so those early calls see the binding as UNDEFINED. A guard testing
+  // `=== null` is not enough. This shipped once and threw on every early call.
+  _dateParseMemo = undefined;
+  let threw = null, out = null;
+  try { out = parseFlexibleDate("1-Jan-2021"); } catch (e) { threw = e.message; }
+  ok(threw === null, "E1 an early call does not throw", threw);
+  ok(out && out.getFullYear() === 2021, "E2 and still parses", out && out.toDateString());
+  _dateParseMemo = null;
+  threw = null;
+  try { out = parseFlexibleDate("2-Feb-2022"); } catch (e) { threw = e.message; }
+  ok(threw === null && out.getFullYear() === 2022, "E3 a null binding is handled too", threw);
+  ok(/if \(!_dateParseMemo\)/.test(SRC),
+     "E4 the guard is falsy-tested, not compared to null");
 }
 
 console.log("\nD. Guards: neither hot function may go back to per-call construction");

@@ -5978,17 +5978,35 @@
     });
   }
 
+  // Paints the active segment of an Open/Closed pill. The two buttons are always
+  // both visible, so the state has to be shown by which one is highlighted rather
+  // than by the label — a single button reading "Open" was ambiguous about whether
+  // that was the current state or the action.
+  function _setOpenClosedPill(container, showClosed) {
+    if (!container) return;
+    container.querySelectorAll(".isc-toggle-btn").forEach(function (b) {
+      var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open");
+      b.classList.toggle("active", (wants === "closed") === !!showClosed);
+      b.setAttribute("aria-pressed", String((wants === "closed") === !!showClosed));
+    });
+  }
+
   // Wire Stocks/ETF controls — India and US Open toggles operate independently.
   (function wireSeControls() {
     [
       { id: "seh-open-toggle", region: "india" },
       { id: "seh-us-open-toggle", region: "us" }
     ].forEach(function (spec) {
-      var btn = document.getElementById(spec.id);
-      if (!btn) return;
-      btn.addEventListener("click", function () {
-        SEH_STATE.showClosed[spec.region] = !SEH_STATE.showClosed[spec.region];
-        btn.textContent = SEH_STATE.showClosed[spec.region] ? "Closed" : "Open";
+      var box = document.getElementById(spec.id);
+      if (!box) return;
+      _setOpenClosedPill(box, SEH_STATE.showClosed[spec.region]);
+      box.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-seh-open]");
+        if (!btn) return;
+        var wantClosed = btn.getAttribute("data-seh-open") === "closed";
+        if (wantClosed === !!SEH_STATE.showClosed[spec.region]) return; // already there
+        SEH_STATE.showClosed[spec.region] = wantClosed;
+        _setOpenClosedPill(box, wantClosed);
         // Sync legacy checkboxes so the outer buildStockHoldings call can
         // fetch closed positions when either region needs them. When either
         // region is Closed we must re-fetch; otherwise re-render is enough.
@@ -8265,11 +8283,19 @@
   // The cache stores the TIMESTAMP, not the Date: callers get a fresh object every
   // time, so nothing can mutate a shared one. Allocating a Date from a number is
   // far cheaper than parsing a string.
-  var _dateParseMemo = Object.create(null);
+  // Created lazily inside the function, NOT by a `var` initialiser here: function
+  // declarations hoist but assignments do not, and parseFlexibleDate is called
+  // during module init from far above this point — a plain `var` left the memo
+  // undefined for those calls and every one of them threw.
+  var _dateParseMemo = null;
   var _dateParseMemoSize = 0;
   function parseFlexibleDate(value) {
     var str = String(value == null ? "" : value).trim();
     if (!str) return null;
+    // `!_dateParseMemo`, not `=== null`: before the `var` initialiser below has run
+    // the hoisted binding is UNDEFINED, and those early calls are exactly the ones
+    // that must not throw.
+    if (!_dateParseMemo) _dateParseMemo = Object.create(null);
     var hit = _dateParseMemo[str];
     if (hit !== undefined) return hit === null ? null : new Date(hit);
     var out = _parseFlexibleDateUncached(str);
@@ -13306,12 +13332,19 @@
     // Debt ETF/Mutual has its own Open/Closed state, so switching one table does
     // not move the other. It re-renders from the rows already split out, with no
     // refetch needed.
-    var dbtBtn = document.getElementById("dbth-open-toggle");
-    if (dbtBtn) dbtBtn.addEventListener("click", function () {
-      DBTH_STATE.showClosed = !DBTH_STATE.showClosed;
-      dbtBtn.textContent = DBTH_STATE.showClosed ? "Closed" : "Open";
-      try { renderDebtHoldings(); } catch (e) {}
-    });
+    var dbtBox = document.getElementById("dbth-open-toggle");
+    if (dbtBox) {
+      _setOpenClosedPill(dbtBox, DBTH_STATE.showClosed);
+      dbtBox.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-dbth-open]");
+        if (!btn) return;
+        var wantClosed = btn.getAttribute("data-dbth-open") === "closed";
+        if (wantClosed === !!DBTH_STATE.showClosed) return;
+        DBTH_STATE.showClosed = wantClosed;
+        _setOpenClosedPill(dbtBox, wantClosed);
+        try { renderDebtHoldings(); } catch (e) {}
+      });
+    }
     if (openBtn) openBtn.addEventListener("click", function () {
       MFH_STATE.showClosed = !MFH_STATE.showClosed;
       openBtn.textContent = MFH_STATE.showClosed ? "Closed" : "Open";
