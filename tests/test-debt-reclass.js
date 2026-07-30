@@ -35,6 +35,10 @@ function extract(marker) {
 
 // ---- scope the extracted code runs in -------------------------------------
 let sheets = {}; // prefix → rows[][]
+// parseFlexibleDate memoises into these; declared here because extract() slices
+// on brace balance and cannot take a bare `var`.
+var _dateParseMemo = Object.create(null);
+var _dateParseMemoSize = 0;
 function getSheetRows(prefix) { return sheets[prefix] || null; }
 const UNITS_EPSILON = 0.0001;
 
@@ -44,6 +48,7 @@ const pieces = [
   "var CANONICAL_FIELD_KEYWORDS",
   "function parseNumber(value)",
   "function parseFlexibleDate(value)",
+  "function _parseFlexibleDateUncached(str)",
   "var _topCatMemo = null",
   "function buildInstrumentTopCategoryMap()",
   "function isFixedIncomeInstrument(name, catMap)",

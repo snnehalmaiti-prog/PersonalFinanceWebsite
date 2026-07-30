@@ -30,6 +30,10 @@ const localStorage = {
   removeItem: k => storage.delete(k),
 };
 function dbg() {}
+// parseFlexibleDate memoises into these; declared here because extract() slices on
+// brace balance and cannot take a bare `var`.
+var _dateParseMemo = Object.create(null);
+var _dateParseMemoSize = 0;
 
 const pieces = [
   "function parseNumber(value)",
@@ -38,6 +42,7 @@ const pieces = [
   "function findHeaderIndex(ownHeader, canonicalName)",
   "function realignRowsToHeader(rows, canonicalHeader)",
   "function parseFlexibleDate(value)",
+  "function _parseFlexibleDateUncached(str)",
   "function lastAtOrBefore(sortedEvents, targetDate, valueKey)",
 ].map(extract).join("\n\n");
 eval(pieces);

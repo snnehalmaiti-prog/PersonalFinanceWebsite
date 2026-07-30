@@ -1968,9 +1968,14 @@
 
   // Full, comma-grouped rupee amount (e.g. ₹2,58,55,820). Used for tooltips,
   // exports, and any place that needs the exact figure.
+  // Number.toLocaleString builds an Intl.NumberFormat on every call, and this is
+  // the single most-called formatting function in the app — it showed 205 ms of
+  // self time in a profile of one mobile load. Building it once is byte-identical
+  // output for a fraction of the cost.
+  var _inrFullFmt = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
   function formatCurrencyFull(amount) {
     var sign = amount < 0 ? "-" : "";
-    return sign + "₹" + Math.abs(amount).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+    return sign + "₹" + _inrFullFmt.format(Math.abs(amount));
   }
 
   // Display format: amounts of ₹1 crore or more are abbreviated as "₹2.58 CR";
@@ -8251,9 +8256,33 @@
   // for DD/MM/YYYY, common in India). JS's native Date parser misreads slash-separated
   // dates as MM/DD/YYYY, so "21/06/2026" comes out NaN. Parse DD/MM/YYYY and DD-MM-YYYY
   // explicitly before falling back to native parsing.
+  // Memoised on the raw string. Every pass over a sheet re-parses the same date
+  // cells — buildInstrumentUnitEvents, buildXirrCashFlows and
+  // groupUnitTransactionsByInstrument each walk the whole sheet — and the fallback
+  // path is the native Date parser, which is slow. 253 ms of self time in a profile
+  // of one mobile load, on a few hundred distinct date strings.
+  //
+  // The cache stores the TIMESTAMP, not the Date: callers get a fresh object every
+  // time, so nothing can mutate a shared one. Allocating a Date from a number is
+  // far cheaper than parsing a string.
+  var _dateParseMemo = Object.create(null);
+  var _dateParseMemoSize = 0;
   function parseFlexibleDate(value) {
     var str = String(value == null ? "" : value).trim();
     if (!str) return null;
+    var hit = _dateParseMemo[str];
+    if (hit !== undefined) return hit === null ? null : new Date(hit);
+    var out = _parseFlexibleDateUncached(str);
+    // A sheet has a bounded set of date strings; the bound is a safety valve for
+    // pathological input, not an expected path.
+    if (_dateParseMemoSize < 20000) {
+      _dateParseMemo[str] = out === null ? null : out.getTime();
+      _dateParseMemoSize++;
+    }
+    return out;
+  }
+
+  function _parseFlexibleDateUncached(str) {
     var match = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
     if (match) {
       var day = Number(match[1]);

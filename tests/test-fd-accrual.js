@@ -32,6 +32,10 @@ function extract(marker) {
 }
 
 let sheets = {};
+// parseFlexibleDate memoises into these; declared here because extract() slices
+// on brace balance and cannot take a bare `var`.
+var _dateParseMemo = Object.create(null);
+var _dateParseMemoSize = 0;
 function getSheetRows(prefix) { return sheets[prefix] || null; }
 function isProvidentFundSub(s) { return /provident|epf|ppf/.test(String(s || "").toLowerCase()); }
 
@@ -39,6 +43,7 @@ eval([
   "function normalizeText(value)",
   "function parseNumber(value)",
   "function parseFlexibleDate(value)",
+  "function _parseFlexibleDateUncached(str)",
   "function parsePercentRate(value)",
   "function _addMonthsClamped(base, n)",
   "function countElapsedQuarters(start, asOf)",
