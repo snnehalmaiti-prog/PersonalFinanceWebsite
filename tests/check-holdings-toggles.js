@@ -29,7 +29,7 @@ const TOGGLES = [
 
 // Every header puts the portfolio pills first and the Open/Closed pill last, so
 // the two controls line up the same way on every card.
-["fih-card", "cmh-card", "mfh-card"].forEach(function (cardId) {
+["fih-card", "cmh-card", "mfh-card", "dbth-card"].forEach(function (cardId) {
   const at = HTML.indexOf('id="' + cardId + '"');
   if (at === -1) { console.error("  FAIL " + cardId + " is missing"); failed++; return; }
   const right = HTML.slice(HTML.indexOf("mfh-header-right", at), HTML.indexOf("mfh-header-right", at) + 900);
@@ -124,6 +124,24 @@ check(/if \(COMH_STATE\.showClosed && !cmhHasClosed && cmhHasOpen\)/.test(SRC),
   "Commodity Holding needs the same two-way fallback");
 check(/_setOpenClosedPill\(document\.getElementById\("cmh-open-closed"\), COMH_STATE\.showClosed, cmhHasClosed, cmhHasOpen\)/.test(SRC),
   "Commodity Holding must paint its pill availability");
+
+// The Debt table has its own portfolio filter, which only works if its rows are
+// built per portfolio. Lifting them out of the Mutual Fund rows would make them
+// follow the MUTUAL FUND pill instead, and with that pill on "all" every
+// portfolio's units would be merged into one unfilterable row.
+check(/function _buildDebtRowsPerPortfolio\(rows, navByInst, isDebt\)/.test(SRC),
+  "debt rows must be built per portfolio");
+check(/window\.__mfDebtRows = _buildDebtRowsPerPortfolio\(/.test(SRC),
+  "...and that builder must be what feeds the debt table");
+check(/portfolio: "all"/.test(SRC) && /DBTH_STATE = \{[^}]*portfolio: "all"/.test(SRC),
+  "DBTH_STATE needs a portfolio field");
+check(/data-dbth-portfolio/.test(SRC), "the debt portfolio pill is not wired");
+check(/_portfolio: r\._portfolio \|\| ""/.test(SRC),
+  "Stocks/ETF debt rows must carry their portfolio through the normalisation, or the filter drops them");
+check(/if \(!names\.length\) \{/.test(SRC),
+  "with no portfolio on any debt row, show no pill rather than a dead All");
+check(/r\._portfolio \? escapeHtml\(r\._portfolio\)/.test(SRC),
+  "the same instrument can appear once per portfolio — the row must name which one");
 
 check(/<h3 class="mfh-title">Debt ETF\/Mutual Holding<\/h3>/.test(HTML),
   'the debt card must be titled "Debt ETF/Mutual Holding"');

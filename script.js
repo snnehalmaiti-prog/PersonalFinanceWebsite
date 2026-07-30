@@ -5355,7 +5355,7 @@
   // reads MFH_STATE during module init — from ABOVE the old declaration site, so it
   // saw undefined and threw whenever the first render had no holdings.
   var MFH_STATE = { showClosed: false, sort: "pnl-desc" };
-  var DBTH_STATE = { showClosed: false, sort: "pnl-desc" };
+  var DBTH_STATE = { showClosed: false, sort: "pnl-desc", portfolio: "all" };
 
   var SEH_STATE = {
     sort: { india: "pnl-desc", us: "pnl-desc" },
@@ -5495,6 +5495,61 @@
     });
   }
 
+  // One row per (portfolio x debt instrument) from the Mutual Fund transaction
+  // sheet, using the NAV history already fetched for that instrument. Same maths as
+  // the Mutual Fund rows; the difference is only that the grouping is per portfolio,
+  // which is what lets the Debt table carry its own portfolio filter.
+  function _buildDebtRowsPerPortfolio(rows, navByInst, isDebt) {
+    var out = [];
+    if (!rows || rows.length < 2) return out;
+    var portfolios = collectPortfolioNamesFromRows(rows) || [];
+    portfolios.forEach(function (portfolio) {
+      var byInst = groupUnitTransactionsByInstrument(rows, portfolio);
+      if (!byInst) return;
+      Object.keys(byInst).forEach(function (instrument) {
+        if (!isDebt(instrument)) return;
+        var lots = fifoRemainingLots(byInst[instrument]);
+        var units = 0, investedCost = 0;
+        lots.forEach(function (l) { units += l.units; investedCost += l.units * l.price; });
+        var hist = navByInst[instrument] || [];
+        var isClosed = units < 1;
+        var currNav, current, invested, pnl, pnlPct, dayChgPct;
+        if (isClosed) {
+          var detail = computeInstrumentRealizedDetail(byInst[instrument]);
+          // A portfolio with no transactions for this instrument contributes nothing.
+          if (!detail || !detail.costOfSoldUnits) return;
+          currNav = detail.lastSellPrice;
+          current = detail.saleProceeds;
+          invested = detail.costOfSoldUnits;
+          pnl = detail.realizedPnl;
+          pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+          dayChgPct = 0;
+        } else {
+          var latest = hist.length ? hist[hist.length - 1] : null;
+          var prev = hist.length > 1 ? hist[hist.length - 2] : null;
+          // No NAV (unmapped, or the fetch failed): value at cost, matching the
+          // fallback the Overview already uses, rather than dropping the holding.
+          currNav = latest ? latest.nav : (units > 0 ? investedCost / units : 0);
+          current = units * currNav;
+          invested = investedCost;
+          pnl = current - invested;
+          pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+          dayChgPct = (latest && prev && prev.nav) ? ((latest.nav - prev.nav) / prev.nav) * 100 : 0;
+        }
+        var flows = buildXirrCashFlows(rows, portfolio, instrument);
+        if (!isClosed && current > UNITS_EPSILON) flows.push({ date: new Date(), amount: current });
+        var x = calculateXIRR(flows);
+        out.push({
+          instrument: instrument, units: units, avgNav: units > 0 ? investedCost / units : 0,
+          currNav: currNav, invested: invested, current: current, pnl: pnl, pnlPct: pnlPct,
+          dayChgPct: dayChgPct, xirrPct: (x == null || !isFinite(x)) ? null : x * 100,
+          _portfolio: portfolio
+        });
+      });
+    });
+    return out;
+  }
+
   // Debt ETF/Mutual: debt funds from the equity sheet plus debt ETFs from the
   // Stocks/ETF sheet, normalised onto the Mutual Fund row shape so the shared
   // renderer can draw them side by side.
@@ -5505,6 +5560,7 @@
       return {
         instrument: r.instrument,
         units: r.units,
+        _portfolio: r._portfolio || "",
         // The list prints avg cost and LTP as ₹ figures, so US rows use their
         // INR values here rather than native USD — otherwise a $ amount would
         // render behind a ₹ sign.
@@ -5523,6 +5579,48 @@
       };
     });
     var all = mfRows.concat(seRows);
+
+    // Portfolio pill. Built from the portfolios that actually hold debt, so it does
+    // not offer a filter that can only ever return nothing. Rebuilt on each render
+    // because the debt set arrives asynchronously from two pipelines.
+    var pfBox = document.getElementById("dbth-portfolio-toggle");
+    if (pfBox) {
+      var names = [];
+      all.forEach(function (r) {
+        var pn = (r._portfolio || "").trim();
+        if (pn && names.indexOf(pn) === -1) names.push(pn);
+      });
+      // A filter the data cannot honour is worse than none: if no debt row carries a
+      // portfolio, show no pill at all rather than a dead "All".
+      if (!names.length) {
+        pfBox.innerHTML = "";
+        DBTH_STATE.portfolio = "all";
+      } else {
+        if (DBTH_STATE.portfolio !== "all" && names.indexOf(DBTH_STATE.portfolio) === -1) {
+          DBTH_STATE.portfolio = "all"; // the selected portfolio no longer holds debt
+        }
+        var opts = ["all"].concat(names);
+        pfBox.innerHTML = opts.map(function (pn) {
+          return '<button type="button" class="mfh-portfolio-btn ' + (pn === DBTH_STATE.portfolio ? "active" : "") +
+            '" data-dbth-portfolio="' + pn.replace(/"/g, "&quot;") + '">' + escapeHtml(pn === "all" ? "All" : pn) + '</button>';
+        }).join("");
+        if (!pfBox.dataset.bound) {
+          pfBox.dataset.bound = "1";
+          pfBox.addEventListener("click", function (ev) {
+            var btn = ev.target.closest("[data-dbth-portfolio]");
+            if (!btn || btn.dataset.dbthPortfolio === DBTH_STATE.portfolio) return;
+            DBTH_STATE.portfolio = btn.dataset.dbthPortfolio;
+            renderDebtHoldings();
+          });
+        }
+      }
+    }
+    if (DBTH_STATE.portfolio !== "all") {
+      all = all.filter(function (r) {
+        return normalizeText(r._portfolio || "") === normalizeText(DBTH_STATE.portfolio);
+      });
+    }
+
     if (statusEl) {
       statusEl.textContent = all.length
         ? ""
@@ -12841,7 +12939,14 @@
             return normalizeText(_dbtCat[normalizeText(name || "")] || "") === "fixed income";
           }
           var mfOnlyRows = rowsData.filter(function (r) { return !_isDebt(r.instrument); });
-          window.__mfDebtRows = rowsData.filter(function (r) { return _isDebt(r.instrument); });
+          // Debt rows are rebuilt PER PORTFOLIO rather than lifted out of rowsData.
+          // The Mutual Fund pipeline groups by the Mutual Fund pill's portfolio, so a
+          // debt row taken from it would silently follow that pill instead of the Debt
+          // table's own filter — and with the pill on "all" every portfolio's units
+          // would be merged into one row that no filter could separate.
+          var _navByInst = {};
+          resolvable.forEach(function (h, i) { _navByInst[h.instrument] = navHistories[i] || []; });
+          window.__mfDebtRows = _buildDebtRowsPerPortfolio(rows, _navByInst, _isDebt);
           // Cached for the allocation toggle to re-render from. It holds the
           // debt-EXCLUDED rows so a later repaint can't reintroduce debt funds
           // into the Mutual Fund allocation.
@@ -12986,7 +13091,10 @@
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
       var seg = lookupSegment(segmentMap, r.instrument);
-      var sub = escapeHtml(seg) + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
+      // The Debt table can show the same instrument once per portfolio, so name the
+      // portfolio — otherwise two rows read as identical duplicates.
+      var sub = (r._portfolio ? escapeHtml(r._portfolio) + " · " : "") +
+        escapeHtml(seg) + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
       var isSip = _isSipInstrument(r.instrument);
       var pnlPos = r.pnl >= 0;
       var xirrCls = r.xirrPct == null ? "mfh-muted" : (r.xirrPct >= 0 ? "" : "mfh-negative");
