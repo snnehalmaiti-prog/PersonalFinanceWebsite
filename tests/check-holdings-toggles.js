@@ -64,19 +64,38 @@ check(/_setOpenClosedPill\(box, SEH_STATE\.showClosed\[spec\.region\]\)/.test(SR
 check((SRC.match(/if \(wantClosed === !!/g) || []).length >= 3,
   "clicking the active segment should be a no-op, not a repaint");
 
-// The Closed segment must disable itself when there is nothing closed.
-check(/b\.disabled = !hasClosed/.test(SRC),
-  "the Closed segment is never disabled — an enabled control leading to an empty list reads as a bug");
-check(/if \(state\.showClosed && !hasClosed\) state\.showClosed = false/.test(SRC),
-  "showing Closed with nothing closed must fall back to Open, not strand an empty view");
-check(/if \(regionShowClosed && !hasClosed\)/.test(SRC),
-  "the Stocks/ETF regions need the same fallback");
+// Either segment must disable itself when its side is empty — symmetrically.
+check(/b\.disabled = !has && !neither/.test(SRC),
+  "a segment with nothing behind it is never disabled — an enabled control leading to an empty list reads as a bug");
+check(/var neither = hasClosed === false && hasOpen === false/.test(SRC),
+  "with BOTH sides empty the pill should stay enabled rather than lock out entirely");
+check(/No closed positions/.test(SRC) && /No open positions/.test(SRC),
+  "both disabled segments need a tooltip saying why");
+check(/if \(state\.showClosed && !hasClosed && hasOpen\) state\.showClosed = false/.test(SRC) &&
+      /else if \(!state\.showClosed && !hasOpen && hasClosed\) state\.showClosed = true/.test(SRC),
+  "the shared renderer must land on whichever side has something");
+check(/if \(regionShowClosed && !hasClosed && hasOpen\)/.test(SRC) &&
+      /else if \(!regionShowClosed && !hasOpen && hasClosed\)/.test(SRC),
+  "the Stocks/ETF regions need the same two-way fallback");
 // The MF row set is pre-filtered by the toggle upstream, so asking it whether any
 // position is closed always answers "no" and permanently disables the segment.
-check(/var hasClosed = \(state === MFH_STATE && window\.__mfAnyClosed !== undefined\)/.test(SRC),
-  "Mutual Fund Holding must answer 'has closed' from the transaction set, not from its filtered rows");
-check(/window\.__mfAnyClosed = anyClosedMf/.test(SRC),
-  "...and that flag must actually be published by the render that computes it");
+check(/var mfFlags = state === MFH_STATE && window\.__mfAnyClosed !== undefined/.test(SRC),
+  "Mutual Fund Holding must answer from the transaction set, not from its filtered rows");
+check(/window\.__mfAnyClosed = anyClosedMf/.test(SRC) && /window\.__mfAnyOpen = anyOpenMf/.test(SRC),
+  "...and both flags must be published by the render that computes them");
+// Stocks/ETF only builds the closed set once the user has asked for it, so the
+// answer has to come from the sheet instead.
+check(/function _seOpenClosedAvailability\(region, portfolioFilter\)/.test(SRC),
+  "Stocks/ETF must answer availability from the transaction sheet, not from priced rows");
+check(/var avail = _seOpenClosedAvailability\(region, regionPortfolio\)/.test(SRC),
+  "...and the renderer must use it, scoped to the region and portfolio on screen");
+// The state objects are read during module init, from above their old declaration
+// site — a `var` there left them undefined and the first empty render threw.
+const mfhDecl = SRC.indexOf("var MFH_STATE =");
+check(mfhDecl !== -1 && mfhDecl < SRC.indexOf("function renderEquityHoldingsTable"),
+  "MFH_STATE must be declared before renderEquityHoldingsTable, which reads it during init");
+check(SRC.indexOf("var DBTH_STATE =") < SRC.indexOf("function renderMfHoldingsCardList"),
+  "DBTH_STATE must be declared before the renderer that reads it");
 check(/var anyClosedMf = false/.test(SRC), "anyClosedMf is computed before the open/closed filter");
 // Debt instruments must bypass the MF open/closed filter or their own table can
 // only ever see one side.
