@@ -21,6 +21,14 @@
 <!-- Preconnect so the chart libs (loaded at body-end, below) start their TLS
      handshake early without blocking first paint. -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<!-- script.js is injected later (after the first-of-session cloud settings sync)
+     rather than declared with the other scripts, so preload it here: the download
+     runs in parallel with everything else and the injected tag hits the preload
+     cache instead of starting a fresh request. -->
+<link rel="preload" as="script" href="script.js?v=__ASSET_VERSION__">
+<!-- wf-idb is 3 KB and the expense cache paint (far earlier in the body than the
+     other script tags) needs it, so load it in <head> rather than at the bottom. -->
+<script src="wf-idb.js?v=__ASSET_VERSION__"></script>
 </head>
 <body>
   <!-- Left nav drawer (mobile only) -->
@@ -1535,8 +1543,19 @@
       var _expCacheKey = null;
       var _expRenderedSig = null;
 
+      // Read straight from the stored session rather than through WfAuth: this inline
+      // script runs long before supabase-client.js is loaded, and the cached snapshot
+      // needs no auth to paint. Waiting for WfAuth just to learn the user id delayed
+      // the cache paint behind a script download for no reason. Still per-user, so a
+      // shared device cannot show the previous user's records.
       function expCacheKey() {
         var uid = (window.WfAuth && WfAuth.getUserId && WfAuth.getUserId()) || null;
+        if (!uid) {
+          try {
+            var sess = JSON.parse(localStorage.getItem("wf-sb-session"));
+            uid = (sess && sess.user && sess.user.id) || null;
+          } catch (e) { uid = null; }
+        }
         return uid ? "exp-snapshot:" + uid : null;
       }
 
@@ -1654,7 +1673,15 @@
           WfDb.select("expense_accounts", "select=*&order=sort_order.asc,created_at.asc"),
           WfDb.select("expense_categories", "select=*&order=sort_order.asc,created_at.asc"),
           WfDb.select("expense_payment_methods", "select=*&order=sort_order.asc,created_at.asc"),
-          WfDb.select("expense_records", "select=*&order=txn_date.desc,created_at.desc")
+          // Explicit projection, not select=*: user_id alone is a 36-char UUID on
+          // every row, which on a few thousand records is a sizeable share of the
+          // payload and is never read on the client (row scoping is RLS's job).
+          // These are exactly the columns the record row is written with plus the
+          // server-assigned id/created_at.
+          WfDb.select("expense_records",
+            "select=id,type,amount,txn_date,txn_at,created_at,account_id,category_id," +
+            "subcategory_id,payment_method_id,note,labels" +
+            "&order=txn_date.desc,created_at.desc")
         ]).then(function (res) {
           return {
             accounts: res[0] || [],
@@ -1667,25 +1694,42 @@
 
       // forceNetwork: skip the instant cache paint. Used after a write, where the
       // caller already knows the cache is behind.
+      // The cached paint and the network refresh are independent: the snapshot needs
+      // only IndexedDB, while the refresh needs supabase-client.js to have loaded and
+      // a valid session. Running them in one gated sequence meant the phone stared at
+      // an empty screen until auth was ready, even though the data was already on the
+      // device. They now start together.
+      var _expCachePainted = false;
+      var _expCacheInFlight = null;
+      function paintExpenseFromCache() {
+        if (_expCacheInFlight) return _expCacheInFlight;
+        _expCacheKey = _expCacheKey || expCacheKey();
+        if (!_expCacheKey || !window.WfIdb) return Promise.resolve(false);
+        _expCacheInFlight = WfIdb.get(_expCacheKey).then(function (cached) {
+          if (!cached || !cached.accounts) return false;
+          applyExpSnapshot(cached);
+          renderAllExpense();
+          _expCachePainted = true;
+          return true;
+        }).catch(function () { return false; })
+          .then(function (r) { _expCacheInFlight = null; return r; });
+        return _expCacheInFlight;
+      }
+
       function loadDashAccounts(forceNetwork) {
+        if (!forceNetwork && !_expCachePainted) paintExpenseFromCache();
         if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
-          setTimeout(function () { loadDashAccounts(forceNetwork); }, 200);
+          setTimeout(function () { loadDashAccounts(forceNetwork); }, 120);
           return;
         }
         _expCacheKey = expCacheKey();
 
-        var painted = false;
-        var cacheStep = (forceNetwork || !_expCacheKey || !window.WfIdb)
+        var cacheStep = (forceNetwork || _expCachePainted || !_expCacheKey || !window.WfIdb)
           ? Promise.resolve(null)
-          : WfIdb.get(_expCacheKey);
+          : paintExpenseFromCache();
 
-        cacheStep.then(function (cached) {
-          if (cached && cached.accounts) {
-            applyExpSnapshot(cached);
-            renderAllExpense();
-            painted = true;
-          }
-        }).catch(function () {}).then(function () {
+        cacheStep.catch(function () {}).then(function () {
+          var painted = _expCachePainted;
           return fetchExpenseFromNetwork().then(function (fresh) {
             applyExpSnapshot(fresh);
             // Repaint only when the data actually differs from what's on screen.
@@ -3931,7 +3975,6 @@
 
   </main>
 
-  <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
   <script src="supabase-client.js?v=__ASSET_VERSION__"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
@@ -3964,12 +4007,16 @@
         }).catch(function () { /* offline / error → keep local cache */ });
       }
 
-      WfAuth.loadSettingsFromCloud().catch(function () {})
+      // Publish the sync as a promise instead of reloading the page once it lands.
+      // The reload was a second FULL page load per session — HTML, CSS, the 687 KB
+      // script.js, all four expense tables and the market JSON, all fetched and
+      // parsed twice. On a phone that doubled the load. script.js is injected once
+      // this resolves (see below), so it reads the synced values on its first and
+      // only run.
+      window.__wfCloudSync = WfAuth.loadSettingsFromCloud().catch(function () {})
         .then(seedSheetDataFromCloud)
-        .then(function () {
-          sessionStorage.setItem("wf-cloud-synced", "1");
-          location.reload();
-        });
+        .then(function () { sessionStorage.setItem("wf-cloud-synced", "1"); })
+        .catch(function () { /* a failed sync must never block the app */ });
     })();
   </script>
   <!-- Chart libs moved out of <head> so they don't block first paint; they load
@@ -3979,9 +4026,29 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
   <script src="wf-math.js?v=__ASSET_VERSION__"></script>
   <script src="wf-overview.js?v=__ASSET_VERSION__"></script>
-  <script src="script.js?v=__ASSET_VERSION__"></script>
   <script>
+    // script.js is injected rather than declared, so it can start AFTER the
+    // first-of-session cloud settings sync without a page reload. The <link
+    // rel="preload"> in <head> means the download already ran in parallel, so this
+    // waits on the sync only — the bytes are in the preload cache by then.
     (function () {
+      var pending = window.__wfCloudSync || Promise.resolve();
+      function inject() {
+        var el = document.createElement("script");
+        el.src = "script.js?v=__ASSET_VERSION__";
+        el.onload = function () { document.dispatchEvent(new Event("wf-app-ready")); };
+        el.onerror = function () { document.dispatchEvent(new Event("wf-app-ready")); };
+        document.head.appendChild(el);
+      }
+      // A sync that hangs must not strand the app: cap the wait and load anyway.
+      var done = false;
+      function go() { if (done) return; done = true; inject(); }
+      pending.then(go, go);
+      setTimeout(go, 4000);
+    })();
+  </script>
+  <script>
+    document.addEventListener("wf-app-ready", function () {
       if (!window.WfAuth) return;
       if (WfAuth.isLoggedIn()) {
         WfAuth.loadSettingsFromCloud().then(function (row) {
@@ -3992,7 +4059,7 @@
       }
       wireUserMenu();
       WfAuth.refreshUser().then(function () { wireUserMenu(); }).catch(function () {});
-    })();
+    });
 
     function wireUserMenu() {
       var user = WfAuth.getUser() || {};
