@@ -19,6 +19,11 @@ except ImportError:
 MAPPING_FILE = os.path.join(os.path.dirname(__file__), "stocksetf_mapping.json")
 TICKERS_FILE = os.path.join(os.path.dirname(__file__), ".github", "stock_tickers.json")  # fallback
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "stock_prices.json")
+# The per-ticker OHLC series are ~90% of the payload (about 2 MB of 2.25 MB) and are
+# only read by the charts and rolling-return analytics — nothing the Overview or the
+# holdings tables need. Kept in a separate file so the dashboard's first load does
+# not pay for them; the client fetches this lazily when a chart actually needs it.
+HISTORY_FILE = os.path.join(os.path.dirname(__file__), "stock_history.json")
 USD_INR_TICKER = "USDINR=X"
 USD_INR_HISTORY_YEARS = 3
 
@@ -373,19 +378,25 @@ def main():
 
     corporate_actions = fetch_corporate_actions(tickers_config)
 
+    updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     output = {
-        "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "updated": updated,
         "prices": prices,
         "usd_inr_history": usd_inr_history,
         "index_history": index_history,
-        "stock_history": stock_history,
         "corporate_actions": corporate_actions,
     }
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, {len(index_history)} index(es), {len(stock_history)} stock history series, and {len(corporate_actions)} ticker(s) with corporate actions.")
+    # Written second so a reader that already has the small file can never see a
+    # history newer than the prices it was reconciled against.
+    with open(HISTORY_FILE, "w") as f:
+        json.dump({"updated": updated, "stock_history": stock_history}, f, separators=(",", ":"))
+
+    print(f"\nWrote {OUTPUT_FILE} with {len(prices)} prices, {len(usd_inr_history)} USD/INR history entries, {len(index_history)} index(es), and {len(corporate_actions)} ticker(s) with corporate actions.")
+    print(f"Wrote {HISTORY_FILE} with {len(stock_history)} stock history series.")
 
 
 if __name__ == "__main__":

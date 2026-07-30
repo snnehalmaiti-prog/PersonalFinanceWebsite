@@ -3657,9 +3657,11 @@
     return map;
   }
 
-  // The bulky static stock_prices.json (histories) — cached 30 min in localStorage
-  // and deduped in-flight. This is the 2.24 MB payload; keeping it out of the
-  // 3-minute refresh loop is the main performance win.
+  // stock_prices.json — prices, USD/INR history, index history, corporate actions.
+  // Cached 30 min and deduped in-flight. The per-ticker OHLC series used to live in
+  // here too and were ~90% of the file (2.0 MB of 2.25 MB, ~595 KB gzipped); they
+  // are now in stock_history.json, fetched only when a chart needs them, which takes
+  // this file off the load path at 67 KB gzipped instead of 662 KB.
   function _getStaticStockData() {
     // Evict the old 2.24 MB merged cache key (replaced by the split static/live
     // caches) so the two don't co-exist and blow the localStorage quota.
@@ -3683,6 +3685,52 @@
       })
       .catch(function (err) { _stockStaticPromise = null; throw err; });
     return _stockStaticPromise;
+  }
+
+  // stock_history.json — the per-ticker OHLC series. Only the value chart, the TWR
+  // series and the rolling-return analytics read these, so the fetch is deferred
+  // until one of them actually runs. Same IndexedDB cache and in-flight dedupe as
+  // the prices file.
+  var _stockHistoryPromise = null;
+  function _getStaticStockHistory() {
+    if (_stockHistoryPromise) return _stockHistoryPromise;
+    _stockHistoryPromise = _blobCacheGet("wf-stock-history-static", STOCK_STATIC_CACHE_MAX_AGE_MS)
+      .then(function (hit) {
+        if (hit && hit.data) { _stockHistoryPromise = null; return hit.data; }
+        return fetch("stock_history.json?t=" + Math.floor(Date.now() / STOCK_STATIC_CACHE_MAX_AGE_MS))
+          .then(function (r) {
+            if (!r.ok) throw new Error("stock_history.json not found (HTTP " + r.status + ")");
+            return r.json();
+          })
+          .then(function (data) {
+            var hist = (data && data.stock_history) || {};
+            _blobCacheSet("wf-stock-history-static", { data: hist });
+            _stockHistoryPromise = null;
+            return hist;
+          });
+      })
+      .catch(function (err) { _stockHistoryPromise = null; throw err; });
+    return _stockHistoryPromise;
+  }
+
+  // Merged prices WITH the OHLC history attached, for the chart paths. Callers keep
+  // reading spData.stock_history, so nothing downstream changes.
+  //
+  // If the deployed stock_prices.json still carries stock_history inline (a build
+  // from before the split), that copy is used and the extra request is skipped —
+  // so a stale Pages deploy or a warm cache can't leave the charts empty. A failed
+  // history fetch degrades to no history, which is what a failed prices fetch
+  // already did.
+  function fetchAllStockPricesWithHistory() {
+    return fetchAllStockPrices().then(function (sp) {
+      if (sp && sp.stock_history && Object.keys(sp.stock_history).length) return sp;
+      return _getStaticStockHistory().catch(function () { return {}; }).then(function (hist) {
+        var out = {};
+        for (var k in sp) { if (Object.prototype.hasOwnProperty.call(sp, k)) out[k] = sp[k]; }
+        out.stock_history = hist || {};
+        return out;
+      });
+    });
   }
 
   // Returns a Promise<{ updated, prices, usd_inr_history, ... }>. The bulky static
@@ -4217,7 +4265,7 @@
       var navHistoriesPromise = instruments.length
         ? Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         : Promise.resolve([]);
-      var stockPricesPromise = fetchAllStockPrices().catch(function () { return {}; });
+      var stockPricesPromise = fetchAllStockPricesWithHistory().catch(function () { return {}; });
 
       return Promise.all([navHistoriesPromise, stockPricesPromise]).then(function (res) {
         var navHistories = res[0];
@@ -4448,7 +4496,7 @@
         ? Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         : Promise.resolve([]);
       var spPromise = Object.keys(seUnitEventsByTicker).length
-        ? fetchAllStockPrices().catch(function () { return {}; })
+        ? fetchAllStockPricesWithHistory().catch(function () { return {}; })
         : Promise.resolve({});
 
       return Promise.all([navHistoriesPromise, spPromise]).then(function (res) {
@@ -4536,7 +4584,7 @@
       var navHistoriesPromise = instruments.length
         ? Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); }))
         : Promise.resolve([]);
-      var stockPricesPromise = fetchAllStockPrices().catch(function () { return {}; });
+      var stockPricesPromise = fetchAllStockPricesWithHistory().catch(function () { return {}; });
 
       return Promise.all([navHistoriesPromise, stockPricesPromise]).then(function (res) {
         var navHistories = res[0];
@@ -8532,7 +8580,7 @@
         ? fetchGoldPriceINRPerGram().catch(function () { return null; })
         : Promise.resolve(null);
       var stockPricesPromise = hasAnySE
-        ? fetchAllStockPrices().catch(function () { return { prices: {}, usd_inr_history: {} }; })
+        ? fetchAllStockPricesWithHistory().catch(function () { return { prices: {}, usd_inr_history: {} }; })
         : Promise.resolve({ prices: {}, usd_inr_history: {} });
       // Build monthly sample dates from first buy to today for historical price chart
       var goldPriceHistoryPromise = hasAnyCommodity
