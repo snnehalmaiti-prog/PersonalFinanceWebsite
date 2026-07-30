@@ -3615,9 +3615,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   flex-direction: column;
 }
 .isc-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.isc-toggle { display: inline-flex; gap: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
-.isc-toggle-btn { border: none; background: transparent; padding: 3px 9px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); border-radius: 999px; cursor: pointer; text-transform: uppercase; }
-.isc-toggle-btn.active { background: var(--text); color: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+/* One pill style for every holdings-card control. The portfolio filter and the
+   Open/Closed filter sit side by side in the same header, so they must be the same
+   size — they were 4px/12px/0.68rem and 3px/9px/0.62rem, which read as two
+   different controls. Declared together so they cannot drift apart again; edit the
+   size here and every card follows. */
+.isc-toggle,
+.mfh-portfolio-toggle { display: inline-flex; gap: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
+.isc-toggle-btn,
+.mfh-portfolio-btn { border: none; background: transparent; padding: 2px 8px; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); border-radius: 999px; cursor: pointer; text-transform: uppercase; }
+.isc-toggle-btn.active,
+.mfh-portfolio-btn.active { background: var(--text); color: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
 /* Disabled segment: nothing behind it (e.g. no closed positions). Kept visible
    rather than hidden so the control does not change width as data arrives. */
 .isc-toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -3831,12 +3839,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-header-left { display: flex; flex-direction: column; gap: 2px; }
 .mfh-eyebrow { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted); }
 .mfh-title { margin: 0; font-size: 1.2rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
-.mfh-header-right { display: flex; gap: 8px; }
+/* align-items: center, not the flex default of stretch — otherwise the portfolio
+   toggle (a direct flex child) is stretched to the row's height while the
+   Open/Closed pill, wrapped in a div, shrink-wraps its content. Same padding and
+   font, two different heights: 19.6px vs 14px. */
+.mfh-header-right { display: flex; gap: 8px; align-items: center; }
 .mfh-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 0.78rem; font-weight: 600; color: var(--text); cursor: pointer; box-shadow: var(--shadow-sm); }
 .mfh-btn:hover { background: var(--bg); }
-.mfh-portfolio-toggle { display: inline-flex; gap: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
-.mfh-portfolio-btn { border: none; background: transparent; padding: 4px 12px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); border-radius: 999px; cursor: pointer; text-transform: uppercase; }
-.mfh-portfolio-btn.active { background: var(--text); color: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+/* Sizing and colours live with .isc-toggle above — one rule for both pills. */
 .mfh-list-header {
   display: grid; grid-template-columns: minmax(180px, 2.2fr) 0.9fr 0.9fr 0.85fr 1fr 0.85fr; gap: 10px;
   padding: 8px 6px 5px; border-bottom: 1px solid var(--border);

@@ -14,6 +14,7 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 const HTML = fs.readFileSync(path.join(ROOT, "dashboard.html"), "utf8");
 const SRC = fs.readFileSync(path.join(ROOT, "script.js"), "utf8");
+const CSS = fs.readFileSync(path.join(ROOT, "styles.css"), "utf8");
 
 let failed = 0;
 function check(cond, msg) { if (!cond) { console.error("  FAIL " + msg); failed++; } }
@@ -169,6 +170,20 @@ check(/r\._portfolio \? escapeHtml\(r\._portfolio\)/.test(SRC),
 
 check(/<h3 class="mfh-title">Debt ETF\/Mutual Fund Holding<\/h3>/.test(HTML),
   'the debt card must be titled "Debt ETF/Mutual Fund Holding"');
+
+// The two pills sit side by side in the same header, so they must be the same
+// size. They were declared separately and had drifted to 4px/12px/0.68rem and
+// 3px/9px/0.62rem; sharing one declaration is what keeps them from drifting again.
+check(/\.isc-toggle-btn,\s*\n\.mfh-portfolio-btn \{/.test(CSS),
+  "the two pill styles must share one declaration, or they drift apart");
+check(/\.isc-toggle,\s*\n\.mfh-portfolio-toggle \{/.test(CSS),
+  "...and so must their containers");
+check(/\.isc-toggle-btn\.active,\s*\n\.mfh-portfolio-btn\.active \{/.test(CSS),
+  "...and their active state");
+// Same padding and font still rendered 19.6px vs 14px: the portfolio toggle is a
+// direct flex child and was stretched, while the Open/Closed pill is wrapped.
+check(/\.mfh-header-right \{[^}]*align-items: center/.test(CSS),
+  "the header row must centre its controls, or the portfolio toggle is stretched taller than the Open/Closed pill");
 
 if (failed) { console.error("\n" + failed + " holdings-toggle check(s) failed"); process.exit(1); }
 console.log("holdings Open/Closed toggles OK");
