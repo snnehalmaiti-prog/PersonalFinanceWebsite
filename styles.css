@@ -3621,6 +3621,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Disabled segment: nothing behind it (e.g. no closed positions). Kept visible
    rather than hidden so the control does not change width as data arrives. */
 .isc-toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* A portfolio with nothing in this table: shown, so the row of names is the same
+   on every card, but not selectable. */
+.mfh-portfolio-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .isc-toggle-btn:disabled.active { background: var(--text); color: var(--bg); }
 .isc-eyebrow {
   font-size: 0.5rem; font-weight: 700; letter-spacing: 0.09em;

@@ -3411,20 +3411,28 @@
 
     // Wire portfolio pill toggle
     var pf = document.getElementById("fih-portfolio-toggle");
-    if (pf && !pf.dataset.bound) {
-      pf.dataset.bound = "1";
-      var portfolios = ["all"].concat(collectPortfolioNamesFromSheets(["fd", "fixedincome"]) || []);
-      pf.innerHTML = portfolios.map(function (p) {
-        var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === FIH_STATE.portfolio ? "active" : "") + '" data-fih-portfolio="' + p.replace(/"/g, '&quot;') + '">' + escapeHtml(label) + '</button>';
-      }).join("");
-      pf.querySelectorAll("[data-fih-portfolio]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
+    if (pf) {
+      // Gold lives in the Commodity card, so a portfolio holding only gold has
+      // nothing here and its pill is disabled. Repainted every render because
+      // availability follows the data, not the wiring.
+      var withFi = [];
+      (holdings || []).forEach(function (h) {
+        if (_fiIsGold(h.subCategory)) return;
+        var pn = (h.portfolio || "").trim();
+        if (pn && withFi.indexOf(pn) === -1) withFi.push(pn);
+      });
+      FIH_STATE.portfolio = _renderPortfolioPills(
+        pf, "data-fih-portfolio", _allPortfolioNames(["fd", "fixedincome"]), FIH_STATE.portfolio,
+        function (p) { return withFi.indexOf(p) !== -1; });
+      if (!pf.dataset.bound) {
+        pf.dataset.bound = "1";
+        pf.addEventListener("click", function (ev) {
+          var btn = ev.target.closest("[data-fih-portfolio]");
+          if (!btn || btn.disabled || btn.dataset.fihPortfolio === FIH_STATE.portfolio) return;
           FIH_STATE.portfolio = btn.dataset.fihPortfolio;
-          pf.querySelectorAll("[data-fih-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
           renderAllFixedIncomeHoldingsTable();
         });
-      });
+      }
     }
     var sortBtn = document.getElementById("fih-sort-toggle");
     if (sortBtn && !sortBtn.dataset.bound) {
@@ -5265,20 +5273,24 @@
     }
     // Portfolio pill toggle.
     var cmhPf = document.getElementById("cmh-portfolio-toggle");
-    if (cmhPf && !cmhPf.dataset.bound) {
-      cmhPf.dataset.bound = "1";
-      var ports = ["all"].concat(collectPortfolioNamesFromSheets(["fd"]) || []);
-      cmhPf.innerHTML = ports.map(function (p) {
-        var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === COMH_STATE.portfolio ? "active" : "") + '" data-cmh-portfolio="' + p.replace(/"/g, "&quot;") + '">' + escapeHtml(label) + '</button>';
-      }).join("");
-      cmhPf.querySelectorAll("[data-cmh-portfolio]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
+    if (cmhPf) {
+      var withGold = [];
+      (allHoldings || []).forEach(function (h) {
+        var pn = (h.portfolio || "").trim();
+        if (pn && withGold.indexOf(pn) === -1) withGold.push(pn);
+      });
+      COMH_STATE.portfolio = _renderPortfolioPills(
+        cmhPf, "data-cmh-portfolio", _allPortfolioNames(["fd"]), COMH_STATE.portfolio,
+        function (p) { return withGold.indexOf(p) !== -1; });
+      if (!cmhPf.dataset.bound) {
+        cmhPf.dataset.bound = "1";
+        cmhPf.addEventListener("click", function (ev) {
+          var btn = ev.target.closest("[data-cmh-portfolio]");
+          if (!btn || btn.disabled || btn.dataset.cmhPortfolio === COMH_STATE.portfolio) return;
           COMH_STATE.portfolio = btn.dataset.cmhPortfolio;
-          cmhPf.querySelectorAll("[data-cmh-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
           renderCommodityHoldingsTable();
         });
-      });
+      }
     }
 
     var freshness = goldRateFreshnessText();
@@ -5590,29 +5602,19 @@
         var pn = (r._portfolio || "").trim();
         if (pn && names.indexOf(pn) === -1) names.push(pn);
       });
-      // A filter the data cannot honour is worse than none: if no debt row carries a
-      // portfolio, show no pill at all rather than a dead "All".
-      if (!names.length) {
-        pfBox.innerHTML = "";
-        DBTH_STATE.portfolio = "all";
-      } else {
-        if (DBTH_STATE.portfolio !== "all" && names.indexOf(DBTH_STATE.portfolio) === -1) {
-          DBTH_STATE.portfolio = "all"; // the selected portfolio no longer holds debt
-        }
-        var opts = ["all"].concat(names);
-        pfBox.innerHTML = opts.map(function (pn) {
-          return '<button type="button" class="mfh-portfolio-btn ' + (pn === DBTH_STATE.portfolio ? "active" : "") +
-            '" data-dbth-portfolio="' + pn.replace(/"/g, "&quot;") + '">' + escapeHtml(pn === "all" ? "All" : pn) + '</button>';
-        }).join("");
-        if (!pfBox.dataset.bound) {
-          pfBox.dataset.bound = "1";
-          pfBox.addEventListener("click", function (ev) {
-            var btn = ev.target.closest("[data-dbth-portfolio]");
-            if (!btn || btn.dataset.dbthPortfolio === DBTH_STATE.portfolio) return;
-            DBTH_STATE.portfolio = btn.dataset.dbthPortfolio;
-            renderDebtHoldings();
-          });
-        }
+      // Same list as every other card, with the portfolios that hold no debt
+      // disabled — consistent with the rest rather than hiding them here alone.
+      DBTH_STATE.portfolio = _renderPortfolioPills(
+        pfBox, "data-dbth-portfolio", _allPortfolioNames(["equity", "stocksetf"]),
+        DBTH_STATE.portfolio, function (pn) { return names.indexOf(pn) !== -1; });
+      if (!pfBox.dataset.bound) {
+        pfBox.dataset.bound = "1";
+        pfBox.addEventListener("click", function (ev) {
+          var btn = ev.target.closest("[data-dbth-portfolio]");
+          if (!btn || btn.disabled || btn.dataset.dbthPortfolio === DBTH_STATE.portfolio) return;
+          DBTH_STATE.portfolio = btn.dataset.dbthPortfolio;
+          renderDebtHoldings();
+        });
       }
     }
     if (DBTH_STATE.portfolio !== "all") {
@@ -5680,11 +5682,18 @@
     renderSeHoldingsCardList(rowsData, "us", usdInrToday);
   }
 
+  // Latest rows for the delegated portfolio-pill handlers (bound once, but a click
+  // must re-render from the newest data, not from whatever was in scope at wiring).
+  var _seWiredRows = { rowsData: [], usdInrToday: null };
   function _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday) {
     var seRows = getSheetRows("stocksetf");
     if (!seRows) return;
-    // See the Mutual Fund pills: debt-only portfolios have no Stocks/ETF holding.
-    var portfolios = ["all"].concat(collectPortfolioNamesFromRows(excludeFixedIncomeRows(getSheetRows("stocksetf"))) || []);
+    // Every portfolio in the sheet, including debt-only ones — availability below
+    // decides which are usable, so the row of names is the same on every card.
+    var portfolios = _allPortfolioNames(["stocksetf"]);
+    // The delegated handlers below are bound once but must re-render from the
+    // LATEST rows, so the current ones are parked here on every call.
+    _seWiredRows = { rowsData: rowsData, usdInrToday: usdInrToday };
     // Each region's toggle updates only its own state and re-renders only its list.
     [
       { id: "seh-portfolio-toggle", region: "india" },
@@ -5692,18 +5701,25 @@
     ].forEach(function (spec) {
       var el = document.getElementById(spec.id);
       if (!el) return;
-      var currentPortfolio = SEH_STATE.portfolio[spec.region] || "all";
-      el.innerHTML = portfolios.map(function (p) {
-        var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === currentPortfolio ? "active" : "") + '" data-seh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + escapeHtml(label) + '</button>';
-      }).join("");
-      el.querySelectorAll("[data-seh-portfolio]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          SEH_STATE.portfolio[spec.region] = btn.dataset.sehPortfolio;
-          el.querySelectorAll("[data-seh-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
-          renderSeHoldingsCardList(rowsData, spec.region, usdInrToday);
+      // Region-aware: a portfolio holding only US stocks has nothing in the India
+      // table, and vice versa, so its pill is disabled there. Answered from the
+      // transaction sheet, which covers closed positions too.
+      SEH_STATE.portfolio[spec.region] = _renderPortfolioPills(
+        el, "data-seh-portfolio", portfolios,
+        SEH_STATE.portfolio[spec.region] || "all",
+        function (p) {
+          var a = _seOpenClosedAvailability(spec.region, p);
+          return a.open || a.closed;
         });
-      });
+      if (!el.dataset.bound) {
+        el.dataset.bound = "1";
+        el.addEventListener("click", function (ev) {
+          var btn = ev.target.closest("[data-seh-portfolio]");
+          if (!btn || btn.disabled || btn.dataset.sehPortfolio === SEH_STATE.portfolio[spec.region]) return;
+          SEH_STATE.portfolio[spec.region] = btn.dataset.sehPortfolio;
+          renderSeHoldingsCardList(_seWiredRows.rowsData, spec.region, _seWiredRows.usdInrToday);
+        });
+      }
     });
   }
 
@@ -6154,6 +6170,35 @@
   // both visible, so the state has to be shown by which one is highlighted rather
   // than by the label — a single button reading "Open" was ambiguous about whether
   // that was the current state or the action.
+  // Portfolio pills, painted the same way on every holdings card.
+  //
+  // Every card lists the SAME portfolios and disables the ones with nothing in that
+  // particular table, rather than hiding them. Hiding made the row of names change
+  // shape from card to card, which reads as data missing; a greyed name says "this
+  // person holds nothing here", which is information. "All" is never disabled.
+  //
+  // Returns the selection to use — if the current one has become unavailable (a
+  // portfolio that sold its last holding, or a filter carried over from another
+  // card) it falls back to "all" rather than showing an empty table.
+  function _renderPortfolioPills(container, attr, names, selected, isAvailable) {
+    if (!container) return selected;
+    if (selected !== "all" && !isAvailable(selected)) selected = "all";
+    container.innerHTML = ["all"].concat(names).map(function (p) {
+      var ok = p === "all" || isAvailable(p);
+      return '<button type="button" class="mfh-portfolio-btn ' + (p === selected ? "active" : "") + '"' +
+        (ok ? "" : ' disabled title="No holdings in this table"') +
+        " " + attr + '="' + escapeHtml(p) + '">' +
+        escapeHtml(p === "all" ? "All" : p) + "</button>";
+    }).join("");
+    return selected;
+  }
+
+  // The portfolios that appear anywhere in the transaction sheets. Used as the
+  // common list so every card shows the same names.
+  function _allPortfolioNames(prefixes) {
+    return collectPortfolioNamesFromSheets(prefixes) || [];
+  }
+
   // A segment with nothing behind it is disabled — an enabled control that leads to
   // an empty list reads as a bug. Symmetric: a portfolio that has sold everything
   // has no Open view, just as one that has never sold has no Closed view. Pass
@@ -12857,6 +12902,13 @@
 
     window.__mfAnyClosed = anyClosedMf;
     window.__mfAnyOpen = anyOpenMf;
+    // Repainted here, not at wire-up: which portfolios hold a mutual fund is only
+    // known once the sheet has been read, and it changes as data syncs.
+    var _mfWith = collectPortfolioNamesFromRows(excludeFixedIncomeRows(getSheetRows("equity"))) || [];
+    window.__mfHoldingsPortfolioOverride = _renderPortfolioPills(
+      document.getElementById("mfh-portfolio-toggle"), "data-mfh-portfolio",
+      _allPortfolioNames(["equity"]), window.__mfHoldingsPortfolioOverride || "all",
+      function (p) { return _mfWith.indexOf(p) !== -1; });
     if (!holdings.length) {
       statusEl.textContent = MFH_STATE.showClosed
         ? "No closed mutual fund holdings for this filter."
@@ -13609,20 +13661,13 @@
     // Portfolio filter for the Holdings list (All / <each portfolio>).
     var pfToggle = document.getElementById("mfh-portfolio-toggle");
     if (pfToggle) {
-      // From the debt-filtered sheet: a portfolio holding only Fixed Income funds
-      // has nothing in this list, so it gets no pill.
-      var portfolios = ["all"].concat(collectPortfolioNamesFromRows(excludeFixedIncomeRows(getSheetRows("equity"))) || []);
-      var current = window.__mfHoldingsPortfolioOverride || "all";
-      pfToggle.innerHTML = portfolios.map(function (p) {
-        var label = p === "all" ? "All" : p;
-        return '<button type="button" class="mfh-portfolio-btn ' + (p === current ? "active" : "") + '" data-mfh-portfolio="' + p.replace(/"/g, '&quot;') + '">' + escapeHtml(label) + '</button>';
-      }).join("");
-      pfToggle.querySelectorAll("[data-mfh-portfolio]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          window.__mfHoldingsPortfolioOverride = btn.dataset.mfhPortfolio;
-          pfToggle.querySelectorAll("[data-mfh-portfolio]").forEach(function (b) { b.classList.toggle("active", b === btn); });
-          renderEquityHoldingsTable();
-        });
+      // Delegated, so the pills can be repainted on every render (availability
+      // depends on data that arrives after this wiring runs) without rebinding.
+      pfToggle.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-mfh-portfolio]");
+        if (!btn || btn.disabled) return;
+        window.__mfHoldingsPortfolioOverride = btn.dataset.mfhPortfolio;
+        renderEquityHoldingsTable();
       });
     }
   })();
