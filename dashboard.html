@@ -1814,6 +1814,17 @@
 
       // ── Monthly Income / Budget / Expense bar chart ────────────────────
       var expMonthlyChart = null;
+      // How many month columns to draw: through the last month that HAS data, never
+      // fewer than six. The month index is 0-based, so +1 turns it into a count —
+      // the extra +1 that used to be here drew one empty month past the end of the
+      // data, which is why a year with activity through August showed an empty
+      // September.
+      function monthColumnsToShow(hasDataAt) {
+        var last = -1;
+        for (var i = 11; i >= 0; i--) { if (hasDataAt(i)) { last = i; break; } }
+        return Math.min(12, Math.max(6, last + 1));
+      }
+
       function renderExpMonthlyChart() {
         var canvas = document.getElementById("dash-exp-monthly-chart");
         var status = document.getElementById("dash-exp-monthly-status");
@@ -1860,12 +1871,9 @@
             '<div class="cashflow-ytd-stat"><span class="cashflow-ytd-dot" style="background:#EF4444"></span><span class="cashflow-ytd-label">Expense</span><span class="cashflow-ytd-val">' + fmtMoney(ytdExpense) + '</span></div>';
         }
         var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-        // Trim trailing months with no activity to reduce empty space at the right
-        var lastMonthWithData = -1;
-        for (var mi = 11; mi >= 0; mi--) {
-          if (income[mi] || budget[mi] || expense[mi]) { lastMonthWithData = mi; break; }
-        }
-        var showN = Math.min(12, Math.max(6, lastMonthWithData + 2));
+        var showN = monthColumnsToShow(function (mi) {
+          return !!(income[mi] || budget[mi] || expense[mi]);
+        });
         var trimmedLabels = labels.slice(0, showN);
         var data = {
           labels: trimmedLabels,
@@ -2654,12 +2662,9 @@
           running = nxt;
         }
         var ytdTotal = running;
-        // Trim trailing months with no budget AND no expense — reduces empty whitespace
-        var lastActiveMonth = -1;
-        for (var k = 11; k >= 0; k--) {
-          if (monthBudget[k] || monthActual[k]) { lastActiveMonth = k; break; }
-        }
-        var showMonths = Math.min(12, Math.max(6, lastActiveMonth + 2));
+        var showMonths = monthColumnsToShow(function (k) {
+          return !!(monthBudget[k] || monthActual[k]);
+        });
         var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         var labels = monthNames.slice(0, showMonths).concat(["YTD"]);
         floors = floors.slice(0, showMonths);
