@@ -44,6 +44,7 @@ const pieces = [
   "var CANONICAL_FIELD_KEYWORDS",
   "function parseNumber(value)",
   "function parseFlexibleDate(value)",
+  "var _topCatMemo = null",
   "function buildInstrumentTopCategoryMap()",
   "function isFixedIncomeInstrument(name, catMap)",
   "function excludeFixedIncomeRows(rows, catMap)",

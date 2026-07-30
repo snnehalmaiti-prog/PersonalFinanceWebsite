@@ -125,6 +125,37 @@
   var AMFI_NAV_MAP_STATIC_FILE = "amfi_nav.json";
   var lastAmfiFetchFailures = [];
 
+  // ─── Bulky payload cache (IndexedDB, not localStorage) ─────────────────────
+  //
+  // Three market-data payloads dominate a cold load: stock_prices.json (~2.3 MB),
+  // amfi_nav.json (~1 MB) and amfi_isin_map.json (~0.5 MB). They used to be cached
+  // in localStorage, which is SYNCHRONOUS — every load paid a JSON.parse of
+  // multi-megabyte text on the main thread, and every refresh paid a JSON.stringify
+  // plus a blocking disk write. On a mid-range Android that is the visible freeze.
+  //
+  // Worse, the three together exceed the ~5 MB localStorage quota, so setItem threw,
+  // the entry was never stored, and the next load re-downloaded AND re-stringified
+  // the whole thing. The cache was costing time without ever paying off.
+  //
+  // IndexedDB is asynchronous, has a far larger quota, and stores structured clones,
+  // so there is no JSON serialisation at all. A miss is always safe: the caller
+  // falls back to the network exactly as before.
+  var BLOB_CACHE_PREFIX = "blob:";
+  function _blobCacheGet(key, maxAgeMs) {
+    // Reclaim quota from the legacy localStorage entry, once, on first read.
+    try { localStorage.removeItem(key); } catch (e) {}
+    if (!window.WfIdb) return Promise.resolve(null);
+    return WfIdb.get(BLOB_CACHE_PREFIX + key).then(function (entry) {
+      if (entry && entry.fetchedAt && (Date.now() - entry.fetchedAt) < maxAgeMs) return entry;
+      return null;
+    }).catch(function () { return null; });
+  }
+  function _blobCacheSet(key, entry) {
+    if (!window.WfIdb || !entry) return;
+    entry.fetchedAt = Date.now();
+    try { WfIdb.set(BLOB_CACHE_PREFIX + key, entry); } catch (e) {}
+  }
+
   function applyTheme(theme) {
     if (theme === "dark") {
       root.setAttribute("data-theme", "dark");
@@ -1559,14 +1590,34 @@
     return total;
   }
 
+  // Parsed-sheet memo. getSheetRows is called on the order of hundreds of times
+  // per render pass (86 static call sites, most of them inside per-portfolio or
+  // per-instrument loops), and each call used to re-read localStorage and re-parse
+  // the whole sheet — hundreds of rows of JSON, synchronously, on the main thread.
+  // That is a large share of the freeze on a phone.
+  //
+  // The memo is keyed on the raw string's length so a write from another tab (or
+  // any path that bypasses _invalidateSheetRows) still invalidates it: getItem is
+  // cheap, parsing is what costs. Callers MUST NOT mutate the array they get back,
+  // which was already true — the existing code copies before filtering.
+  var _sheetRowsMemo = {};
   function getSheetRows(prefix) {
     var raw = localStorage.getItem("wf-" + prefix + "-data");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-      return null;
-    }
+    if (!raw) { delete _sheetRowsMemo[prefix]; return null; }
+    var memo = _sheetRowsMemo[prefix];
+    if (memo && memo.len === raw.length) return memo.rows;
+    var rows;
+    try { rows = JSON.parse(raw); }
+    catch (e) { delete _sheetRowsMemo[prefix]; return null; }
+    _sheetRowsMemo[prefix] = { len: raw.length, rows: rows };
+    return rows;
+  }
+
+  // Called wherever a sheet's cached data is written or cleared, so the memo can
+  // never serve rows for a payload that has been replaced by one of equal length.
+  function _invalidateSheetRows(prefix) {
+    if (prefix == null) _sheetRowsMemo = {};
+    else delete _sheetRowsMemo[prefix];
   }
 
   // Fold/unfold long holdings lists: when there are >3 instrument rows,
@@ -3513,10 +3564,18 @@
   // category: a debt fund and a gold fund both sit in the Mutual Fund sheet but
   // are Fixed Income and Commodity respectively. Anything holding a category
   // must consult this map rather than assume "equity sheet ⇒ Equity".
+  // Memoised on the identity of the two mapping-sheet arrays. getSheetRows now
+  // returns a stable reference while the underlying payload is unchanged, so
+  // reference equality is an exact staleness check — and this map is rebuilt from
+  // ~15 call sites, several of them per render. Treat the result as read-only.
+  var _topCatMemo = null;
   function buildInstrumentTopCategoryMap() {
+    var _mfRows = getSheetRows("mfmapping");
+    var _seRows = getSheetRows("stocksetfmapping");
+    if (_topCatMemo && _topCatMemo.mf === _mfRows && _topCatMemo.se === _seRows) return _topCatMemo.map;
     var map = {};
     ["mfmapping", "stocksetfmapping"].forEach(function (mp) {
-      var rows = getSheetRows(mp);
+      var rows = mp === "mfmapping" ? _mfRows : _seRows;
       if (!rows || rows.length < 2) return;
       var header = rows[0].map(normalizeText);
       var iIdx = header.indexOf("instrument name");
@@ -3528,6 +3587,7 @@
         if (nm && cat) map[normalizeText(nm)] = cat;
       });
     });
+    _topCatMemo = { mf: _mfRows, se: _seRows, map: map };
     return map;
   }
 
@@ -3604,20 +3664,22 @@
     // Evict the old 2.24 MB merged cache key (replaced by the split static/live
     // caches) so the two don't co-exist and blow the localStorage quota.
     try { localStorage.removeItem("wf-stock-prices-json"); } catch (e) {}
-    try {
-      var c = JSON.parse(localStorage.getItem("wf-stock-prices-static"));
-      if (c && c.fetchedAt && Date.now() - c.fetchedAt < STOCK_STATIC_CACHE_MAX_AGE_MS) return Promise.resolve(c.data);
-    } catch (e) {}
+    // One in-flight promise covers the cache read AND the fetch, so concurrent
+    // callers can't each start their own 2.3 MB download while IDB is answering.
     if (_stockStaticPromise) return _stockStaticPromise;
-    _stockStaticPromise = fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_STATIC_CACHE_MAX_AGE_MS))
-      .then(function (r) {
-        if (!r.ok) throw new Error("stock_prices.json not found (HTTP " + r.status + ")");
-        return r.json();
-      })
-      .then(function (data) {
-        try { localStorage.setItem("wf-stock-prices-static", JSON.stringify({ data: data, fetchedAt: Date.now() })); } catch (e) {}
-        _stockStaticPromise = null;
-        return data;
+    _stockStaticPromise = _blobCacheGet("wf-stock-prices-static", STOCK_STATIC_CACHE_MAX_AGE_MS)
+      .then(function (hit) {
+        if (hit && hit.data) { _stockStaticPromise = null; return hit.data; }
+        return fetch("stock_prices.json?t=" + Math.floor(Date.now() / STOCK_STATIC_CACHE_MAX_AGE_MS))
+          .then(function (r) {
+            if (!r.ok) throw new Error("stock_prices.json not found (HTTP " + r.status + ")");
+            return r.json();
+          })
+          .then(function (data) {
+            _blobCacheSet("wf-stock-prices-static", { data: data });
+            _stockStaticPromise = null;
+            return data;
+          });
       })
       .catch(function (err) { _stockStaticPromise = null; throw err; });
     return _stockStaticPromise;
@@ -6528,6 +6590,7 @@
       if (merged && merged.length > 1 && !fetchFailures) {
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        _invalidateSheetRows(prefix);
         pushSheetDataToCloud(prefix, merged);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
       }
@@ -6562,6 +6625,7 @@
       fetchSheetData(cfg, function (rows) {
         if (!rows || rows.length <= 1) return; // keep cache on empty/failure
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+        _invalidateSheetRows(prefix);
         pushSheetDataToCloud(prefix, rows);
         document.dispatchEvent(new CustomEvent("wf-sync-complete"));
         try { renderStockEtfHoldingsTable(); renderEquityHoldingsTable(); } catch (e) {}
@@ -7251,6 +7315,7 @@
     function processRows(rows) {
       addPortfolioNames(extractColumnValues(rows, "Portfolio Name"));
       localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(rows));
+      _invalidateSheetRows(prefix);
       pushSheetDataToCloud(prefix, rows);
       document.dispatchEvent(new CustomEvent("wf-sync-complete"));
       if (typeof afterSync === "function") afterSync(rows);
@@ -7364,6 +7429,7 @@
         localStorage.removeItem(localDataKey);
         localStorage.removeItem(storageKey);
         localStorage.removeItem("wf-" + prefix + "-data");
+        _invalidateSheetRows(prefix);
         sheetTableWrap.hidden = true;
         setStatus("", false);
         setConnected(false);
@@ -7561,6 +7627,7 @@
         autoSaveConfigs();
         if (!readRowConfigs().filter(function (c) { return c.link; }).length) {
           localStorage.removeItem("wf-" + prefix + "-data");
+          _invalidateSheetRows(prefix);
           updateDashboardStats();
           updateRefreshButtonStatus(prefix);
         }
@@ -7656,6 +7723,7 @@
       var configs = readRowConfigs().filter(function (c) { return c.link; });
       if (!configs.length) {
         localStorage.removeItem("wf-" + prefix + "-data");
+        _invalidateSheetRows(prefix);
         updateDashboardStats();
         updateRefreshButtonStatus(prefix);
         setStatus("Add at least one sheet link (Google Sheets, OneDrive, or CSV).", true);
@@ -7680,6 +7748,7 @@
         }
         addPortfolioNames(extractColumnValues(merged, "Portfolio Name"));
         localStorage.setItem("wf-" + prefix + "-data", JSON.stringify(merged));
+        _invalidateSheetRows(prefix);
         // Only a fetch-clean merge reaches the shared cloud cache (see resync note)
         // so a partial fetch can't clobber a fuller blob other devices seed from.
         // Gate on fetchFailures, not total failures, so a bad config entry beside
@@ -8049,27 +8118,26 @@
   // the Overview and the portfolio cards read the SAME NAV map, so day change is stable.
   var _amfiNavMapSessionPromise = null;
   function fetchAmfiNavMap() {
-    try {
-      var cached = JSON.parse(localStorage.getItem(AMFI_NAV_MAP_CACHE_KEY));
-      if (cached && Date.now() - cached.fetchedAt < AMFI_NAV_MAP_MAX_AGE_MS) {
-        if (cached.source) _marketSource["amfi_nav"] = cached.source; // restore source for the indicator
-        return Promise.resolve(cached.data);
-      }
-    } catch (e) {}
-
+    // The cache read is async now, so it lives INSIDE the pinned session promise —
+    // otherwise two callers arriving before IDB answers would both miss and both
+    // run the hybrid, which is exactly the race the pin exists to prevent.
     if (_amfiNavMapSessionPromise) return _amfiNavMapSessionPromise;
 
-    var p = _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
-      if (staticData && Object.keys(staticData).length) {
-        try {
-          localStorage.setItem(AMFI_NAV_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData, source: _marketSource["amfi_nav"] || null }));
-        } catch (e) {}
-        return staticData;
+    var p = _blobCacheGet(AMFI_NAV_MAP_CACHE_KEY, AMFI_NAV_MAP_MAX_AGE_MS).then(function (cached) {
+      if (cached && cached.data && Object.keys(cached.data).length) {
+        if (cached.source) _marketSource["amfi_nav"] = cached.source; // restore source for the indicator
+        return cached.data;
       }
-      // Empty result (both sources unavailable): don't pin it — let the next
-      // caller retry so a transient miss doesn't freeze an empty map all session.
-      _amfiNavMapSessionPromise = null;
-      return {};
+      return _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
+        if (staticData && Object.keys(staticData).length) {
+          _blobCacheSet(AMFI_NAV_MAP_CACHE_KEY, { data: staticData, source: _marketSource["amfi_nav"] || null });
+          return staticData;
+        }
+        // Empty result (both sources unavailable): don't pin it — let the next
+        // caller retry so a transient miss doesn't freeze an empty map all session.
+        _amfiNavMapSessionPromise = null;
+        return {};
+      });
     }, function (err) {
       _amfiNavMapSessionPromise = null;
       throw err;
@@ -8079,25 +8147,23 @@
     return p;
   }
 
+  var _amfiIsinMapPromise = null;
   function fetchAmfiIsinToSchemeMap() {
-    try {
-      var cached = JSON.parse(localStorage.getItem(AMFI_ISIN_MAP_CACHE_KEY));
-      if (cached && Date.now() - cached.fetchedAt < AMFI_ISIN_MAP_MAX_AGE_MS) {
-        return Promise.resolve(cached.data);
-      }
-    } catch (e) {}
-
-    lastAmfiFetchFailures = [];
-    return _fetchAmfiMapHybrid(AMFI_ISIN_MAP_STATIC_FILE, "amfi_isin").then(function (staticData) {
-      if (staticData && Object.keys(staticData).length) {
-        try {
-          localStorage.setItem(AMFI_ISIN_MAP_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data: staticData }));
-        } catch (e) {}
-        return staticData;
-      }
-      lastAmfiFetchFailures.push("amfi_isin_map.json missing or empty");
-      return {};
-    });
+    if (_amfiIsinMapPromise) return _amfiIsinMapPromise;
+    _amfiIsinMapPromise = _blobCacheGet(AMFI_ISIN_MAP_CACHE_KEY, AMFI_ISIN_MAP_MAX_AGE_MS).then(function (cached) {
+      if (cached && cached.data && Object.keys(cached.data).length) return cached.data;
+      lastAmfiFetchFailures = [];
+      return _fetchAmfiMapHybrid(AMFI_ISIN_MAP_STATIC_FILE, "amfi_isin").then(function (staticData) {
+        if (staticData && Object.keys(staticData).length) {
+          _blobCacheSet(AMFI_ISIN_MAP_CACHE_KEY, { data: staticData });
+          return staticData;
+        }
+        lastAmfiFetchFailures.push("amfi_isin_map.json missing or empty");
+        _amfiIsinMapPromise = null; // don't pin an empty map for the session
+        return {};
+      });
+    }).catch(function (err) { _amfiIsinMapPromise = null; throw err; });
+    return _amfiIsinMapPromise;
   }
 
   var lastSchemeMapDiagnostic = null;

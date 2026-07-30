@@ -434,5 +434,56 @@ eval(extract("function collectPortfolioNamesFromRows(rows)"));
   ok(collectPortfolioNamesFromRows(null).length === 0, "J19 null rows yield no portfolios");
 }
 
+console.log("\nK. Parsed-sheet memo (the phone-freeze fix)");
+eval(extract("var _sheetRowsMemo = {}"));
+eval(extract("function getSheetRows(prefix)"));
+eval(extract("function _invalidateSheetRows(prefix)"));
+eval(extract("var _topCatMemo = null"));
+eval(extract("function buildInstrumentTopCategoryMap()"));
+{
+  ok(getSheetRows("nope") === null, "K1 a missing sheet is still null");
+  localStorage.setItem("wf-equity-data", JSON.stringify([["A"], ["1"]]));
+  var first = getSheetRows("equity");
+  ok(first.length === 2, "K2 rows parse");
+  ok(getSheetRows("equity") === first, "K3 the SAME array is returned - no re-parse");
+
+  // A replacement payload of a DIFFERENT length invalidates on its own.
+  localStorage.setItem("wf-equity-data", JSON.stringify([["A"], ["1"], ["2"]]));
+  ok(getSheetRows("equity").length === 3, "K4 a differently-sized payload is re-parsed without help");
+
+  // Same length, different content: only the explicit invalidation can catch this,
+  // which is why every writer calls it.
+  localStorage.setItem("wf-equity-data", JSON.stringify([["A"], ["9"], ["8"]]));
+  ok(getSheetRows("equity")[1][0] === "1", "K5 a same-length payload is (knowingly) served from the memo");
+  _invalidateSheetRows("equity");
+  ok(getSheetRows("equity")[1][0] === "9", "K6 _invalidateSheetRows forces the re-parse");
+
+  _invalidateSheetRows();
+  localStorage.removeItem("wf-equity-data");
+  ok(getSheetRows("equity") === null, "K7 removing the payload clears the memo too");
+
+  localStorage.setItem("wf-equity-data", "{not json");
+  ok(getSheetRows("equity") === null, "K8 corrupt JSON is a miss, not a throw");
+  localStorage.removeItem("wf-equity-data");
+}
+{
+  // The category map memo keys on the mapping arrays' identity.
+  localStorage.setItem("wf-mfmapping-data", JSON.stringify([
+    ["Instrument Name", "Instrument Category"], ["Kotak Arbitrage", "Fixed Income"]]));
+  localStorage.removeItem("wf-stocksetfmapping-data");
+  _invalidateSheetRows();
+  var m1 = buildInstrumentTopCategoryMap();
+  ok(m1["kotak arbitrage"] === "Fixed Income", "K9 category map builds");
+  ok(buildInstrumentTopCategoryMap() === m1, "K10 and is memoised by array identity");
+  localStorage.setItem("wf-mfmapping-data", JSON.stringify([
+    ["Instrument Name", "Instrument Category"], ["Kotak Arbitrage", "Equity"], ["Extra", "Equity"]]));
+  _invalidateSheetRows("mfmapping");
+  var m2 = buildInstrumentTopCategoryMap();
+  ok(m2 !== m1 && m2["kotak arbitrage"] === "Equity",
+     "K11 a changed mapping sheet rebuilds it - a fund cannot stay misclassified");
+  localStorage.removeItem("wf-mfmapping-data");
+  _invalidateSheetRows();
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

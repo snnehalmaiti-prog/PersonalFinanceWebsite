@@ -389,6 +389,8 @@
   </footer>
 
 
+  <!-- wf-idb before script.js: script.js reads window.WfIdb for its bulky-payload cache. -->
+  <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
   <script src="wf-math.js?v=__ASSET_VERSION__"></script>
   <script src="wf-overview.js?v=__ASSET_VERSION__"></script>
   <script src="script.js?v=__ASSET_VERSION__"></script>
@@ -447,7 +449,6 @@
       </form>
     </div>
   </div>
-  <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
   <script src="supabase-client.js?v=__ASSET_VERSION__"></script>
   <script>
     // Detect Supabase recovery / access-token hash (from password reset email)
