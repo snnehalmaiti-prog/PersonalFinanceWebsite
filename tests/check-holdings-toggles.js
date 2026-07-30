@@ -23,7 +23,21 @@ const TOGGLES = [
   { id: "seh-open-toggle", attr: "data-seh-open", label: "India holdings" },
   { id: "seh-us-open-toggle", attr: "data-seh-open", label: "US holdings" },
   { id: "dbth-open-toggle", attr: "data-dbth-open", label: "Debt ETF/Mutual Holding" },
+  { id: "fih-open-closed", attr: "data-fih-oc", label: "Fixed Income Holding" },
+  { id: "cmh-open-closed", attr: "data-cmh-oc", label: "Commodity Holding" },
 ];
+
+// Every header puts the portfolio pills first and the Open/Closed pill last, so
+// the two controls line up the same way on every card.
+["fih-card", "cmh-card", "mfh-card"].forEach(function (cardId) {
+  const at = HTML.indexOf('id="' + cardId + '"');
+  if (at === -1) { console.error("  FAIL " + cardId + " is missing"); failed++; return; }
+  const right = HTML.slice(HTML.indexOf("mfh-header-right", at), HTML.indexOf("mfh-header-right", at) + 900);
+  const pf = right.indexOf("portfolio-toggle");
+  const oc = right.search(/isc-toggle/);
+  if (pf === -1 || oc === -1) { console.error("  FAIL " + cardId + ": header is missing one of the two controls"); failed++; return; }
+  if (pf > oc) { console.error("  FAIL " + cardId + ": Open/Closed comes before the portfolio pills — headers must line up"); failed++; }
+});
 
 TOGGLES.forEach(function (t) {
   const at = HTML.indexOf('id="' + t.id + '"');
@@ -45,7 +59,7 @@ TOGGLES.forEach(function (t) {
 const painter = SRC.slice(SRC.indexOf("function _setOpenClosedPill"),
                           SRC.indexOf("function _setOpenClosedPill") + 700);
 check(painter.length > 0, "_setOpenClosedPill is missing");
-["data-mfh-open", "data-seh-open", "data-dbth-open"].forEach(function (a) {
+["data-mfh-open", "data-seh-open", "data-dbth-open", "data-fih-oc", "data-cmh-oc"].forEach(function (a) {
   check(painter.indexOf(a) !== -1, "_setOpenClosedPill does not recognise " + a);
 });
 check(painter.indexOf("aria-pressed") !== -1,
@@ -101,6 +115,15 @@ check(/var anyClosedMf = false/.test(SRC), "anyClosedMf is computed before the o
 // only ever see one side.
 check(/if \(!isDebtInst\) \{/.test(SRC),
   "debt instruments must not be filtered by the Mutual Fund toggle — their table has its own");
+
+check(/if \(FIH_STATE\.showClosed && !fihHasClosed && fihHasOpen\)/.test(SRC),
+  "Fixed Income Holding needs the same two-way fallback as the other tables");
+check(/_setOpenClosedPill\(ocToggle, FIH_STATE\.showClosed, fihHasClosed, fihHasOpen\)/.test(SRC),
+  "Fixed Income Holding must paint its pill availability");
+check(/if \(COMH_STATE\.showClosed && !cmhHasClosed && cmhHasOpen\)/.test(SRC),
+  "Commodity Holding needs the same two-way fallback");
+check(/_setOpenClosedPill\(document\.getElementById\("cmh-open-closed"\), COMH_STATE\.showClosed, cmhHasClosed, cmhHasOpen\)/.test(SRC),
+  "Commodity Holding must paint its pill availability");
 
 check(/<h3 class="mfh-title">Debt ETF\/Mutual Holding<\/h3>/.test(HTML),
   'the debt card must be titled "Debt ETF/Mutual Holding"');

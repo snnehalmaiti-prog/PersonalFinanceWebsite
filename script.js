@@ -3320,12 +3320,22 @@
         });
       });
     }
-    var filtered = holdings.filter(function (h) {
+    // Everything this portfolio would show, before the open/closed split — so the
+    // pill can disable the side that has nothing behind it, exactly as the Mutual
+    // Fund and Stocks/ETF tables do.
+    var fihScope = holdings.filter(function (h) {
       if (FIH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(FIH_STATE.portfolio)) return false;
       if (_fiIsGold(h.subCategory)) return false; // gold shown in commodity card
-      // Open = active holdings; Closed = matured FDs (money returned, interest realized).
-      if (!!h.matured !== !!FIH_STATE.showClosed) return false;
       return true;
+    });
+    var fihHasClosed = fihScope.some(function (h) { return !!h.matured; });
+    var fihHasOpen = fihScope.some(function (h) { return !h.matured; });
+    if (FIH_STATE.showClosed && !fihHasClosed && fihHasOpen) FIH_STATE.showClosed = false;
+    else if (!FIH_STATE.showClosed && !fihHasOpen && fihHasClosed) FIH_STATE.showClosed = true;
+    _setOpenClosedPill(ocToggle, FIH_STATE.showClosed, fihHasClosed, fihHasOpen);
+    var filtered = fihScope.filter(function (h) {
+      // Open = active holdings; Closed = matured FDs (money returned, interest realized).
+      return !!h.matured === !!FIH_STATE.showClosed;
     });
     var fparts = String(FIH_STATE.sort || "pnl-desc").split("-");
     var fSortKey = fparts[0];
@@ -5278,10 +5288,18 @@
     if (asof) { asof.textContent = asofText; asof.style.color = _goldRateMeta.stale ? "#B45309" : ""; }
     if (goldTop) { goldTop.innerHTML = asofText ? "&#128337; " + asofText : ""; goldTop.style.color = _goldRateMeta.stale ? "#B45309" : ""; }
 
-    var holdings = (allHoldings || []).filter(function (h) {
-      if (COMH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(COMH_STATE.portfolio)) return false;
-      return !!h.isSold === !!COMH_STATE.showClosed;
+    // Same as the other holdings tables: work out what this portfolio has on each
+    // side before splitting, so the pill can disable the empty one.
+    var cmhScope = (allHoldings || []).filter(function (h) {
+      return COMH_STATE.portfolio === "all" ||
+        normalizeText(h.portfolio || "") === normalizeText(COMH_STATE.portfolio);
     });
+    var cmhHasClosed = cmhScope.some(function (h) { return !!h.isSold; });
+    var cmhHasOpen = cmhScope.some(function (h) { return !h.isSold; });
+    if (COMH_STATE.showClosed && !cmhHasClosed && cmhHasOpen) COMH_STATE.showClosed = false;
+    else if (!COMH_STATE.showClosed && !cmhHasOpen && cmhHasClosed) COMH_STATE.showClosed = true;
+    _setOpenClosedPill(document.getElementById("cmh-open-closed"), COMH_STATE.showClosed, cmhHasClosed, cmhHasOpen);
+    var holdings = cmhScope.filter(function (h) { return !!h.isSold === !!COMH_STATE.showClosed; });
     if (eyebrow) eyebrow.textContent = holdings.length ? ("HOLDINGS · " + holdings.length + (COMH_STATE.showClosed ? " CLOSED" : " OPEN")) : "";
     if (!holdings.length) {
       list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + (COMH_STATE.showClosed ? "closed (sold)" : "open") + ' commodity holdings.</p>';
@@ -6051,7 +6069,9 @@
     if (!container) return;
     var neither = hasClosed === false && hasOpen === false;
     container.querySelectorAll(".isc-toggle-btn").forEach(function (b) {
-      var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open") || b.getAttribute("data-mfh-open");
+      var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open") ||
+                  b.getAttribute("data-mfh-open") || b.getAttribute("data-fih-oc") ||
+                  b.getAttribute("data-cmh-oc");
       var isClosedSeg = wants === "closed";
       b.classList.toggle("active", isClosedSeg === !!showClosed);
       b.setAttribute("aria-pressed", String(isClosedSeg === !!showClosed));
