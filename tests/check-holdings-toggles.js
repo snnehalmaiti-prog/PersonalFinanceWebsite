@@ -74,6 +74,18 @@ check(painter.indexOf("aria-pressed") !== -1,
 check(/_setOpenClosedPill\(box, SEH_STATE\.showClosed\[spec\.region\]\)/.test(SRC),
   "the Stocks/ETF pills do not paint their initial state");
 
+// A control must be repainted by the SAME function its handler re-renders through,
+// or the list filters while the highlight stays put and the control looks dead.
+// That is exactly what happened to the Stocks/ETF portfolio pills.
+const seRender = SRC.slice(SRC.indexOf("function renderSeHoldingsCardList"),
+                           SRC.indexOf("function renderSeHoldingsCardList") + 2500);
+check(/SEH_STATE\.portfolio\[region\] = _renderPortfolioPills\(/.test(seRender),
+  "the Stocks/ETF portfolio pills must be painted inside renderSeHoldingsCardList, which is what their click handler calls");
+const seWire = SRC.slice(SRC.indexOf("function _wireSeHoldingsPortfolioToggle"),
+                         SRC.indexOf("function _wireSeHoldingsPortfolioToggle") + 1400);
+check(seWire.indexOf("_renderPortfolioPills") === -1,
+  "...and not only at wire-up, which the handler never runs again");
+
 // Clicking the segment that is already active must not re-render.
 check((SRC.match(/if \(wantClosed === !!/g) || []).length >= 3,
   "clicking the active segment should be a no-op, not a repaint");

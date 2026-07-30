@@ -5677,9 +5677,6 @@
   function _wireSeHoldingsPortfolioToggle(rowsData, usdInrToday) {
     var seRows = getSheetRows("stocksetf");
     if (!seRows) return;
-    // Every portfolio in the sheet, including debt-only ones — availability below
-    // decides which are usable, so the row of names is the same on every card.
-    var portfolios = _allPortfolioNames(["stocksetf"]);
     // The delegated handlers below are bound once but must re-render from the
     // LATEST rows, so the current ones are parked here on every call.
     _seWiredRows = { rowsData: rowsData, usdInrToday: usdInrToday };
@@ -5690,16 +5687,8 @@
     ].forEach(function (spec) {
       var el = document.getElementById(spec.id);
       if (!el) return;
-      // Region-aware: a portfolio holding only US stocks has nothing in the India
-      // table, and vice versa, so its pill is disabled there. Answered from the
-      // transaction sheet, which covers closed positions too.
-      SEH_STATE.portfolio[spec.region] = _renderPortfolioPills(
-        el, "data-seh-portfolio", portfolios,
-        SEH_STATE.portfolio[spec.region] || "all",
-        function (p) {
-          var a = _seOpenClosedAvailability(spec.region, p);
-          return a.open || a.closed;
-        });
+      // The pills themselves are painted by renderSeHoldingsCardList; this only
+      // binds the (delegated) handler once.
       if (!el.dataset.bound) {
         el.dataset.bound = "1";
         el.addEventListener("click", function (ev) {
@@ -6007,6 +5996,17 @@
     if (!list) return;
     var mapping = buildStockMappingTable();
     var regionShowClosed = !!SEH_STATE.showClosed[region];
+    // Painted HERE, not only at wire-up: the portfolio pill's own click handler
+    // re-renders through this function, so painting it anywhere else left the
+    // highlight stuck on whatever was active when the card was first drawn — the
+    // list filtered correctly while the control looked dead.
+    SEH_STATE.portfolio[region] = _renderPortfolioPills(
+      document.getElementById(region === "us" ? "seh-us-portfolio-toggle" : "seh-portfolio-toggle"),
+      "data-seh-portfolio", _allPortfolioNames(["stocksetf"]), SEH_STATE.portfolio[region] || "all",
+      function (p) {
+        var a = _seOpenClosedAvailability(region, p);
+        return a.open || a.closed;
+      });
     var regionPortfolio = SEH_STATE.portfolio[region] || "all";
     var regionSort = SEH_STATE.sort[region] || "pnl-desc";
     // Everything this region/portfolio would show, before the open/closed split —
