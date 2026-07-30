@@ -585,7 +585,10 @@
           </div>
           <div class="mfh-header-right">
             <div class="mfh-portfolio-toggle" id="seh-portfolio-toggle" role="group"></div>
-            <button type="button" class="mfh-btn" id="seh-open-toggle" data-seh-state="open">Open</button>
+            <div id="seh-open-toggle"><div class="isc-toggle" role="group" aria-label="Show open or closed holdings">
+              <button type="button" class="isc-toggle-btn active" data-seh-open="open" data-seh-region="india">Open</button>
+              <button type="button" class="isc-toggle-btn" data-seh-open="closed" data-seh-region="india">Closed</button>
+            </div></div>
           </div>
         </div>
         <p class="muted small" id="stocksetf-india-holdings-status">Loading holdings…</p>
@@ -627,7 +630,10 @@
           </div>
           <div class="mfh-header-right">
             <div class="mfh-portfolio-toggle" id="seh-us-portfolio-toggle" role="group"></div>
-            <button type="button" class="mfh-btn" id="seh-us-open-toggle" data-seh-state="open">Open</button>
+            <div id="seh-us-open-toggle"><div class="isc-toggle" role="group" aria-label="Show open or closed holdings">
+              <button type="button" class="isc-toggle-btn active" data-seh-open="open" data-seh-region="us">Open</button>
+              <button type="button" class="isc-toggle-btn" data-seh-open="closed" data-seh-region="us">Closed</button>
+            </div></div>
           </div>
         </div>
         <p class="muted small" id="stocksetf-us-holdings-status">Loading holdings…</p>
@@ -732,11 +738,14 @@
         <div class="mfh-header">
           <div class="mfh-header-left">
             <span class="mfh-eyebrow" id="dbth-eyebrow">HOLDINGS &middot; — OPEN</span>
-            <h3 class="mfh-title">Debt ETF/Mutual</h3>
+            <h3 class="mfh-title">Debt ETF/Mutual Holding</h3>
             <p class="muted small" style="margin:2px 0 0;font-size:0.7rem;">Funds &amp; ETFs marked <strong>Fixed Income</strong> in the mapping sheets.</p>
           </div>
           <div class="mfh-header-right">
-            <button type="button" class="mfh-btn" id="dbth-open-toggle" data-mfh-state="open">Open</button>
+            <div id="dbth-open-toggle"><div class="isc-toggle" role="group" aria-label="Show open or closed holdings">
+              <button type="button" class="isc-toggle-btn active" data-dbth-open="open">Open</button>
+              <button type="button" class="isc-toggle-btn" data-dbth-open="closed">Closed</button>
+            </div></div>
           </div>
         </div>
         <p class="muted small" id="dbth-status">Loading holdings…</p>
