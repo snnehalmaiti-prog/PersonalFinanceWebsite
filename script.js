@@ -2955,7 +2955,7 @@
     renderFiAllocation(active);
     renderFiInterestSplit(active);
     // Debt funds/ETFs count toward the FI totals above, but they have their own
-    // Debt ETF/Mutual table — listing them here too would show them twice.
+    // Debt ETF/Mutual Fund table — listing them here too would show them twice.
     renderFiHoldingsCardList(holdings.filter(function (h) {
       return String(h.subCategory || "").toLowerCase().indexOf("debt") !== 0;
     }));
@@ -3008,7 +3008,7 @@
 
   // Debt funds/ETFs (Instrument Category = Fixed Income in a mapping sheet) are
   // reported under Fixed Income, so the FI cards, allocation and split must see
-  // them too — not just the Debt ETF/Mutual list. Normalised onto the FI holding
+  // them too — not just the Debt ETF/Mutual Fund list. Normalised onto the FI holding
   // shape. Portfolio comes from the row when tagged (Stocks/ETF), else from the
   // instrument's first appearance in the equity sheet.
   function _buildDebtFundHoldingsForFi() {
@@ -5562,7 +5562,7 @@
     return out;
   }
 
-  // Debt ETF/Mutual: debt funds from the equity sheet plus debt ETFs from the
+  // Debt ETF/Mutual Fund: debt funds from the equity sheet plus debt ETFs from the
   // Stocks/ETF sheet, normalised onto the Mutual Fund row shape so the shared
   // renderer can draw them side by side.
   function renderDebtHoldings() {
@@ -5641,7 +5641,7 @@
   }
 
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
-    // Debt ETFs belong to Debt ETF/Mutual, not the India/US equity lists — an
+    // Debt ETFs belong to Debt ETF/Mutual Fund, not the India/US equity lists — an
     // instrument must appear in exactly one holdings table or its value reads
     // twice. Split before anything downstream consumes these rows.
     var _seCat = buildInstrumentTopCategoryMap();
@@ -5988,7 +5988,7 @@
   // Does this region/portfolio have any open, and any fully-closed, position?
   // Answered by replaying FIFO over the transaction sheet — no prices needed, which
   // is why this can run before (or instead of) the priced holdings build. Debt
-  // instruments are excluded: they belong to Debt ETF/Mutual Holding, which has its
+  // instruments are excluded: they belong to Debt ETF/Mutual Fund Holding, which has its
   // own pill.
   function _seOpenClosedAvailability(region, portfolioFilter) {
     var out = { open: false, closed: false };
@@ -12881,7 +12881,7 @@
       var isDebtInst = isFixedIncomeInstrument(instrument);
       if (!isDebtInst) { if (remainingUnits < 1) anyClosedMf = true; else anyOpenMf = true; }
       // Debt instruments are never filtered by the MUTUAL FUND toggle. They are
-      // split out below into the Debt ETF/Mutual Holding table, which has its own
+      // split out below into the Debt ETF/Mutual Fund Holding table, which has its own
       // Open/Closed state — and while this filter applied to them, that table could
       // only ever see one side, so its Closed view was permanently empty.
       if (!isDebtInst) {
@@ -12984,7 +12984,7 @@
           renderEquityHoldingsRows(tbody, rowsData);
           attachEquityHoldingsSortHandlers(tbody, rowsData);
           // Split debt funds out of the equity list. An instrument marked Fixed
-          // Income in the mapping sheet belongs in Debt ETF/Mutual, and showing it
+          // Income in the mapping sheet belongs in Debt ETF/Mutual Fund, and showing it
           // in both would double count it to the reader.
           var _dbtCat = buildInstrumentTopCategoryMap();
           function _isDebt(name) {
@@ -13083,7 +13083,7 @@
     }
     return 0;
   }
-  // Debt ETF/Mutual reuses this list wholesale, so both tables share one
+  // Debt ETF/Mutual Fund reuses this list wholesale, so both tables share one
   // implementation and cannot drift apart in columns, sorting or formatting.
   // `opts` names the target elements and the sort/open state to read.
   function renderMfHoldingsCardList(rowsData, opts) {
@@ -13209,7 +13209,7 @@
     if (!row) return;
     var allRows = getSheetRows("equity");
     if (!allRows) { row.innerHTML = ""; return; }
-    // Debt funds are reported under Debt ETF/Mutual, so they are excluded from
+    // Debt funds are reported under Debt ETF/Mutual Fund, so they are excluded from
     // these cards' invested, current, day change and XIRR alike — computing all
     // four from the same non-debt population keeps the card internally consistent.
     var rows = excludeFixedIncomeRows(allRows);
@@ -13612,7 +13612,7 @@
   (function wireMfControls() {
     var openBtn = document.getElementById("mfh-open-toggle");
     var sortBtn = document.getElementById("mfh-sort-toggle");
-    // Debt ETF/Mutual has its own Open/Closed state, so switching one table does
+    // Debt ETF/Mutual Fund has its own Open/Closed state, so switching one table does
     // not move the other. It re-renders from the rows already split out, with no
     // refetch needed.
     var dbtBox = document.getElementById("dbth-open-toggle");

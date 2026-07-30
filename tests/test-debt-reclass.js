@@ -2,7 +2,7 @@
 //
 // An instrument whose Instrument Category is "Fixed Income" in the Mutual Fund
 // or Stocks/ETF mapping sheet must be reported under Fixed Income everywhere:
-// out of the MF and Stocks/ETF lists AND their totals, into Debt ETF/Mutual and
+// out of the MF and Stocks/ETF lists AND their totals, into Debt ETF/Mutual Fund and
 // the Fixed Income cards — with net worth unchanged.
 //
 // Like the other suites, this extracts the REAL function sources from script.js

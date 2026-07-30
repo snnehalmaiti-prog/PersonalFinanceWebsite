@@ -22,7 +22,7 @@ const TOGGLES = [
   { id: "mfh-open-toggle", attr: "data-mfh-open", label: "Mutual Fund Holding" },
   { id: "seh-open-toggle", attr: "data-seh-open", label: "India holdings" },
   { id: "seh-us-open-toggle", attr: "data-seh-open", label: "US holdings" },
-  { id: "dbth-open-toggle", attr: "data-dbth-open", label: "Debt ETF/Mutual Holding" },
+  { id: "dbth-open-toggle", attr: "data-dbth-open", label: "Debt ETF/Mutual Fund Holding" },
   { id: "fih-open-closed", attr: "data-fih-oc", label: "Fixed Income Holding" },
   { id: "cmh-open-closed", attr: "data-cmh-oc", label: "Commodity Holding" },
 ];
@@ -143,8 +143,8 @@ check(/if \(!names\.length\) \{/.test(SRC),
 check(/r\._portfolio \? escapeHtml\(r\._portfolio\)/.test(SRC),
   "the same instrument can appear once per portfolio — the row must name which one");
 
-check(/<h3 class="mfh-title">Debt ETF\/Mutual Holding<\/h3>/.test(HTML),
-  'the debt card must be titled "Debt ETF/Mutual Holding"');
+check(/<h3 class="mfh-title">Debt ETF\/Mutual Fund Holding<\/h3>/.test(HTML),
+  'the debt card must be titled "Debt ETF/Mutual Fund Holding"');
 
 if (failed) { console.error("\n" + failed + " holdings-toggle check(s) failed"); process.exit(1); }
 console.log("holdings Open/Closed toggles OK");
