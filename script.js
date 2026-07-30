@@ -286,7 +286,12 @@
     loginSub.textContent = isLogin ? "Access your portfolio dashboard" : "Start tracking your investments in minutes";
   }
 
-  if (openLoginBtn) {
+  // Guarded on the WHOLE legacy modal, not just the button. index.html has the
+  // "Log in" button (and wires it to its own auth modal inline) but none of the rest
+  // of this markup, so checking only openLoginBtn let the block run and then throw on
+  // closeLoginBtn — an uncaught error on every landing-page load that also killed the
+  // remainder of this IIFE, so anything added below it silently did not run there.
+  if (openLoginBtn && loginOverlay && closeLoginBtn && tabLogin && tabSignup) {
     openLoginBtn.addEventListener("click", openModal);
     if (openLoginMobileBtn) {
       openLoginMobileBtn.addEventListener("click", function () {

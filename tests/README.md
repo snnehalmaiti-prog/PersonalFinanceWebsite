@@ -57,3 +57,20 @@ PAT never being uploaded and being cleared on sign-out, and cloud config pull.
     because hand-bumped tags had already drifted: `index.html` was serving
     `script.js?v=budgetacct` while `dashboard.html` had moved to `?v=ovstore4`,
     so the same file was cached under two keys and landing pages served stale code.
+
+## e2e-regression.js
+
+An end-to-end sweep in a real browser: seeds every sheet plus expense data, walks
+all tabs, exercises every pill on all six holdings cards, and fails on any page
+error, any NaN/undefined reaching the screen, or a control that does not respond.
+
+It is NOT picked up by `run-all.js` (that discovers `test-*.js`) because it needs a
+static server and Playwright's Chromium, neither of which CI here has. Run it by
+hand after UI changes:
+
+    node tools/serve.js &          # or any static server on :8098
+    node tests/e2e-regression.js
+
+It found the login-modal guard bug that every unit suite missed: script.js runs on
+all three pages, and a block guarded on one element while dereferencing a sibling
+threw on index.html, killing every top-level statement below it.
