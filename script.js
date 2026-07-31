@@ -8872,6 +8872,11 @@
               running += txn.type === "buy" ? txn.units : -txn.units;
               return { date: txn.date, cumulativeUnits: Math.max(0, running) };
             });
+            // The instrument name and region ride along with the events: the
+            // Growth-of-₹100 contributions must be drawn from exactly the rows
+            // this series values, and US rows need their FX conversion.
+            events.instrument = instrument;
+            events.region = region;
             seUnitEventsByTicker[ticker] = events;
           });
         }
@@ -9137,16 +9142,36 @@
         var contribEvents = [];
 
         // MF + Stocks/ETF: buildXirrCashFlows returns negative for buys, positive for sells.
+        //
+        // Only the instruments the VALUE series can price may contribute flows.
+        // Taking every row instead was a systematic drag: a fund whose ISIN does
+        // not resolve to an AMFI scheme code, or a stock with no mapping row, is
+        // absent from `points` — so its purchases arrived as money in with no
+        // matching value, and every rupee of them was booked as an instant loss.
+        // `skipped` above already counts exactly these instruments.
         var equityRowsForFlow = getSheetRows("equity");
         var seRowsForFlow = getSheetRows("stocksetf");
         if (equityRowsForFlow) {
-          buildXirrCashFlows(equityRowsForFlow, selectedPortfolio).forEach(function (f) {
-            contribEvents.push({ date: f.date, delta: -f.amount });
+          instruments.forEach(function (name) {
+            buildXirrCashFlows(equityRowsForFlow, selectedPortfolio, name).forEach(function (f) {
+              contribEvents.push({ date: f.date, delta: -f.amount });
+            });
           });
         }
         if (seRowsForFlow) {
-          buildXirrCashFlows(seRowsForFlow, selectedPortfolio).forEach(function (f) {
-            contribEvents.push({ date: f.date, delta: -f.amount });
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            var entry = seUnitEventsByTicker[ticker];
+            // US rows are priced in USD in the sheet, while the value series
+            // converts them to INR. Converting at the flow's own transaction-date
+            // rate — as the CAGR path already did — keeps the two in one currency;
+            // without it a $100 purchase read as ₹100 of new money against ₹8,400
+            // of new value, and the difference was booked as a gain.
+            var hist = ((stockPricesData && stockPricesData.stock_history) || {})[ticker];
+            var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+            buildXirrCashFlows(seRowsForFlow, selectedPortfolio, entry.instrument).forEach(function (f) {
+              var rate = isUsd ? (usdInrHistMap[formatDateISO(f.date)] || usdInrToday) : 1;
+              contribEvents.push({ date: f.date, delta: -f.amount * rate });
+            });
           });
         }
 

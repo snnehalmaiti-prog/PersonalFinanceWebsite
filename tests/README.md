@@ -71,6 +71,25 @@ hand after UI changes:
     node tools/serve.js &          # or any static server on :8098
     node tests/e2e-regression.js
 
+## e2e-growth.js
+
+The GROWTH OF ₹100 chart, end to end, against hand-computable data — NAV history,
+stock history, FX and AMFI resolution are all stubbed, so the expected figures are
+worked out by hand rather than by re-running the shipped formula. Same reason it is
+not in `run-all.js`: needs a static server and Playwright's Chromium.
+
+    node tools/serve.js &
+    node tests/e2e-growth.js
+
+Three defects in that chart were invisible to unit tests, because each lived in how
+the series was ASSEMBLED rather than in any function: a period return that let
+contributions dilute the line, contributions drawn from instruments the value series
+cannot price, and US flows counted in dollars against rupee values. The recurrence
+itself now lives in `WfMath.twrNavSeries` and is unit-tested by `test-twr-nav.js`;
+this suite covers the assembly around it.
+
+## More on e2e-regression.js
+
 It also caught the transactions drill-down hanging the page on a month where a
 fixed deposit matured: the modal waited on that month's slice of the realized-P&L
 data instead of on the data itself, and since a maturity carries no unit price the
