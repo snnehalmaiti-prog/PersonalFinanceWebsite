@@ -4284,7 +4284,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    rest ("SINCE 2018", "OVER TIME") and the visible window's start year while
    zoomed, so a zoomed chart never leaves you guessing what you are looking at. */
 .avc-subtitle {
-  margin: 2px 20px 0;
+  /* No horizontal margin: the card already pads 20px, and adding it again here
+     indented the period line past the title it belongs to. The negative top pulls
+     it up under the header, whose own 8px bottom margin left them far apart. */
+  margin: -8px 0 8px;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.04em;
