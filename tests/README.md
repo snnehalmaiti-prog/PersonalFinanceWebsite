@@ -146,6 +146,22 @@ fixture out of dashboard.html's own markup, so it cannot drift from what it chec
 
 Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
 
+## e2e-chart-render-perf.js
+
+Load cost of the two value charts on a portfolio the size of the real one: 18 mapped
+funds, 6 stocks, daily NAV back to 2018, eight years of monthly SIPs.
+
+    node tests/e2e-chart-render-perf.js
+
+Asserts that a burst of five re-render triggers costs one paint rather than five,
+that the initial load does not rebuild the charts a dozen times, and — the reported
+symptom — that only ONE chart state ever reaches the screen, so the user never sees a
+chart drawn wrong and then corrected.
+
+`burstBuilds` is the deterministic number and is what the mutants move: 14 without
+the generation guard, 2 with it. `blocked` is machine-dependent, reported but not
+asserted.
+
 ## e2e-account-value-zoom.js
 
 The zoom-following readouts on BOTH value charts — ACCOUNT VALUE · OVER TIME and
