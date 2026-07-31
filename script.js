@@ -9349,8 +9349,9 @@
           // Update header legend + eyebrow with inception year
           var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
           _avcInceptionYear = inceptionYear;
-          var eyebrowEl = document.getElementById("avc-eyebrow");
-          if (eyebrowEl) eyebrowEl.textContent = "GROWTH OF ₹100 · SINCE " + inceptionYear;
+          // The title is fixed; the line under it says which period is on screen.
+          var periodEl = document.getElementById("avc-period");
+          if (periodEl) periodEl.textContent = "SINCE " + inceptionYear;
           var portValEl = document.getElementById("avc-portfolio-value");
           if (portValEl) portValEl.textContent = lastPortNorm != null ? "₹" + Math.round(lastPortNorm) : "—";
           var idxNameEl = document.getElementById("avc-index-name");
@@ -9535,27 +9536,23 @@
           var pEl = document.getElementById("avc-portfolio-value");
           var iEl = document.getElementById("avc-index-value");
           var cEl = document.getElementById("avc-range-change");
-          var eyeEl = document.getElementById("avc-eyebrow");
+          var periodEl2 = document.getElementById("avc-period");
           if (pEl) pEl.textContent = pEnd && pEnd.y != null ? "₹" + Math.round(pEnd.y) : "—";
           if (iEl) iEl.textContent = iEnd && iEnd.y != null ? "₹" + Math.round(iEnd.y) : "—";
-          if (eyeEl) {
-            eyeEl.textContent = full
-              ? ("GROWTH OF ₹100 · SINCE " + _avcInceptionYear)
-              : ("GROWTH OF ₹100 · TO " + _avcMonthFmt.format(pEnd ? pEnd.x : new Date(hi)).toUpperCase());
-          }
-          var fromEl = document.getElementById("avc-zoom-from");
-          if (fromEl) {
-            // The year the visible window opens in — taken from the first plotted
-            // point inside it, not from the bound itself, so it names a year the
+
+          if (periodEl2) {
+            // Zoomed, the year the visible window opens in — taken from the first
+            // plotted point inside it, not from the bound, so it names a year the
             // chart is actually showing data for.
             var firstVisible = null;
             for (var fi = 0; fi < portSeries.length; fi++) {
               var fp = portSeries[fi];
               if (fp && fp.y != null && fp.x.getTime() >= lo) { firstVisible = fp; break; }
             }
-            fromEl.hidden = full;
-            fromEl.textContent = full ? ""
-              : ("FROM " + (firstVisible ? firstVisible.x : new Date(lo)).getFullYear());
+            periodEl2.textContent = full
+              ? ("SINCE " + _avcInceptionYear)
+              : ("FROM " + (firstVisible ? firstVisible.x : new Date(lo)).getFullYear() +
+                 " · TO " + _avcMonthFmt.format(pEnd ? pEnd.x : new Date(hi)).toUpperCase());
           }
           if (!cEl) return;
           if (full || !pStart || !pEnd || pStart === pEnd || !(pStart.y > 0)) {
@@ -9651,19 +9648,19 @@
         var endPt = pvcValueAt(hi) || points[points.length - 1];
         var startPt = pvcValueAt(lo);
         if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
-        if (nameEl) {
-          nameEl.textContent = full ? "Current Value"
-            : ("Value · " + _pvcMonthFmt.format(endPt.x));
-        }
-        var fromEl2 = document.getElementById("pvc-zoom-from");
-        if (fromEl2) {
+        // The period line under the title already names the window, so the legend
+        // label stays a plain noun rather than repeating the month.
+        if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
+        var pvcPeriodEl = document.getElementById("pvc-period");
+        if (pvcPeriodEl) {
           var firstVis = null;
           for (var fj = 0; fj < points.length; fj++) {
             if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
           }
-          fromEl2.hidden = full;
-          fromEl2.textContent = full ? ""
-            : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear());
+          pvcPeriodEl.textContent = full
+            ? "OVER TIME"
+            : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
+               " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase());
         }
         if (!changeEl) return;
         // A change needs two points to be a change. Zoomed to the full range there
