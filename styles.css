@@ -4274,3 +4274,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-txn-totals b.pos { color: #10B981; }
 /* Only offer the pointer where clicking actually drills in. */
 #monthly-invest-cat-wrap canvas { cursor: pointer; }
+
+/* Account Value · Over Time — range pills and the zoom-following readout. */
+.pvc-range-picker { display: flex; gap: 4px; padding: 0 20px 4px; flex-wrap: wrap; }
+.avc-legend-change { font-size: 0.72rem; font-weight: 600; margin-left: 6px; }
+.avc-legend-change.pvc-up { color: var(--emerald); }
+.avc-legend-change.pvc-down { color: #EF4444; }

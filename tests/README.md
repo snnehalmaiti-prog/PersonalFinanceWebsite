@@ -109,6 +109,23 @@ stocks/ETF flows were gathered from the OPEN holdings and a fully-sold position
 contributed neither its cost nor its proceeds — while mutual funds had no such
 filter, so the two asset classes did not agree on what the number meant.
 
+## e2e-account-value-zoom.js
+
+The ACCOUNT VALUE · OVER TIME range pills and the zoom-following readout.
+
+    node tests/e2e-account-value-zoom.js
+    PVC_SHORT=1 node tests/e2e-account-value-zoom.js   # short-history variant
+
+The NAV compounds at a fixed 0.16%/day, so each window's expected change is
+`1.0016^days − 1` and is checked as arithmetic rather than taken from the app. The
+interior-window case (C11–C13) is the one that matters: every range pill ends at the
+last point, so only a window that does NOT end at today can tell a window-aware
+readout from one that merely prints the final value.
+
+Chart.js and its zoom plugin cannot load in the sandbox (no CDN), so the suite
+models an x scale with min/max plus zoomScale/resetZoom. It covers the wiring and
+the arithmetic, NOT the plugin's own wheel and pinch gestures.
+
 ## More on e2e-regression.js
 
 It also caught the transactions drill-down hanging the page on a month where a

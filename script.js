@@ -9508,6 +9508,52 @@
       var lastVal = points.length ? points[points.length - 1].y : 0;
       var lastEl = document.getElementById("pvc-current-value");
       if (lastEl) lastEl.textContent = "₹" + Math.round(lastVal).toLocaleString("en-IN");
+
+      // The readout follows whatever window is on screen. Zoomed out it is the
+      // current value; zoomed in — by wheel, pinch, drag, or a range pill — it is
+      // the value at the right edge of the view plus the change across it, so
+      // "what was I worth at the end of last month, and how did that month go" is
+      // answerable by looking rather than by reading tooltips.
+      var nameEl = document.getElementById("pvc-legend-name");
+      var changeEl = document.getElementById("pvc-range-change");
+      var _pvcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
+      function pvcValueAt(t) {
+        // Last point at or before t — the value actually held then, not interpolated.
+        var hit = null;
+        for (var i = 0; i < points.length; i++) {
+          if (points[i].x.getTime() <= t) hit = points[i]; else break;
+        }
+        return hit;
+      }
+      function updatePvcReadout() {
+        var chart = window.__wfPortfolioValueChart;
+        if (!chart || !points.length) return;
+        var sc = chart.scales && chart.scales.x;
+        var lo = sc && isFinite(sc.min) ? sc.min : pvcXMin;
+        var hi = sc && isFinite(sc.max) ? sc.max : pvcXMax;
+        var full = lo <= pvcXMin + 1 && hi >= pvcXMax - 1;
+        var endPt = pvcValueAt(hi) || points[points.length - 1];
+        var startPt = pvcValueAt(lo);
+        if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
+        if (nameEl) {
+          nameEl.textContent = full ? "Current Value"
+            : ("Value · " + _pvcMonthFmt.format(endPt.x));
+        }
+        if (!changeEl) return;
+        // A change needs two points to be a change. Zoomed to the full range there
+        // is nothing to compare against, and the earliest point has no "before".
+        if (full || !startPt || startPt === endPt || !(startPt.y > 0)) {
+          changeEl.hidden = true;
+          return;
+        }
+        var delta = endPt.y - startPt.y;
+        var pct = (delta / startPt.y) * 100;
+        changeEl.hidden = false;
+        changeEl.className = "avc-legend-change " + (delta >= 0 ? "pvc-up" : "pvc-down");
+        changeEl.textContent = (delta >= 0 ? "+" : "−") + "₹" +
+          Math.round(Math.abs(delta)).toLocaleString("en-IN") +
+          " (" + (delta >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2) + "%)";
+      }
       // Zoom/pan bounds = the plotted data range so zoom-out can't reveal empty space.
       var pvcXMin = points.length ? points[0].x.getTime() : undefined;
       var pvcXMax = points.length ? points[points.length - 1].x.getTime() : undefined;
@@ -9536,15 +9582,18 @@
             },
             zoom: {
               limits: { x: { min: pvcXMin, max: pvcXMax } },
-              pan: { enabled: true, mode: "x" },
-              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" }
+              pan: { enabled: true, mode: "x", onPanComplete: updatePvcReadout },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
+                      drag: { enabled: false }, onZoomComplete: updatePvcReadout }
             }
           },
           scales: {
             x: {
               type: "time",
-              // Auto-select the tick unit so zooming in shows months, not just years.
-              time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
+              // minUnit "day", not "month": zoomed into a single month the axis has
+              // to be able to label days, or the view the range pills open is
+              // unreadable — one tick for the whole window.
+              time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
               grid: { display: false }
             },
             y: {
@@ -9562,7 +9611,51 @@
         }
       });
       // Double-click to reset the zoom back to the full range.
-      canvas2.ondblclick = function () { if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.resetZoom(); };
+      canvas2.ondblclick = function () {
+        if (!window.__wfPortfolioValueChart) return;
+        window.__wfPortfolioValueChart.resetZoom();
+        _pvcSetActiveRange("ALL");
+        updatePvcReadout();
+      };
+
+      // Range pills. "1M" is the point of the exercise: one click to the last month
+      // of the series, with its end value and its move already on screen.
+      function _pvcSetActiveRange(key) {
+        var picker = document.getElementById("pvc-range-picker");
+        if (!picker) return;
+        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (b) {
+          b.classList.toggle("active", b.getAttribute("data-pvc-range") === key);
+        });
+      }
+      (function wirePvcRangePicker() {
+        var picker = document.getElementById("pvc-range-picker");
+        if (!picker || !points.length) return;
+        var MONTHS = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
+        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (btn) {
+          var key = btn.getAttribute("data-pvc-range");
+          // Offered only where there is enough history to show; a 1Y window on six
+          // months of data is just the full range wearing a different label.
+          if (MONTHS[key]) {
+            var need = _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime();
+            var enough = need > pvcXMin;
+            btn.disabled = !enough;
+            btn.classList.toggle("is-disabled", !enough);
+          }
+          btn.onclick = function () {
+            var chart = window.__wfPortfolioValueChart;
+            if (!chart || btn.disabled) return;
+            if (key === "ALL") {
+              chart.resetZoom();
+            } else {
+              var from = Math.max(pvcXMin, _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime());
+              chart.zoomScale("x", { min: from, max: pvcXMax }, "none");
+            }
+            _pvcSetActiveRange(key);
+            updatePvcReadout();
+          };
+        });
+      }());
+      updatePvcReadout();
     }
 
     if (resetBtn && !resetBtn.dataset.bound) {

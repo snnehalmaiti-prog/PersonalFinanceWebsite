@@ -302,11 +302,19 @@
           <div class="avc-legend">
             <div class="avc-legend-item">
               <span class="avc-legend-line avc-legend-portfolio"></span>
-              <span class="avc-legend-name">Current Value</span>
+              <span class="avc-legend-name" id="pvc-legend-name">Current Value</span>
               <span class="avc-legend-sep">&middot;</span>
               <span class="avc-legend-value avc-portfolio-value" id="pvc-current-value">&#8377;—</span>
+              <span class="avc-legend-change" id="pvc-range-change" hidden></span>
             </div>
           </div>
+        </div>
+        <div class="pvc-range-picker" id="pvc-range-picker">
+          <button type="button" class="range-pill" data-pvc-range="1M">1M</button>
+          <button type="button" class="range-pill" data-pvc-range="3M">3M</button>
+          <button type="button" class="range-pill" data-pvc-range="6M">6M</button>
+          <button type="button" class="range-pill" data-pvc-range="1Y">1Y</button>
+          <button type="button" class="range-pill active" data-pvc-range="ALL">All</button>
         </div>
         <p class="muted small" id="pvc-status" hidden></p>
         <div class="avc-chart-wrap">
