@@ -37,6 +37,9 @@ const SELECTED_PORTFOLIO_KEY = "wf-portfolio";
 let storage = {};
 var localStorage = { getItem: (k) => (k in storage ? storage[k] : null) };
 function getSheetRows(prefix) { return sheets[prefix] || null; }
+// USD/INR the chart reads synchronously from the price cache.
+let stockPrices = null;
+function getCachedStockPrices() { return stockPrices; }
 
 eval([
   "function normalizeText(value)",
@@ -44,6 +47,8 @@ eval([
   "function parseFlexibleDate(value)",
   "function _parseFlexibleDateUncached(str)",
   "function parsePercentRate(value)",
+  "function formatDateISO(date)",
+  "function lookupUsdInrRate(rateMap, dateStr, fallback)",
   "function _addMonthsClamped(base, n)",
   "function countElapsedQuarters(start, asOf)",
   "function elapsedQuartersFractional(start, asOf)",
@@ -201,6 +206,57 @@ console.log("\nG. fdMaturityValue itself");
      "G3 no rate means no interest");
   ok((SRC.match(/Math\.pow\(1 \+ rate \/ 4, q\)/g) || []).length === 1,
      "G4 the compounding formula lives in one place");
+}
+
+console.log("\nK. US stocks and ETFs are converted to rupees");
+{
+  // The chart is entirely in rupees. A $100 purchase must be drawn as ₹8,400, not
+  // as ₹100 sitting alongside genuinely-rupee mutual fund purchases.
+  const SE = ["Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price",
+              "Transaction Date", "Instrument Sub Category"];
+  const MAP = ["Instrument Name", "Instrument Category", "Instrument Sub Category",
+               "Market Segment", "Region", "Identifier", "Sector"];
+  function run(prices) {
+    stockPrices = prices;
+    sheets = {
+      stocksetf: [SE,
+        ["Snnehal", "QQQ", "Buy", "10", "100", "2024-03-01", "ETF"],
+        ["Snnehal", "HDFC Bank", "Buy", "10", "1500", "2024-03-01", "Stock"]],
+      stocksetfmapping: [MAP,
+        ["QQQ", "Equity", "ETF", "Large Cap", "US", "QQQ", "Tech"],
+        ["HDFC Bank", "Equity", "Stock", "Large Cap", "India", "HDFCBANK", "Financials"]],
+    };
+    return buildMonthlyInvestCatData("all");
+  }
+
+  const d = run({ prices: { __USD_INR__: { price: 84 } },
+                  usd_inr_history: { "2024-03-01": 83 } });
+  const m = d.byMonthCat["2024-03"] || {};
+  ok(near(m["ETF"] || 0, 10 * 100 * 83),
+     "K1 a US ETF is converted at the transaction date's own rate", m["ETF"]);
+  ok(near(m["Stock"] || 0, 15000),
+     "K2 an India row is left alone — it is already in rupees", m["Stock"]);
+  ok(near((d.byMonthGrp["2024-03"] || {})["Equity"] || 0, 10 * 100 * 83 + 15000),
+     "K3 the category rollup totals the converted figure", d.byMonthGrp["2024-03"]);
+
+  // No history for that date → today's rate, not 1.
+  const d2 = run({ prices: { __USD_INR__: { price: 84 } }, usd_inr_history: {} });
+  ok(near((d2.byMonthCat["2024-03"] || {})["ETF"] || 0, 10 * 100 * 84),
+     "K4 a missing historical rate falls back to today's, never to unconverted",
+     (d2.byMonthCat["2024-03"] || {})["ETF"]);
+
+  // Prices not loaded yet: the chart repaints when they arrive, but it must not
+  // crash or invent a rate in the meantime.
+  const d3 = run(null);
+  const m3 = d3.byMonthCat["2024-03"] || {};
+  ok(isFinite(m3["ETF"]) && m3["ETF"] > 0, "K5 no price payload still produces a finite figure", m3["ETF"]);
+  ok(near(m3["Stock"] || 0, 15000), "K6 and never disturbs the rupee rows", m3["Stock"]);
+
+  // The drill-down rows must carry the same converted amount as the bars.
+  const t = (d.byMonthTxns["2024-03"] || []).filter((x) => x.instrument === "QQQ")[0];
+  ok(t && near(t.amount, 10 * 100 * 83),
+     "K7 the transaction list shows rupees too, matching the bar", t && t.amount);
+  stockPrices = null;
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");

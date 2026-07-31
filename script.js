@@ -3766,6 +3766,13 @@
   // histories are cached 30 min; the small live prices overlay from Supabase every
   // ~3 min (in-memory merged cache), so callers get fresh prices without re-pulling
   // the 2.24 MB file. Supabase failing falls back to the static prices.
+  // The merged price payload if it is already in memory, else null. Lets a
+  // SYNCHRONOUS builder reach USD/INR history without becoming a promise; callers
+  // must handle null by re-rendering once the fetch lands.
+  function getCachedStockPrices() {
+    return (_stockMergedCache && _stockMergedCache.data) || null;
+  }
+
   function fetchAllStockPrices() {
     if (_stockMergedCache && Date.now() - _stockMergedCache.at < STOCK_PRICES_CACHE_MAX_AGE_MS) {
       _rememberPriceSource(_stockMergedCache.data);
@@ -11266,6 +11273,33 @@
       });
     });
 
+    // US stocks and ETFs are priced in dollars in the sheet, while this chart is
+    // entirely in rupees — a $78 purchase was drawn, and totalled, as ₹78. Convert
+    // at the transaction's own date rate, the same way every other rupee figure in
+    // the app does. The rates come from the in-memory price payload; when it has
+    // not arrived yet the caller re-renders once it has.
+    var _sp = getCachedStockPrices();
+    var usdInrMap = (_sp && _sp.usd_inr_history) || null;
+    var usdInrToday = (_sp && _sp.prices && _sp.prices["__USD_INR__"])
+      ? _sp.prices["__USD_INR__"].price : 84;
+    var usRegionByInstr = {};
+    (function () {
+      var mrows = getSheetRows("stocksetfmapping");
+      if (!mrows || mrows.length < 2) return;
+      var mhdr = mrows[0].map(normalizeText);
+      var miIdx = mhdr.indexOf("instrument name");
+      var mrIdx = mhdr.indexOf("region");
+      if (miIdx === -1 || mrIdx === -1) return;
+      mrows.slice(1).forEach(function (r) {
+        var instr = (r[miIdx] || "").trim();
+        if (instr && normalizeText(r[mrIdx]) === "us") usRegionByInstr[normalizeText(instr)] = true;
+      });
+    }());
+    function toInr(amount, instrName, d) {
+      if (!usRegionByInstr[instrName]) return amount;
+      return amount * lookupUsdInrRate(usdInrMap, formatDateISO(d), usdInrToday);
+    }
+
     var byMonthCat = {};
     var byMonthCatOut = {}; // withdrawals / sells / redemptions
     // Same flows rolled up to Instrument Category (Equity / Fixed Income /
@@ -11326,6 +11360,9 @@
         var amount = amtIdx !== -1 ? parseNumber(row[amtIdx]) : (parseNumber(row[unitsIdx]) * parseNumber(row[priceIdx]));
         if (!amount) return;
         var instrName = instrIdx !== -1 ? normalizeText((row[instrIdx] || "").trim()) : "";
+        // Only the stocksetf sheet carries US rows; the equity (mutual fund) sheet
+        // is rupees throughout, and its instruments are absent from this map.
+        amount = toInr(amount, instrName, d);
         var cat = (instrName && instrCatMap[instrName])
           ? instrCatMap[instrName]
           : (subCatIdx !== -1 && row[subCatIdx] ? (row[subCatIdx] || "").trim() : "Other");
@@ -12606,7 +12643,17 @@
     }
   }
 
+  var _micAwaitingFx = false;
   function renderMonthlyInvestmentByCategory() {
+    // US rows need USD/INR, which is read synchronously from the price cache. On a
+    // cold load the cache is still empty, so the first paint would draw dollars as
+    // rupees. Fetch once and repaint; the guard keeps it to a single retry.
+    if (!getCachedStockPrices() && !_micAwaitingFx) {
+      _micAwaitingFx = true;
+      fetchAllStockPrices().catch(function () { return null; }).then(function () {
+        renderMonthlyInvestmentByCategory();
+      });
+    }
     var statusEl = document.getElementById("monthly-invest-cat-status");
     var yearSel = document.getElementById("monthly-invest-cat-year");
     var portNameEl = document.getElementById("mic-portfolio-name");

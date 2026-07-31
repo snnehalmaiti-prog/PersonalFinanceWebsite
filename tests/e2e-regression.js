@@ -90,7 +90,8 @@ function ok(cond, name, detail) {
   await p.addInitScript(() => {
     window.__charts = [];
     window.Chart = function (ctx, cfg) {
-      window.__charts.push({ type: cfg && cfg.type, labels: (cfg && cfg.data && cfg.data.labels) || [] });
+      window.__charts.push({ id: (ctx && ctx.canvas && ctx.canvas.id) || "",
+        type: cfg && cfg.type, labels: (cfg && cfg.data && cfg.data.labels) || [] });
       this.destroy = function () {}; this.update = function () {}; this.resize = function () {};
       // Lets a test click a specific month on the chart, which is how the
       // transactions drill-down is reached.
@@ -210,11 +211,22 @@ function ok(cond, name, detail) {
 
   console.log("\nE. The monthly charts stop at the last month with data");
   {
-    const labels = await p.evaluate(() => (window.__charts || [])
-      .filter((c) => (c.labels || []).indexOf("Jan") === 0).map((c) => c.labels.join(",")));
+    // Scoped to the two Expense-tab charts this rule is about. The Investments
+    // CASH FLOW chart also starts at "Jan" but draws a full calendar year on
+    // purpose — it has a year selector, and trimming it would hide months the user
+    // has explicitly navigated to. Matching it here was accidental.
+    const EXPENSE_MONTHLY = ["dash-exp-monthly-chart", "dash-exp-wf-chart"];
+    const labels = await p.evaluate((ids) => (window.__charts || [])
+      .filter((c) => ids.indexOf(c.id) !== -1 && (c.labels || []).indexOf("Jan") === 0)
+      .map((c) => c.labels.join(",")), EXPENSE_MONTHLY);
     ok(labels.length >= 1, "E1 the monthly charts were built", labels);
-    ok(labels.every((l) => l.indexOf("Sep") === -1),
-       "E2 no empty month past the data (income/expense to Jul, budget to Jul)", labels);
+    // The fixture's expense data runs Jan–Jul, so the axis must end at Jul. Asserting
+    // the exact label set, not merely "no September": a one-month overrun draws
+    // August, which a Sep-only check waves through. (test-month-columns.js pins the
+    // arithmetic itself; this confirms the rendered chart actually uses it.)
+    const WANT = ["Jan,Feb,Mar,Apr,May,Jun,Jul", "Jan,Feb,Mar,Apr,May,Jun,Jul,YTD"];
+    ok(labels.length >= 2 && labels.every((l) => WANT.indexOf(l) !== -1),
+       "E2 the monthly axes end at the last month with data (Jul), with no padding", labels);
   }
 
   console.log("\nF. Overview totals reconcile");
