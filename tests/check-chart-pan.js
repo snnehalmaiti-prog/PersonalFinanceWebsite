@@ -41,13 +41,23 @@ function blocksAt(src, marker) {
   return out;
 }
 
-// Two charts, two pan blocks, both horizontal and both enabled.
+// Dragging is ours, not the plugin's: chartjs-plugin-zoom's pan depends on
+// Hammer.js, which we cannot verify loads. wireChartXDrag needs only pointer
+// events. The plugin's own pan must stay OFF on both charts, or a drag moves the
+// window twice — once per implementation.
 const panBlocks = blocksAt(SRC, "pan: {").concat(blocksAt(SRC, "pan:\n"));
-const enabledPans = panBlocks.filter((b) => /enabled:\s*true/.test(b) && /mode:\s*"x"/.test(b));
-check(enabledPans.length === 2,
-  "expected both value charts to enable horizontal pan, found " + enabledPans.length);
-check(enabledPans.every((b) => /threshold:\s*\d+/.test(b)),
-  "pan needs a threshold, or a plain click registers as a one-pixel drag");
+check(panBlocks.length === 2, "expected a pan block on each value chart, found " + panBlocks.length);
+check(panBlocks.every((b) => /enabled:\s*false/.test(b)),
+  "the plugin's pan must stay disabled — wireChartXDrag owns the drag, and both " +
+  "running would pan at twice the pointer speed");
+check(/function wireChartXDrag\(/.test(SRC), "wireChartXDrag is missing — nothing handles the drag");
+check((SRC.match(/wireChartXDrag\(/g) || []).length === 3,
+  "expected one wireChartXDrag definition and one call per chart, found " +
+  (SRC.match(/wireChartXDrag\(/g) || []).length);
+check(/canvas\.__wfDragWired/.test(SRC),
+  "re-wiring the same canvas must unbind first, or handlers stack across re-renders");
+check(/setPointerCapture/.test(SRC),
+  "the drag needs pointer capture, or it stops the moment the cursor leaves the canvas");
 
 // The regression itself: a hard min/max on the x scale options kills panning.
 check(!/min:\s*fullMinTime,\s*\n\s*max:\s*fullMaxTime,/.test(SRC),

@@ -115,9 +115,15 @@ In `run-all.js`. Pins the pan/zoom configuration of both value charts, because t
 browser suites cannot reach it: chartjs-plugin-zoom needs a CDN the sandbox has no
 route to, so its gestures are never exercised here.
 
-It exists because the Growth chart declared pan and still would not drag — its x
-scale also carried hard `min`/`max` in the OPTIONS, which Chart.js re-applies on
-every update, undoing the pan plugin's writes as fast as it made them.
+Dragging is no longer the plugin's job at all. chartjs-plugin-zoom's pan depends on
+Hammer.js, and nothing here can verify that loads — the sandbox has no CDN. So the
+drag is `wireChartXDrag` in script.js: pointer events only, ours to test, and
+exercised with real `mouse.down/move/up` in e2e-account-value-zoom.js. The plugin
+keeps wheel and pinch. Its own pan must stay OFF, or a drag pans twice.
+
+Before that, the Growth chart declared pan and still would not drag — its x scale
+also carried hard `min`/`max` in the OPTIONS, which Chart.js re-applies on every
+update, undoing the pan plugin's writes as fast as it made them.
 
 It also requires every `zoomScale`/`resetZoom` call to sit behind a typeof guard.
 Those are plugin methods, not Chart.js ones: when the plugin fails to load and

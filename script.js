@@ -6611,6 +6611,81 @@
   // Units traded FOR MONEY, per instrument per day. Splits and bonuses are
   // excluded: they change the unit count without any money moving, and the
   // unit price falls to match, so the curve must not react to them at all.
+  // Click-and-drag the chart left/right.
+  //
+  // Implemented here rather than left to chartjs-plugin-zoom's own pan, which
+  // depends on Hammer.js being present and which we have no way to verify loads.
+  // This needs nothing but pointer events, works the same for mouse and touch, and
+  // is ours to test. The plugin keeps wheel and pinch, which are native to it.
+  //
+  // The window keeps its width and slides; `limits` stop it leaving the data, so
+  // dragging past either end simply stops rather than revealing blank space.
+  function wireChartXDrag(canvas, getChart, minLimit, maxLimit, onChange) {
+    if (!canvas) return;
+    // Re-wiring the same canvas would stack handlers and pan at a multiple of the
+    // pointer speed.
+    if (canvas.__wfDragWired) canvas.__wfDragWired();
+    var dragging = false, startX = 0, startMin = 0, startMax = 0, moved = false;
+
+    function span(chart) {
+      var sc = chart && chart.scales && chart.scales.x;
+      if (!sc || !isFinite(sc.min) || !isFinite(sc.max)) return null;
+      return { min: sc.min, max: sc.max };
+    }
+
+    function onDown(e) {
+      var chart = getChart();
+      var w = span(chart);
+      if (!w) return;
+      dragging = true; moved = false;
+      startX = e.clientX; startMin = w.min; startMax = w.max;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      var chart = getChart();
+      if (!chart) return;
+      var area = chart.chartArea;
+      var width = area ? (area.right - area.left) : canvas.clientWidth;
+      if (!(width > 0)) return;
+      var dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) < 4) return; // a click is not a drag
+      moved = true;
+      // Dragging right moves the window BACK in time: the data follows the cursor.
+      var perPixel = (startMax - startMin) / width;
+      var shift = -dx * perPixel;
+      var min = startMin + shift, max = startMax + shift;
+      if (min < minLimit) { max += minLimit - min; min = minLimit; }
+      if (max > maxLimit) { min -= max - maxLimit; max = maxLimit; }
+      if (min < minLimit) min = minLimit; // window wider than the data
+      setChartXWindow(chart, min, max);
+      if (onChange) onChange();
+      e.preventDefault();
+    }
+
+    function onUp(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (moved && onChange) onChange();
+    }
+
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointercancel", onUp);
+    canvas.addEventListener("pointerleave", onUp);
+    canvas.__wfDragWired = function () {
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointercancel", onUp);
+      canvas.removeEventListener("pointerleave", onUp);
+      canvas.__wfDragWired = null;
+    };
+  }
+
   // Set a chart's visible x window. zoomScale/resetZoom come from
   // chartjs-plugin-zoom, which is a separate CDN script: if it fails to load —
   // offline, blocked, an ad blocker — Chart.js itself is still fine, and calling a
@@ -9466,15 +9541,10 @@
                   x: { min: fullMinTime, max: fullMaxTime }
                 },
                 pan: {
-                  // Left/right drag with the mouse. threshold keeps a click from
-                  // registering as a one-pixel pan.
-                  enabled: true,
-                  mode: "x",
-                  threshold: 5,
-                  // Both: onPan keeps the figures live during the drag, onPanComplete
-                  // is the one that fires if the gesture ends without a final move.
-                  onPan: function (ctx) { updateVisibleRangeLabel(ctx.chart); updateAvcReadout(); },
-                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); updateAvcReadout(); }
+                  // Off: the drag is handled by wireChartXDrag below, which needs no
+                  // Hammer.js. Leaving both on would pan at twice the pointer speed.
+                  enabled: false,
+                  mode: "x"
                 },
                 zoom: {
                   wheel: { enabled: true },
@@ -9494,6 +9564,12 @@
         // buy. It used to come from a hard scale bound; set through the plugin it
         // survives, and panning starts from here rather than fighting it.
         setChartXWindow(window.__wfValueChart, fullMinTime, fullMaxTime);
+        wireChartXDrag(canvas, function () { return window.__wfValueChart; },
+          fullMinTime, fullMaxTime, function () {
+            updateVisibleRangeLabel(window.__wfValueChart);
+            clearActiveRangePill();
+            updateAvcReadout();
+          });
         updateVisibleRangeLabel(window.__wfValueChart);
         updateAvcReadout();
         // Same gesture as the Account Value chart: double-click anywhere to go back
@@ -9705,8 +9781,8 @@
             },
             zoom: {
               limits: { x: { min: pvcXMin, max: pvcXMax } },
-              pan: { enabled: true, mode: "x", threshold: 5,
-                     onPan: updatePvcReadout, onPanComplete: updatePvcReadout },
+              // Off — see wireChartXDrag; two pan implementations would double up.
+              pan: { enabled: false, mode: "x" },
               zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
                       drag: { enabled: false }, onZoomComplete: updatePvcReadout }
             }
@@ -9734,6 +9810,9 @@
           }
         }
       });
+      wireChartXDrag(canvas2, function () { return window.__wfPortfolioValueChart; },
+        pvcXMin, pvcXMax, updatePvcReadout);
+
       // Double-click to reset the zoom back to the full range.
       canvas2.ondblclick = function () {
         if (!window.__wfPortfolioValueChart) return;
