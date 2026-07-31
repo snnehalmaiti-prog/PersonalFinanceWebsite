@@ -158,14 +158,39 @@ const SCENARIOS = [
       const port = (cfg.data.datasets[0].data || []).filter((q) => q && q.y != null);
       const at = (iso) => { const h = port.filter((q) => new Date(q.x).toISOString().slice(0, 10) <= iso).pop(); return h ? +h.y.toFixed(2) : null; };
       const o = {}; probe.forEach((d) => { o[d] = at(d); });
-      return { vals: o, n: port.length, first: port[0] ? +port[0].y.toFixed(2) : null,
+      const first = port[0], last = port[port.length - 1];
+      return { vals: o, n: port.length,
+               firstDate: new Date(first.x).toISOString().slice(0, 10),
+               finalNav: +last.y.toFixed(3), first: port[0] ? +port[0].y.toFixed(2) : null,
                nonFinite: port.filter((q) => !isFinite(q.y)).length,
                tail: (document.getElementById("avc-portfolio-value") || {}).textContent };
     }, sc.probe);
+    // Independent cross-check: the CAGR card runs a SECOND, separately written TWR
+    // over the same portfolio — different sampling, different code path. Compounding
+    // its rate over its own window (inception → today) must land on the chart's
+    // final NAV. Two implementations agreeing is worth more than either matching
+    // its own expectation.
+    if (!res.err) {
+      const cg = await p.evaluate(async () => {
+        const b = document.getElementById("bench-mode-cagr");
+        if (b) b.click();
+        await new Promise((r) => setTimeout(r, 4000));
+        return (document.getElementById("benchmark-portfolio-xirr") || {}).textContent || "";
+      });
+      const rate = parseFloat(String(cg).replace(/[^0-9.\-]/g, "")) / 100;
+      const yrs = (Date.now() - new Date(res.firstDate + "T00:00:00").getTime()) / 86400000 / 365.25;
+      res.cagrImplied = isFinite(rate) ? +(100 * Math.pow(1 + rate, yrs)).toFixed(2) : null;
+      res.cagrText = cg;
+    }
     console.log("\n" + sc.name + "  " + JSON.stringify(res));
     if (!res.err) {
       ok(res.first === 100, sc.name + " starts at 100", res.first);
       ok(res.nonFinite === 0, sc.name + " has no non-finite point", res.nonFinite);
+      // 1% tolerance: the CAGR rate is read from a 2-decimal percentage, and the
+      // two paths sample the portfolio at different frequencies.
+      ok(res.cagrImplied != null && Math.abs(res.cagrImplied - res.finalNav) <= Math.max(1, res.finalNav * 0.01),
+         sc.name + " agrees with the CAGR card's independent TWR",
+         [res.finalNav, res.cagrImplied, res.cagrText]);
     } else { ok(false, sc.name + " rendered", res.err); }
     global["R_" + sc.name.split(" ")[0]] = res;
     await ctx.close();

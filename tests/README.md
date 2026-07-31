@@ -88,6 +88,12 @@ cannot price, and US flows counted in dollars against rupee values. The recurren
 itself now lives in `WfMath.twrNavSeries` and is unit-tested by `test-twr-nav.js`;
 this suite covers the assembly around it.
 
+Every scenario also cross-checks the chart against the CAGR card, which runs a
+SECOND, separately written TWR over the same portfolio at a different sampling
+frequency. Compounding its rate over its own window must land on the chart's final
+NAV. Two independent implementations agreeing is stronger evidence than either one
+matching an expectation written next to it.
+
 ## More on e2e-regression.js
 
 It also caught the transactions drill-down hanging the page on a month where a
