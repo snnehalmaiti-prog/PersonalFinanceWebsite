@@ -42,6 +42,10 @@ const SHEETS = {
   "wf-fd-data": [FD_HDR,
     ["3-Jun-2026", "Snnehal", "HDFC", "Deposit-1", "Fixed Income", "Fixed Deposit", "Deposit", "32051", "4-Jun-2027", "6.25%"],
     ["3-Jun-2023", "Trisha", "HDFC", "Deposit-Old", "Fixed Income", "Fixed Deposit", "Deposit", "10000", "4-Jun-2024", "6.25%"],
+    // Sep 2025 deliberately has BOTH a deposit and an FD maturing, and no equity
+    // sale anywhere near it — the exact shape that used to lock up the page (see I).
+    ["3-Mar-2024", "Trisha", "HDFC", "Deposit-Lone", "Fixed Income", "Fixed Deposit", "Deposit", "20000", "15-Sep-2025", "6.25%"],
+    ["10-Sep-2025", "Trisha", "HDFC", "Deposit-New", "Fixed Income", "Fixed Deposit", "Deposit", "5000", "10-Sep-2030", "6.25%"],
     ["1-Jan-2024", "Snnehal", "—", "Gold Bar", "Fixed Income", "Gold", "Deposit", "50000", "", "0%"],
     ["1-Jan-2024", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "75000", "", "3%"]],
   "wf-fixedincome-data": [FI_HDR,
@@ -88,6 +92,9 @@ function ok(cond, name, detail) {
     window.Chart = function (ctx, cfg) {
       window.__charts.push({ type: cfg && cfg.type, labels: (cfg && cfg.data && cfg.data.labels) || [] });
       this.destroy = function () {}; this.update = function () {}; this.resize = function () {};
+      // Lets a test click a specific month on the chart, which is how the
+      // transactions drill-down is reached.
+      this.getElementsAtEventForMode = function () { return [{ index: (window.__clickIdx || 0) }]; };
       this.data = cfg && cfg.data; this.options = cfg && cfg.options; this.scales = { x: {}, y: {} };
     };
     window.Chart.register = function () {}; window.Chart.defaults = { font: {} };
@@ -251,6 +258,52 @@ function ok(cond, name, detail) {
     const real = pageErrors.filter((m) => !/reading 'x'|reading 'y'|scales/.test(m));
     ok(real.length === 0, "H1 no page errors across the whole sweep", real.slice(0, 5));
     console.log("       (harness-only chart-stub errors suppressed: " + (pageErrors.length - real.length) + ")");
+  }
+
+  console.log("\nI. The Sold view of an FD-maturity month does not hang");
+  {
+    // A maturing FD is an outflow with no unit price, so the FIFO realized pass
+    // produces no row for its month. The modal used to wait on THAT MONTH'S slice
+    // of the realized data rather than on the data itself, so it resolved the
+    // cached promise and re-opened itself forever. A month with both a deposit and
+    // a maturity is what makes it reachable: without both, the Sold button is
+    // disabled and the branch is never entered.
+    const res = await Promise.race([
+      p.evaluate(async () => {
+        const sel = document.getElementById("monthly-invest-cat-year");
+        if (sel) { sel.value = "2025"; sel.onchange && sel.onchange(); }
+        await new Promise((r) => setTimeout(r, 800));
+        window.__clickIdx = 8; // September
+        const cv = document.querySelector("#monthly-invest-cat-wrap canvas");
+        if (!cv) return { err: "no canvas" };
+        cv.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 300));
+        const ov = document.getElementById("mic-txn-overlay");
+        const sold = document.querySelector('[data-txn-filter="out"]');
+        const soldOffered = !!(sold && !sold.disabled);
+        if (soldOffered) sold.click();
+        await new Promise((r) => setTimeout(r, 800));
+        return {
+          opened: !!(ov && !ov.hidden), soldOffered,
+          title: (document.getElementById("mic-txn-title") || {}).textContent || "",
+          sub: (document.getElementById("mic-txn-sub") || {}).textContent || "",
+          rows: document.querySelectorAll("#mic-txn-body tr").length,
+        };
+      }),
+      new Promise((r) => setTimeout(() => r({ hung: true }), 20000)),
+    ]);
+    ok(!res.hung, "I1 the page is still responsive after opening the Sold view", res);
+    ok(res.opened === true, "I2 the drill-down opened on the maturity month", res.title);
+    ok(res.soldOffered === true, "I3 Sold is offered — the month has both directions", res);
+    ok(/sold/.test(res.sub || ""), "I4 the Sold view actually rendered", res.sub);
+    ok(res.rows > 0, "I5 the maturity is listed", res.rows);
+    // Raced as well: with the loop back, the page's main thread never yields, so
+    // an unraced evaluate would hang the whole suite instead of failing it.
+    const alive = await Promise.race([
+      p.evaluate(() => 1 + 1).catch(() => 0),
+      new Promise((r) => setTimeout(() => r(0), 15000)),
+    ]);
+    ok(alive === 2, "I6 the page can still be evaluated afterwards", alive);
   }
 
   console.log("\nRESULT: " + pass + " passed, " + fail + " failed");

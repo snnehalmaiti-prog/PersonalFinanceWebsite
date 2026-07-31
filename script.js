@@ -12094,7 +12094,13 @@
       // the modal must not sit blank waiting for it.
       var soldView = __micTxnFilter === "out";
       var realizedMonth = (__micRealizedData && __micRealizedData[k]) || null;
-      if (soldView && !realizedMonth) {
+      // Wait on the DATA, not on this month's slice of it. A month can legitimately
+      // have sold rows and no realized entry — an FD maturing, a PF withdrawal, a
+      // commodity sale: none carry a unit price, so the FIFO pass never produces a
+      // row for them. Keying the refetch on the empty slice meant openTxnModal
+      // resolved the (cached, instant) promise and called itself again, forever,
+      // and the page locked up the moment such a month was opened.
+      if (soldView && !__micRealizedData) {
         buildRealizedByMonthInstrument(localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all")
           .then(function (data) {
             __micRealizedData = data;

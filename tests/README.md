@@ -71,6 +71,12 @@ hand after UI changes:
     node tools/serve.js &          # or any static server on :8098
     node tests/e2e-regression.js
 
+It also caught the transactions drill-down hanging the page on a month where a
+fixed deposit matured: the modal waited on that month's slice of the realized-P&L
+data instead of on the data itself, and since a maturity carries no unit price the
+slice was never filled, so the modal re-opened itself forever. That is a live
+event loop, not a pure function — no unit suite can see it.
+
 It found the login-modal guard bug that every unit suite missed: script.js runs on
 all three pages, and a block guarded on one element while dereferencing a sibling
 threw on index.html, killing every top-level statement below it.
