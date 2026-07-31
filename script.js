@@ -9204,6 +9204,9 @@
         // left gap before the first MF/Stocks/commodity transaction.
         var fullMinTime = (equityFirstTxnDate || first).getTime();
         var fullMaxTime = last.getTime();
+        // Filled in once the base point is known; the eyebrow restores it whenever
+        // the chart is zoomed back out to the full range.
+        var _avcInceptionYear = "";
 
         // === Growth-of-₹100 normalization + benchmark overlay ===
         var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
@@ -9320,6 +9323,7 @@
 
           // Update header legend + eyebrow with inception year
           var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
+          _avcInceptionYear = inceptionYear;
           var eyebrowEl = document.getElementById("avc-eyebrow");
           if (eyebrowEl) eyebrowEl.textContent = "GROWTH OF ₹100 · SINCE " + inceptionYear;
           var portValEl = document.getElementById("avc-portfolio-value");
@@ -9395,9 +9399,10 @@
             scales: {
               x: {
                 type: "time",
-                // No fixed unit → Chart.js auto-selects the tick unit from the
-                // visible range, so zooming in switches from years to months.
-                time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
+                // minUnit "day", matching the Account Value chart: zoomed into a
+                // single month a month-granular axis draws one tick for the whole
+                // window, which is exactly the view zooming in is for.
+                time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
                 min: fullMinTime,
                 max: fullMaxTime,
                 grid: { display: false },
@@ -9406,8 +9411,15 @@
                   autoSkip: true,
                   major: { enabled: true },
                   font: function (ctx) { return ctx.tick && ctx.tick.major ? { weight: "bold" } : {}; },
-                  callback: function (value) {
+                  callback: function (value, index, ticks) {
                     var d = new Date(value);
+                    // Zoomed into under ~3 months the month name repeats on every
+                    // tick and says nothing; show the day instead.
+                    var span = ticks && ticks.length > 1
+                      ? Math.abs(ticks[ticks.length - 1].value - ticks[0].value) : 0;
+                    if (span > 0 && span < 1000 * 60 * 60 * 24 * 95) {
+                      return d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+                    }
                     return d.getMonth() === 0 ? String(d.getFullYear()) : d.toLocaleDateString("en-US", { month: "short" });
                   }
                 }
@@ -9438,20 +9450,78 @@
                 pan: {
                   enabled: true,
                   mode: "x",
-                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
+                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); updateAvcReadout(); }
                 },
                 zoom: {
                   wheel: { enabled: true },
                   pinch: { enabled: true },
                   mode: "x",
-                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
+                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); updateAvcReadout(); }
                 }
               }
             },
           }
         });
         updateVisibleRangeLabel(window.__wfValueChart);
+        updateAvcReadout();
+        // Same gesture as the Account Value chart: double-click anywhere to go back
+        // to the full range.
+        canvas.ondblclick = function () {
+          if (!window.__wfValueChart) return;
+          window.__wfValueChart.resetZoom();
+          updateVisibleRangeLabel(window.__wfValueChart);
+          clearActiveRangePill();
+          updateAvcReadout();
+        };
         } // end _renderNormalizedChart
+
+        // The two legend figures follow the visible window, as they do on the
+        // Account Value chart: zoomed in they read the portfolio and the index at
+        // the right edge of the view, plus how far the portfolio moved across it.
+        // Zoomed out they are the whole-period figures again.
+        var _avcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
+        function _avcAt(series, t) {
+          var hit = null;
+          for (var i = 0; i < series.length; i++) {
+            var pt = series[i];
+            if (!pt || pt.y == null) continue;
+            if (pt.x.getTime() <= t) hit = pt; else break;
+          }
+          return hit;
+        }
+        function updateAvcReadout() {
+          var chart = window.__wfValueChart;
+          if (!chart) return;
+          var sc = chart.scales && chart.scales.x;
+          var lo = sc && isFinite(sc.min) ? sc.min : fullMinTime;
+          var hi = sc && isFinite(sc.max) ? sc.max : fullMaxTime;
+          var full = lo <= fullMinTime + 1 && hi >= fullMaxTime - 1;
+          var portSeries = normPortPoints || [];
+          var idxSeries = (chart.data && chart.data.datasets && chart.data.datasets[1] &&
+                           chart.data.datasets[1].data) || [];
+          var pEnd = _avcAt(portSeries, hi), pStart = _avcAt(portSeries, lo);
+          var iEnd = _avcAt(idxSeries, hi);
+          var pEl = document.getElementById("avc-portfolio-value");
+          var iEl = document.getElementById("avc-index-value");
+          var cEl = document.getElementById("avc-range-change");
+          var eyeEl = document.getElementById("avc-eyebrow");
+          if (pEl) pEl.textContent = pEnd && pEnd.y != null ? "₹" + Math.round(pEnd.y) : "—";
+          if (iEl) iEl.textContent = iEnd && iEnd.y != null ? "₹" + Math.round(iEnd.y) : "—";
+          if (eyeEl) {
+            eyeEl.textContent = full
+              ? ("GROWTH OF ₹100 · SINCE " + _avcInceptionYear)
+              : ("GROWTH OF ₹100 · TO " + _avcMonthFmt.format(pEnd ? pEnd.x : new Date(hi)).toUpperCase());
+          }
+          if (!cEl) return;
+          if (full || !pStart || !pEnd || pStart === pEnd || !(pStart.y > 0)) {
+            cEl.hidden = true;
+            return;
+          }
+          var pct = ((pEnd.y - pStart.y) / pStart.y) * 100;
+          cEl.hidden = false;
+          cEl.className = "avc-legend-change " + (pct >= 0 ? "pvc-up" : "pvc-down");
+          cEl.textContent = (pct >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2) + "%";
+        }
 
         function updateVisibleRangeLabel(chart) {
           var xScale = chart.scales.x;
@@ -9478,6 +9548,7 @@
           chart.update();
           updateVisibleRangeLabel(chart);
           clearActiveRangePill();
+          updateAvcReadout();
           if (btn) btn.classList.add("active");
         }
 
@@ -9614,47 +9685,8 @@
       canvas2.ondblclick = function () {
         if (!window.__wfPortfolioValueChart) return;
         window.__wfPortfolioValueChart.resetZoom();
-        _pvcSetActiveRange("ALL");
         updatePvcReadout();
       };
-
-      // Range pills. "1M" is the point of the exercise: one click to the last month
-      // of the series, with its end value and its move already on screen.
-      function _pvcSetActiveRange(key) {
-        var picker = document.getElementById("pvc-range-picker");
-        if (!picker) return;
-        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (b) {
-          b.classList.toggle("active", b.getAttribute("data-pvc-range") === key);
-        });
-      }
-      (function wirePvcRangePicker() {
-        var picker = document.getElementById("pvc-range-picker");
-        if (!picker || !points.length) return;
-        var MONTHS = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
-        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (btn) {
-          var key = btn.getAttribute("data-pvc-range");
-          // Offered only where there is enough history to show; a 1Y window on six
-          // months of data is just the full range wearing a different label.
-          if (MONTHS[key]) {
-            var need = _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime();
-            var enough = need > pvcXMin;
-            btn.disabled = !enough;
-            btn.classList.toggle("is-disabled", !enough);
-          }
-          btn.onclick = function () {
-            var chart = window.__wfPortfolioValueChart;
-            if (!chart || btn.disabled) return;
-            if (key === "ALL") {
-              chart.resetZoom();
-            } else {
-              var from = Math.max(pvcXMin, _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime());
-              chart.zoomScale("x", { min: from, max: pvcXMax }, "none");
-            }
-            _pvcSetActiveRange(key);
-            updatePvcReadout();
-          };
-        });
-      }());
       updatePvcReadout();
     }
 
