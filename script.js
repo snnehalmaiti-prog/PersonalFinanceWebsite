@@ -9433,24 +9433,13 @@
                 // it made them and dragging the Growth chart did nothing. The window
                 // is bounded by the zoom plugin's own limits below, which pan and
                 // zoom both respect, and set through zoomScale like the other chart.
+                // No ticks block: the axis is left to Chart.js's own time formatting,
+                // exactly as on the Account Value chart. The custom callback here used
+                // to relabel every tick itself — bolded year markers interleaved with
+                // bare month names — so the two charts sitting side by side disagreed
+                // about what a date looks like. displayFormats above is the whole
+                // specification, and it is shared.
                 grid: { display: false },
-                ticks: {
-                  maxRotation: 0,
-                  autoSkip: true,
-                  major: { enabled: true },
-                  font: function (ctx) { return ctx.tick && ctx.tick.major ? { weight: "bold" } : {}; },
-                  callback: function (value, index, ticks) {
-                    var d = new Date(value);
-                    // Zoomed into under ~3 months the month name repeats on every
-                    // tick and says nothing; show the day instead.
-                    var span = ticks && ticks.length > 1
-                      ? Math.abs(ticks[ticks.length - 1].value - ticks[0].value) : 0;
-                    if (span > 0 && span < 1000 * 60 * 60 * 24 * 95) {
-                      return d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
-                    }
-                    return d.getMonth() === 0 ? String(d.getFullYear()) : d.toLocaleDateString("en-US", { month: "short" });
-                  }
-                }
               },
               y: { ticks: { callback: function (v) { return "₹" + Math.round(v); } }, grid: { color: "rgba(150,150,150,0.12)" } }
             },
