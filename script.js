@@ -6611,6 +6611,31 @@
   // Units traded FOR MONEY, per instrument per day. Splits and bonuses are
   // excluded: they change the unit count without any money moving, and the
   // unit price falls to match, so the curve must not react to them at all.
+  // Set a chart's visible x window. zoomScale/resetZoom come from
+  // chartjs-plugin-zoom, which is a separate CDN script: if it fails to load —
+  // offline, blocked, an ad blocker — Chart.js itself is still fine, and calling a
+  // plugin method blind threw and took the whole render down with it. Fall back to
+  // the scale options, which pins the window instead of making it draggable. A
+  // chart that cannot be panned beats no chart at all.
+  function setChartXWindow(chart, min, max) {
+    if (!chart) return;
+    if (typeof chart.zoomScale === "function") {
+      chart.zoomScale("x", { min: min, max: max }, "none");
+      return;
+    }
+    if (chart.options && chart.options.scales && chart.options.scales.x) {
+      chart.options.scales.x.min = min;
+      chart.options.scales.x.max = max;
+      chart.update();
+    }
+  }
+
+  function resetChartXWindow(chart, min, max) {
+    if (!chart) return;
+    if (typeof chart.resetZoom === "function") { chart.resetZoom(); return; }
+    setChartXWindow(chart, min, max);
+  }
+
   function buildTradedUnitsByDate(rows, portfolioFilter) {
     var out = {};
     if (!rows || !rows.length) return out;
@@ -9403,8 +9428,11 @@
                 // single month a month-granular axis draws one tick for the whole
                 // window, which is exactly the view zooming in is for.
                 time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
-                min: fullMinTime,
-                max: fullMaxTime,
+                // NOT min/max here. A hard bound on the scale options is re-applied
+                // on every update, so the pan plugin's writes were undone as fast as
+                // it made them and dragging the Growth chart did nothing. The window
+                // is bounded by the zoom plugin's own limits below, which pan and
+                // zoom both respect, and set through zoomScale like the other chart.
                 grid: { display: false },
                 ticks: {
                   maxRotation: 0,
@@ -9448,27 +9476,41 @@
                   x: { min: fullMinTime, max: fullMaxTime }
                 },
                 pan: {
+                  // Left/right drag with the mouse. threshold keeps a click from
+                  // registering as a one-pixel pan.
                   enabled: true,
                   mode: "x",
+                  threshold: 5,
+                  // Both: onPan keeps the figures live during the drag, onPanComplete
+                  // is the one that fires if the gesture ends without a final move.
+                  onPan: function (ctx) { updateVisibleRangeLabel(ctx.chart); updateAvcReadout(); },
                   onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); updateAvcReadout(); }
                 },
                 zoom: {
                   wheel: { enabled: true },
                   pinch: { enabled: true },
                   mode: "x",
+                  // Drag belongs to panning, not to box-select zooming; the two
+                  // cannot share the gesture.
+                  drag: { enabled: false },
                   onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); updateAvcReadout(); }
                 }
               }
             },
           }
         });
+        // The opening window is the equity inception → last sample, which is
+        // narrower than the plotted data when fixed income predates the first equity
+        // buy. It used to come from a hard scale bound; set through the plugin it
+        // survives, and panning starts from here rather than fighting it.
+        setChartXWindow(window.__wfValueChart, fullMinTime, fullMaxTime);
         updateVisibleRangeLabel(window.__wfValueChart);
         updateAvcReadout();
         // Same gesture as the Account Value chart: double-click anywhere to go back
         // to the full range.
         canvas.ondblclick = function () {
           if (!window.__wfValueChart) return;
-          window.__wfValueChart.resetZoom();
+          resetChartXWindow(window.__wfValueChart, fullMinTime, fullMaxTime);
           updateVisibleRangeLabel(window.__wfValueChart);
           clearActiveRangePill();
           updateAvcReadout();
@@ -9512,6 +9554,20 @@
               ? ("GROWTH OF ₹100 · SINCE " + _avcInceptionYear)
               : ("GROWTH OF ₹100 · TO " + _avcMonthFmt.format(pEnd ? pEnd.x : new Date(hi)).toUpperCase());
           }
+          var fromEl = document.getElementById("avc-zoom-from");
+          if (fromEl) {
+            // The year the visible window opens in — taken from the first plotted
+            // point inside it, not from the bound itself, so it names a year the
+            // chart is actually showing data for.
+            var firstVisible = null;
+            for (var fi = 0; fi < portSeries.length; fi++) {
+              var fp = portSeries[fi];
+              if (fp && fp.y != null && fp.x.getTime() >= lo) { firstVisible = fp; break; }
+            }
+            fromEl.hidden = full;
+            fromEl.textContent = full ? ""
+              : ("FROM " + (firstVisible ? firstVisible.x : new Date(lo)).getFullYear());
+          }
           if (!cEl) return;
           if (full || !pStart || !pEnd || pStart === pEnd || !(pStart.y > 0)) {
             cEl.hidden = true;
@@ -9543,9 +9599,9 @@
           else if (key === "3Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 3;
           else if (key === "5Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 5;
           var min = key === "ALL" ? fullMinTime : Math.max(fullMinTime, fullMaxTime - spanMs);
-          chart.options.scales.x.min = min;
-          chart.options.scales.x.max = fullMaxTime;
-          chart.update();
+          // Through the zoom plugin, so panning afterwards starts from this window
+          // instead of fighting a hard scale bound.
+          setChartXWindow(chart, min, fullMaxTime);
           updateVisibleRangeLabel(chart);
           clearActiveRangePill();
           updateAvcReadout();
@@ -9610,6 +9666,16 @@
           nameEl.textContent = full ? "Current Value"
             : ("Value · " + _pvcMonthFmt.format(endPt.x));
         }
+        var fromEl2 = document.getElementById("pvc-zoom-from");
+        if (fromEl2) {
+          var firstVis = null;
+          for (var fj = 0; fj < points.length; fj++) {
+            if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
+          }
+          fromEl2.hidden = full;
+          fromEl2.textContent = full ? ""
+            : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear());
+        }
         if (!changeEl) return;
         // A change needs two points to be a change. Zoomed to the full range there
         // is nothing to compare against, and the earliest point has no "before".
@@ -9653,7 +9719,8 @@
             },
             zoom: {
               limits: { x: { min: pvcXMin, max: pvcXMax } },
-              pan: { enabled: true, mode: "x", onPanComplete: updatePvcReadout },
+              pan: { enabled: true, mode: "x", threshold: 5,
+                     onPan: updatePvcReadout, onPanComplete: updatePvcReadout },
               zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
                       drag: { enabled: false }, onZoomComplete: updatePvcReadout }
             }
@@ -9684,7 +9751,7 @@
       // Double-click to reset the zoom back to the full range.
       canvas2.ondblclick = function () {
         if (!window.__wfPortfolioValueChart) return;
-        window.__wfPortfolioValueChart.resetZoom();
+        resetChartXWindow(window.__wfPortfolioValueChart, pvcXMin, pvcXMax);
         updatePvcReadout();
       };
       updatePvcReadout();
@@ -9693,7 +9760,10 @@
     if (resetBtn && !resetBtn.dataset.bound) {
       resetBtn.dataset.bound = "1";
       resetBtn.addEventListener("click", function () {
-        if (window.__wfValueChart) window.__wfValueChart.resetZoom();
+        // Guarded for the same reason: resetZoom is the zoom plugin's, not Chart's.
+        if (window.__wfValueChart && typeof window.__wfValueChart.resetZoom === "function") {
+          window.__wfValueChart.resetZoom();
+        }
         var rangePicker = document.getElementById("value-chart-range-picker");
         if (rangePicker) {
           Array.prototype.forEach.call(rangePicker.querySelectorAll(".range-pill"), function (btn) { btn.classList.remove("active"); });
