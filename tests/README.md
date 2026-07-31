@@ -125,6 +125,21 @@ Chart.js does not, a bare call throws and takes the whole chart down. e2e-regres
 caught exactly that — the sandbox has no CDN, which turns out to be a faithful
 simulation of a blocked or offline user.
 
+## check-chart-subtitle-align.js / measure-subtitle-align.js
+
+The period line under each chart title ("SINCE 2018", "OVER TIME") must sit flush
+with the title. It did not: the card already pads 20px and the subtitle rule added
+its own horizontal margin on top, indenting the period 20px past the title it
+belongs to, with an 11px gap above it.
+
+`check-chart-subtitle-align.js` is in `run-all.js` and pins the CSS rule.
+`measure-subtitle-align.js` measures the real geometry in a browser — it builds its
+fixture out of dashboard.html's own markup, so it cannot drift from what it checks:
+
+    node tests/measure-subtitle-align.js
+
+Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
+
 ## e2e-account-value-zoom.js
 
 The zoom-following readouts on BOTH value charts — ACCOUNT VALUE · OVER TIME and
