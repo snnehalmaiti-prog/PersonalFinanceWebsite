@@ -92,10 +92,11 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
     const ce = document.getElementById("avc-range-change");
     return {
       eyebrow: (document.getElementById("avc-eyebrow")||{}).textContent,
+      period: (document.getElementById("avc-period")||{}).textContent,
       port: (document.getElementById("avc-portfolio-value")||{}).textContent,
       idx: (document.getElementById("avc-index-value")||{}).textContent,
       change: ce && !ce.hidden ? ce.textContent : null,
-      from: (() => { const e = document.getElementById("avc-zoom-from"); return e && !e.hidden ? e.textContent : null; })(),
+
       spanDays: sc && isFinite(sc.min) && isFinite(sc.max) ? Math.round((sc.max - sc.min) / 864e5) : null,
     };
   });
@@ -106,7 +107,7 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
       name: (document.getElementById("pvc-legend-name")||{}).textContent,
       value: (document.getElementById("pvc-current-value")||{}).textContent,
       change: (() => { const e = document.getElementById("pvc-range-change"); return e && !e.hidden ? e.textContent : null; })(),
-      from: (() => { const e = document.getElementById("pvc-zoom-from"); return e && !e.hidden ? e.textContent : null; })(),
+      period: (document.getElementById("pvc-period")||{}).textContent,
       spanDays: sc ? Math.round((sc.max - sc.min) / 864e5) : null,
     };
   });
@@ -115,7 +116,8 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   ok(initial.spanDays > 0, "A1 the chart rendered with an x range", initial);
   ok(initial.name === "Current Value", "A2 unzoomed, the readout is the current value", initial.name);
   ok(initial.change === null, "A3 and shows no change — there is no window to compare", initial.change);
-  ok(initial.from === null, "A4 and no start-year line — the full range needs no explaining", initial.from);
+  ok(initial.period === "OVER TIME",
+     "A4 the period line under the title reads OVER TIME at full range", initial.period);
 
   // Zoom the Account Value chart to an interior window — what a wheel-zoom or a
   // drag-pan produces. Every whole-period readout looks identical at the right edge,
@@ -136,8 +138,8 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   await p.waitForTimeout(200);
   const pvcMid = await read();
   console.log("  account-value interior " + JSON.stringify(pvcMid));
-  ok(/Jun 2024/.test(pvcMid.name || ""),
-     "B1 Account Value: an interior window names the month it ends in", pvcMid.name);
+  ok(pvcMid.spanDays === 31,
+     "B1 Account Value: an interior window is the one that was asked for", pvcMid.spanDays);
   ok(pvcMid.value !== initial.value,
      "B2 Account Value: and reports that window's value, not today's", [pvcMid.value, initial.value]);
   {
@@ -151,18 +153,22 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   await p.evaluate(() => document.getElementById("portfolio-value-chart").ondblclick());
   await p.waitForTimeout(200);
   const pvcReset = await read();
-  ok(/FROM 2024/.test(pvcMid.from || ""),
-     "B3b Account Value: the start year of the window is shown while zoomed", pvcMid.from);
-  ok(pvcReset.name === "Current Value" && pvcReset.change === null && pvcReset.from === null,
+  ok(/^FROM 2024 · TO JUN 2024$/.test(pvcMid.period || ""),
+     "B3b Account Value: the period line names the window while zoomed", pvcMid.period);
+  ok(pvcMid.name === "Value",
+     "B3c Account Value: the legend label does not repeat the month", pvcMid.name);
+  ok(pvcReset.name === "Current Value" && pvcReset.change === null && pvcReset.period === "OVER TIME",
      "B4 Account Value: double-click restores the whole-period readout", pvcReset);
   ok(pvcReset.spanDays === initial.spanDays, "B5 and the full range", [pvcReset.spanDays, initial.spanDays]);
 
   // The Growth chart must behave the same way.
   const growth0 = await readGrowth();
   console.log("  growth full     " + JSON.stringify(growth0));
-  ok(/SINCE/.test(growth0.eyebrow || ""), "C1 Growth: unzoomed the eyebrow reads SINCE <year>", growth0.eyebrow);
-  ok(growth0.change === null && growth0.from === null,
-     "C2 Growth: and shows neither a window change nor a start year", growth0);
+  ok(growth0.eyebrow === "GROWTH OF ₹100",
+     "C1 Growth: the title is just the title — no period appended", growth0.eyebrow);
+  ok(/^SINCE \d{4}$/.test(growth0.period || ""),
+     "C1b Growth: the period line under it carries SINCE <year>", growth0.period);
+  ok(growth0.change === null, "C2 Growth: and shows no window change at full range", growth0.change);
   ok(growth0.spanDays > 0, "C3 Growth: the chart has an x range", growth0);
 
   const zoomed = await zoomTo("__wfValueChart", "2024-05-01", "2024-06-01");
@@ -170,19 +176,20 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
     await p.waitForTimeout(200);
     const g = await readGrowth();
     console.log("  growth interior " + JSON.stringify(g));
-    ok(/TO JUN 2024/i.test(g.eyebrow || ""),
-       "C4 Growth: zoomed, the eyebrow names the window's end month", g.eyebrow);
+    ok(g.eyebrow === "GROWTH OF ₹100",
+       "C4 Growth: the title never changes with the zoom", g.eyebrow);
+    ok(/^FROM 2024 · TO JUN 2024$/.test(g.period || ""),
+       "C4b Growth: the period line names the window", g.period);
     ok(g.port !== growth0.port,
        "C5 Growth: the portfolio figure follows the window", [g.port, growth0.port]);
     ok(g.change && /%/.test(g.change), "C6 Growth: and the window's change is shown", g.change);
     ok(g.spanDays === 31, "C7 Growth: the window is the one that was asked for", g.spanDays);
-    ok(/FROM 2024/.test(g.from || ""),
-       "C7b Growth: the start year of the window is shown while zoomed", g.from);
+
 
     await p.evaluate(() => document.getElementById("value-chart").ondblclick());
     await p.waitForTimeout(200);
     const gReset = await readGrowth();
-    ok(/SINCE/.test(gReset.eyebrow || "") && gReset.change === null && gReset.from === null,
+    ok(/^SINCE \d{4}$/.test(gReset.period || "") && gReset.change === null,
        "C8 Growth: double-click restores the whole-period readout", gReset);
     ok(gReset.port === growth0.port, "C9 and the whole-period figure", [gReset.port, growth0.port]);
   } else {

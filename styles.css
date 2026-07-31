@@ -4280,9 +4280,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #value-chart, #portfolio-value-chart { cursor: grab; touch-action: pan-y; }
 #value-chart:active, #portfolio-value-chart:active { cursor: grabbing; }
 
-/* Shown only while zoomed: which year the visible window starts in, so a zoomed
-   chart never leaves you guessing what period you are looking at. */
-.avc-zoom-from {
+/* The period line under each chart title. Carries the whole-range description at
+   rest ("SINCE 2018", "OVER TIME") and the visible window's start year while
+   zoomed, so a zoomed chart never leaves you guessing what you are looking at. */
+.avc-subtitle {
   margin: 2px 20px 0;
   font-size: 0.68rem;
   font-weight: 600;
