@@ -109,6 +109,22 @@ stocks/ETF flows were gathered from the OPEN holdings and a fully-sold position
 contributed neither its cost nor its proceeds — while mutual funds had no such
 filter, so the two asset classes did not agree on what the number meant.
 
+## check-chart-pan.js
+
+In `run-all.js`. Pins the pan/zoom configuration of both value charts, because the
+browser suites cannot reach it: chartjs-plugin-zoom needs a CDN the sandbox has no
+route to, so its gestures are never exercised here.
+
+It exists because the Growth chart declared pan and still would not drag — its x
+scale also carried hard `min`/`max` in the OPTIONS, which Chart.js re-applies on
+every update, undoing the pan plugin's writes as fast as it made them.
+
+It also requires every `zoomScale`/`resetZoom` call to sit behind a typeof guard.
+Those are plugin methods, not Chart.js ones: when the plugin fails to load and
+Chart.js does not, a bare call throws and takes the whole chart down. e2e-regression
+caught exactly that — the sandbox has no CDN, which turns out to be a faithful
+simulation of a blocked or offline user.
+
 ## e2e-account-value-zoom.js
 
 The zoom-following readouts on BOTH value charts — ACCOUNT VALUE · OVER TIME and
