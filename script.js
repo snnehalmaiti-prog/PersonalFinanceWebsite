@@ -8962,7 +8962,33 @@
     return result;
   }
 
+  // Both value charts are rebuilt by renderValueChart, and a dozen things ask for
+  // that during a single load: the initial call, each sheet finishing, the overview
+  // flows landing, the exclusion toggle. Every one of those used to start its own
+  // full async pipeline — NAV history, prices, the whole timeline — and whichever
+  // finished LAST painted, regardless of how much it knew.
+  //
+  // That is the flash on refresh: an early run whose AMFI scheme map had not
+  // resolved sees fewer instruments, so it draws a shorter history from a later
+  // start, and if it lands last that is what stays on screen until something else
+  // triggers a redraw.
+  //
+  // The fix is a generation counter: a run that has been superseded discards its
+  // result instead of painting it, and bails before the expensive part — the guard
+  // sits at the top of the outer then(), ahead of the timeline and point building,
+  // so a stale run costs only its already-cached fetches.
+  //
+  // Debouncing was tried here too and measured WORSE: 13 chart builds against 7,
+  // because holding runs back on a timer stopped them superseding each other
+  // cleanly. The guard alone does the work.
+  var _vcGen = 0;
   function renderValueChart() {
+    try { _renderValueChartNow(); } catch (e) {}
+  }
+
+  function _renderValueChartNow() {
+    var _myGen = ++_vcGen;
+    function _superseded() { return _myGen !== _vcGen; }
     var canvas = document.getElementById("value-chart");
     var statusEl = document.getElementById("value-chart-status");
     var rangeEl = document.getElementById("value-chart-range");
@@ -8981,8 +9007,19 @@
       });
     }
 
-    statusEl.hidden = false;
-    statusEl.textContent = "Resolving mutual fund scheme codes…";
+    // Progress text belongs to the FIRST load only. Once a chart is on screen, the
+    // re-renders that follow (each sheet arriving, the overview settling, the
+    // exclusion toggle) must not paint "…ing" messages over a finished graph —
+    // which is what left one stranded beneath it.
+    if (!window.__wfValueChart) {
+      statusEl.hidden = false;
+      statusEl.textContent = "Resolving mutual fund scheme codes…";
+    } else {
+      // Clearing it here, not only on the happy path: a run that gets superseded
+      // returns before it would have hidden its own message, which is how one got
+      // stranded under a finished chart.
+      statusEl.hidden = true;
+    }
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
@@ -9083,7 +9120,17 @@
         return;
       }
 
-      statusEl.textContent = instruments.length ? "Fetching NAV history for " + instruments.length + " instrument(s)…" : "Loading…";
+      // Only while there is nothing to look at. Re-renders happen throughout a load
+      // — each sheet arriving, the overview settling — and announcing "Fetching NAV
+      // history…" over an already-drawn chart is what left that message stranded
+      // under a finished graph.
+      if (!window.__wfValueChart) {
+        statusEl.hidden = false;
+        statusEl.textContent = instruments.length
+          ? "Fetching NAV history for " + instruments.length + " instrument(s)…" : "Loading…";
+      } else {
+        statusEl.hidden = true;
+      }
 
       return Promise.all([
         Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); })),
@@ -9091,6 +9138,9 @@
         goldPriceHistoryPromise,
         stockPricesPromise
       ]).then(function (outerResults) {
+        // A newer render started while this one was fetching; its answer is at
+        // least as complete as ours, so drop this result rather than paint over it.
+        if (_superseded()) return;
         var navHistories = outerResults[0];
         var currentGoldPrice = outerResults[1];
         var goldPriceHistory = outerResults[2];
@@ -9215,6 +9265,28 @@
         // Cash flow at each timeline point, marked at that point's own valuation.
         var flowAt = new Array(timeline.length).fill(0);
 
+        // Everything the per-point loop needs, resolved ONCE. It used to call
+        // normalizeText per instrument per timeline point and rebuild
+        // Object.keys(seUnitEventsByTicker) each time round — tens of thousands of
+        // string normalisations and array allocations for a chart that draws a few
+        // thousand points, all of it invariant.
+        var mfTradedByIdx = instruments.map(function (name) {
+          return mfTradedUnits[normalizeText(name)] || null;
+        });
+        var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
+        var seTickers = Object.keys(seUnitEventsByTicker);
+        var seMeta = seTickers.map(function (ticker) {
+          var hist = stockHistoryAll[ticker];
+          var fallback = allPrices[ticker];
+          return {
+            units: seUnitsAtByTicker[ticker],
+            prices: hist ? hist.prices : null,
+            fallbackPrice: fallback ? fallback.price : null,
+            isUsd: hist ? hist.currency === "USD" : !!(fallback && fallback.currency === "USD"),
+            traded: seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
+          };
+        });
+
         var commodityValueAt = [];
         var points = timeline.map(function (date, i) {
           var activeGrams = commodityGramsAt[i] || 0;
@@ -9223,7 +9295,9 @@
           commodityValueAt.push(commVal);
           var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
           var dk = dateKey(date);
-          instruments.forEach(function (name) {
+          var flow = 0;
+          for (var mi = 0; mi < instruments.length; mi++) {
+            var name = instruments[mi];
             var units = unitsAtByName[name][i] || 0;
             var nav = navAtByName[name][i];
             if (units > UNITS_EPSILON && nav) total += units * nav;
@@ -9232,30 +9306,28 @@
             // when there is no nav: the value series cannot see this instrument on
             // this date either, and counting money against value that is not there
             // is what put a permanent hole in the curve.
-            if (!nav) return;
-            var traded = mfTradedUnits[normalizeText(name)];
-            if (traded && traded[dk]) flowAt[i] += traded[dk] * nav;
-          });
+            if (!nav) continue;
+            var traded = mfTradedByIdx[mi];
+            if (traded && traded[dk]) flow += traded[dk] * nav;
+          }
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
-          var stockHistory = (stockPricesData && stockPricesData.stock_history) || {};
-          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
-            var units = seUnitsAtByTicker[ticker][i] || 0;
-            var hist = stockHistory[ticker];
-            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
-            if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
-            if (!price) return;
-            var isUsd = hist ? hist.currency === "USD" : (allPrices[ticker] && allPrices[ticker].currency === "USD");
-            var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
-            if (units > UNITS_EPSILON) total += units * priceInr;
+          for (var si = 0; si < seMeta.length; si++) {
+            var m = seMeta[si];
+            var price = m.prices ? lookupIndexPrice(m.prices, dateStr) : null;
+            if (!price) price = m.fallbackPrice;
+            if (!price) continue;
+            var priceInr = m.isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
+            var seUnits = m.units[i] || 0;
+            if (seUnits > UNITS_EPSILON) total += seUnits * priceInr;
             // Same rule, and the same INR price: the flow can never disagree with
             // the valuation, in magnitude or in currency. Deliberately NOT gated on
             // still holding units — the sale that takes a position to zero is
             // exactly the flow that must be counted, or the value would vanish with
             // nothing to explain it and the curve would read it as a total loss.
-            var seTraded = seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")];
-            if (seTraded && seTraded[dk]) flowAt[i] += seTraded[dk] * priceInr;
-          });
+            if (m.traded && m.traded[dk]) flow += m.traded[dk] * priceInr;
+          }
+          flowAt[i] = flow;
           return { x: date, y: total };
         });
 
@@ -9293,7 +9365,9 @@
         })();
 
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
-        try { _renderPortfolioValueChart(pointsAll); } catch (e) {}
+        // Guarded like the other chart: a superseded run's answer is no better than
+        // the one already on screen, and building it is the expensive half.
+        if (!_superseded()) { try { _renderPortfolioValueChart(pointsAll); } catch (e) {} }
 
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
@@ -9422,6 +9496,7 @@
           }
 
           // Update header legend + eyebrow with inception year
+          if (_superseded()) return { normIdxPoints: normIdxPoints };
           var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
           _avcInceptionYear = inceptionYear;
           // The title is fixed; the line under it says which period is on screen.
@@ -9439,8 +9514,10 @@
           if (verdictEl) verdictEl.hidden = true;
           return { normIdxPoints: normIdxPoints };
         }).then(function (idxResult) {
+          if (_superseded()) return;
           _renderNormalizedChart(idxResult ? idxResult.normIdxPoints : []);
         }).catch(function () {
+          if (_superseded()) return;
           _renderNormalizedChart([]);
         });
 
