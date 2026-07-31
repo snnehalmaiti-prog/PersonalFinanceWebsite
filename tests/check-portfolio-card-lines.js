@@ -11,11 +11,12 @@
 const fs = require("fs");
 const path = require("path");
 const SRC = fs.readFileSync(path.join(__dirname, "..", "script.js"), "utf8");
+const CSS = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
 
 let failed = 0;
 function check(cond, msg) { if (!cond) { console.error("  FAIL " + msg); failed++; } }
 
-check(/function _mfpcBarHtml\(pnlPct\)/.test(SRC), "_mfpcBarHtml is missing");
+check(/function _mfpcBarHtml\(\)/.test(SRC), "_mfpcBarHtml is missing, or takes an argument again — the bar is static");
 check(/function _mfpcReturnRowHtml\(pnl, pnlPct\)/.test(SRC), "_mfpcReturnRowHtml is missing");
 
 // Exactly one definition plus one call per portfolio-card renderer (MF, SE, FI).
@@ -29,8 +30,17 @@ check((SRC.match(/class="mfpc-bar"/g) || []).length === 1,
   "the bar markup is written out more than once — it must come from _mfpcBarHtml");
 check((SRC.match(/class="mfpc-return-row"/g) || []).length === 1,
   "the return row is written out more than once — it must come from _mfpcReturnRowHtml");
-check((SRC.match(/Math\.max\(4, \(pnlPct \+ 30\) \* 1\.4\)/g) || []).length === 1,
-  "the bar's scaling formula is duplicated; it belongs only in _mfpcBarHtml");
+// The bar is a static divider. It used to scale its fill with the return, which
+// made the same card look different on every tab; nothing about its width may
+// depend on the numbers again, and no inline width may reappear.
+const barStart = SRC.indexOf("function _mfpcBarHtml");
+const bar = SRC.slice(barStart, SRC.indexOf("function _mfpcReturnRowHtml", barStart));
+check(!/pnlPct|progress|style="width/.test(bar),
+  "the bar's width is derived from the return again — it must be static");
+check(/<div class="mfpc-bar"><div class="mfpc-bar-fill"><\/div><\/div>/.test(SRC),
+  "the bar markup must be the plain static two-div divider");
+check(/\.mfpc-bar-fill \{[^}]*width: 100%/.test(CSS),
+  "the static bar's width must be pinned in styles.css");
 
 // The word that had gone missing on one tab.
 const row = SRC.slice(SRC.indexOf("function _mfpcReturnRowHtml"),

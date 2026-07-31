@@ -3158,7 +3158,7 @@
         '</div>' +
         '<div class="mfpc-current-label">CURRENT VALUE</div>' +
         '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
-        _mfpcBarHtml(pnlPct) +
+        _mfpcBarHtml() +
         _mfpcReturnRowHtml(pnl, pnlPct) +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
@@ -5782,7 +5782,7 @@
           '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
           dayChgHtml +
         '</div>' +
-        _mfpcBarHtml(pnlPct) +
+        _mfpcBarHtml() +
         _mfpcReturnRowHtml(pnl, pnlPct) +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
@@ -6159,10 +6159,11 @@
   // renderers and had drifted: Stocks/ETF dropped the " gain"/" loss" word, so the
   // same line read differently depending on which investment tab you were on.
   // Shared so it cannot happen again.
-  function _mfpcBarHtml(pnlPct) {
-    // Scaled fill: -30% return reads empty, +50% reads full. Purely indicative.
-    var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
-    return '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>';
+  function _mfpcBarHtml() {
+    // Static divider, not an indicator. It used to scale its fill with the return,
+    // which made the same card look different on every tab while carrying no
+    // information the percentage below it did not already state. Width lives in CSS.
+    return '<div class="mfpc-bar"><div class="mfpc-bar-fill"></div></div>';
   }
 
   function _mfpcReturnRowHtml(pnl, pnlPct) {
@@ -13266,7 +13267,7 @@
             '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
             dayChgHtml +
           '</div>' +
-          _mfpcBarHtml(pnlPct) +
+          _mfpcBarHtml() +
           _mfpcReturnRowHtml(pnl, pnlPct) +
           '<div class="mfpc-footer">' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
