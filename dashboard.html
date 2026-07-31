@@ -267,14 +267,13 @@
       <div id="account-value-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;">
       <div class="avc-card" id="account-value-card" style="flex:1 1 480px;min-width:0;">
         <div class="avc-header">
-          <span class="avc-eyebrow" id="avc-eyebrow">GROWTH OF &#8377;100</span>
+          <span class="avc-eyebrow" id="avc-eyebrow">GROWTH OF &#8377;100 &middot; SINCE INCEPTION</span>
           <div class="avc-legend">
             <div class="avc-legend-item">
               <span class="avc-legend-line avc-legend-portfolio"></span>
               <span class="avc-legend-name">Portfolio</span>
               <span class="avc-legend-sep">&middot;</span>
               <span class="avc-legend-value avc-portfolio-value" id="avc-portfolio-value">&#8377;—</span>
-              <span class="avc-legend-change" id="avc-range-change" hidden></span>
             </div>
             <div class="avc-legend-item">
               <span class="avc-legend-line avc-legend-index"></span>
@@ -284,7 +283,6 @@
             </div>
           </div>
         </div>
-        <p class="avc-subtitle" id="avc-period">SINCE INCEPTION</p>
         <p class="muted small" id="value-chart-status" hidden>Loading NAV history…</p>
         <div class="avc-chart-wrap">
           <canvas id="value-chart" height="320"></canvas>
@@ -300,7 +298,7 @@
 
       <div class="avc-card" id="portfolio-value-card" style="flex:1 1 480px;min-width:0;">
         <div class="avc-header">
-          <span class="avc-eyebrow" id="pvc-eyebrow">ACCOUNT VALUE</span>
+          <span class="avc-eyebrow" id="pvc-eyebrow">ACCOUNT VALUE &middot; OVER TIME</span>
           <div class="avc-legend">
             <div class="avc-legend-item">
               <span class="avc-legend-line avc-legend-portfolio"></span>
@@ -311,7 +309,13 @@
             </div>
           </div>
         </div>
-        <p class="avc-subtitle" id="pvc-period">OVER TIME</p>
+        <div class="pvc-range-picker" id="pvc-range-picker">
+          <button type="button" class="range-pill" data-pvc-range="1M">1M</button>
+          <button type="button" class="range-pill" data-pvc-range="3M">3M</button>
+          <button type="button" class="range-pill" data-pvc-range="6M">6M</button>
+          <button type="button" class="range-pill" data-pvc-range="1Y">1Y</button>
+          <button type="button" class="range-pill active" data-pvc-range="ALL">All</button>
+        </div>
         <p class="muted small" id="pvc-status" hidden></p>
         <div class="avc-chart-wrap">
           <canvas id="portfolio-value-chart" height="320"></canvas>

@@ -6611,106 +6611,6 @@
   // Units traded FOR MONEY, per instrument per day. Splits and bonuses are
   // excluded: they change the unit count without any money moving, and the
   // unit price falls to match, so the curve must not react to them at all.
-  // Click-and-drag the chart left/right.
-  //
-  // Implemented here rather than left to chartjs-plugin-zoom's own pan, which
-  // depends on Hammer.js being present and which we have no way to verify loads.
-  // This needs nothing but pointer events, works the same for mouse and touch, and
-  // is ours to test. The plugin keeps wheel and pinch, which are native to it.
-  //
-  // The window keeps its width and slides; `limits` stop it leaving the data, so
-  // dragging past either end simply stops rather than revealing blank space.
-  function wireChartXDrag(canvas, getChart, minLimit, maxLimit, onChange) {
-    if (!canvas) return;
-    // Re-wiring the same canvas would stack handlers and pan at a multiple of the
-    // pointer speed.
-    if (canvas.__wfDragWired) canvas.__wfDragWired();
-    var dragging = false, startX = 0, startMin = 0, startMax = 0, moved = false;
-
-    function span(chart) {
-      var sc = chart && chart.scales && chart.scales.x;
-      if (!sc || !isFinite(sc.min) || !isFinite(sc.max)) return null;
-      return { min: sc.min, max: sc.max };
-    }
-
-    function onDown(e) {
-      var chart = getChart();
-      var w = span(chart);
-      if (!w) return;
-      dragging = true; moved = false;
-      startX = e.clientX; startMin = w.min; startMax = w.max;
-      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-    }
-
-    function onMove(e) {
-      if (!dragging) return;
-      var chart = getChart();
-      if (!chart) return;
-      var area = chart.chartArea;
-      var width = area ? (area.right - area.left) : canvas.clientWidth;
-      if (!(width > 0)) return;
-      var dx = e.clientX - startX;
-      if (!moved && Math.abs(dx) < 4) return; // a click is not a drag
-      moved = true;
-      // Dragging right moves the window BACK in time: the data follows the cursor.
-      var perPixel = (startMax - startMin) / width;
-      var shift = -dx * perPixel;
-      var min = startMin + shift, max = startMax + shift;
-      if (min < minLimit) { max += minLimit - min; min = minLimit; }
-      if (max > maxLimit) { min -= max - maxLimit; max = maxLimit; }
-      if (min < minLimit) min = minLimit; // window wider than the data
-      setChartXWindow(chart, min, max);
-      if (onChange) onChange();
-      e.preventDefault();
-    }
-
-    function onUp(e) {
-      if (!dragging) return;
-      dragging = false;
-      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
-      if (moved && onChange) onChange();
-    }
-
-    canvas.addEventListener("pointerdown", onDown);
-    canvas.addEventListener("pointermove", onMove);
-    canvas.addEventListener("pointerup", onUp);
-    canvas.addEventListener("pointercancel", onUp);
-    canvas.addEventListener("pointerleave", onUp);
-    canvas.__wfDragWired = function () {
-      canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerup", onUp);
-      canvas.removeEventListener("pointercancel", onUp);
-      canvas.removeEventListener("pointerleave", onUp);
-      canvas.__wfDragWired = null;
-    };
-  }
-
-  // Set a chart's visible x window. zoomScale/resetZoom come from
-  // chartjs-plugin-zoom, which is a separate CDN script: if it fails to load —
-  // offline, blocked, an ad blocker — Chart.js itself is still fine, and calling a
-  // plugin method blind threw and took the whole render down with it. Fall back to
-  // the scale options, which pins the window instead of making it draggable. A
-  // chart that cannot be panned beats no chart at all.
-  function setChartXWindow(chart, min, max) {
-    if (!chart) return;
-    if (typeof chart.zoomScale === "function") {
-      chart.zoomScale("x", { min: min, max: max }, "none");
-      return;
-    }
-    if (chart.options && chart.options.scales && chart.options.scales.x) {
-      chart.options.scales.x.min = min;
-      chart.options.scales.x.max = max;
-      chart.update();
-    }
-  }
-
-  function resetChartXWindow(chart, min, max) {
-    if (!chart) return;
-    if (typeof chart.resetZoom === "function") { chart.resetZoom(); return; }
-    setChartXWindow(chart, min, max);
-  }
-
   function buildTradedUnitsByDate(rows, portfolioFilter) {
     var out = {};
     if (!rows || !rows.length) return out;
@@ -8962,33 +8862,7 @@
     return result;
   }
 
-  // Both value charts are rebuilt by renderValueChart, and a dozen things ask for
-  // that during a single load: the initial call, each sheet finishing, the overview
-  // flows landing, the exclusion toggle. Every one of those used to start its own
-  // full async pipeline — NAV history, prices, the whole timeline — and whichever
-  // finished LAST painted, regardless of how much it knew.
-  //
-  // That is the flash on refresh: an early run whose AMFI scheme map had not
-  // resolved sees fewer instruments, so it draws a shorter history from a later
-  // start, and if it lands last that is what stays on screen until something else
-  // triggers a redraw.
-  //
-  // The fix is a generation counter: a run that has been superseded discards its
-  // result instead of painting it, and bails before the expensive part — the guard
-  // sits at the top of the outer then(), ahead of the timeline and point building,
-  // so a stale run costs only its already-cached fetches.
-  //
-  // Debouncing was tried here too and measured WORSE: 13 chart builds against 7,
-  // because holding runs back on a timer stopped them superseding each other
-  // cleanly. The guard alone does the work.
-  var _vcGen = 0;
   function renderValueChart() {
-    try { _renderValueChartNow(); } catch (e) {}
-  }
-
-  function _renderValueChartNow() {
-    var _myGen = ++_vcGen;
-    function _superseded() { return _myGen !== _vcGen; }
     var canvas = document.getElementById("value-chart");
     var statusEl = document.getElementById("value-chart-status");
     var rangeEl = document.getElementById("value-chart-range");
@@ -9007,19 +8881,8 @@
       });
     }
 
-    // Progress text belongs to the FIRST load only. Once a chart is on screen, the
-    // re-renders that follow (each sheet arriving, the overview settling, the
-    // exclusion toggle) must not paint "…ing" messages over a finished graph —
-    // which is what left one stranded beneath it.
-    if (!window.__wfValueChart) {
-      statusEl.hidden = false;
-      statusEl.textContent = "Resolving mutual fund scheme codes…";
-    } else {
-      // Clearing it here, not only on the happy path: a run that gets superseded
-      // returns before it would have hidden its own message, which is how one got
-      // stranded under a finished chart.
-      statusEl.hidden = true;
-    }
+    statusEl.hidden = false;
+    statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
       var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
@@ -9120,17 +8983,7 @@
         return;
       }
 
-      // Only while there is nothing to look at. Re-renders happen throughout a load
-      // — each sheet arriving, the overview settling — and announcing "Fetching NAV
-      // history…" over an already-drawn chart is what left that message stranded
-      // under a finished graph.
-      if (!window.__wfValueChart) {
-        statusEl.hidden = false;
-        statusEl.textContent = instruments.length
-          ? "Fetching NAV history for " + instruments.length + " instrument(s)…" : "Loading…";
-      } else {
-        statusEl.hidden = true;
-      }
+      statusEl.textContent = instruments.length ? "Fetching NAV history for " + instruments.length + " instrument(s)…" : "Loading…";
 
       return Promise.all([
         Promise.all(instruments.map(function (name) { return fetchNavHistory(lookupSchemeCode(schemeMap, name)); })),
@@ -9138,9 +8991,6 @@
         goldPriceHistoryPromise,
         stockPricesPromise
       ]).then(function (outerResults) {
-        // A newer render started while this one was fetching; its answer is at
-        // least as complete as ours, so drop this result rather than paint over it.
-        if (_superseded()) return;
         var navHistories = outerResults[0];
         var currentGoldPrice = outerResults[1];
         var goldPriceHistory = outerResults[2];
@@ -9265,28 +9115,6 @@
         // Cash flow at each timeline point, marked at that point's own valuation.
         var flowAt = new Array(timeline.length).fill(0);
 
-        // Everything the per-point loop needs, resolved ONCE. It used to call
-        // normalizeText per instrument per timeline point and rebuild
-        // Object.keys(seUnitEventsByTicker) each time round — tens of thousands of
-        // string normalisations and array allocations for a chart that draws a few
-        // thousand points, all of it invariant.
-        var mfTradedByIdx = instruments.map(function (name) {
-          return mfTradedUnits[normalizeText(name)] || null;
-        });
-        var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
-        var seTickers = Object.keys(seUnitEventsByTicker);
-        var seMeta = seTickers.map(function (ticker) {
-          var hist = stockHistoryAll[ticker];
-          var fallback = allPrices[ticker];
-          return {
-            units: seUnitsAtByTicker[ticker],
-            prices: hist ? hist.prices : null,
-            fallbackPrice: fallback ? fallback.price : null,
-            isUsd: hist ? hist.currency === "USD" : !!(fallback && fallback.currency === "USD"),
-            traded: seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
-          };
-        });
-
         var commodityValueAt = [];
         var points = timeline.map(function (date, i) {
           var activeGrams = commodityGramsAt[i] || 0;
@@ -9295,9 +9123,7 @@
           commodityValueAt.push(commVal);
           var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
           var dk = dateKey(date);
-          var flow = 0;
-          for (var mi = 0; mi < instruments.length; mi++) {
-            var name = instruments[mi];
+          instruments.forEach(function (name) {
             var units = unitsAtByName[name][i] || 0;
             var nav = navAtByName[name][i];
             if (units > UNITS_EPSILON && nav) total += units * nav;
@@ -9306,28 +9132,30 @@
             // when there is no nav: the value series cannot see this instrument on
             // this date either, and counting money against value that is not there
             // is what put a permanent hole in the curve.
-            if (!nav) continue;
-            var traded = mfTradedByIdx[mi];
-            if (traded && traded[dk]) flow += traded[dk] * nav;
-          }
+            if (!nav) return;
+            var traded = mfTradedUnits[normalizeText(name)];
+            if (traded && traded[dk]) flowAt[i] += traded[dk] * nav;
+          });
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
-          for (var si = 0; si < seMeta.length; si++) {
-            var m = seMeta[si];
-            var price = m.prices ? lookupIndexPrice(m.prices, dateStr) : null;
-            if (!price) price = m.fallbackPrice;
-            if (!price) continue;
-            var priceInr = m.isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
-            var seUnits = m.units[i] || 0;
-            if (seUnits > UNITS_EPSILON) total += seUnits * priceInr;
+          var stockHistory = (stockPricesData && stockPricesData.stock_history) || {};
+          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+            var units = seUnitsAtByTicker[ticker][i] || 0;
+            var hist = stockHistory[ticker];
+            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
+            if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
+            if (!price) return;
+            var isUsd = hist ? hist.currency === "USD" : (allPrices[ticker] && allPrices[ticker].currency === "USD");
+            var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
+            if (units > UNITS_EPSILON) total += units * priceInr;
             // Same rule, and the same INR price: the flow can never disagree with
             // the valuation, in magnitude or in currency. Deliberately NOT gated on
             // still holding units — the sale that takes a position to zero is
             // exactly the flow that must be counted, or the value would vanish with
             // nothing to explain it and the curve would read it as a total loss.
-            if (m.traded && m.traded[dk]) flow += m.traded[dk] * priceInr;
-          }
-          flowAt[i] = flow;
+            var seTraded = seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")];
+            if (seTraded && seTraded[dk]) flowAt[i] += seTraded[dk] * priceInr;
+          });
           return { x: date, y: total };
         });
 
@@ -9365,9 +9193,7 @@
         })();
 
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
-        // Guarded like the other chart: a superseded run's answer is no better than
-        // the one already on screen, and building it is the expensive half.
-        if (!_superseded()) { try { _renderPortfolioValueChart(pointsAll); } catch (e) {} }
+        try { _renderPortfolioValueChart(pointsAll); } catch (e) {}
 
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
@@ -9492,23 +9318,24 @@
             }
           }
 
-          if (_superseded()) return { normIdxPoints: normIdxPoints };
-          // The period line and both figures are written by updateAvcReadout, from
-          // the series on the chart, once it has been drawn. Writing them here as
-          // well — before the chart exists — is what allowed a label from one run to
-          // sit above a line from another.
+          // Update header legend + eyebrow with inception year
+          var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
+          var eyebrowEl = document.getElementById("avc-eyebrow");
+          if (eyebrowEl) eyebrowEl.textContent = "GROWTH OF ₹100 · SINCE " + inceptionYear;
+          var portValEl = document.getElementById("avc-portfolio-value");
+          if (portValEl) portValEl.textContent = lastPortNorm != null ? "₹" + Math.round(lastPortNorm) : "—";
           var idxNameEl = document.getElementById("avc-index-name");
           if (idxNameEl) idxNameEl.textContent = indexDisplayName;
+          var idxValEl = document.getElementById("avc-index-value");
+          if (idxValEl) idxValEl.textContent = lastIdxNorm != null ? "₹" + Math.round(lastIdxNorm) : "—";
 
           // Verdict callout removed per user request; keep element hidden.
           var verdictEl = document.getElementById("avc-verdict");
           if (verdictEl) verdictEl.hidden = true;
           return { normIdxPoints: normIdxPoints };
         }).then(function (idxResult) {
-          if (_superseded()) return;
           _renderNormalizedChart(idxResult ? idxResult.normIdxPoints : []);
         }).catch(function () {
-          if (_superseded()) return;
           _renderNormalizedChart([]);
         });
 
@@ -9568,22 +9395,22 @@
             scales: {
               x: {
                 type: "time",
-                // minUnit "day", matching the Account Value chart: zoomed into a
-                // single month a month-granular axis draws one tick for the whole
-                // window, which is exactly the view zooming in is for.
-                time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
-                // NOT min/max here. A hard bound on the scale options is re-applied
-                // on every update, so the pan plugin's writes were undone as fast as
-                // it made them and dragging the Growth chart did nothing. The window
-                // is bounded by the zoom plugin's own limits below, which pan and
-                // zoom both respect, and set through zoomScale like the other chart.
-                // No ticks block: the axis is left to Chart.js's own time formatting,
-                // exactly as on the Account Value chart. The custom callback here used
-                // to relabel every tick itself — bolded year markers interleaved with
-                // bare month names — so the two charts sitting side by side disagreed
-                // about what a date looks like. displayFormats above is the whole
-                // specification, and it is shared.
+                // No fixed unit → Chart.js auto-selects the tick unit from the
+                // visible range, so zooming in switches from years to months.
+                time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
+                min: fullMinTime,
+                max: fullMaxTime,
                 grid: { display: false },
+                ticks: {
+                  maxRotation: 0,
+                  autoSkip: true,
+                  major: { enabled: true },
+                  font: function (ctx) { return ctx.tick && ctx.tick.major ? { weight: "bold" } : {}; },
+                  callback: function (value) {
+                    var d = new Date(value);
+                    return d.getMonth() === 0 ? String(d.getFullYear()) : d.toLocaleDateString("en-US", { month: "short" });
+                  }
+                }
               },
               y: { ticks: { callback: function (v) { return "₹" + Math.round(v); } }, grid: { color: "rgba(150,150,150,0.12)" } }
             },
@@ -9609,118 +9436,22 @@
                   x: { min: fullMinTime, max: fullMaxTime }
                 },
                 pan: {
-                  // Off: the drag is handled by wireChartXDrag below, which needs no
-                  // Hammer.js. Leaving both on would pan at twice the pointer speed.
-                  enabled: false,
-                  mode: "x"
+                  enabled: true,
+                  mode: "x",
+                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
                 },
                 zoom: {
                   wheel: { enabled: true },
                   pinch: { enabled: true },
                   mode: "x",
-                  // Drag belongs to panning, not to box-select zooming; the two
-                  // cannot share the gesture.
-                  drag: { enabled: false },
-                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); updateAvcReadout(); }
+                  onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
                 }
               }
             },
           }
         });
-        // The opening window is the equity inception → last sample, which is
-        // narrower than the plotted data when fixed income predates the first equity
-        // buy. It used to come from a hard scale bound; set through the plugin it
-        // survives, and panning starts from here rather than fighting it.
-        setChartXWindow(window.__wfValueChart, fullMinTime, fullMaxTime);
-        wireChartXDrag(canvas, function () { return window.__wfValueChart; },
-          fullMinTime, fullMaxTime, function () {
-            updateVisibleRangeLabel(window.__wfValueChart);
-            clearActiveRangePill();
-            updateAvcReadout();
-          });
         updateVisibleRangeLabel(window.__wfValueChart);
-        updateAvcReadout();
-        // Same gesture as the Account Value chart: double-click anywhere to go back
-        // to the full range.
-        canvas.ondblclick = function () {
-          if (!window.__wfValueChart) return;
-          resetChartXWindow(window.__wfValueChart, fullMinTime, fullMaxTime);
-          updateVisibleRangeLabel(window.__wfValueChart);
-          clearActiveRangePill();
-          updateAvcReadout();
-        };
         } // end _renderNormalizedChart
-
-        // The two legend figures follow the visible window, as they do on the
-        // Account Value chart: zoomed in they read the portfolio and the index at
-        // the right edge of the view, plus how far the portfolio moved across it.
-        // Zoomed out they are the whole-period figures again.
-        var _avcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
-        function _avcAt(series, t) {
-          var hit = null;
-          for (var i = 0; i < series.length; i++) {
-            var pt = series[i];
-            if (!pt || pt.y == null) continue;
-            if (pt.x.getTime() <= t) hit = pt; else break;
-          }
-          return hit;
-        }
-        function updateAvcReadout() {
-          var chart = window.__wfValueChart;
-          if (!chart) return;
-          var sc = chart.scales && chart.scales.x;
-          var lo = sc && isFinite(sc.min) ? sc.min : fullMinTime;
-          var hi = sc && isFinite(sc.max) ? sc.max : fullMaxTime;
-          var full = lo <= fullMinTime + 1 && hi >= fullMaxTime - 1;
-          // Read the series off the CHART, not off this run's closure. The label has
-          // to describe the line that is actually drawn; taking it from a local array
-          // let the two disagree — a subtitle reading "SINCE 2018" above a line that
-          // starts in 2021 is exactly that disagreement, and no amount of guarding
-          // which run paints can rule it out while the two come from different places.
-          var dsets = (chart.data && chart.data.datasets) || [];
-          var portSeries = (dsets[0] && dsets[0].data) || [];
-          var idxSeries = (dsets[1] && dsets[1].data) || [];
-          var pEnd = _avcAt(portSeries, hi), pStart = _avcAt(portSeries, lo);
-          var iEnd = _avcAt(idxSeries, hi);
-          var pEl = document.getElementById("avc-portfolio-value");
-          var iEl = document.getElementById("avc-index-value");
-          var cEl = document.getElementById("avc-range-change");
-          var periodEl2 = document.getElementById("avc-period");
-          if (pEl) pEl.textContent = pEnd && pEnd.y != null ? "₹" + Math.round(pEnd.y) : "—";
-          if (iEl) iEl.textContent = iEnd && iEnd.y != null ? "₹" + Math.round(iEnd.y) : "—";
-
-          if (periodEl2) {
-            // Zoomed, the year the visible window opens in — taken from the first
-            // plotted point inside it, not from the bound, so it names a year the
-            // chart is actually showing data for.
-            var firstVisible = null;
-            for (var fi = 0; fi < portSeries.length; fi++) {
-              var fp = portSeries[fi];
-              if (fp && fp.y != null && fp.x.getTime() >= lo) { firstVisible = fp; break; }
-            }
-            // "SINCE" is the first year the line actually has a value for, read from
-            // the plotted series. It used to come from a stored inception year, which
-            // could outlive the series it described.
-            var firstPlotted = null;
-            for (var pi2 = 0; pi2 < portSeries.length; pi2++) {
-              var pp = portSeries[pi2];
-              if (pp && pp.y != null) { firstPlotted = pp; break; }
-            }
-            periodEl2.textContent = full
-              ? ("SINCE " + (firstPlotted ? firstPlotted.x : new Date(fullMinTime)).getFullYear())
-              : ("FROM " + (firstVisible ? firstVisible.x : new Date(lo)).getFullYear() +
-                 " · TO " + _avcMonthFmt.format(pEnd ? pEnd.x : new Date(hi)).toUpperCase());
-          }
-          if (!cEl) return;
-          if (full || !pStart || !pEnd || pStart === pEnd || !(pStart.y > 0)) {
-            cEl.hidden = true;
-            return;
-          }
-          var pct = ((pEnd.y - pStart.y) / pStart.y) * 100;
-          cEl.hidden = false;
-          cEl.className = "avc-legend-change " + (pct >= 0 ? "pvc-up" : "pvc-down");
-          cEl.textContent = (pct >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2) + "%";
-        }
 
         function updateVisibleRangeLabel(chart) {
           var xScale = chart.scales.x;
@@ -9742,12 +9473,11 @@
           else if (key === "3Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 3;
           else if (key === "5Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 5;
           var min = key === "ALL" ? fullMinTime : Math.max(fullMinTime, fullMaxTime - spanMs);
-          // Through the zoom plugin, so panning afterwards starts from this window
-          // instead of fighting a hard scale bound.
-          setChartXWindow(chart, min, fullMaxTime);
+          chart.options.scales.x.min = min;
+          chart.options.scales.x.max = fullMaxTime;
+          chart.update();
           updateVisibleRangeLabel(chart);
           clearActiveRangePill();
-          updateAvcReadout();
           if (btn) btn.classList.add("active");
         }
 
@@ -9805,19 +9535,9 @@
         var endPt = pvcValueAt(hi) || points[points.length - 1];
         var startPt = pvcValueAt(lo);
         if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
-        // The period line under the title already names the window, so the legend
-        // label stays a plain noun rather than repeating the month.
-        if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
-        var pvcPeriodEl = document.getElementById("pvc-period");
-        if (pvcPeriodEl) {
-          var firstVis = null;
-          for (var fj = 0; fj < points.length; fj++) {
-            if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
-          }
-          pvcPeriodEl.textContent = full
-            ? "OVER TIME"
-            : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
-               " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase());
+        if (nameEl) {
+          nameEl.textContent = full ? "Current Value"
+            : ("Value · " + _pvcMonthFmt.format(endPt.x));
         }
         if (!changeEl) return;
         // A change needs two points to be a change. Zoomed to the full range there
@@ -9862,8 +9582,7 @@
             },
             zoom: {
               limits: { x: { min: pvcXMin, max: pvcXMax } },
-              // Off — see wireChartXDrag; two pan implementations would double up.
-              pan: { enabled: false, mode: "x" },
+              pan: { enabled: true, mode: "x", onPanComplete: updatePvcReadout },
               zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
                       drag: { enabled: false }, onZoomComplete: updatePvcReadout }
             }
@@ -9891,25 +9610,58 @@
           }
         }
       });
-      wireChartXDrag(canvas2, function () { return window.__wfPortfolioValueChart; },
-        pvcXMin, pvcXMax, updatePvcReadout);
-
       // Double-click to reset the zoom back to the full range.
       canvas2.ondblclick = function () {
         if (!window.__wfPortfolioValueChart) return;
-        resetChartXWindow(window.__wfPortfolioValueChart, pvcXMin, pvcXMax);
+        window.__wfPortfolioValueChart.resetZoom();
+        _pvcSetActiveRange("ALL");
         updatePvcReadout();
       };
+
+      // Range pills. "1M" is the point of the exercise: one click to the last month
+      // of the series, with its end value and its move already on screen.
+      function _pvcSetActiveRange(key) {
+        var picker = document.getElementById("pvc-range-picker");
+        if (!picker) return;
+        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (b) {
+          b.classList.toggle("active", b.getAttribute("data-pvc-range") === key);
+        });
+      }
+      (function wirePvcRangePicker() {
+        var picker = document.getElementById("pvc-range-picker");
+        if (!picker || !points.length) return;
+        var MONTHS = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
+        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (btn) {
+          var key = btn.getAttribute("data-pvc-range");
+          // Offered only where there is enough history to show; a 1Y window on six
+          // months of data is just the full range wearing a different label.
+          if (MONTHS[key]) {
+            var need = _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime();
+            var enough = need > pvcXMin;
+            btn.disabled = !enough;
+            btn.classList.toggle("is-disabled", !enough);
+          }
+          btn.onclick = function () {
+            var chart = window.__wfPortfolioValueChart;
+            if (!chart || btn.disabled) return;
+            if (key === "ALL") {
+              chart.resetZoom();
+            } else {
+              var from = Math.max(pvcXMin, _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime());
+              chart.zoomScale("x", { min: from, max: pvcXMax }, "none");
+            }
+            _pvcSetActiveRange(key);
+            updatePvcReadout();
+          };
+        });
+      }());
       updatePvcReadout();
     }
 
     if (resetBtn && !resetBtn.dataset.bound) {
       resetBtn.dataset.bound = "1";
       resetBtn.addEventListener("click", function () {
-        // Guarded for the same reason: resetZoom is the zoom plugin's, not Chart's.
-        if (window.__wfValueChart && typeof window.__wfValueChart.resetZoom === "function") {
-          window.__wfValueChart.resetZoom();
-        }
+        if (window.__wfValueChart) window.__wfValueChart.resetZoom();
         var rangePicker = document.getElementById("value-chart-range-picker");
         if (rangePicker) {
           Array.prototype.forEach.call(rangePicker.querySelectorAll(".range-pill"), function (btn) { btn.classList.remove("active"); });

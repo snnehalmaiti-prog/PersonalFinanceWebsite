@@ -109,71 +109,18 @@ stocks/ETF flows were gathered from the OPEN holdings and a fully-sold position
 contributed neither its cost nor its proceeds — while mutual funds had no such
 filter, so the two asset classes did not agree on what the number meant.
 
-## check-chart-pan.js
-
-In `run-all.js`. Pins the pan/zoom configuration of both value charts, because the
-browser suites cannot reach it: chartjs-plugin-zoom needs a CDN the sandbox has no
-route to, so its gestures are never exercised here.
-
-Dragging is no longer the plugin's job at all. chartjs-plugin-zoom's pan depends on
-Hammer.js, and nothing here can verify that loads — the sandbox has no CDN. So the
-drag is `wireChartXDrag` in script.js: pointer events only, ours to test, and
-exercised with real `mouse.down/move/up` in e2e-account-value-zoom.js. The plugin
-keeps wheel and pinch. Its own pan must stay OFF, or a drag pans twice.
-
-Before that, the Growth chart declared pan and still would not drag — its x scale
-also carried hard `min`/`max` in the OPTIONS, which Chart.js re-applies on every
-update, undoing the pan plugin's writes as fast as it made them.
-
-It also requires every `zoomScale`/`resetZoom` call to sit behind a typeof guard.
-Those are plugin methods, not Chart.js ones: when the plugin fails to load and
-Chart.js does not, a bare call throws and takes the whole chart down. e2e-regression
-caught exactly that — the sandbox has no CDN, which turns out to be a faithful
-simulation of a blocked or offline user.
-
-## check-chart-subtitle-align.js / measure-subtitle-align.js
-
-The period line under each chart title ("SINCE 2018", "OVER TIME") must sit flush
-with the title. It did not: the card already pads 20px and the subtitle rule added
-its own horizontal margin on top, indenting the period 20px past the title it
-belongs to, with an 11px gap above it.
-
-`check-chart-subtitle-align.js` is in `run-all.js` and pins the CSS rule.
-`measure-subtitle-align.js` measures the real geometry in a browser — it builds its
-fixture out of dashboard.html's own markup, so it cannot drift from what it checks:
-
-    node tests/measure-subtitle-align.js
-
-Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
-
-## e2e-chart-render-perf.js
-
-Load cost of the two value charts on a portfolio the size of the real one: 18 mapped
-funds, 6 stocks, daily NAV back to 2018, eight years of monthly SIPs.
-
-    node tests/e2e-chart-render-perf.js
-
-Asserts that a burst of five re-render triggers costs one paint rather than five,
-that the initial load does not rebuild the charts a dozen times, and — the reported
-symptom — that only ONE chart state ever reaches the screen, so the user never sees a
-chart drawn wrong and then corrected.
-
-`burstBuilds` is the deterministic number and is what the mutants move: 14 without
-the generation guard, 2 with it. `blocked` is machine-dependent, reported but not
-asserted.
-
 ## e2e-account-value-zoom.js
 
-The zoom-following readouts on BOTH value charts — ACCOUNT VALUE · OVER TIME and
-GROWTH OF ₹100.
+The ACCOUNT VALUE · OVER TIME range pills and the zoom-following readout.
 
     node tests/e2e-account-value-zoom.js
+    PVC_SHORT=1 node tests/e2e-account-value-zoom.js   # short-history variant
 
 The NAV compounds at a fixed 0.16%/day, so each window's expected change is
-`1.0016^days − 1` and is checked as arithmetic rather than taken from the app.
-Every window is an INTERIOR one — it does not end at the last point — because a
-window ending at today looks identical whether the readout follows the view or
-merely prints the final figure. That is the only shape that discriminates.
+`1.0016^days − 1` and is checked as arithmetic rather than taken from the app. The
+interior-window case (C11–C13) is the one that matters: every range pill ends at the
+last point, so only a window that does NOT end at today can tell a window-aware
+readout from one that merely prints the final value.
 
 Chart.js and its zoom plugin cannot load in the sandbox (no CDN), so the suite
 models an x scale with min/max plus zoomScale/resetZoom. It covers the wiring and
