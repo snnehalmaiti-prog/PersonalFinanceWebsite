@@ -134,10 +134,60 @@
     return out;
   }
 
+  // twrNavSeries — time-weighted return rebased to 100.
+  //
+  // Given a portfolio's value at each timeline point and the CUMULATIVE net
+  // contributions as at each of those points, returns the NAV series: 100 on the
+  // first point with value, then each period chained by
+  //
+  //   NAV(i) = NAV(i-1) x (value(i) - contributions during period i) / value(i-1)
+  //
+  // Subtracting the period's own cash flow from the ENDING value is what makes the
+  // return time-weighted: money paid in today has not earned anything yet, so it
+  // must not read as growth. It is exact (not a Modified-Dietz approximation) when
+  // every flow date is itself a timeline point, so no flow straddles a period.
+  //
+  // Points before the portfolio has any value are null — there is no return to
+  // report yet, and plotting them as 100 would draw a flat line through a period
+  // when nothing was invested.
+  //
+  // Returns { nav: Array<number|null>, baseIndex: number, last: number|null };
+  // baseIndex is -1 (and nav all null) when the portfolio never had value.
+  function twrNavSeries(values, cumContrib) {
+    var n = values ? values.length : 0;
+    var nav = new Array(n);
+    for (var z = 0; z < n; z++) nav[z] = null;
+    var base = 0;
+    while (base < n && !(values[base] > 0)) base++;
+    if (base >= n) return { nav: nav, baseIndex: -1, last: null };
+    nav[base] = 100;
+    var prevNav = 100;
+    var prevValue = values[base];
+    var prevContrib = (cumContrib && cumContrib[base]) || 0;
+    for (var i = base + 1; i < n; i++) {
+      var c = (cumContrib && cumContrib[i]) || 0;
+      var dContrib = c - prevContrib;
+      var value = values[i];
+      var earned = value - dContrib;
+      var v = prevNav;
+      // prevValue <= 0: nothing was invested over this period (the portfolio was
+      // empty, or is being opened by this very flow) — no return to record, so
+      // carry the NAV flat rather than dividing by zero. earned <= 0: a full exit;
+      // likewise flat, the realised move having been taken in earlier periods.
+      if (prevValue > 0 && earned > 0) v = prevNav * (earned / prevValue);
+      nav[i] = v;
+      prevNav = v;
+      prevValue = value;
+      prevContrib = c;
+    }
+    return { nav: nav, baseIndex: base, last: prevNav };
+  }
+
   root.WfMath = {
     DAYS_PER_YEAR: DAYS_PER_YEAR,
     calculateXIRR: calculateXIRR,
     fifoRemainingLots: fifoRemainingLots,
-    forwardFillOverTimeline: forwardFillOverTimeline
+    forwardFillOverTimeline: forwardFillOverTimeline,
+    twrNavSeries: twrNavSeries
   };
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this));

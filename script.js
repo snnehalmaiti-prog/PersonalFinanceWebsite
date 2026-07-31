@@ -9246,34 +9246,33 @@
           cumContribAt[pi] = runningContrib;
         }
 
-        // TWR NAV: start at 100 on the first day the portfolio has value.
-        // units_0 = value_0 / 100. Thereafter, when contributions arrive at
-        // date t, units grow by Δcontrib / NAV(previous). Between contributions,
-        // NAV moves purely with portfolio value.
-        var basePortIdx = 0;
-        while (basePortIdx < growthPoints.length && !(growthPoints[basePortIdx].y > 0)) basePortIdx++;
-        var normPortPoints = growthPoints.map(function () { return { x: null, y: null }; });
-        var lastPortNorm = null;
-        if (basePortIdx < growthPoints.length && growthPoints[basePortIdx].y > 0) {
-          var units = growthPoints[basePortIdx].y / 100;
-          normPortPoints[basePortIdx] = { x: growthPoints[basePortIdx].x, y: 100 };
-          var prevNav = 100;
-          var prevContrib = cumContribAt[basePortIdx];
-          for (var i = basePortIdx + 1; i < growthPoints.length; i++) {
-            var dContrib = cumContribAt[i] - prevContrib;
-            if (Math.abs(dContrib) > 0.01 && prevNav > 0) {
-              // Units adjust for cash flow at the prevailing NAV
-              units += dContrib / prevNav;
-            }
-            var nav = units > 0 && growthPoints[i].y > 0 ? (growthPoints[i].y / units) : prevNav;
-            normPortPoints[i] = { x: growthPoints[i].x, y: nav };
-            prevNav = nav;
-            prevContrib = cumContribAt[i];
-          }
-          lastPortNorm = prevNav;
-        } else {
-          normPortPoints = growthPoints.map(function (p) { return { x: p.x, y: null }; });
-        }
+        // TWR NAV: start at 100 on the first day the portfolio has value, then
+        // chain each period's return.
+        //
+        //   NAV(i) = NAV(i-1) × (value(i) − contributions(i)) / value(i-1)
+        //
+        // Subtracting the period's own cash flow from the ENDING value is what
+        // makes the return time-weighted: money put in today has not earned
+        // anything yet, so it must not count as growth. Exact here rather than an
+        // approximation, because every transaction date is itself a timeline
+        // point — a flow never straddles a period.
+        //
+        // This used to carry a unit count instead, buying units at the PREVIOUS
+        // point's NAV. That is only right if the value did not move between the
+        // two points, and it is wrong exactly when it matters most: a purchase on
+        // a day the price jumped bought units at the stale NAV, permanently
+        // diluting the series. A fund that doubled while being bought into read
+        // ₹133 instead of ₹200 — and looked like it had LOST to an index that
+        // rose half as much.
+        // The recurrence itself lives in WfMath.twrNavSeries so it can be tested
+        // against hand-computed cases; here it is only mapped back onto dates.
+        var _twr = WfMath.twrNavSeries(
+          growthPoints.map(function (p) { return p.y; }), cumContribAt);
+        var basePortIdx = _twr.baseIndex === -1 ? growthPoints.length : _twr.baseIndex;
+        var lastPortNorm = _twr.last;
+        var normPortPoints = growthPoints.map(function (p, i) {
+          return { x: p.x, y: _twr.nav[i] };
+        });
 
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
         fetchIndexHistory().then(function (indexHistory) {
