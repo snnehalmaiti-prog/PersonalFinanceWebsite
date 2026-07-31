@@ -137,6 +137,60 @@ console.log("\nG. Nothing is NaN or Infinity");
   ok(near(noFlows.nav[1], 200), "G2 a missing contribution series means no flows", noFlows.nav[1]);
 }
 
+console.log("\nI. The unit model, at the ₹1,000 base the spec is written in");
+{
+  // "Your account value is ₹10,000 and the NAV is ₹1,000 → 10 units. When you add
+  //  ₹5,000, 5 new units are created → 15 units. Since the NAV remains ₹1,000 your
+  //  total value is ₹15,000, but the curve correctly shows no profit or loss."
+  const a = T([10000, 15000], [10000, 15000], 1000);
+  ok(a.nav[0] === 1000, "I1 opens at a NAV of 1,000", a.nav[0]);
+  ok(a.units[0] === 10, "I2 ₹10,000 at ₹1,000 is 10 units", a.units[0]);
+  ok(near(a.nav[1], 1000), "I3 adding ₹5,000 leaves the NAV at 1,000", a.nav[1]);
+  ok(near(a.units[1], 15), "I4 it creates 5 new units, for 15", a.units[1]);
+  ok(near(a.units[1] * a.nav[1], 15000), "I5 15 units × ₹1,000 = ₹15,000", a.units[1] * a.nav[1]);
+
+  // "Day 1: NAV ₹1,000, 10 units, account ₹10,000. Day 2: gains ₹1,000 → ₹11,000
+  //  and NAV ₹1,100, units unchanged. Day 3: loses ₹2,000 → ₹9,000 and NAV ₹900,
+  //  units still unchanged."
+  const b = T([10000, 11000, 9000], [10000, 10000, 10000], 1000);
+  ok(near(b.nav[1], 1100), "I6 a ₹1,000 gain takes the NAV to 1,100", b.nav[1]);
+  ok(near(b.nav[2], 900), "I7 a ₹2,000 loss takes it to 900", b.nav[2]);
+  ok(b.units.every((u) => near(u, 10)),
+     "I8 the unit count never moves on market gains or losses", b.units);
+
+  // A withdrawal cancels units at the NAV it left at, and the NAV does not move.
+  const w = T([10000, 6000], [10000, 6000], 1000);
+  ok(near(w.nav[1], 1000), "I9 withdrawing ₹4,000 leaves the NAV at 1,000", w.nav[1]);
+  ok(near(w.units[1], 6), "I10 it cancels 4 units, leaving 6", w.units[1]);
+
+  // The base is a relabelling: the curve's SHAPE cannot depend on it.
+  const v = [1000, 1500, 1200], c = [1000, 1000, 1000];
+  const h = T(v, c, 100), k = T(v, c, 1000);
+  ok(k.nav.every((x, i) => near(x, h.nav[i] * 10, 1e-9)),
+     "I11 the ₹1,000 base is exactly ten times the ₹100 base", [h.nav, k.nav]);
+  ok(near(T(v, c).last, h.last), "I12 the base defaults to 100", T(v, c).last);
+}
+
+console.log("\nJ. Units and NAV stay consistent with the account value");
+{
+  // units × NAV must reproduce the account value at every point — the invariant
+  // that makes the unit story true rather than just a way of describing it.
+  const v = [1000, 1800, 1800, 900, 2400];
+  const c = [1000, 1000, 1500, 1500, 2100];
+  const s = T(v, c, 1000);
+  let worst = 0;
+  s.nav.forEach((x, i) => { if (x != null) worst = Math.max(worst, Math.abs(s.units[i] * x - v[i])); });
+  ok(worst < 1e-6, "J1 units × NAV equals the account value at every point", worst);
+  // And units only ever change when money moves.
+  let moved = [];
+  for (let i = 1; i < v.length; i++) {
+    const flowed = Math.abs(c[i] - c[i - 1]) > 1e-9;
+    const unitsMoved = Math.abs(s.units[i] - s.units[i - 1]) > 1e-6;
+    if (unitsMoved !== flowed) moved.push(i);
+  }
+  ok(moved.length === 0, "J2 units change on cash flows and only on cash flows", moved);
+}
+
 console.log("\nH. The chart uses this helper rather than its own copy");
 {
   const fs = require("fs");

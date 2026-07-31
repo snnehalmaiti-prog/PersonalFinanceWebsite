@@ -134,53 +134,75 @@
     return out;
   }
 
-  // twrNavSeries — time-weighted return rebased to 100.
+  // twrNavSeries — the portfolio performance curve, as a unit/NAV model.
   //
-  // Given a portfolio's value at each timeline point and the CUMULATIVE net
-  // contributions as at each of those points, returns the NAV series: 100 on the
-  // first point with value, then each period chained by
+  // The account is treated as a fund. It opens with `baseNav` per unit (100 here,
+  // so the chart reads "growth of ₹100"), and thereafter:
   //
-  //   NAV(i) = NAV(i-1) x (value(i) - contributions during period i) / value(i-1)
+  //   * money added creates units at the NAV the money entered at,
+  //   * money withdrawn cancels units at the NAV it left at,
+  //   * the NAV itself moves ONLY with the market.
   //
-  // Subtracting the period's own cash flow from the ENDING value is what makes the
-  // return time-weighted: money paid in today has not earned anything yet, so it
-  // must not read as growth. It is exact (not a Modified-Dietz approximation) when
-  // every flow date is itself a timeline point, so no flow straddles a period.
+  // So a deposit changes the unit COUNT and never the unit PRICE, which is what
+  // keeps cash flows out of the curve. Worked through: 10 units at ₹1,000 is an
+  // account of ₹10,000; adding ₹5,000 creates 5 units at ₹1,000, giving 15 units
+  // and ₹15,000 — the account grew 50% while the curve correctly stays flat.
   //
-  // Points before the portfolio has any value are null — there is no return to
-  // report yet, and plotting them as 100 would draw a flat line through a period
-  // when nothing was invested.
+  // Equivalently, and how it is computed here (one pass, no accumulated rounding):
   //
-  // Returns { nav: Array<number|null>, baseIndex: number, last: number|null };
-  // baseIndex is -1 (and nav all null) when the portfolio never had value.
-  function twrNavSeries(values, cumContrib) {
+  //   NAV(i) = NAV(i-1) × (value(i) − flows(i)) / value(i-1)
+  //
+  // — the same thing, since NAV(i) = (value(i) − flows(i)) / units(i-1) and
+  // units(i) = value(i) / NAV(i). `units` is returned as well, for callers that
+  // want to show it.
+  //
+  // Flows are valued at the NAV of the point they occur on, both ways. In this app
+  // a "contribution" is a purchase, not a cash deposit that sits idle: the money
+  // arrives and is deployed in the same transaction, at that transaction's own
+  // price. A mutual fund order executes AT the day's NAV, so this is exact for
+  // them. Crediting a purchase with the day's move instead (creating its units at
+  // the PREVIOUS point's NAV) would hand it a return it did not earn — measured at
+  // 133 where 200 was right, on a fund that doubled while being bought into.
+  //
+  // Points before the account has any value are null: there is no return to report
+  // yet, and drawing a flat baseline through a period when nothing was invested
+  // would claim one.
+  //
+  // Returns { nav, units, baseIndex, last }; baseIndex is -1 (everything null)
+  // when the account never had value.
+  function twrNavSeries(values, cumContrib, baseNav) {
+    var start = baseNav > 0 ? baseNav : 100;
     var n = values ? values.length : 0;
-    var nav = new Array(n);
-    for (var z = 0; z < n; z++) nav[z] = null;
+    var nav = new Array(n), units = new Array(n);
+    for (var z = 0; z < n; z++) { nav[z] = null; units[z] = null; }
     var base = 0;
     while (base < n && !(values[base] > 0)) base++;
-    if (base >= n) return { nav: nav, baseIndex: -1, last: null };
-    nav[base] = 100;
-    var prevNav = 100;
+    if (base >= n) return { nav: nav, units: units, baseIndex: -1, last: null };
+    nav[base] = start;
+    units[base] = values[base] / start;
+    var prevNav = start;
     var prevValue = values[base];
     var prevContrib = (cumContrib && cumContrib[base]) || 0;
     for (var i = base + 1; i < n; i++) {
       var c = (cumContrib && cumContrib[i]) || 0;
-      var dContrib = c - prevContrib;
+      var flow = c - prevContrib;
       var value = values[i];
-      var earned = value - dContrib;
+      // What the units already outstanding are worth now, before this point's own
+      // money is added or taken out. That is the only part that reflects the market.
+      var earned = value - flow;
       var v = prevNav;
-      // prevValue <= 0: nothing was invested over this period (the portfolio was
+      // prevValue <= 0: nothing was invested over this period (the account was
       // empty, or is being opened by this very flow) — no return to record, so
       // carry the NAV flat rather than dividing by zero. earned <= 0: a full exit;
       // likewise flat, the realised move having been taken in earlier periods.
       if (prevValue > 0 && earned > 0) v = prevNav * (earned / prevValue);
       nav[i] = v;
+      units[i] = v > 0 ? value / v : units[i - 1];
       prevNav = v;
       prevValue = value;
       prevContrib = c;
     }
-    return { nav: nav, baseIndex: base, last: prevNav };
+    return { nav: nav, units: units, baseIndex: base, last: prevNav };
   }
 
   root.WfMath = {
