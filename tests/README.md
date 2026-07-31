@@ -111,16 +111,16 @@ filter, so the two asset classes did not agree on what the number meant.
 
 ## e2e-account-value-zoom.js
 
-The ACCOUNT VALUE · OVER TIME range pills and the zoom-following readout.
+The zoom-following readouts on BOTH value charts — ACCOUNT VALUE · OVER TIME and
+GROWTH OF ₹100.
 
     node tests/e2e-account-value-zoom.js
-    PVC_SHORT=1 node tests/e2e-account-value-zoom.js   # short-history variant
 
 The NAV compounds at a fixed 0.16%/day, so each window's expected change is
-`1.0016^days − 1` and is checked as arithmetic rather than taken from the app. The
-interior-window case (C11–C13) is the one that matters: every range pill ends at the
-last point, so only a window that does NOT end at today can tell a window-aware
-readout from one that merely prints the final value.
+`1.0016^days − 1` and is checked as arithmetic rather than taken from the app.
+Every window is an INTERIOR one — it does not end at the last point — because a
+window ending at today looks identical whether the readout follows the view or
+merely prints the final figure. That is the only shape that discriminates.
 
 Chart.js and its zoom plugin cannot load in the sandbox (no CDN), so the suite
 models an x scale with min/max plus zoomScale/resetZoom. It covers the wiring and
