@@ -168,6 +168,27 @@ console.log("\nF. The drill-down rows match the bars");
      "F5 its amount equals the bar it sits behind");
 }
 
+console.log("\nH. The maturity carries its interest as P&L");
+{
+  const dep = ago(30), mat = ago(6);
+  const d = build([fdRow({ amount: 100000, date: dep, maturity: mat, rate: "6.25%" })]);
+  const t = (d.byMonthTxns[mk(mat)] || [])[0];
+  ok(t && t.pnl != null, "H1 the maturity row carries a pnl");
+  ok(t && near(t.pnl, t.amount - 100000),
+     "H2 it is exactly the interest: what came back minus what went in", t && [t.pnl, t.amount - 100000]);
+  ok(t && t.pnl > 0, "H3 a positive rate earns positive interest", t && t.pnl);
+
+  // A deposit is not a realized event; only the maturity books profit.
+  const dt = (d.byMonthTxns[mk(dep)] || [])[0];
+  ok(dt && dt.pnl == null, "H4 the deposit row carries no pnl", dt && dt.pnl);
+
+  // A zero-rate FD returns exactly the principal, so its profit is zero — which
+  // must still read as KNOWN (0), not as unknown.
+  const d0 = build([fdRow({ amount: 100000, date: dep, maturity: mat, rate: "0%" })]);
+  const t0 = (d0.byMonthTxns[mk(mat)] || [])[0];
+  ok(t0 && t0.pnl === 0, "H5 a zero-rate FD reports zero profit, not a blank", t0 && t0.pnl);
+}
+
 console.log("\nG. fdMaturityValue itself");
 {
   const s = new Date("2024-01-01T00:00:00");

@@ -11457,6 +11457,11 @@
               cat: cat, grp: grp,
               amount: matVal,
               out: true,
+              // An FD has no units, so the FIFO realized pass produces nothing for
+              // it. Its profit is simply the interest it paid, which is known
+              // exactly here — carried on the row so the drill-down can show a
+              // real P&L instead of a dash.
+              pnl: matVal - Math.abs(amount),
               type: "Maturity",
               source: grp
             });
@@ -12147,11 +12152,16 @@
                 // and P&L. Aggregation happens within a portfolio group, so all
                 // rows folded into a line share this value.
                 portfolio: t.portfolio,
-                amount: 0, count: 0, types: {}, min: t.date, max: t.date
+                amount: 0, count: 0, types: {}, min: t.date, max: t.date,
+                // Row-carried profit (FD interest). Kept separate from the FIFO
+                // realized figures, which are keyed by instrument rather than by
+                // row, so folding several maturities into one line still adds up.
+                pnl: 0, pnlKnown: false
               };
             }
             var g = m[key];
             g.amount += t.amount;
+            if (t.pnl != null) { g.pnl += t.pnl; g.pnlKnown = true; }
             g.count += 1;
             if (t.type) g.types[t.type] = true;
             if (t.date < g.min) g.min = t.date;
@@ -12211,7 +12221,14 @@
                 pnlCell +
               '</tr>';
             }
+            // No FIFO row. Buy/Sell price stay blank — there are no units to price
+            // — but the profit itself can still be known: an FD's interest is
+            // carried on the transaction.
             extra = '<td class="num mic-txn-na">—</td><td class="num mic-txn-na">—</td>';
+            var rowPnlCell = t.pnlKnown
+              ? '<td class="num ' + (t.pnl >= 0 ? 'pos' : 'out') + '">' +
+                (t.pnl >= 0 ? '+' : '&minus;') + formatCurrency(Math.abs(t.pnl)) + '</td>'
+              : '<td class="num mic-txn-na">—</td>';
             return '<tr>' +
               '<td>' + dateCell + '</td>' +
               '<td><span class="mic-txn-inst"><span class="mic-txn-dot" style="background:' + col + '"></span>' +
@@ -12222,7 +12239,7 @@
               '<td>' + escapeHtml(typeLabel) + '</td>' +
               extra +
               '<td class="num out">&minus;' + formatCurrency(t.amount) + '</td>' +
-              '<td class="num mic-txn-na">—</td>' +
+              rowPnlCell +
             '</tr>';
           }
           return '<tr>' +
@@ -12258,6 +12275,15 @@
           var rows = groups[pf];
           var gIn = 0, gOut = 0, gPnl = 0, gPnlKnown = false;
           rows.forEach(function (t) { if (t.out) gOut += t.amount; else gIn += t.amount; });
+          // Row-carried profit first (FD interest), then the FIFO figures. The two
+          // never cover the same row: an instrument has units or it does not.
+          if (soldView) {
+            rows.forEach(function (t) {
+              if (t.pnl == null) return;
+              gPnl += t.pnl;
+              gPnlKnown = true;
+            });
+          }
           if (soldView && realizedMonth && realizedMonth[pf]) {
             // Sum each sold instrument once, from the per-portfolio pool.
             var seen = {};
@@ -12270,6 +12296,10 @@
               gPnl += r.proceeds - r.cost;
               gPnlKnown = true;
             });
+          }
+          // Outside both branches: the footer must total whichever of the two
+          // sources this group actually had.
+          if (soldView) {
             pnlTot += gPnl;
             if (gPnlKnown) pnlKnown = true;
           }

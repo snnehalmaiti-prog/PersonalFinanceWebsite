@@ -288,6 +288,11 @@ function ok(cond, name, detail) {
           title: (document.getElementById("mic-txn-title") || {}).textContent || "",
           sub: (document.getElementById("mic-txn-sub") || {}).textContent || "",
           rows: document.querySelectorAll("#mic-txn-body tr").length,
+          // The maturity row's P&L cell, and the modal footer's P&L total.
+          cells: [...document.querySelectorAll("#mic-txn-body tr")]
+            .filter((r) => /Maturity/.test(r.textContent))
+            .map((r) => [...r.children].map((c) => c.textContent.trim())),
+          footer: (document.getElementById("mic-txn-totals") || {}).textContent || "",
         };
       }),
       new Promise((r) => setTimeout(() => r({ hung: true }), 20000)),
@@ -297,6 +302,13 @@ function ok(cond, name, detail) {
     ok(res.soldOffered === true, "I3 Sold is offered — the month has both directions", res);
     ok(/sold/.test(res.sub || ""), "I4 the Sold view actually rendered", res.sub);
     ok(res.rows > 0, "I5 the maturity is listed", res.rows);
+    // An FD has no units, so Buy/Sell Price stay blank — but its profit is known
+    // exactly (the interest it paid) and must not render as a dash.
+    const cells = (res.cells || [])[0] || [];
+    const pnlCell = cells[cells.length - 1] || "";
+    ok(/^[+\u2212-]\s*\u20b9/.test(pnlCell), "I7 the maturity shows its interest as P&L", cells);
+    ok(pnlCell.indexOf("\u2014") === -1, "I8 the P&L cell is not a dash", pnlCell);
+    ok(/P&L/.test(res.footer || ""), "I9 the footer totals it", res.footer);
     // Raced as well: with the loop back, the page's main thread never yields, so
     // an unraced evaluate would hang the whole suite instead of failing it.
     const alive = await Promise.race([
