@@ -94,6 +94,21 @@ frequency. Compounding its rate over its own window must land on the chart's fin
 NAV. Two independent implementations agreeing is stronger evidence than either one
 matching an expectation written next to it.
 
+## e2e-xirr.js
+
+Portfolio XIRR end to end, checked against an XIRR written in the test from the
+definition — not by calling the shipped solver, so the two are genuinely
+independent. Same reason it is not in `run-all.js`.
+
+    node tests/e2e-xirr.js
+
+The fixture is built so a wrong answer is unmistakable: ₹1,000 into a fund that
+doubles and ₹10,000 into a stock that halves, both fully sold. Counting both gives
+−59.63%; dropping the stock gives +301.91%. The app reported +301.91%, because the
+stocks/ETF flows were gathered from the OPEN holdings and a fully-sold position
+contributed neither its cost nor its proceeds — while mutual funds had no such
+filter, so the two asset classes did not agree on what the number meant.
+
 ## More on e2e-regression.js
 
 It also caught the transactions drill-down hanging the page on a month where a

@@ -6640,6 +6640,33 @@
     return sum;
   }
 
+  // Every stocks/ETF cash flow in a portfolio, converted to INR at each
+  // transaction's own USD/INR rate. ALL instruments, including ones that have been
+  // fully sold: a closed position's buys and proceeds are as much a part of the
+  // return as an open one's. Building this from the OPEN holdings instead silently
+  // dropped every exited position from the portfolio XIRR and from the benchmark
+  // that replays these flows — measured at +301.91% where the money earned
+  // -59.63%, because the one closed position happened to be the loss.
+  // Rows with no mapping are skipped: nothing values them anywhere, so counting
+  // their money would compare cash against a value that does not exist.
+  function buildSeInrFlows(rows, portfolioFilter, mappingTable, usdMap, usdToday) {
+    var out = [];
+    var byInstrument = groupUnitTransactionsByInstrument(rows, portfolioFilter) || {};
+    Object.keys(byInstrument).forEach(function (instrument) {
+      var mapping = mappingTable && mappingTable[normalizeText(instrument)];
+      if (!mapping) return;
+      var isUsd = normalizeText(mapping.region) === "us";
+      byInstrument[instrument].forEach(function (txn) {
+        if (!txn.date || !txn.units || !txn.price) return; // price 0 = corporate action
+        var rate = isUsd ? ((usdMap && usdMap[formatDateISO(txn.date)]) || usdToday || 1) : 1;
+        var amt = txn.units * txn.price * rate;
+        out.push({ date: txn.date, amount: txn.type === "buy" ? -amt : amt });
+      });
+    });
+    out.sort(function (a, b) { return a.date - b.date; });
+    return out;
+  }
+
   function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -14283,6 +14310,19 @@
           _setOpenClosedPill(document.getElementById(reg === "us" ? "seh-us-open-toggle" : "seh-open-toggle"),
             SEH_STATE.showClosed[reg], a.closed, a.open);
         });
+        // Nothing is held, but money was still put in and taken out, and that is a
+        // return. Publish those flows before leaving: this branch is exactly the
+        // "sold everything" case, and returning without them left the portfolio
+        // XIRR and the benchmark describing only the other asset classes. The
+        // terminal is zero here — there is nothing left to mark.
+        fetchAllStockPrices().catch(function () { return {}; }).then(function (sp) {
+          var flows = buildSeInrFlows(rows, ovPortfolio, mappingTable,
+            (sp && sp.usd_inr_history) || {},
+            (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84);
+          _ovFlows.seFlowsINR = flows.slice();
+          _ovFlows.seXirrFlows = flows.slice();
+          document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
+        });
         return;
       }
 
@@ -14552,22 +14592,19 @@
             seReturnPctEl.className = "overview-stat-value " + (retPct > 0 ? "positive" : retPct < 0 ? "negative" : "");
           }
 
-          // Portfolio-level XIRR — from the Overview-portfolio open positions so
-          // _ovFlows.seXirrFlows (and the overview XIRR) honour the Overview selector,
-          // consistent with the totals above.
-          var seXirrFlows = [];
-          ovOpenHoldings.forEach(function (hh) {
-            if (hh.region === "US") {
-              (hh.txns || []).forEach(function (txn) {
-                if (!txn.date || !txn.units || !txn.price) return;
-                var dateStr = formatDateISO(txn.date);
-                var rateForDate = usdInrHistMap[dateStr] || usdInrToday;
-                seXirrFlows.push({ date: txn.date, amount: txn.type === "buy" ? -(txn.units * txn.price * rateForDate) : (txn.units * txn.price * rateForDate) });
-              });
-            } else {
-              buildXirrCashFlows(rows, ovPortfolio, hh.instrument).forEach(function (f) { seXirrFlows.push(f); });
-            }
-          });
+          // Portfolio-level XIRR — every stocks/ETF row in the Overview portfolio,
+          // INR-converted. Honours the Overview selector, consistent with the totals
+          // above.
+          //
+          // It used to walk the OPEN holdings, which silently dropped every position
+          // that had been fully sold — all of its buys and all of its proceeds. A
+          // stock bought and exited was simply not part of the portfolio's return,
+          // nor of the benchmark, which replays these same flows. Measured on a
+          // fixture: ₹1,000 into a fund that doubled and ₹10,000 into a stock that
+          // halved, both closed, reported +301.91% — the fund on its own — where the
+          // money actually earned −59.63%. Mutual funds never had this filter, so
+          // the two asset classes did not even agree on what the number meant.
+          var seXirrFlows = buildSeInrFlows(rows, ovPortfolio, mappingTable, usdInrHistMap, usdInrToday);
           // INR-converted SE cash flows WITHOUT terminal — reused by the benchmark
           // comparison and period XIRR so those paths stop using unconverted USD.
           _ovFlows.seFlowsINR = seXirrFlows.slice();
