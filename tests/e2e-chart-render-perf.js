@@ -195,6 +195,31 @@ for (let s = 0; s < N_STOCKS; s++) livePrices["TICK" + s] = { price: 300, curren
      "A5 the period line agrees with the plotted history", m.period);
   ok(m.statusVisible === false,
      "A6 no progress message is left stranded under the finished chart", [m.statusVisible, m.statusText]);
+  // The reported symptom was "SINCE 2018" printed above a line that starts in 2021.
+  // Whatever causes a short series, the LABEL must never disagree with it — so it is
+  // read from the plotted data. Truncate the drawn series and the label must follow.
+  const agree = await p.evaluate(() => {
+    const ch = window.__wfValueChart;
+    const ds = ch.data.datasets[0];
+    const pts = ds.data;
+    const firstNonNull = pts.findIndex((q) => q && q.y != null);
+    // Blank out the first three years, exactly as a partial instrument set would.
+    const cut = new Date("2021-01-01T00:00:00").getTime();
+    ds.data = pts.map((q) => (q && q.x.getTime() < cut ? { x: q.x, y: null } : q));
+    // Redraw the readout the way a zoom/pan does.
+    const cb = ch.options.plugins.zoom.zoom.onZoomComplete;
+    if (cb) cb({ chart: ch });
+    const after = (document.getElementById("avc-period") || {}).textContent;
+    ds.data = pts;
+    if (cb) cb({ chart: ch });
+    return { firstNonNull, after, restored: (document.getElementById("avc-period") || {}).textContent };
+  });
+  console.log("  " + JSON.stringify(agree));
+  ok(agree.after === "SINCE 2021",
+     "A8 the period line is read from the drawn line, so it cannot contradict it", agree.after);
+  ok(agree.restored === "SINCE 2018",
+     "A9 and follows it back when the full series returns", agree.restored);
+
   ok(errs.length === 0, "A7 no page errors", errs.slice(0, 3));
 
   console.log("\n  blocked main thread: " + m.blocked + "ms over " + m.tasks + " long tasks");

@@ -9378,9 +9378,6 @@
         // left gap before the first MF/Stocks/commodity transaction.
         var fullMinTime = (equityFirstTxnDate || first).getTime();
         var fullMaxTime = last.getTime();
-        // Filled in once the base point is known; the eyebrow restores it whenever
-        // the chart is zoomed back out to the full range.
-        var _avcInceptionYear = "";
 
         // === Growth-of-₹100 normalization + benchmark overlay ===
         var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
@@ -9495,19 +9492,13 @@
             }
           }
 
-          // Update header legend + eyebrow with inception year
           if (_superseded()) return { normIdxPoints: normIdxPoints };
-          var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
-          _avcInceptionYear = inceptionYear;
-          // The title is fixed; the line under it says which period is on screen.
-          var periodEl = document.getElementById("avc-period");
-          if (periodEl) periodEl.textContent = "SINCE " + inceptionYear;
-          var portValEl = document.getElementById("avc-portfolio-value");
-          if (portValEl) portValEl.textContent = lastPortNorm != null ? "₹" + Math.round(lastPortNorm) : "—";
+          // The period line and both figures are written by updateAvcReadout, from
+          // the series on the chart, once it has been drawn. Writing them here as
+          // well — before the chart exists — is what allowed a label from one run to
+          // sit above a line from another.
           var idxNameEl = document.getElementById("avc-index-name");
           if (idxNameEl) idxNameEl.textContent = indexDisplayName;
-          var idxValEl = document.getElementById("avc-index-value");
-          if (idxValEl) idxValEl.textContent = lastIdxNorm != null ? "₹" + Math.round(lastIdxNorm) : "—";
 
           // Verdict callout removed per user request; keep element hidden.
           var verdictEl = document.getElementById("avc-verdict");
@@ -9681,9 +9672,14 @@
           var lo = sc && isFinite(sc.min) ? sc.min : fullMinTime;
           var hi = sc && isFinite(sc.max) ? sc.max : fullMaxTime;
           var full = lo <= fullMinTime + 1 && hi >= fullMaxTime - 1;
-          var portSeries = normPortPoints || [];
-          var idxSeries = (chart.data && chart.data.datasets && chart.data.datasets[1] &&
-                           chart.data.datasets[1].data) || [];
+          // Read the series off the CHART, not off this run's closure. The label has
+          // to describe the line that is actually drawn; taking it from a local array
+          // let the two disagree — a subtitle reading "SINCE 2018" above a line that
+          // starts in 2021 is exactly that disagreement, and no amount of guarding
+          // which run paints can rule it out while the two come from different places.
+          var dsets = (chart.data && chart.data.datasets) || [];
+          var portSeries = (dsets[0] && dsets[0].data) || [];
+          var idxSeries = (dsets[1] && dsets[1].data) || [];
           var pEnd = _avcAt(portSeries, hi), pStart = _avcAt(portSeries, lo);
           var iEnd = _avcAt(idxSeries, hi);
           var pEl = document.getElementById("avc-portfolio-value");
@@ -9702,8 +9698,16 @@
               var fp = portSeries[fi];
               if (fp && fp.y != null && fp.x.getTime() >= lo) { firstVisible = fp; break; }
             }
+            // "SINCE" is the first year the line actually has a value for, read from
+            // the plotted series. It used to come from a stored inception year, which
+            // could outlive the series it described.
+            var firstPlotted = null;
+            for (var pi2 = 0; pi2 < portSeries.length; pi2++) {
+              var pp = portSeries[pi2];
+              if (pp && pp.y != null) { firstPlotted = pp; break; }
+            }
             periodEl2.textContent = full
-              ? ("SINCE " + _avcInceptionYear)
+              ? ("SINCE " + (firstPlotted ? firstPlotted.x : new Date(fullMinTime)).getFullYear())
               : ("FROM " + (firstVisible ? firstVisible.x : new Date(lo)).getFullYear() +
                  " · TO " + _avcMonthFmt.format(pEnd ? pEnd.x : new Date(hi)).toUpperCase());
           }
