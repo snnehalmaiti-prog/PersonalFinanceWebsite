@@ -1016,6 +1016,15 @@
     return total;
   }
 
+  // What a fixed deposit paid out at maturity: principal compounded quarterly at
+  // its own rate, with the part-quarter pro-rated. Shared so the XIRR flows, the
+  // realized-interest attribution and the cash-flow chart can never disagree
+  // about how much money came back.
+  function fdMaturityValue(principal, startDate, maturityDate, rate) {
+    var q = elapsedQuartersFractional(startDate, maturityDate);
+    return (q > 0 && rate) ? principal * Math.pow(1 + rate / 4, q) : principal;
+  }
+
   // Matured-FD realized interest keyed by maturity YEAR (mirrors sumFdRealizedProfit's
   // total). Lets the Realized Profit card attribute FD interest to a year, not just "all".
   function fdMaturedRealizedByYear(rows, portfolioFilter) {
@@ -1040,8 +1049,7 @@
       if (!(matD && matD < todayD)) return; // not matured
       var principal = parseNumber(row[aI]);
       var rate = parsePercentRate(row[rI]);
-      var q = elapsedQuartersFractional(parseFlexibleDate(row[dI]), matD);
-      var matVal = (q > 0 && rate) ? principal * Math.pow(1 + rate / 4, q) : principal;
+      var matVal = fdMaturityValue(principal, parseFlexibleDate(row[dI]), matD, rate);
       var interest = matVal - principal;
       if (!interest) return;
       var yr = String(matD.getFullYear());
@@ -1119,9 +1127,7 @@
       var maturity = maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null;
       if (maturity && maturity < today) {
         var rate = rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0;
-        var quarters = elapsedQuartersFractional(date, maturity);
-        var maturityValue = (quarters > 0 && rate) ? amount * Math.pow(1 + rate / 4, quarters) : amount;
-        flows.push({ date: maturity, amount: maturityValue });
+        flows.push({ date: maturity, amount: fdMaturityValue(amount, date, maturity, rate) });
       }
     });
     return flows;
@@ -11394,6 +11400,10 @@
       // the Instrument Category column.
       var instrCatIdx = header.indexOf("instrument category");
       var fdInstrIdx = header.indexOf("instrument name");
+      var rateIdx = header.indexOf("rate of return");
+      var maturityIdx = header.indexOf("maturity date/sell date");
+      if (maturityIdx === -1) maturityIdx = header.indexOf("maturity date");
+      var todayD = new Date();
       if (dateIdx === -1 || amtIdx === -1 || subCatIdx === -1) return;
       rows.slice(1).forEach(function (row) {
         if (ovSkip(row, portIdx)) return;
@@ -11425,6 +11435,33 @@
           type: typeIdx !== -1 ? (row[typeIdx] || "").trim() : "",
           source: grp
         });
+
+        // A fixed deposit has no sell row: the sheet records the deposit and a
+        // maturity date, and the money comes back on that date. Without this the
+        // chart showed the deposit as an outflow and nothing ever coming in, so a
+        // year whose only event was an FD maturing looked empty. Booked at the
+        // maturity month for the amount actually received (principal + interest,
+        // same engine as the XIRR flows). Only for FDs that have ALREADY matured —
+        // a future maturity is not a cash flow yet.
+        if (!isOut && normalizeText(row[subCatIdx] || "") === "fixed deposit" && maturityIdx !== -1) {
+          var matD = parseFlexibleDate(row[maturityIdx]);
+          if (matD && matD < todayD) {
+            var matVal = fdMaturityValue(Math.abs(amount), d, matD,
+              rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0);
+            addTo(byMonthCatOut, matD, cat, matVal);
+            addTo(byMonthGrpOut, matD, grp, matVal);
+            recordTxn(matD, {
+              date: matD,
+              instrument: fdInstrIdx !== -1 ? (row[fdInstrIdx] || "").trim() : "",
+              portfolio: portIdx !== -1 ? (row[portIdx] || "").trim() : "",
+              cat: cat, grp: grp,
+              amount: matVal,
+              out: true,
+              type: "Maturity",
+              source: grp
+            });
+          }
+        }
       });
     }());
 
