@@ -3098,14 +3098,12 @@
     row.innerHTML = all.map(function (p, i) {
       var pnl = p.current - p.invested;
       var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
-      var isNeg = pnl < 0;
       var pal = p.isCombined ? { bg: "#23211D", fg: "#fff" } : FI_AVATAR_PALETTE[i % FI_AVATAR_PALETTE.length];
       var initial = p.isCombined ? "Σ" : _fiInit(p.name);
       var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
       var totalCur = p.fi + p.gold;
       var fiPct = totalCur > 0 ? (p.fi / totalCur) * 100 : 0;
       var goldPct = totalCur > 0 ? (p.gold / totalCur) * 100 : 0;
-      var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
       // Compute XIRR using the same builders as Overview: matured FD flows +
       // PF flows + EPF flows, with terminal = corresponding current values.
       var xirrPct = null;
@@ -3160,11 +3158,8 @@
         '</div>' +
         '<div class="mfpc-current-label">CURRENT VALUE</div>' +
         '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
-        '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
-        '<div class="mfpc-return-row">' +
-          '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
-        '</div>' +
+        _mfpcBarHtml(pnlPct) +
+        _mfpcReturnRowHtml(pnl, pnlPct) +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
@@ -5753,14 +5748,12 @@
     row.innerHTML = all.map(function (p, i) {
       var pnl = p.current - p.invested;
       var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
-      var isNeg = pnl < 0;
       var pal = p.isCombined ? { bg: "#23211D", fg: "#fff" } : SE_AVATAR_PALETTE[i % 3];
       var initial = p.isCombined ? "Σ" : _seInit(p.name);
       var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
       var totalCur = p.india + p.us;
       var iPct = totalCur > 0 ? Math.round(p.india / totalCur * 100) : 0;
       var uPct = totalCur > 0 ? Math.round(p.us / totalCur * 100) : 0;
-      var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
       // Day change + day change % (vs previous close). prevVal = current − dayChange.
       var dayChg = p.day || 0;
       var prevVal = p.current - dayChg;
@@ -5789,11 +5782,8 @@
           '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
           dayChgHtml +
         '</div>' +
-        '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
-        '<div class="mfpc-return-row">' +
-          '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-          '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' + (isNeg ? "" : "+") + formatCurrency(pnl) + '</span>' +
-        '</div>' +
+        _mfpcBarHtml(pnlPct) +
+        _mfpcReturnRowHtml(pnl, pnlPct) +
         '<div class="mfpc-footer">' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
           '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
@@ -6164,6 +6154,27 @@
   // both visible, so the state has to be shown by which one is highlighted rather
   // than by the label — a single button reading "Open" was ambiguous about whether
   // that was the current state or the action.
+  // The progress bar and the "+x.xx%   +Rs n gain" line under every portfolio card.
+  // These were copy-pasted into the Mutual Fund, Stocks/ETF and Fixed Income
+  // renderers and had drifted: Stocks/ETF dropped the " gain"/" loss" word, so the
+  // same line read differently depending on which investment tab you were on.
+  // Shared so it cannot happen again.
+  function _mfpcBarHtml(pnlPct) {
+    // Scaled fill: -30% return reads empty, +50% reads full. Purely indicative.
+    var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4));
+    return '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>';
+  }
+
+  function _mfpcReturnRowHtml(pnl, pnlPct) {
+    var isNeg = pnl < 0;
+    return '<div class="mfpc-return-row">' +
+      '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' +
+        (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
+      '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' +
+        (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? " loss" : " gain") + '</span>' +
+    '</div>';
+  }
+
   // Portfolio pills, painted the same way on every holdings card.
   //
   // Every card lists the SAME portfolios and disables the ones with nothing in that
@@ -13226,14 +13237,12 @@
       row.innerHTML = all.map(function (p, i) {
         var pnl = p.current - p.invested;
         var pnlPct = p.invested > 0 ? (pnl / p.invested) * 100 : 0;
-        var isNeg = pnl < 0;
         var xirrPct = p.xirr == null || !isFinite(p.xirr) ? null : p.xirr * 100;
         var pal = p.isCombined
           ? { bg: "#23211D", fg: "#fff" }
           : { bg: MFH_AVATAR_PALETTE[i % 3].bg, fg: MFH_AVATAR_PALETTE[i % 3].fg };
         var initial = p.isCombined ? "Σ" : _initials(p.name).charAt(0);
         var subtitle = p.isCombined ? "HOUSEHOLD TOTAL" : "PERSONAL PORTFOLIO";
-        var progress = Math.min(100, Math.max(4, (pnlPct + 30) * 1.4)); // rough scaled fill
         // Day change + day change % (vs previous close). prevVal = current − dayChange.
         var dayChg = p.dayChange || 0;
         var prevVal = p.current - dayChg;
@@ -13257,11 +13266,8 @@
             '<div class="mfpc-current-value"' + _crTitle(p.current) + '>' + formatCurrency(p.current) + '</div>' +
             dayChgHtml +
           '</div>' +
-          '<div class="mfpc-bar"><div class="mfpc-bar-fill" style="width:' + progress + '%;"></div></div>' +
-          '<div class="mfpc-return-row">' +
-            '<span class="mfpc-return-pct ' + (isNeg ? "mfpc-negative" : "") + '">' + (isNeg ? "" : "+") + pnlPct.toFixed(2) + '%</span>' +
-            '<span class="mfpc-gain ' + (isNeg ? "mfpc-negative" : "mfpc-positive") + '"' + _crTitle(pnl) + '>' + (isNeg ? "" : "+") + formatCurrency(pnl) + (isNeg ? ' loss' : ' gain') + '</span>' +
-          '</div>' +
+          _mfpcBarHtml(pnlPct) +
+          _mfpcReturnRowHtml(pnl, pnlPct) +
           '<div class="mfpc-footer">' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">Invested</span><span class="mfpc-foot-value">' + formatCurrency(p.invested) + '</span></div>' +
             '<div class="mfpc-foot-item"><span class="mfpc-foot-label">XIRR</span><span class="mfpc-foot-value mfpc-xirr ' + (xirrPct != null && xirrPct < 0 ? "mfpc-negative" : "") + '">' + (xirrPct == null ? "—" : (xirrPct >= 0 ? "+" : "") + xirrPct.toFixed(2) + "%") + '</span></div>' +
