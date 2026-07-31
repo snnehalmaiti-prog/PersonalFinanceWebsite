@@ -4324,67 +4324,59 @@
         while (d <= today) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
         if (!samples.length || samples[samples.length - 1] < today) samples.push(today);
 
+        // Each sample records the price it valued every instrument at, so the
+        // period's cash flow can be measured with those same prices. Measuring the
+        // flow with the price recorded on the sheet instead let the gap between the
+        // two leak into the return, permanently and in whichever direction the
+        // recorded price differed.
         var portfolioValues = [];
         samples.forEach(function (date) {
           var dateStr = formatDateISO(date);
           var total = 0;
+          var priceOf = {};
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
-            if (units > UNITS_EPSILON && nav) total += units * nav;
+            if (!nav) return;
+            priceOf["mf|" + normalizeText(name)] = nav;
+            if (units > UNITS_EPSILON) total += units * nav;
           });
           Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
             var entry = seUnitEventsByTicker[ticker];
             var units = lastAtOrBefore(entry.events, date, "cumulativeUnits") || 0;
-            if (units <= UNITS_EPSILON) return;
             var hist = stockHistory[ticker];
             var price = hist ? lastPriceOnOrBefore(hist.prices, dateStr) : null;
             if (!price) return;
-            if (entry.region === "US" || (hist && hist.currency === "USD")) {
-              total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
-            } else {
-              total += units * price;
-            }
+            var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+            var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
+            // Recorded even at zero units: the sale that closes a position is the
+            // flow that most needs pricing.
+            priceOf["se|" + normalizeText(entry.instrument || "")] = priceInr;
+            if (units > UNITS_EPSILON) total += units * priceInr;
           });
-          if (total > 0) portfolioValues.push({ date: date, value: total });
+          if (total > 0) portfolioValues.push({ date: date, value: total, priceOf: priceOf });
         });
 
         if (portfolioValues.length < 2) return null;
 
-        var equityRows = getSheetRows("equity");
-        var extFlows = [];
-        instruments.forEach(function (name) {
-          extFlows = extFlows.concat(buildXirrCashFlows(equityRows, selected, name));
-        });
-        if (seRows) {
-          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
-            var entry = seUnitEventsByTicker[ticker];
-            if (!stockHistory[ticker]) return;
-            // US flows are in USD — convert each to INR at the flow's transaction-date
-            // FX so they match the INR portfolio values (fixes CAGR/Growth-of-₹100).
-            var isUsd = entry.region === "US" || (stockHistory[ticker] && stockHistory[ticker].currency === "USD");
-            buildXirrCashFlows(seRows, selected, entry.instrument).forEach(function (f) {
-              if (isUsd) {
-                var rate = usdInrHistMap[formatDateISO(f.date)] || usdInrToday;
-                extFlows.push({ date: f.date, amount: f.amount * rate });
-              } else {
-                extFlows.push(f);
-              }
-            });
-          });
-        }
-        extFlows.sort(function (a, b) { return a.date - b.date; });
+        // Units traded for money, per instrument. Splits and bonuses are excluded —
+        // they move the unit count without any money moving.
+        var mfTradedUnits = buildTradedUnitsByDate(getSheetRows("equity"), selected);
+        var seTradedUnits = buildTradedUnitsByDate(seRows, selected);
 
         var navSeries = [{ date: portfolioValues[0].date, nav: 100 }];
         for (var m = 1; m < portfolioValues.length; m++) {
           var prevPt = portfolioValues[m - 1], curPt = portfolioValues[m];
+          // The period's flow, valued at the prices THIS sample used. The units
+          // bought during the period are in the ending value at the ending price,
+          // so that is the price at which they must be taken back out.
           var netFlow = 0;
-          for (var q = 0; q < extFlows.length; q++) {
-            var ef = extFlows[q];
-            if (ef.date <= prevPt.date) continue;
-            if (ef.date > curPt.date) break;
-            netFlow += -ef.amount;
-          }
+          Object.keys(curPt.priceOf).forEach(function (key) {
+            var byDate = key.slice(0, 3) === "mf|" ? mfTradedUnits[key.slice(3)]
+                                                   : seTradedUnits[key.slice(3)];
+            var u = tradedUnitsInRange(byDate, prevPt.date, curPt.date);
+            if (u) netFlow += u * curPt.priceOf[key];
+          });
           var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
           // C4: reflect real drawdowns instead of flattening them. Previously a
           // collapse interval (g <= 0, i.e. netted value fell to/through zero) was
@@ -4651,26 +4643,27 @@
         samples.forEach(function (date) {
           var dateStr = formatDateISO(date);
           var total = 0;
+          var priceOf = {};
           instruments.forEach(function (name) {
             var units = lastAtOrBefore(unitEvents[name], date, "cumulativeUnits") || 0;
             var nav = lastAtOrBefore(navByInstrument[name], date, "nav");
-            if (units > UNITS_EPSILON && nav) total += units * nav;
+            if (!nav) return;
+            priceOf["mf|" + normalizeText(name)] = nav;
+            if (units > UNITS_EPSILON) total += units * nav;
           });
           Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
             var entry = seUnitEventsByTicker[ticker];
             var units = lastAtOrBefore(entry.events, date, "cumulativeUnits") || 0;
-            if (units <= UNITS_EPSILON) return;
             var hist = stockHistory[ticker];
             // Only actual historical prices — today's LTP as a proxy would distort rolling CAGRs
             var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
             if (!price) return;
-            if (entry.region === "US" || (hist && hist.currency === "USD")) {
-              total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
-            } else {
-              total += units * price;
-            }
+            var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+            var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
+            priceOf["se|" + normalizeText(entry.instrument || "")] = priceInr;
+            if (units > UNITS_EPSILON) total += units * priceInr;
           });
-          if (total > 0) portfolioValues.push({ date: date, value: total });
+          if (total > 0) portfolioValues.push({ date: date, value: total, priceOf: priceOf });
         });
 
         if (portfolioValues.length < 2) return null;
@@ -4684,31 +4677,25 @@
         // MF schemes that resolved in the scheme map, and stocks that have price history.
         // Including flows for unvalued instruments would subtract contributions with no
         // matching value increase, understating the return.
-        var equityRows = getSheetRows("equity");
-        var extFlows = [];
-        instruments.forEach(function (name) {
-          extFlows = extFlows.concat(buildXirrCashFlows(equityRows, selected, name));
-        });
-        if (seRows) {
-          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
-            if (!stockHistory[ticker]) return; // excluded from valuation → exclude flows too
-            extFlows = extFlows.concat(buildXirrCashFlows(seRows, selected, seUnitEventsByTicker[ticker].instrument));
-          });
-        }
-        // buildXirrCashFlows: buys are negative (money out of pocket), sells positive.
-        // Net contribution INTO the portfolio during a period = -sum(amounts).
-        extFlows.sort(function (a, b) { return a.date - b.date; });
+        // Units traded for money; splits and bonuses move units without money.
+        var mfTradedUnits = buildTradedUnitsByDate(getSheetRows("equity"), selected);
+        var seTradedUnits = buildTradedUnitsByDate(seRows, selected);
 
         var navSeries = [{ date: portfolioValues[0].date, nav: 100 }];
         for (var m = 1; m < portfolioValues.length; m++) {
           var prevPt = portfolioValues[m - 1], curPt = portfolioValues[m];
+          // Valued at THIS sample's prices, the same ones that produced curPt.value:
+          // the units bought during the period sit in the ending value at the ending
+          // price, so that is the price they must be taken back out at. Using the
+          // amount recorded on the sheet instead let the difference between the two
+          // leak into the return, every period, permanently.
           var netFlow = 0;
-          for (var q = 0; q < extFlows.length; q++) {
-            var ef = extFlows[q];
-            if (ef.date <= prevPt.date) continue;
-            if (ef.date > curPt.date) break;
-            netFlow += -ef.amount; // contribution into portfolio is positive
-          }
+          Object.keys(curPt.priceOf).forEach(function (key) {
+            var byDate = key.slice(0, 3) === "mf|" ? mfTradedUnits[key.slice(3)]
+                                                   : seTradedUnits[key.slice(3)];
+            var u = tradedUnitsInRange(byDate, prevPt.date, curPt.date);
+            if (u) netFlow += u * curPt.priceOf[key];
+          });
           // End-of-period flow assumption: period growth = (V_t - F_t) / V_{t-1}
           var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
           if (!isFinite(g) || g <= 0) g = 1; // guard against degenerate months
@@ -6614,6 +6601,45 @@
 
   // Cash flows for XIRR: Buy = negative (money out), Sell = positive (money in).
   // Each transaction is kept as its own row — buys and sells on the same date are not netted.
+  // Units traded FOR MONEY, per instrument per day. Splits and bonuses are
+  // excluded: they change the unit count without any money moving, and the
+  // unit price falls to match, so the curve must not react to them at all.
+  function buildTradedUnitsByDate(rows, portfolioFilter) {
+    var out = {};
+    if (!rows || !rows.length) return out;
+    var h = rows[0].map(normalizeText);
+    var pI = h.indexOf("portfolio name"), iI = h.indexOf("instrument name"),
+        tI = h.indexOf("transaction type"), uI = h.indexOf("units"),
+        cI = h.indexOf("price"), dI = h.indexOf("transaction date");
+    if (pI === -1 || iI === -1 || tI === -1 || uI === -1 || dI === -1) return out;
+    rows.slice(1).forEach(function (row) {
+      if (portfolioFilter !== "all" &&
+          normalizeText((row[pI] || "").trim()) !== normalizeText(portfolioFilter)) return;
+      var type = normalizeText(row[tI] || "");
+      if (type === "split" || type === "bonus") return; // no money moved
+      var isBuy = type.indexOf("buy") !== -1, isSell = type.indexOf("sell") !== -1;
+      if (!isBuy && !isSell) return;
+      var units = parseNumber(row[uI]);
+      var price = cI === -1 ? 0 : parseNumber(row[cI]);
+      if (!units || !price) return; // a zero price is a corporate action, not a trade
+      var d = parseFlexibleDate(row[dI]);
+      if (!d) return;
+      var key = normalizeText((row[iI] || "").trim());
+      var byDate = out[key] || (out[key] = {});
+      byDate[dateKey(d)] = (byDate[dateKey(d)] || 0) + (isBuy ? units : -units);
+    });
+    return out;
+  }
+
+  // Units traded in a half-open period (after `from`, up to and including `to`),
+  // for one instrument. Used to value a period's flow at that period's own price.
+  function tradedUnitsInRange(byDate, from, to) {
+    if (!byDate) return 0;
+    var lo = from ? dateKey(from) : "", hi = dateKey(to), sum = 0;
+    for (var k in byDate) { if (k > lo && k <= hi) sum += byDate[k]; }
+    return sum;
+  }
+
   function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -9049,6 +9075,12 @@
           seUnitsAtByTicker[ticker] = _ff(seUnitEventsByTicker[ticker], timeline, "cumulativeUnits");
         });
 
+        var mfTradedUnits = buildTradedUnitsByDate(getSheetRows("equity"), selectedPortfolio);
+        var seTradedUnits = buildTradedUnitsByDate(getSheetRows("stocksetf"), selectedPortfolio);
+
+        // Cash flow at each timeline point, marked at that point's own valuation.
+        var flowAt = new Array(timeline.length).fill(0);
+
         var commodityValueAt = [];
         var points = timeline.map(function (date, i) {
           var activeGrams = commodityGramsAt[i] || 0;
@@ -9056,27 +9088,39 @@
           var commVal = activeGrams > 0 ? activeGrams * goldPriceAtDate : 0;
           commodityValueAt.push(commVal);
           var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
+          var dk = dateKey(date);
           instruments.forEach(function (name) {
             var units = unitsAtByName[name][i] || 0;
             var nav = navAtByName[name][i];
             if (units > UNITS_EPSILON && nav) total += units * nav;
+            // The flow is valued at the SAME nav this instrument was just valued at,
+            // so a purchase changes the unit count and never the unit price. Skipped
+            // when there is no nav: the value series cannot see this instrument on
+            // this date either, and counting money against value that is not there
+            // is what put a permanent hole in the curve.
+            if (!nav) return;
+            var traded = mfTradedUnits[normalizeText(name)];
+            if (traded && traded[dk]) flowAt[i] += traded[dk] * nav;
           });
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
           var stockHistory = (stockPricesData && stockPricesData.stock_history) || {};
           Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
             var units = seUnitsAtByTicker[ticker][i] || 0;
-            if (units <= UNITS_EPSILON) return;
             var hist = stockHistory[ticker];
             var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
             if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
             if (!price) return;
             var isUsd = hist ? hist.currency === "USD" : (allPrices[ticker] && allPrices[ticker].currency === "USD");
-            if (isUsd) {
-              total += units * price * (usdInrHistMap[dateStr] || usdInrToday);
-            } else {
-              total += units * price;
-            }
+            var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
+            if (units > UNITS_EPSILON) total += units * priceInr;
+            // Same rule, and the same INR price: the flow can never disagree with
+            // the valuation, in magnitude or in currency. Deliberately NOT gated on
+            // still holding units — the sale that takes a position to zero is
+            // exactly the flow that must be counted, or the value would vanish with
+            // nothing to explain it and the curve would read it as a total loss.
+            var seTraded = seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")];
+            if (seTraded && seTraded[dk]) flowAt[i] += seTraded[dk] * priceInr;
           });
           return { x: date, y: total };
         });
@@ -9135,122 +9179,31 @@
           : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
 
         // === Time-Weighted Return NAV computation ===
-        // Collect contribution/withdrawal events from all sheets. Positive delta
-        // means money flowed into the portfolio (a contribution), negative means
-        // money was withdrawn. Interest/gains are NOT included — they show up as
-        // increases in portfolio value and are what drives NAV growth.
-        var contribEvents = [];
-
-        // MF + Stocks/ETF: buildXirrCashFlows returns negative for buys, positive for sells.
+        // The cash flow at each timeline point, valued at THE SAME PRICE the value
+        // series used for that instrument on that date.
         //
-        // Only the instruments the VALUE series can price may contribute flows.
-        // Taking every row instead was a systematic drag: a fund whose ISIN does
-        // not resolve to an AMFI scheme code, or a stock with no mapping row, is
-        // absent from `points` — so its purchases arrived as money in with no
-        // matching value, and every rupee of them was booked as an instant loss.
-        // `skipped` above already counts exactly these instruments.
-        var equityRowsForFlow = getSheetRows("equity");
-        var seRowsForFlow = getSheetRows("stocksetf");
-        if (equityRowsForFlow) {
-          instruments.forEach(function (name) {
-            buildXirrCashFlows(equityRowsForFlow, selectedPortfolio, name).forEach(function (f) {
-              contribEvents.push({ date: f.date, delta: -f.amount });
-            });
-          });
-        }
-        if (seRowsForFlow) {
-          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
-            var entry = seUnitEventsByTicker[ticker];
-            // US rows are priced in USD in the sheet, while the value series
-            // converts them to INR. Converting at the flow's own transaction-date
-            // rate — as the CAGR path already did — keeps the two in one currency;
-            // without it a $100 purchase read as ₹100 of new money against ₹8,400
-            // of new value, and the difference was booked as a gain.
-            var hist = ((stockPricesData && stockPricesData.stock_history) || {})[ticker];
-            var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
-            buildXirrCashFlows(seRowsForFlow, selectedPortfolio, entry.instrument).forEach(function (f) {
-              var rate = isUsd ? (usdInrHistMap[formatDateISO(f.date)] || usdInrToday) : 1;
-              contribEvents.push({ date: f.date, delta: -f.amount * rate });
-            });
-          });
-        }
-
-        // Fixed Income (EPF, PF, FD, Savings): excluded from Growth-of-₹100 chart.
-        if (false) {
-          var fiRowsForFlow = getSheetRows("fixedincome");
-          if (fiRowsForFlow && fiRowsForFlow.length) {
-            var fiHdr = fiRowsForFlow[0].map(normalizeText);
-            var fiPortIdx = fiHdr.indexOf("portfolio name");
-            var fiTypeIdx = fiHdr.indexOf("transaction type");
-            var fiAmtIdx = fiHdr.indexOf("amount");
-            var fiCatIdx = fiHdr.indexOf("instrument category");
-            var fiDateIdx = fiHdr.findIndex(function (h) { return h.indexOf("date") !== -1; });
-            if (fiPortIdx !== -1 && fiTypeIdx !== -1 && fiAmtIdx !== -1 && fiDateIdx !== -1) {
-              fiRowsForFlow.slice(1).forEach(function (row) {
-                var portfolio = (row[fiPortIdx] || "").trim();
-                if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
-                if (fiCatIdx !== -1 && normalizeText(row[fiCatIdx]) !== "fixed income") return;
-                var type = normalizeText(row[fiTypeIdx]);
-                if (type.indexOf("deposit") === -1) return;
-                var date = parseFlexibleDate(row[fiDateIdx]);
-                if (!date) return;
-                var amt = parseNumber(row[fiAmtIdx]);
-                if (!amt) return;
-                contribEvents.push({ date: date, delta: amt });
-              });
-            }
-          }
-
-          // FD sheet — fixed deposits: each row is a discrete deposit
-          // Investment corpus / savings: use buildFdValueEvents deltas as contribution proxy
-          // Gold/commodity: buy = contribution, sell = withdrawal
-          var fdRowsForFlow = getSheetRows("fd");
-          if (fdRowsForFlow && fdRowsForFlow.length) {
-            var fdHdr = fdRowsForFlow[0].map(normalizeText);
-            var fdPortIdx = fdHdr.indexOf("portfolio name");
-            var fdTypeIdx = fdHdr.indexOf("transaction type");
-            var fdAmtIdx = fdHdr.indexOf("invested amount");
-            var fdDateIdx = fdHdr.indexOf("transaction date");
-            var fdSubIdx = fdHdr.indexOf("instrument sub category");
-            if (fdPortIdx !== -1 && fdAmtIdx !== -1 && fdDateIdx !== -1) {
-              fdRowsForFlow.slice(1).forEach(function (row) {
-                var portfolio = (row[fdPortIdx] || "").trim();
-                if (selectedPortfolio !== "all" && normalizeText(portfolio) !== normalizeText(selectedPortfolio)) return;
-                var sub = fdSubIdx !== -1 ? normalizeText(row[fdSubIdx]) : "";
-                var type = fdTypeIdx !== -1 ? normalizeText(row[fdTypeIdx]) : "";
-                var date = parseFlexibleDate(row[fdDateIdx]);
-                if (!date) return;
-                var amt = parseNumber(row[fdAmtIdx]);
-                if (!amt) return;
-
-                if (sub === "fixed deposit") {
-                  // Discrete deposit — contribution
-                  contribEvents.push({ date: date, delta: amt });
-                } else if (sub === "gold" || sub === "silver" || sub === "commodity") {
-                  var isBuy = type.indexOf("buy") !== -1 || !type;
-                  contribEvents.push({ date: date, delta: isBuy ? amt : -amt });
-                }
-                // Investment Corpus / Savings Account: skipped here — handled below via
-                // buildFdValueEvents balance-delta stream to catch running-balance changes
-              });
-            }
-
-            // Investment Corpus / Savings: balance deltas as contribution proxy.
-            // (Interest accrual is small for these; treating balance moves as
-            // contributions is a reasonable approximation.)
-            var fdBalanceEvents = buildFdValueEvents(selectedPortfolio);
-            var prevBal = 0;
-            fdBalanceEvents.forEach(function (ev) {
-              var delta = ev.cumulativeValue - prevBal;
-              prevBal = ev.cumulativeValue;
-              if (Math.abs(delta) > 0.01) contribEvents.push({ date: ev.date, delta: delta });
-            });
-          }
-        }
-
-        contribEvents.sort(function (a, b) { return a.date - b.date; });
-
-        // Growth-of-₹100 value series = portfolio value with commodity (physical
+        // This is the whole point. The NAV moves by (value − flow) / prevValue, so
+        // if the flow is measured with a different price from the value, the
+        // difference is silently booked as profit or loss. It used to take the
+        // amount straight off the sheet: buying 100 units recorded at ₹12 while the
+        // fund's NAV that day was ₹10 subtracted ₹1,200 of flow against ₹1,000 of
+        // new value, and the ₹200 gap became a permanent 20% hole in the curve.
+        // Every purchase leaked a little, in whichever direction the recorded price
+        // differed from the valuation, and the leaks compounded — which is how the
+        // curve could sit below an index the portfolio's XIRR was beating.
+        //
+        // Marking the flow at the valuation price makes "money in creates units and
+        // never moves the unit price" exactly true, which is what the model says.
+        // For mutual funds it is also simply correct: an order fills AT that day's
+        // NAV. For stocks it discards intraday movement between the trade and the
+        // close, which is small and unbiased — unlike a recorded price that may be
+        // an average, or carry brokerage.
+        //
+        // Fixed income (EPF/PF/FD/Savings) and commodity contribute neither value
+        // nor flows here: Growth-of-₹100 is an equity vs equity-index comparison.
+        // The dead branch that used to collect their cash flows is gone with the
+        // contribEvents list it fed.
+// Growth-of-₹100 value series = portfolio value with commodity (physical
         // gold/silver from the fd sheet) stripped out. Physical-gold purchases are
         // not tracked as contributions, so leaving their value in would make each
         // purchase look like instant growth. The ₹100 line is therefore a pure
@@ -9260,14 +9213,13 @@
           return { x: p.x, y: p.y - (commodityValueAt[i] || 0) };
         });
 
-        // Cumulative contributions at each timeline date (running sum through time)
+        // Cumulative contributions at each timeline date, from the flows gathered in
+        // the same pass that valued the portfolio — so the two can never disagree
+        // about a price, a currency, or whether an instrument existed that day.
         var cumContribAt = new Array(points.length).fill(0);
-        var evIdx = 0, runningContrib = 0;
+        var runningContrib = 0;
         for (var pi = 0; pi < points.length; pi++) {
-          while (evIdx < contribEvents.length && contribEvents[evIdx].date <= points[pi].x) {
-            runningContrib += contribEvents[evIdx].delta;
-            evIdx++;
-          }
+          runningContrib += flowAt[pi] || 0;
           cumContribAt[pi] = runningContrib;
         }
 

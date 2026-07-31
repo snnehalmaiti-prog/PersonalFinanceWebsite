@@ -104,6 +104,33 @@ const SCENARIOS = [
     stockHistory: { QQQ: { currency: "USD", flat: 100 } },
     nav: (iso) => (iso >= "2024-06-01" ? 20 : 10),
     probe: ["2024-03-01", "2024-05-31", "2024-12-01"] },
+  { name: "S9 a purchase recorded at a price other than that day's NAV",
+    // 100 units recorded at ₹12 on a day the fund's NAV is ₹10. The recorded price
+    // is not a return — it must not move the curve. This is the defect that let the
+    // chart sit below an index the portfolio's XIRR was beating: every purchase
+    // leaked the gap between the recorded price and the valuation, and the leaks
+    // compounded. Before the fix this read 80 here and 160 at the end.
+    txns: [["1-Jan-2024", "Snnehal", "Fund A", "Buy", "100", "10"],
+           ["1-Feb-2024", "Snnehal", "Fund A", "Buy", "100", "12"],
+           ["1-Jun-2024", "Snnehal", "Fund A", "Buy", "100", "20"]],
+    nav: (iso) => (iso >= "2024-06-01" ? 20 : 10),
+    probe: ["2024-01-31", "2024-02-01", "2024-05-31", "2024-12-01"] },
+  { name: "S10 a bonus issue",
+    // A bonus doubles the units while the NAV halves: no money moved and the
+    // account is worth the same, so the curve must not react at all.
+    txns: [["1-Jan-2024", "Snnehal", "Fund A", "Buy", "100", "20"],
+           ["1-Jun-2024", "Snnehal", "Fund A", "Bonus", "100", "0"]],
+    nav: (iso) => (iso >= "2024-06-01" ? 10 : 20),
+    probe: ["2024-05-31", "2024-06-01", "2024-12-01"] },
+  { name: "S11 a bonus recorded as a zero-price Buy",
+    // The encoding a sheet actually tends to use for a bonus. It must be read as a
+    // corporate action, not as a purchase: no money moved, and the unit price
+    // halved to match, so the curve must not move. Counting it as a flow would
+    // halve the line.
+    txns: [["1-Jan-2024", "Snnehal", "Fund A", "Buy", "100", "20"],
+           ["1-Jun-2024", "Snnehal", "Fund A", "Buy", "100", "0"]],
+    nav: (iso) => (iso >= "2024-06-01" ? 10 : 20),
+    probe: ["2024-05-31", "2024-06-01", "2024-12-01"] },
 ];
 
 (async () => {
@@ -229,6 +256,22 @@ const SCENARIOS = [
      "S8a a $1,000 purchase is not growth", R("S8").vals);
   ok(near(R("S8").vals["2024-12-01"], 100 * 86000 / 85000, 0.05),
      "S8b the US leg is weighted in rupees, not dollars", R("S8").vals);
+
+  // S9: the recorded price is not a return.
+  ok(near(R("S9").vals["2024-02-01"], 100),
+     "S9a a purchase above that day's NAV does not dent the curve", R("S9").vals);
+  ok(near(R("S9").vals["2024-05-31"], 100), "S9b nor later", R("S9").vals);
+  ok(near(R("S9").vals["2024-12-01"], 200),
+     "S9c the fund's actual doubling still reads 200", R("S9").vals);
+  // S10: 100 units at ₹20 = ₹2,000; bonus makes it 200 units at ₹10 = ₹2,000.
+  ok(near(R("S10").vals["2024-05-31"], 100), "S10a flat before the bonus", R("S10").vals);
+  ok(near(R("S10").vals["2024-06-01"], 100),
+     "S10b a bonus moves neither the account value nor the curve", R("S10").vals);
+  ok(near(R("S10").vals["2024-12-01"], 100), "S10c and it stays flat", R("S10").vals);
+
+  ok(near(R("S11").vals["2024-06-01"], 100),
+     "S11a a zero-price Buy is a corporate action, not a contribution", R("S11").vals);
+  ok(near(R("S11").vals["2024-12-01"], 100), "S11b and the curve stays flat", R("S11").vals);
 
   console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
