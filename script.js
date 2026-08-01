@@ -9497,22 +9497,20 @@
                 type: "time",
                 // No fixed unit → Chart.js auto-selects the tick unit from the
                 // visible range, so zooming in switches from years to months.
-                time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
+                // Identical to the Account Value chart's: the two sit side by side
+                // and must not disagree about what a date looks like. displayFormats
+                // is the whole specification — see the absent ticks block below.
+                time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
                 // NOT min/max here. A hard bound on the scale options is re-applied
                 // on every update, so the pan writes were undone as fast as they were
                 // made and dragging this chart did nothing. The window is bounded by
                 // the zoom plugin's own limits below, and opened through it instead.
+                // No ticks block, exactly as on the Account Value chart. The callback
+                // that used to live here relabelled every tick itself — bolded year
+                // markers interleaved with bare month names — so the two charts
+                // labelled dates differently. Chart.js formats both from
+                // displayFormats now, so they match at every zoom by construction.
                 grid: { display: false },
-                ticks: {
-                  maxRotation: 0,
-                  autoSkip: true,
-                  major: { enabled: true },
-                  font: function (ctx) { return ctx.tick && ctx.tick.major ? { weight: "bold" } : {}; },
-                  callback: function (value) {
-                    var d = new Date(value);
-                    return d.getMonth() === 0 ? String(d.getFullYear()) : d.toLocaleDateString("en-US", { month: "short" });
-                  }
-                }
               },
               y: { ticks: { callback: function (v) { return "₹" + Math.round(v); } }, grid: { color: "rgba(150,150,150,0.12)" } }
             },

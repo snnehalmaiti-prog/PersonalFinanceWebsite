@@ -86,6 +86,22 @@ check(zoomBlocks.length === 2 && zoomBlocks.every((b) => /drag:\s*\{\s*enabled:\
 check(blocksAt(SRC, "limits: {").filter((b) => /x:\s*\{\s*min:/.test(b)).length === 2,
   "both charts must bound pan/zoom to their plotted range");
 
+// The two charts sit side by side, so their time axes must be specified the same
+// way. A custom ticks callback on one of them relabelled every tick itself and the
+// pair disagreed about what a date looks like.
+const xBlocks = blocksAt(SRC, 'x: {\n                type: "time"')
+  .concat(blocksAt(SRC, 'x: {\n              type: "time"'));
+check(xBlocks.length === 2, "expected both value charts to declare a time x axis, found " + xBlocks.length);
+check(xBlocks.every((b) => !/ticks:\s*\{/.test(b)),
+  "neither time axis may carry its own ticks block — the shared displayFormats is " +
+  "the whole specification, or the two charts label dates differently");
+const fmt = xBlocks.map((b) => (b.match(/displayFormats:\s*\{[^}]*\}/) || [""])[0]);
+check(fmt[0] && fmt[0] === fmt[1],
+  "the two time axes must use identical displayFormats: " + JSON.stringify(fmt));
+const unit = xBlocks.map((b) => (b.match(/minUnit:\s*"(\w+)"/) || [])[1]);
+check(unit[0] === "day" && unit[1] === "day",
+  "both axes need minUnit day, or zooming into a month draws one tick: " + JSON.stringify(unit));
+
 // Discoverability: a draggable chart looks exactly like one that is not.
 check(/#value-chart[^{]*#portfolio-value-chart[^{]*\{[^}]*cursor:\s*grab/.test(CSS),
   "the canvases should show a grab cursor so the drag is discoverable");
