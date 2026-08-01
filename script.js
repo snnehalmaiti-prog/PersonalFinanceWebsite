@@ -9494,6 +9494,35 @@
         // and not just the portfolio.
         var _avcIdxSeries = [];
 
+        // Hover readout, replacing the floating tooltip: both series' figures land
+        // in the header legend they already occupy, and the period line names the
+        // date they belong to. Leaving the chart restores the zoom-window state.
+        var _avcDayFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        var _avcHoverIdx = -1;
+        function avcHover(els) {
+          var idx = els && els.length ? els[0].index : -1;
+          if (idx === _avcHoverIdx) return;   // fires on every pointer move
+          _avcHoverIdx = idx;
+          var pt = normPortPoints[idx];
+          if (idx < 0 || !pt) { updateVisibleRangeLabel(window.__wfValueChart); return; }
+          var portEl = document.getElementById("avc-portfolio-value");
+          if (portEl) portEl.textContent = pt.y != null ? "₹" + Math.round(pt.y) : "—";
+          // The index is a separate series and may be shorter or have gaps, so it
+          // is read at the hovered DATE rather than at the same array index.
+          setAvcLegend("avc-index-value", _avcIdxSeries, pt.x.getTime());
+          var per = document.getElementById("avc-period");
+          if (per) per.textContent = _avcDayFmt.format(pt.x).toUpperCase();
+        }
+        // Assignment, not addEventListener: _renderNormalizedChart runs again on
+        // every re-render and this canvas is reused, so a listener added each time
+        // would stack up one handler per render.
+        if (canvas) {
+          canvas.onmouseleave = function () {
+            _avcHoverIdx = -1;
+            if (window.__wfValueChart) updateVisibleRangeLabel(window.__wfValueChart);
+          };
+        }
+
         function _renderNormalizedChart(normIdxPoints) {
         _avcIdxSeries = normIdxPoints || [];
         if (window.__wfValueChart) window.__wfValueChart.destroy();
@@ -9542,7 +9571,8 @@
           options: {
             maintainAspectRatio: false,
             animation: { duration: 350, easing: "easeOutQuart" },
-            interaction: { intersect: false, mode: "index" },
+            interaction: { intersect: false, mode: "index", axis: "x" },
+            onHover: function (evt, els, chart) { avcHover(els); },
             scales: {
               x: {
                 type: "time",
@@ -9567,17 +9597,10 @@
             },
             plugins: {
               legend: { display: false },
-              tooltip: {
-                enabled: true,
-                callbacks: {
-                  title: function (items) {
-                    if (!items || !items.length) return "";
-                    var d = new Date(items[0].parsed.x);
-                    return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
-                  },
-                  label: function (ctx) { return ctx.dataset.label + ": ₹" + Math.round(ctx.parsed.y); }
-                }
-              },
+              // Off. Portfolio and Index go in the card header instead — the same
+              // place CASH FLOW · MONTHLY keeps its stats row — so both series
+              // are read in one fixed spot rather than from a box that moves.
+              tooltip: { enabled: false },
               zoom: {
                 limits: {
                   // Clamp pan/zoom to the actually-plotted range so zooming OUT
@@ -9765,6 +9788,29 @@
           Math.round(Math.abs(delta)).toLocaleString("en-IN") +
           " (" + (delta >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2) + "%)";
       }
+      // Hover readout. The value and the date it belongs to go into the card
+      // header, replacing the floating tooltip: the figures stay in one place, so
+      // comparing two dates is a matter of moving the pointer rather than
+      // remembering what the last box said. Leaving the chart restores whatever
+      // the zoom window was reporting.
+      var _pvcDayFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+      var _pvcHoverIdx = -1;
+      function pvcHover(els) {
+        var idx = els && els.length ? els[0].index : -1;
+        if (idx === _pvcHoverIdx) return;   // Chart.js fires onHover on every move
+        _pvcHoverIdx = idx;
+        if (idx < 0 || !points[idx]) { updatePvcReadout(); return; }
+        var pt = points[idx];
+        if (lastEl) lastEl.textContent = "₹" + Math.round(pt.y).toLocaleString("en-IN");
+        if (nameEl) nameEl.textContent = "Value";
+        var per = document.getElementById("pvc-period");
+        if (per) per.textContent = _pvcDayFmt.format(pt.x).toUpperCase();
+        if (changeEl) changeEl.hidden = true;
+      }
+      if (canvas2) {
+        canvas2.onmouseleave = function () { _pvcHoverIdx = -1; updatePvcReadout(); };
+      }
+
       // Zoom/pan bounds = the plotted data range so zoom-out can't reveal empty space.
       var pvcXMin = points.length ? points[0].x.getTime() : undefined;
       var pvcXMax = points.length ? points[points.length - 1].x.getTime() : undefined;
@@ -9784,13 +9830,17 @@
         },
         options: {
           responsive: true, maintainAspectRatio: false,
+          // Hovering anywhere over the plot picks the nearest point along x, so
+          // the readout responds to being near the line rather than only to
+          // landing on a 0px-radius point.
+          interaction: { intersect: false, mode: "index", axis: "x" },
+          onHover: function (evt, els, chart) { pvcHover(els); },
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) { return "₹" + Math.round(ctx.parsed.y).toLocaleString("en-IN"); }
-              }
-            },
+            // Off. The figures go in the card header instead — the same place
+            // CASH FLOW · MONTHLY keeps its stats row — so reading the chart
+            // never means chasing a floating box across it.
+            tooltip: { enabled: false },
             zoom: {
               limits: { x: { min: pvcXMin, max: pvcXMax } },
               // Off — see wireChartXDrag; two pan implementations would double up.

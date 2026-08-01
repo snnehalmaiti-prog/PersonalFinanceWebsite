@@ -126,6 +126,12 @@ Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
 
 ## e2e-account-value-zoom.js
 
+Also covers the hover readout: both value charts have their floating tooltip off
+and report the hovered point in the card header instead, the way CASH FLOW ·
+MONTHLY keeps its figures in a stats row. Ten mutants fail it — each tooltip
+re-enabled, each chart's hover made a no-op, the index read at the wrong date,
+each chart's mouseleave failing to restore, and the hover ignoring its index.
+
 The ACCOUNT VALUE · OVER TIME range pills and the zoom-following readout.
 
     node tests/e2e-account-value-zoom.js

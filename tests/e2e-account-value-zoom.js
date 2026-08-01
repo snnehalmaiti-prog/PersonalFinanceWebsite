@@ -232,6 +232,97 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
        [gr.gPort, initial.gPort, gr.gIdx, initial.gIdx]);
   }
 
+  // Hover: the figures belong in the card header, not in a floating tooltip that
+  // has to be chased across the plot. Both charts read out the hovered point and
+  // both put it back when the pointer leaves.
+  {
+    const tips = await p.evaluate(() => ({
+      pvc: window.__wfPortfolioValueChart.options.plugins.tooltip.enabled,
+      avc: window.__wfValueChart.options.plugins.tooltip.enabled,
+      pvcMode: (window.__wfPortfolioValueChart.options.interaction || {}).mode,
+      avcMode: (window.__wfValueChart.options.interaction || {}).mode,
+    }));
+    ok(tips.pvc === false && tips.avc === false,
+       "H1 the floating tooltip is off on both charts", tips);
+    ok(tips.pvcMode === "index" && tips.avcMode === "index",
+       "H2 and hovering picks the nearest point along x, not a 0px-radius hit", tips);
+
+    // Drive the handler the way Chart.js does. The stub has no hit-testing, so
+    // the element list is supplied — what is under test is the readout, not
+    // Chart.js's geometry.
+    const hoverPvc = (i) => p.evaluate((idx) => {
+      const ch = window.__wfPortfolioValueChart;
+      ch.options.onHover(null, idx < 0 ? [] : [{ index: idx }], ch);
+      const pts = ch.data.datasets[0].data;
+      return { shown: (document.getElementById("pvc-current-value")||{}).textContent,
+               period: (document.getElementById("pvc-period")||{}).textContent,
+               want: idx < 0 ? null : Math.round(pts[idx].y).toLocaleString("en-IN") };
+    }, i);
+
+    // What the header says before any hovering — the chart is still zoomed to the
+    // interior window from earlier, so this is a window readout, not the full one.
+    const preHover = await read();
+    const h0 = await hoverPvc(5);
+    ok(h0.shown === "₹" + h0.want,
+       "H3 Account Value: hovering shows THAT point's value in the header", h0);
+    ok(/^\d{1,2} [A-Z]{3} \d{4}$/.test(h0.period || ""),
+       "H4 and the period line names the date it belongs to", h0.period);
+
+    // A different point must give a different figure, or the readout could be
+    // reporting a constant and H3 would still pass.
+    const h1 = await hoverPvc(300);
+    ok(h1.shown === "₹" + h1.want && h1.shown !== h0.shown,
+       "H5 and a different point reads out differently", [h0.shown, h1.shown]);
+
+    // Leaving restores the zoom-window readout rather than stranding the last
+    // hovered value in the header.
+    await p.evaluate(() => document.getElementById("portfolio-value-chart").onmouseleave());
+    const afterLeave = await read();
+    ok(afterLeave.value === preHover.value && afterLeave.period === preHover.period &&
+       afterLeave.name === preHover.name && afterLeave.change === preHover.change,
+       "H6 and leaving the chart restores exactly what it said before", [afterLeave, preHover]);
+    ok(afterLeave.value !== h1.shown,
+       "H6b — which is not the last hovered value left stranded", [afterLeave.value, h1.shown]);
+
+    // The Growth chart reads out BOTH series, since both are plotted.
+    const hoverAvc = (i) => p.evaluate((idx) => {
+      const ch = window.__wfValueChart;
+      ch.options.onHover(null, [{ index: idx }], ch);
+      const idxSeries = (ch.data.datasets[1] || {}).data || [];
+      // What the index series itself says at the hovered DATE, under the same
+      // "last non-null at or before" rule the readout must be following.
+      const t = ch.data.datasets[0].data[idx].x.getTime();
+      let wantIdx = null;
+      for (const q of idxSeries) { if (!q || q.x.getTime() > t) break; if (q.y != null) wantIdx = q.y; }
+      return { port: (document.getElementById("avc-portfolio-value")||{}).textContent,
+               idx: (document.getElementById("avc-index-value")||{}).textContent,
+               period: (document.getElementById("avc-period")||{}).textContent,
+               want: Math.round(ch.data.datasets[0].data[idx].y),
+               wantIdx: wantIdx == null ? null : Math.round(wantIdx) };
+    }, i);
+    const g0 = await hoverAvc(5);
+    ok(g0.port === "₹" + g0.want,
+       "H7 Growth: hovering shows that point's Portfolio value", g0);
+    ok(g0.wantIdx != null && g0.idx === "₹" + g0.wantIdx,
+       "H8 and the Index value at that same date alongside it", g0);
+    // Both figures must MOVE with the pointer. Without this, a readout that never
+    // updated the index would still satisfy H8 by leaving the old value in place.
+    const g1 = await hoverAvc(300);
+    ok(g1.idx === "₹" + g1.wantIdx && g1.idx !== g0.idx,
+       "H8b and both follow the pointer to a different date", [g0.idx, g1.idx]);
+    ok(g1.port === "₹" + g1.want && g1.port !== g0.port,
+       "H8c — the Portfolio figure too", [g0.port, g1.port]);
+    ok(/^\d{1,2} [A-Z]{3} \d{4}$/.test(g0.period || ""),
+       "H9 and the period line names the date", g0.period);
+
+    await p.evaluate(() => document.getElementById("value-chart").onmouseleave());
+    const gLeave = await read();
+    ok(/^SINCE \d{4}$/.test(gLeave.gPeriod || ""),
+       "H10 Growth: leaving restores the whole-period readout", gLeave.gPeriod);
+    ok(gLeave.gPort === initial.gPort,
+       "H11 and the whole-period figure with it", [gLeave.gPort, initial.gPort]);
+  }
+
   // Click-and-drag, with real mouse events, on both charts. This is the whole point
   // of owning the pan rather than leaving it to a plugin we cannot load here.
   async function dragChart(canvasId, dx) {
