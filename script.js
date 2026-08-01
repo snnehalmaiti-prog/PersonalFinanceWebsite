@@ -11572,6 +11572,11 @@
   var __micTxnRerender = null;
   var __monthlyInvestCatIdle = false; // on = show month-on-month parked-cash balances (Savings Account + Investment Corpus)
   var __monthlyIdleCashData; // { byMonthInstr, instruments, yearList }
+  // Idle Cash keeps its OWN legend selection. It lists parked-cash instruments
+  // (Savings Account, Investment Corpus), a different namespace from the flow
+  // views' sub-categories, so sharing __monthlyInvestCatFilters would mean a
+  // pick made in one view silently emptying the other.
+  var __monthlyIdleCashFilters = [];
 
   // MON_LABELS and MIC_PALETTE are defined inside drawMonthlyInvestCatChart to avoid hoisting issues
 
@@ -12892,9 +12897,16 @@
       var instruments = Object.keys(instrSet).sort();
 
       function cell(k, instr) { return (byMonthInstr[k] && byMonthInstr[k][instr]) ? byMonthInstr[k][instr] : 0; }
+      // Legend selection, exactly as the "By instrument" view defines it: an empty
+      // list means show everything, and everything derived from it — the bars, the
+      // stats row, the hovered-month split — reflects the same choice, so the parts
+      // always add up to the totals stated above them.
+      function idleIncluded(instr) {
+        return !__monthlyIdleCashFilters.length || __monthlyIdleCashFilters.indexOf(instr) !== -1;
+      }
       function monthTotal(k) {
         var m = byMonthInstr[k];
-        return m ? Object.keys(m).reduce(function (s, c) { return s + m[c]; }, 0) : 0;
+        return m ? Object.keys(m).reduce(function (s, c) { return idleIncluded(c) ? s + m[c] : s; }, 0) : 0;
       }
 
       if (!instruments.length) {
@@ -12905,20 +12917,34 @@
         if (legendElA) legendElA.innerHTML = "";
         var statsElA = document.getElementById("monthly-invest-cat-stats");
         if (statsElA) statsElA.innerHTML = "";
+        // Leaving the flow views' split panel up would describe a chart that is
+        // no longer on screen.
+        var splitElA = document.getElementById("mic-hover-split");
+        if (splitElA) splitElA.innerHTML = "";
         return;
       }
       if (statusEl) statusEl.textContent = "";
 
-      var datasets = instruments.map(function (instr, i) {
+      // Drop selections that aren't in view (e.g. after a year change), so a stale
+      // pick can't leave the chart looking empty with no way to see why.
+      __monthlyIdleCashFilters = __monthlyIdleCashFilters.filter(function (c) {
+        return instruments.indexOf(c) !== -1;
+      });
+      var datasets = [];
+      instruments.forEach(function (instr, i) {
+        if (!idleIncluded(instr)) return;
+        // Colour comes from the position in the FULL instrument list, not in the
+        // filtered one, so an instrument keeps its colour as others are switched
+        // off instead of taking over the colour of one that is no longer shown.
         var col = IDLE_PALETTE[i % IDLE_PALETTE.length];
-        return {
+        datasets.push({
           label: instr,
           data: monthKeys.map(function (k) { return cell(k, instr); }),
           backgroundColor: col + "CC",
           borderColor: col,
           borderWidth: 0,
           borderRadius: 3, categoryPercentage: 0.72, barPercentage: 0.9
-        };
+        });
       });
 
       // Stats: latest month's total idle cash (the balance held now) + average
@@ -12935,13 +12961,120 @@
           '<div class="mic-stat"><span class="mic-stat-label">Avg / month</span><span class="mic-stat-value">' + formatCurrency(avg) + '</span></div>';
       }
 
+      // Selectable legend, same contract as "By instrument": click (or Enter/Space)
+      // toggles an instrument in or out of the selection, several can be on at
+      // once, the unselected ones dim, and "Show all" clears the selection —
+      // otherwise a user who picked a subset has to click each one off again.
       var legendEl = document.getElementById("monthly-invest-cat-legend");
       if (legendEl) {
+        var anyIdleSelected = __monthlyIdleCashFilters.length > 0;
         legendEl.innerHTML = instruments.map(function (instr, i) {
           var col = IDLE_PALETTE[i % IDLE_PALETTE.length];
-          return '<div class="mic-legend-item"><div class="mic-legend-bar" style="background:' + col + '"></div>' + escapeHtml(instr) + '</div>';
-        }).join("");
+          var on = idleIncluded(instr);
+          return '<div class="mic-legend-item mic-legend-clickable' + (on ? '' : ' mic-legend-dimmed') + '"' +
+            ' role="button" tabindex="0"' +
+            ' aria-pressed="' + (anyIdleSelected && on ? 'true' : 'false') + '"' +
+            ' title="' + (on && anyIdleSelected ? 'Click to remove from the selection' : 'Click to add to the selection') + '"' +
+            ' data-mic-idle="' + escapeHtml(instr).replace(/"/g, '&quot;') + '">' +
+            '<div class="mic-legend-bar" style="background:' + col + '"></div>' +
+            escapeHtml(instr) + '</div>';
+        }).join("") +
+        (anyIdleSelected
+          ? '<div class="mic-legend-item mic-legend-clickable mic-legend-clear" role="button" tabindex="0"' +
+            ' data-mic-idle-clear="1" title="Show all instruments">Show all</div>'
+          : "");
+        Array.prototype.forEach.call(legendEl.querySelectorAll("[data-mic-idle]"), function (item) {
+          function toggle() {
+            // Read the label off the rendered text, not the attribute: the
+            // attribute is HTML-escaped for the markup and would not match the
+            // raw instrument name the filter list holds.
+            var instr = instruments[Array.prototype.indexOf.call(
+              legendEl.querySelectorAll("[data-mic-idle]"), item)];
+            if (instr == null) return;
+            var at = __monthlyIdleCashFilters.indexOf(instr);
+            if (at === -1) __monthlyIdleCashFilters.push(instr);
+            else __monthlyIdleCashFilters.splice(at, 1);
+            drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+          }
+          item.addEventListener("click", toggle);
+          item.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+          });
+        });
+        Array.prototype.forEach.call(legendEl.querySelectorAll("[data-mic-idle-clear]"), function (item) {
+          function clearAll() {
+            __monthlyIdleCashFilters = [];
+            drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
+          }
+          item.addEventListener("click", clearAll);
+          item.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clearAll(); }
+          });
+        });
       }
+
+      // ── Hovered-month split, in the same panel the flow views use ───────────
+      // Idle Cash is a BALANCE, not a flow, so there is no Investment/Withdrawal
+      // pair and no period sum — adding up twelve month-end balances would state
+      // a number that was never held. The resting state is therefore the latest
+      // month with a balance, which is what the stats row above already reports.
+      var idleSplitEl = document.getElementById("mic-hover-split");
+      var __idleHoverIdx = -1;
+      var IDLE_MON_FULL = ["January","February","March","April","May","June",
+                           "July","August","September","October","November","December"];
+      function idleChips(k) {
+        var m = byMonthInstr[k] || {};
+        return Object.keys(m)
+          .filter(function (c) { return m[c] > 0 && idleIncluded(c); })
+          .sort(function (a, b) { return m[b] - m[a]; })
+          .map(function (c) {
+            // Position in the full instrument list, so a chip carries the same
+            // colour as its bar and its legend entry.
+            var col = IDLE_PALETTE[Math.max(0, instruments.indexOf(c)) % IDLE_PALETTE.length];
+            return '<span class="mic-hs-item">' +
+              '<span class="mic-hs-dot" style="background:' + col + '"></span>' +
+              escapeHtml(c) + ' <b>' + formatCurrency(m[c]) + '</b></span>';
+          }).join("");
+      }
+      function idleMonthText(k) {
+        var kp = String(k).split("-");
+        return (IDLE_MON_FULL[parseInt(kp[1], 10) - 1] || k) + (kp[0] ? " " + kp[0] : "");
+      }
+      function paintIdleSplit(k, restingLabel) {
+        if (!idleSplitEl) return;
+        var chipsHtml = k ? idleChips(k) : "";
+        // Same total markup the flow views use (mic-hs-tot / mic-hs-tot-label), so
+        // the row reads identically whichever mode produced it.
+        var totalHtml = k
+          ? '<span class="mic-hs-tot"><span class="mic-hs-tot-label">Idle Cash</span>' +
+            '<b>' + formatCurrency(monthTotal(k)) + '</b></span>' : "";
+        idleSplitEl.innerHTML =
+          '<div class="mic-hs-row"><span class="mic-hs-month">' +
+            escapeHtml(restingLabel || (k ? idleMonthText(k) : "")) + '</span>' + totalHtml +
+          '</div>' +
+          '<div class="mic-hs-row">' +
+            (chipsHtml ? '<span class="mic-hs-cap">Idle Cash</span><span class="mic-hs-group">' + chipsHtml + '</span>' : '') +
+          '</div>';
+      }
+      function showIdleRestingSplit() {
+        // Latest month that still has a balance under the current selection.
+        var k = null;
+        for (var ri = monthKeys.length - 1; ri >= 0; ri--) {
+          if (monthTotal(monthKeys[ri]) > 0) { k = monthKeys[ri]; break; }
+        }
+        if (!k) { if (idleSplitEl) idleSplitEl.innerHTML = ""; return; }
+        paintIdleSplit(k, "Latest · " + idleMonthText(k));
+      }
+      function clearIdleHoverSplit() { __idleHoverIdx = -1; showIdleRestingSplit(); }
+      function renderIdleHoverSplit(idx) {
+        // Ignore repeats: Chart.js fires onHover on every pointer move.
+        if (idx === __idleHoverIdx) return;
+        __idleHoverIdx = idx;
+        var k = monthKeys[idx];
+        if (!k || monthTotal(k) <= 0) { clearIdleHoverSplit(); return; }
+        paintIdleSplit(k, null);
+      }
+      clearIdleHoverSplit();
 
       if (__monthlyInvestCatChart) { __monthlyInvestCatChart.destroy(); __monthlyInvestCatChart = null; }
       wrap.innerHTML = "";
@@ -12953,24 +13086,25 @@
         data: { labels: labels, datasets: datasets },
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
+          // Anywhere in a month's column identifies that month, so a thin band in
+          // the stack never has to be hit precisely. Same as the flow views.
+          interaction: { mode: "index", intersect: false },
+          onHover: function (evt, els, chart) {
+            var idx = els && els.length ? els[0].index : -1;
+            if (idx < 0) {
+              var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
+              idx = pts && pts.length ? pts[0].index : -1;
+            }
+            if (idx < 0 || idx >= monthKeys.length) clearIdleHoverSplit();
+            else renderIdleHoverSplit(idx);
+          },
           plugins: {
             legend: { display: false },
-            tooltip: {
-              mode: "index", intersect: false,
-              filter: function (item) { return item.datasetIndex === 0; },
-              callbacks: {
-                label: function (ctx) {
-                  var k = monthKeys[ctx.dataIndex];
-                  if (!k) return "";
-                  var m = byMonthInstr[k] || {};
-                  var lines = ["Idle Cash: " + formatCurrency(monthTotal(k))];
-                  Object.keys(m).filter(function (c) { return m[c] > 0; })
-                    .sort(function (a, b) { return m[b] - m[a]; })
-                    .forEach(function (c) { lines.push("   " + c + ": " + formatCurrency(m[c])); });
-                  return lines;
-                }
-              }
-            }
+            // No tooltip: the month's total and its per-instrument split are both
+            // reported in the rows under the stats row, exactly as in Net and
+            // By instrument, so a floating panel would only repeat them over the
+            // bars it is describing.
+            tooltip: { enabled: false }
           },
           scales: {
             x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
@@ -12988,6 +13122,9 @@
           }
         }
       });
+      // onHover stops firing once the pointer leaves the canvas, so without this
+      // the split panel would stay stuck on the last month hovered.
+      canvas.addEventListener("mouseleave", clearIdleHoverSplit);
     } catch (e) {
       if (statusEl) statusEl.textContent = "Chart error: " + e.message;
     }
@@ -13097,6 +13234,10 @@
     if (idleBtn) {
       idleBtn.onclick = function () {
         __monthlyInvestCatIdle = !__monthlyInvestCatIdle;
+        // Entering or leaving Idle Cash starts from every instrument shown, the
+        // same way toggling By instrument does. A selection carried across the
+        // switch would hide most of the chart with the reason off-screen.
+        __monthlyIdleCashFilters = [];
         if (__monthlyInvestCatIdle) {
           // Balance view — flow-only modes don't apply.
           __monthlyInvestCatNet = false;

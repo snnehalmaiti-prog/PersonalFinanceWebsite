@@ -124,6 +124,22 @@ fixture out of dashboard.html's own markup, so it cannot drift from what it chec
 
 Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
 
+## e2e-mic-idle-cash.js
+
+CASH FLOW · MONTHLY's "Idle Cash" view must read out a hovered month the way Net
+and By instrument do — in the panel under the stats row, not a floating tooltip —
+and its legend must be selectable the same way. The test measures the flow view
+FIRST and asserts Idle Cash matches it, so "the same as" is checked against the
+other modes rather than against a remembered description.
+
+    python3 -m http.server 8098 &
+    node tests/e2e-mic-idle-cash.js
+
+Nine mutants fail it: the tooltip re-enabled, the hover made a no-op, mouseleave
+not restoring, the legend markup made inert, the filter ignored by the datasets
+or by the stats, the palette indexed off the filtered list, and the selection not
+reset on a mode switch.
+
 ## e2e-account-value-zoom.js
 
 Also covers the hover readout: both value charts have their floating tooltip off
