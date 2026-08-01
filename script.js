@@ -9205,12 +9205,34 @@
           navAtByName[name] = _ff(navByInstrument[name], timeline, "nav");
         });
         var seUnitsAtByTicker = {};
-        Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
+        var seTickers = Object.keys(seUnitEventsByTicker);
+        seTickers.forEach(function (ticker) {
           seUnitsAtByTicker[ticker] = _ff(seUnitEventsByTicker[ticker], timeline, "cumulativeUnits");
         });
 
         var mfTradedUnits = buildTradedUnitsByDate(getSheetRows("equity"), selectedPortfolio);
         var seTradedUnits = buildTradedUnitsByDate(getSheetRows("stocksetf"), selectedPortfolio);
+
+        // Everything below is loop-invariant: normalizeText() per (instrument ×
+        // timeline point) and a fresh Object.keys() per point were the dominant
+        // cost of the render on a multi-year, multi-instrument portfolio. Hoist
+        // them so the per-point work is arithmetic and array indexing only.
+        var instrumentList = instruments.slice();
+        var mfUnitsByIdx = instrumentList.map(function (name) { return unitsAtByName[name]; });
+        var mfNavByIdx = instrumentList.map(function (name) { return navAtByName[name]; });
+        var mfTradedByIdx = instrumentList.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
+        var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
+        var seMeta = seTickers.map(function (ticker) {
+          var hist = stockHistoryAll[ticker] || null;
+          var live = allPrices[ticker] || null;
+          return {
+            units: seUnitsAtByTicker[ticker],
+            histPrices: hist ? hist.prices : null,
+            livePrice: live ? live.price : null,
+            isUsd: hist ? hist.currency === "USD" : !!(live && live.currency === "USD"),
+            traded: seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
+          };
+        });
 
         // Cash flow at each timeline point, marked at that point's own valuation.
         var flowAt = new Array(timeline.length).fill(0);
@@ -9223,39 +9245,37 @@
           commodityValueAt.push(commVal);
           var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
           var dk = dateKey(date);
-          instruments.forEach(function (name) {
-            var units = unitsAtByName[name][i] || 0;
-            var nav = navAtByName[name][i];
+          for (var mi = 0; mi < instrumentList.length; mi++) {
+            var units = mfUnitsByIdx[mi][i] || 0;
+            var nav = mfNavByIdx[mi][i];
             if (units > UNITS_EPSILON && nav) total += units * nav;
             // The flow is valued at the SAME nav this instrument was just valued at,
             // so a purchase changes the unit count and never the unit price. Skipped
             // when there is no nav: the value series cannot see this instrument on
             // this date either, and counting money against value that is not there
             // is what put a permanent hole in the curve.
-            if (!nav) return;
-            var traded = mfTradedUnits[normalizeText(name)];
+            if (!nav) continue;
+            var traded = mfTradedByIdx[mi];
             if (traded && traded[dk]) flowAt[i] += traded[dk] * nav;
-          });
+          }
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
-          var stockHistory = (stockPricesData && stockPricesData.stock_history) || {};
-          Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
-            var units = seUnitsAtByTicker[ticker][i] || 0;
-            var hist = stockHistory[ticker];
-            var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
-            if (!price) { var p = allPrices[ticker]; if (p) price = p.price; }
-            if (!price) return;
-            var isUsd = hist ? hist.currency === "USD" : (allPrices[ticker] && allPrices[ticker].currency === "USD");
-            var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
-            if (units > UNITS_EPSILON) total += units * priceInr;
+          for (var si = 0; si < seMeta.length; si++) {
+            var meta = seMeta[si];
+            var seUnits = meta.units[i] || 0;
+            var price = meta.histPrices ? lookupIndexPrice(meta.histPrices, dateStr) : null;
+            if (!price) price = meta.livePrice;
+            if (!price) continue;
+            var priceInr = meta.isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
+            if (seUnits > UNITS_EPSILON) total += seUnits * priceInr;
             // Same rule, and the same INR price: the flow can never disagree with
             // the valuation, in magnitude or in currency. Deliberately NOT gated on
             // still holding units — the sale that takes a position to zero is
             // exactly the flow that must be counted, or the value would vanish with
             // nothing to explain it and the curve would read it as a total loss.
-            var seTraded = seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")];
+            var seTraded = meta.traded;
             if (seTraded && seTraded[dk]) flowAt[i] += seTraded[dk] * priceInr;
-          });
+          }
           return { x: date, y: total };
         });
 
