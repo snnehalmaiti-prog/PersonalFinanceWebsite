@@ -8971,6 +8971,10 @@
   // point once a newer call has started. The newest call is never superseded,
   // so the chart the user ends up looking at is always the complete one.
   var _vcGen = 0;
+  // The Growth chart's inception year, so its period line can go back to
+  // "SINCE <year>" when the zoom is reset without recomputing the series.
+  var _avcInceptionYear = null;
+  var _avcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
   function renderValueChart() {
     var _vcMyGen = ++_vcGen;
     function _superseded() { return _vcMyGen !== _vcGen; }
@@ -9452,10 +9456,12 @@
             }
           }
 
-          // Update header legend + eyebrow with inception year
+          // Update header legend + period line with inception year. The title is a
+          // fixed string; the line under it says which period is on screen.
           var inceptionYear = (points[basePortIdx] ? points[basePortIdx].x : first).getFullYear();
-          var eyebrowEl = document.getElementById("avc-eyebrow");
-          if (eyebrowEl) eyebrowEl.textContent = "GROWTH OF ₹100 · SINCE " + inceptionYear;
+          _avcInceptionYear = inceptionYear;
+          var periodEl = document.getElementById("avc-period");
+          if (periodEl) periodEl.textContent = "SINCE " + inceptionYear;
           var portValEl = document.getElementById("avc-portfolio-value");
           if (portValEl) portValEl.textContent = lastPortNorm != null ? "₹" + Math.round(lastPortNorm) : "—";
           var idxNameEl = document.getElementById("avc-index-name");
@@ -9608,6 +9614,17 @@
         function updateVisibleRangeLabel(chart) {
           var xScale = chart.scales.x;
           if (rangeEl) rangeEl.textContent = new Date(xScale.min).toLocaleDateString() + " – " + new Date(xScale.max).toLocaleDateString();
+          // The period line follows the zoom: at rest it names the inception year,
+          // zoomed it names the window. The title above it never changes.
+          var periodEl3 = document.getElementById("avc-period");
+          if (!periodEl3) return;
+          var lo = isFinite(xScale.min) ? xScale.min : fullMinTime;
+          var hi = isFinite(xScale.max) ? xScale.max : fullMaxTime;
+          var full = lo <= fullMinTime + 1 && hi >= fullMaxTime - 1;
+          periodEl3.textContent = full
+            ? (_avcInceptionYear ? "SINCE " + _avcInceptionYear : "SINCE INCEPTION")
+            : ("FROM " + new Date(lo).getFullYear() +
+               " · TO " + _avcMonthFmt.format(new Date(hi)).toUpperCase());
         }
 
         function clearActiveRangePill() {
@@ -9687,9 +9704,22 @@
         var endPt = pvcValueAt(hi) || points[points.length - 1];
         var startPt = pvcValueAt(lo);
         if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
-        if (nameEl) {
-          nameEl.textContent = full ? "Current Value"
-            : ("Value · " + _pvcMonthFmt.format(endPt.x));
+        // The period line under the title already names the window, so the legend
+        // label stays a plain noun rather than repeating the month.
+        if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
+        var pvcPeriodEl = document.getElementById("pvc-period");
+        if (pvcPeriodEl) {
+          // The year the visible window opens in — taken from the first plotted
+          // point inside it, not from the bound, so it names a year the chart is
+          // actually showing data for.
+          var firstVis = null;
+          for (var fj = 0; fj < points.length; fj++) {
+            if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
+          }
+          pvcPeriodEl.textContent = full
+            ? "OVER TIME"
+            : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
+               " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase());
         }
         if (!changeEl) return;
         // A change needs two points to be a change. Zoomed to the full range there

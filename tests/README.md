@@ -109,6 +109,21 @@ stocks/ETF flows were gathered from the OPEN holdings and a fully-sold position
 contributed neither its cost nor its proceeds — while mutual funds had no such
 filter, so the two asset classes did not agree on what the number meant.
 
+## check-chart-subtitle-align.js / measure-subtitle-align.js
+
+The period line under each chart title ("SINCE 2018", "OVER TIME") must sit flush
+with the title. It did not: the card already pads 20px and the subtitle rule added
+its own horizontal margin on top, indenting the period 20px past the title it
+belongs to, with an 11px gap above it.
+
+`check-chart-subtitle-align.js` is in `run-all.js` and pins the CSS rule.
+`measure-subtitle-align.js` measures the real geometry in a browser — it builds its
+fixture out of dashboard.html's own markup, so it cannot drift from what it checks:
+
+    node tests/measure-subtitle-align.js
+
+Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
+
 ## e2e-account-value-zoom.js
 
 The ACCOUNT VALUE · OVER TIME range pills and the zoom-following readout.

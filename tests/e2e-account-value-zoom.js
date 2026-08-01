@@ -85,6 +85,10 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
       name: (document.getElementById("pvc-legend-name")||{}).textContent,
       value: (document.getElementById("pvc-current-value")||{}).textContent,
       change: (() => { const e = document.getElementById("pvc-range-change"); return e && !e.hidden ? e.textContent : null; })(),
+      period: (document.getElementById("pvc-period")||{}).textContent,
+      eyebrow: (document.getElementById("pvc-eyebrow")||{}).textContent,
+      gEyebrow: (document.getElementById("avc-eyebrow")||{}).textContent,
+      gPeriod: (document.getElementById("avc-period")||{}).textContent,
       spanDays: sc ? Math.round((sc.max - sc.min) / 864e5) : null,
     };
   });
@@ -93,6 +97,15 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   ok(initial.spanDays > 0, "A1 the chart rendered with an x range", initial);
   ok(initial.name === "Current Value", "A2 unzoomed, the readout is the current value", initial.name);
   ok(initial.change === null, "A3 and shows no change — there is no window to compare", initial.change);
+  // The title and the period are two lines, not one run-on string.
+  ok(initial.eyebrow === "ACCOUNT VALUE",
+     "A3a the Account Value title is the title alone", initial.eyebrow);
+  ok(initial.period === "OVER TIME",
+     "A3b with OVER TIME on the period line beneath it", initial.period);
+  ok(initial.gEyebrow === "GROWTH OF ₹100",
+     "A3c the Growth title is the title alone", initial.gEyebrow);
+  ok(/^SINCE \d{4}$/.test(initial.gPeriod || ""),
+     "A3d with SINCE <year> on the period line beneath it", initial.gPeriod);
   ok(await p.evaluate(() => document.querySelectorAll("[data-pvc-range]").length) === 0,
      "A4 the range pills are gone from the markup");
 
@@ -118,7 +131,10 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   }
 
   ok(seen[30].spanDays === 30, "C1 a 30-day window is 30 days wide", seen[30].spanDays);
-  ok(/^Value · /.test(seen[30].name), "C2 zoomed, the readout names the month it ends in", seen[30].name);
+  ok(seen[30].name === "Value",
+     "C2 zoomed, the legend label does not repeat the month — the period line has it", seen[30].name);
+  ok(/^FROM \d{4} · TO [A-Z]{3} \d{4}$/.test(seen[30].period || ""),
+     "C2b and the period line names the window", seen[30].period);
   ok(seen[30].change && seen[30].change.indexOf("₹") !== -1,
      "C3 and shows the change across the window", seen[30].change);
 
@@ -137,7 +153,7 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   await p.evaluate(() => document.getElementById("portfolio-value-chart").ondblclick());
   await p.waitForTimeout(200);
   const afterDbl = await read();
-  ok(afterDbl.name === "Current Value" && afterDbl.change === null,
+  ok(afterDbl.name === "Current Value" && afterDbl.change === null && afterDbl.period === "OVER TIME",
      "C6 double-click restores the whole-period readout", afterDbl);
   ok(afterDbl.spanDays === initial.spanDays, "C7 and the full range", [afterDbl.spanDays, initial.spanDays]);
 
@@ -154,8 +170,10 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   await p.waitForTimeout(200);
   const mid = await read();
   console.log("  interior " + JSON.stringify(mid));
-  ok(/Jun 2024/.test(mid.name || ""),
-     "C8 an interior window names the month it ends in, not today", mid.name);
+  ok(/^FROM 2024 · TO JUN 2024$/.test(mid.period || ""),
+     "C8 an interior window's period line names it, ending in its own month not today", mid.period);
+  ok(mid.eyebrow === "ACCOUNT VALUE",
+     "C8b and the title never changes with the zoom", mid.eyebrow);
   ok(mid.value !== initial.value,
      "C9 and reports that window's value, not the current one", [mid.value, initial.value]);
 
@@ -170,6 +188,30 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
     }, [chartVar, fromIso, toIso]);
   }
 
+  // The Growth chart's period line must behave the same way: the title stays put,
+  // the line under it follows the window and comes back on reset.
+  if (await zoomTo("__wfValueChart", "2024-05-01", "2024-06-01")) {
+    await p.waitForTimeout(200);
+    const g = await read();
+    console.log("  growth interior " + JSON.stringify({ e: g.gEyebrow, p: g.gPeriod }));
+    ok(g.gEyebrow === "GROWTH OF ₹100",
+       "D1 Growth: the title never changes with the zoom", g.gEyebrow);
+    ok(/^FROM 2024 · TO JUN 2024$/.test(g.gPeriod || ""),
+       "D2 Growth: the period line names the window", g.gPeriod);
+    // The Growth chart has no dblclick reset; put the window back where it
+    // started, which is what the reset button and a pan-to-the-edge both do.
+    await p.evaluate(() => {
+      const ch = window.__wfValueChart;
+      const lim = ch.options.plugins.zoom.limits.x;
+      ch.zoomScale("x", { min: lim.min, max: lim.max }, "none");
+      const cb = ch.options.plugins.zoom.zoom.onZoomComplete;
+      if (cb) cb({ chart: ch });
+    });
+    await p.waitForTimeout(200);
+    const gr = await read();
+    ok(/^SINCE \d{4}$/.test(gr.gPeriod || ""),
+       "D3 Growth: double-click restores SINCE <year>", gr.gPeriod);
+  }
 
   // Click-and-drag, with real mouse events, on both charts. This is the whole point
   // of owning the pan rather than leaving it to a plugin we cannot load here.

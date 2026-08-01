@@ -4280,6 +4280,21 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #value-chart, #portfolio-value-chart { cursor: grab; touch-action: pan-y; }
 #value-chart:active, #portfolio-value-chart:active { cursor: grabbing; }
 
+/* The period line under each chart title. Carries the whole-range description at
+   rest ("SINCE 2018", "OVER TIME") and the visible window while zoomed, so a
+   zoomed chart never leaves you guessing what you are looking at. */
+.avc-subtitle {
+  /* No horizontal margin: the card already pads 20px, and adding it again here
+     indented the period line past the title it belongs to. The negative top pulls
+     it up under the header, whose own bottom margin left them far apart. */
+  margin: -8px 0 8px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* The zoom-following readout on the Account Value chart. */
 .avc-legend-change { font-size: 0.72rem; font-weight: 600; margin-left: 6px; }
 .avc-legend-change.pvc-up { color: var(--emerald); }
