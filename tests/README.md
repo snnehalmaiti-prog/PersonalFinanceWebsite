@@ -124,6 +124,30 @@ fixture out of dashboard.html's own markup, so it cannot drift from what it chec
 
 Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
 
+## e2e-integration-smoke.js
+
+Every other suite runs on a small isolated fixture. This one runs the whole
+dashboard on ONE realistic portfolio — several funds, Indian and US stocks, a
+closed position, an FD, a savings account, an investment corpus, EPF and physical
+gold — and checks the features do not break each other: both value charts, their
+hover readouts, all three CASH FLOW · MONTHLY modes and the switches between
+them, the idle-cash legend, and the year / All time controls, with zero page
+errors throughout.
+
+    python3 -m http.server 8098 &
+    node tests/e2e-integration-smoke.js
+
+Two things it exists to catch that nothing else does. Physical gold alone pulls
+in ~90 gold-price requests that gate BOTH value charts, so a portfolio holding it
+is the one most likely to render nothing — those endpoints must be stubbed.
+And every trade is priced at whatever the stubbed price series quotes on that
+date: with trades at prices the series never had, TWR and XIRR diverge for
+reasons that are the fixture's fault rather than the app's.
+
+Note the comment above V7c: Growth-of-₹100 and the XIRR cards can legitimately
+disagree about whether the portfolio beat the index, because the Growth chart
+excludes fixed income and the XIRR cards do not.
+
 ## e2e-mic-idle-cash.js
 
 CASH FLOW · MONTHLY's "Idle Cash" view must read out a hovered month the way Net
