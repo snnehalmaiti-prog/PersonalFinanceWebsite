@@ -283,16 +283,12 @@
             </div>
           </div>
         </div>
-        <div class="avc-subtitle-row">
-          <p class="avc-subtitle" id="avc-period">SINCE INCEPTION</p>
-          <button type="button" id="avc-include-fi" class="mic-toggle-btn avc-fi-toggle"
-                  aria-pressed="false" title="Include EPF, PF, FDs and parked cash in the performance curve">Include Fixed Income</button>
-        </div>
+        <p class="avc-subtitle" id="avc-period">SINCE INCEPTION</p>
         <p class="muted small" id="value-chart-status" hidden>Loading NAV history…</p>
         <div class="avc-chart-wrap">
           <canvas id="value-chart" height="320"></canvas>
         </div>
-        <p class="muted small" id="avc-note" style="margin:8px 20px 4px;font-size:0.72rem;font-style:italic;">Note: 1. Fixed Income Instruments are excluded &nbsp; 2. Change the index from benchmark comparison</p>
+        <p class="muted small" style="margin:8px 20px 4px;font-size:0.72rem;font-style:italic;">Note: 1. Fixed Income Instruments are excluded &nbsp; 2. Change the index from benchmark comparison</p>
         <!-- Verdict removed per user request; legacy nodes preserved hidden for code paths -->
         <div id="avc-verdict" hidden><span id="avc-verdict-headline"></span><span id="avc-verdict-detail"></span><button type="button" id="avc-change-benchmark" hidden></button></div>
         <span id="value-chart-range" hidden></span>

@@ -22,10 +22,7 @@ function check(cond, msg) { if (!cond) { console.error("  FAIL " + msg); failed+
 
 // Comments first: a /* ... */ inside the rule otherwise matches as the declaration.
 const CSS_BARE = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
-// Anchor on a rule whose SELECTOR is exactly .avc-subtitle. A descendant rule
-// like ".avc-subtitle-row .avc-subtitle { flex: ... }" contains the same text and
-// would otherwise be picked up as the margin rule, which it is not.
-const rule = (CSS_BARE.match(/(?:^|[}\n])\s*\.avc-subtitle\s*\{[^}]*\}/m) || [""])[0];
+const rule = (CSS_BARE.match(/\.avc-subtitle\s*\{[^}]*\}/) || [""])[0];
 check(rule, ".avc-subtitle rule is missing");
 
 const margin = (rule.match(/margin:\s*([^;]+);/) || [])[1];

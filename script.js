@@ -8793,13 +8793,7 @@
     return events;
   }
 
-  // depositsOnly: accumulate CONTRIBUTIONS rather than value — deposit rows count,
-  // interest rows do not. The performance curve needs both series: value tells it
-  // what the account is worth, contributions tell it how much of that was paid in
-  // rather than earned. Without the split every interest credit would be
-  // indistinguishable from money arriving, and the curve would stay flat through
-  // exactly the return it is meant to show.
-  function buildEpfValueEvents(portfolioFilter, depositsOnly) {
+  function buildEpfValueEvents(portfolioFilter) {
     var rows = getSheetRows("fixedincome");
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -8821,10 +8815,7 @@
       if (!isDeposit && !isInterest) return;
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date) return;
-      // Interest is return, not a contribution. Keep the event (so the two series
-      // share dates and step together) with a zero delta.
-      var delta = parseNumber(row[amountIdx]);
-      events.push({ date: date, delta: (depositsOnly && isInterest) ? 0 : delta });
+      events.push({ date: date, delta: parseNumber(row[amountIdx]) });
     });
 
     events.sort(function (a, b) { return a.date - b.date; });
@@ -8979,13 +8970,6 @@
   // Stamp each call with a generation and drop it at every async resumption
   // point once a newer call has started. The newest call is never superseded,
   // so the chart the user ends up looking at is always the complete one.
-  // "Include Fixed Income" on the Portfolio Performance chart. Off by default: the
-  // curve is compared against an equity index, and blending idle cash into it makes
-  // that comparison mean something different. Persisted, because it is a way of
-  // reading the chart rather than a momentary action.
-  var AVC_INCLUDE_FI_KEY = "wf-avc-include-fi";
-  function avcIncludeFI() { return localStorage.getItem(AVC_INCLUDE_FI_KEY) === "1"; }
-
   var _vcGen = 0;
   // The Growth chart's inception year, so its period line can go back to
   // "SINCE <year>" when the zoom is reset without recomputing the series.
@@ -9010,29 +8994,6 @@
         var benchToggle = document.getElementById("benchmark-toggle");
         if (benchToggle) setTimeout(function () { benchToggle.click(); }, 400);
       });
-    }
-
-    // "Include Fixed Income". Bound once; the state itself lives in localStorage so
-    // it survives the re-render this triggers, and the reload after it.
-    var fiBtn = document.getElementById("avc-include-fi");
-    if (fiBtn) {
-      var fiOnNow = avcIncludeFI();
-      fiBtn.classList.toggle("active", fiOnNow);
-      fiBtn.setAttribute("aria-pressed", fiOnNow ? "true" : "false");
-      if (!fiBtn.dataset.bound) {
-        fiBtn.dataset.bound = "1";
-        fiBtn.addEventListener("click", function () {
-          localStorage.setItem(AVC_INCLUDE_FI_KEY, avcIncludeFI() ? "0" : "1");
-          renderValueChart();
-        });
-      }
-    }
-    // The note states the exclusion as a fact; it is a mode, so it has to follow.
-    var noteEl = document.getElementById("avc-note");
-    if (noteEl) {
-      noteEl.textContent = "Note: 1. " +
-        (avcIncludeFI() ? "Fixed Income Instruments are included" : "Fixed Income Instruments are excluded") +
-        "   2. Change the index from benchmark comparison";
     }
 
     statusEl.hidden = false;
@@ -9061,14 +9022,6 @@
       var fdValueEventsAll = isFixedIncomeExcluded()
         ? []
         : buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded(), true);
-      // Contribution counterparts, for the Portfolio Performance curve when fixed
-      // income is folded in. buildFdValueEvents models FDs at principal and PF and
-      // parked cash at their stated balances — no interest is attributed anywhere
-      // in it — so every delta it produces IS a contribution and the two series
-      // are the same. The fixedincome sheet is the one that separates interest
-      // from deposits, so only it needs the depositsOnly pass.
-      var epfContribEventsAll = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio, true);
-      var fdContribEventsAll = fdValueEventsAll;
 
       // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
@@ -9427,22 +9380,8 @@
         // purchase look like instant growth. The ₹100 line is therefore a pure
         // MF + Stocks/ETF vs equity-index comparison (Fixed Income is already
         // excluded above). Commodity is still shown on the Account Value chart.
-        // "Include Fixed Income" folds EPF/PF, FDs and parked cash into the curve.
-        // Both series must move together: the VALUE gains the fixed-income balance
-        // and the CONTRIBUTIONS gain what was paid into it. Adding the value alone
-        // would read every deposit as instant growth — a ₹3,00,000 savings balance
-        // appearing would triple the line on the day it was entered.
-        var _fiOn = avcIncludeFI();
-        var fiContribAt = null;
-        if (_fiOn) {
-          fiContribAt = _ff(epfContribEventsAll, timeline, "cumulativeValue");
-        }
-        var fdContribAt = _fiOn ? _ff(fdContribEventsAll, timeline, "cumulativeValue") : null;
-
         var growthPoints = points.map(function (p, i) {
-          var y = p.y - (commodityValueAt[i] || 0);
-          if (_fiOn) y += (epfAllAt[i] || 0) + (fdAllAt[i] || 0);
-          return { x: p.x, y: y };
+          return { x: p.x, y: p.y - (commodityValueAt[i] || 0) };
         });
 
         // Cumulative contributions at each timeline date, from the flows gathered in
@@ -9453,9 +9392,6 @@
         for (var pi = 0; pi < points.length; pi++) {
           runningContrib += flowAt[pi] || 0;
           cumContribAt[pi] = runningContrib;
-          if (_fiOn) {
-            cumContribAt[pi] += (fiContribAt[pi] || 0) + (fdContribAt[pi] || 0);
-          }
         }
 
         // TWR NAV: start at 100 on the first day the portfolio has value, then
