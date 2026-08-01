@@ -9438,6 +9438,15 @@
         if (normPortPoints[basePortIdx] && normPortPoints[basePortIdx].x) {
           fullMinTime = normPortPoints[basePortIdx].x.getTime();
         }
+        // And hand the chart only the points it can draw. Setting the window is not
+        // enough on its own: a time scale derives its own range from the data, so
+        // leading null points keep the axis anchored years before the curve if the
+        // window is ever re-derived — on a resize, an update, or when the zoom
+        // plugin is unavailable and the window has to be applied through the scale
+        // options instead. Trimming the head makes the axis right by construction
+        // rather than by a call that has to keep winning.
+        var plotFrom = Math.max(0, Math.min(basePortIdx, normPortPoints.length));
+        var plotPortPoints = plotFrom > 0 ? normPortPoints.slice(plotFrom) : normPortPoints;
 
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
         fetchIndexHistory().then(function (indexHistory) {
@@ -9520,7 +9529,7 @@
           var idx = els && els.length ? els[0].index : -1;
           if (idx === _avcHoverIdx) return;   // fires on every pointer move
           _avcHoverIdx = idx;
-          var pt = normPortPoints[idx];
+          var pt = plotPortPoints[idx];
           if (idx < 0 || !pt) { updateVisibleRangeLabel(window.__wfValueChart); return; }
           var portEl = document.getElementById("avc-portfolio-value");
           if (portEl) portEl.textContent = pt.y != null ? "₹" + Math.round(pt.y) : "—";
@@ -9541,7 +9550,9 @@
         }
 
         function _renderNormalizedChart(normIdxPoints) {
-        _avcIdxSeries = normIdxPoints || [];
+        // Same trim, same offset, so the two datasets stay aligned point for point.
+        normIdxPoints = (normIdxPoints || []).slice(plotFrom);
+        _avcIdxSeries = normIdxPoints;
         if (window.__wfValueChart) window.__wfValueChart.destroy();
         var ctx = canvas.getContext("2d");
         var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 340);
@@ -9549,7 +9560,7 @@
         fillGradient.addColorStop(1, "rgba(16,185,129,0)");
         var datasets = [{
           label: "Portfolio",
-          data: normPortPoints,
+          data: plotPortPoints,
           borderColor: "#10B981",
           backgroundColor: fillGradient,
           fill: true,
@@ -9677,7 +9688,7 @@
           // not what it is worth today. Zoomed to a window that ends in 2021, a
           // legend still reading today's figure describes a different chart from
           // the one being looked at.
-          setAvcLegend("avc-portfolio-value", normPortPoints, hi);
+          setAvcLegend("avc-portfolio-value", plotPortPoints, hi);
           setAvcLegend("avc-index-value", _avcIdxSeries, hi);
         }
 

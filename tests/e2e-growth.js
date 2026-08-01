@@ -146,6 +146,16 @@ const SCENARIOS = [
     nav: (iso) => (iso >= "2024-09-01" ? 20 : 10),
     navStart: "2024-06-01",
     probe: ["2024-06-01", "2024-12-01"] },
+  { name: "S13 fixed income predates the first equity buy",
+    // A savings account opened in January pulls the TIMELINE back to January, but
+    // fixed income is excluded from this chart, so the growth series has no value
+    // until the fund is bought in June. Those five months used to be handed to the
+    // chart as null points — and a time scale takes its range from the data, so the
+    // axis started in January with the curve starting in June: the empty gap.
+    txns: [["1-Jun-2024", "Snnehal", "Fund A", "Buy", "100", "10"]],
+    fd: [["1-Jan-2024", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "75000", "", "3%"]],
+    nav: (iso) => (iso >= "2024-09-01" ? 20 : 10),
+    probe: ["2024-06-01", "2024-12-01"] },
 ];
 
 (async () => {
@@ -186,6 +196,7 @@ const SCENARIOS = [
       "wf-stocksetf-data": [TXN].concat(sc.se || []),
     });
     if (sc.seMap) sheets["wf-stocksetfmapping-data"] = sc.seMap;
+    if (sc.fd) sheets["wf-fd-data"] = [EMPTY["wf-fd-data"][0]].concat(sc.fd);
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "domcontentloaded" });
     await p.evaluate((s) => {
       localStorage.clear();
@@ -202,7 +213,16 @@ const SCENARIOS = [
       const o = {}; probe.forEach((d) => { o[d] = at(d); });
       const first = port[0], last = port[port.length - 1];
       const lim = ((((cfg.options || {}).plugins || {}).zoom || {}).limits || {}).x || {};
-      return { vals: o, n: port.length,
+      // Leading points with no value. A time scale derives its own range from the
+      // DATA, so these anchor the axis years before the curve no matter what window
+      // the code asks for — the window is re-derived on resize, on update, and
+      // whenever the zoom plugin is unavailable.
+      const raw = cfg.data.datasets[0].data || [];
+      let headNulls = 0; while (headNulls < raw.length && raw[headNulls].y == null) headNulls++;
+      const idxRaw = (cfg.data.datasets[1] || {}).data || [];
+      return { vals: o, n: port.length, headNulls: headNulls,
+               dataStart: raw.length ? new Date(raw[0].x).toISOString().slice(0, 10) : null,
+               idxLen: idxRaw.length, portLen: raw.length,
                winStart: lim.min == null ? null : new Date(lim.min).toISOString().slice(0, 10),
                period: (document.getElementById("avc-period") || {}).textContent,
                firstDate: new Date(first.x).toISOString().slice(0, 10),
@@ -235,6 +255,12 @@ const SCENARIOS = [
       ok(res.winStart === res.firstDate,
          sc.name + " opens its window at its first plotted point",
          [res.winStart, res.firstDate]);
+      ok(res.headNulls === 0 && res.dataStart === res.firstDate,
+         sc.name + " hands the chart no unplottable leading points",
+         [res.headNulls, res.dataStart, res.firstDate]);
+      ok(res.idxLen === 0 || res.idxLen === res.portLen,
+         sc.name + " and the benchmark series stays aligned with it",
+         [res.idxLen, res.portLen]);
       ok(res.period === "SINCE " + res.firstDate.slice(0, 4),
          sc.name + " and names that year in the period line", [res.period, res.firstDate]);
       ok(res.nonFinite === 0, sc.name + " has no non-finite point", res.nonFinite);
@@ -257,8 +283,22 @@ const SCENARIOS = [
      "S12a the curve starts where the price history does", R("S12").firstDate);
   ok(R("S12").winStart === "2024-06-01",
      "S12b and the chart opens there — no empty gap back to the transaction", R("S12").winStart);
+  ok(R("S12").headNulls === 0 && R("S12").dataStart === "2024-06-01",
+     "S12b2 and the five unplottable months are not in the dataset at all",
+     [R("S12").headNulls, R("S12").dataStart]);
   ok(near(R("S12").vals["2024-12-01"], 200),
      "S12c and the doubling after that still reads 200", R("S12").vals);
+  // S13: the timeline starts in January because of the savings account; the curve
+  // starts in June because that is when equity first has value. The chart must be
+  // given the June-onward series, not five months of nulls in front of it.
+  ok(R("S13").firstDate === "2024-06-01",
+     "S13a the curve starts at the first equity buy", R("S13").firstDate);
+  ok(R("S13").headNulls === 0 && R("S13").dataStart === "2024-06-01",
+     "S13b and the pre-equity months are not in the dataset",
+     [R("S13").headNulls, R("S13").dataStart]);
+  ok(R("S13").idxLen === R("S13").portLen,
+     "S13c and the benchmark was trimmed by the same offset",
+     [R("S13").idxLen, R("S13").portLen]);
   // S1: NAV doubles, no further flows -> 200.
   ok(near(R("S1").vals["2024-05-31"], 100), "S1a flat while the NAV is flat", R("S1").vals);
   ok(near(R("S1").vals["2024-12-01"], 200), "S1b a fund that doubles reads 200", R("S1").vals);
