@@ -4275,6 +4275,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Only offer the pointer where clicking actually drills in. */
 #monthly-invest-cat-wrap canvas { cursor: pointer; }
 
+/* Both value charts pan on a left/right mouse drag; say so with the cursor, since
+   a chart that can be dragged looks exactly like one that cannot. */
+#value-chart, #portfolio-value-chart { cursor: grab; touch-action: pan-y; }
+#value-chart:active, #portfolio-value-chart:active { cursor: grabbing; }
+
 /* The zoom-following readout on the Account Value chart. */
 .avc-legend-change { font-size: 0.72rem; font-weight: 600; margin-left: 6px; }
 .avc-legend-change.pvc-up { color: var(--emerald); }

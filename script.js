@@ -6674,6 +6674,106 @@
     return out;
   }
 
+  // Click-and-drag the chart left/right.
+  //
+  // Implemented here rather than left to chartjs-plugin-zoom's own pan, which
+  // depends on Hammer.js being present and which we have no way to verify loads.
+  // This needs nothing but pointer events, works the same for mouse and touch, and
+  // is ours to test. The plugin keeps wheel and pinch, which are native to it.
+  //
+  // The window keeps its width and slides; `limits` stop it leaving the data, so
+  // dragging past either end simply stops rather than revealing blank space.
+  function wireChartXDrag(canvas, getChart, minLimit, maxLimit, onChange) {
+    if (!canvas) return;
+    // Re-wiring the same canvas would stack handlers and pan at a multiple of the
+    // pointer speed.
+    if (canvas.__wfDragWired) canvas.__wfDragWired();
+    var dragging = false, startX = 0, startMin = 0, startMax = 0, moved = false;
+
+    function span(chart) {
+      var sc = chart && chart.scales && chart.scales.x;
+      if (!sc || !isFinite(sc.min) || !isFinite(sc.max)) return null;
+      return { min: sc.min, max: sc.max };
+    }
+
+    function onDown(e) {
+      var chart = getChart();
+      var w = span(chart);
+      if (!w) return;
+      dragging = true; moved = false;
+      startX = e.clientX; startMin = w.min; startMax = w.max;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      var chart = getChart();
+      if (!chart) return;
+      var area = chart.chartArea;
+      var width = area ? (area.right - area.left) : canvas.clientWidth;
+      if (!(width > 0)) return;
+      var dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) < 4) return; // a click is not a drag
+      moved = true;
+      // Dragging right moves the window BACK in time: the data follows the cursor.
+      var perPixel = (startMax - startMin) / width;
+      var shift = -dx * perPixel;
+      var min = startMin + shift, max = startMax + shift;
+      if (min < minLimit) { max += minLimit - min; min = minLimit; }
+      if (max > maxLimit) { min -= max - maxLimit; max = maxLimit; }
+      if (min < minLimit) min = minLimit; // window wider than the data
+      setChartXWindow(chart, min, max);
+      if (onChange) onChange();
+      e.preventDefault();
+    }
+
+    function onUp(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (moved && onChange) onChange();
+    }
+
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointercancel", onUp);
+    canvas.addEventListener("pointerleave", onUp);
+    canvas.__wfDragWired = function () {
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointercancel", onUp);
+      canvas.removeEventListener("pointerleave", onUp);
+      canvas.__wfDragWired = null;
+    };
+  }
+
+  // Set a chart's visible x window. zoomScale/resetZoom come from
+  // chartjs-plugin-zoom, which is a separate CDN script: if it fails to load —
+  // offline, blocked, an ad blocker — Chart.js itself is still fine, and calling a
+  // plugin method blind threw and took the whole render down with it. Fall back to
+  // the scale options, which pins the window instead of making it draggable. A
+  // chart that cannot be panned beats no chart at all.
+  function setChartXWindow(chart, min, max) {
+    if (!chart) return;
+    if (typeof chart.zoomScale === "function") {
+      chart.zoomScale("x", { min: min, max: max }, "none");
+      return;
+    }
+    if (chart.options && chart.options.scales && chart.options.scales.x) {
+      chart.options.scales.x.min = min;
+      chart.options.scales.x.max = max;
+      chart.update();
+    }
+  }
+
+  function resetChartXWindow(chart, min, max) {
+    if (!chart) return;
+    if (typeof chart.resetZoom === "function") { chart.resetZoom(); return; }
+    setChartXWindow(chart, min, max);
+  }
+
   function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -9398,8 +9498,10 @@
                 // No fixed unit → Chart.js auto-selects the tick unit from the
                 // visible range, so zooming in switches from years to months.
                 time: { minUnit: "month", displayFormats: { year: "yyyy", month: "MMM yy" } },
-                min: fullMinTime,
-                max: fullMaxTime,
+                // NOT min/max here. A hard bound on the scale options is re-applied
+                // on every update, so the pan writes were undone as fast as they were
+                // made and dragging this chart did nothing. The window is bounded by
+                // the zoom plugin's own limits below, and opened through it instead.
                 grid: { display: false },
                 ticks: {
                   maxRotation: 0,
@@ -9436,20 +9538,33 @@
                   x: { min: fullMinTime, max: fullMaxTime }
                 },
                 pan: {
-                  enabled: true,
-                  mode: "x",
-                  onPanComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
+                  // Off: the drag is handled by wireChartXDrag below, which needs no
+                  // Hammer.js. Leaving both on would pan at twice the pointer speed.
+                  enabled: false,
+                  mode: "x"
                 },
                 zoom: {
                   wheel: { enabled: true },
                   pinch: { enabled: true },
                   mode: "x",
+                  // Drag belongs to panning, not to box-select zooming; the two
+                  // cannot share the gesture.
+                  drag: { enabled: false },
                   onZoomComplete: function (ctx) { updateVisibleRangeLabel(ctx.chart); clearActiveRangePill(); }
                 }
               }
             },
           }
         });
+        // The opening window is the equity inception → last sample, narrower than
+        // the plotted data when fixed income predates the first equity buy. Set
+        // through the plugin it survives, and panning starts from here.
+        setChartXWindow(window.__wfValueChart, fullMinTime, fullMaxTime);
+        wireChartXDrag(canvas, function () { return window.__wfValueChart; },
+          fullMinTime, fullMaxTime, function () {
+            updateVisibleRangeLabel(window.__wfValueChart);
+            clearActiveRangePill();
+          });
         updateVisibleRangeLabel(window.__wfValueChart);
         } // end _renderNormalizedChart
 
@@ -9473,9 +9588,9 @@
           else if (key === "3Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 3;
           else if (key === "5Y") spanMs = 1000 * 60 * 60 * 24 * 365 * 5;
           var min = key === "ALL" ? fullMinTime : Math.max(fullMinTime, fullMaxTime - spanMs);
-          chart.options.scales.x.min = min;
-          chart.options.scales.x.max = fullMaxTime;
-          chart.update();
+          // Through the plugin, so panning afterwards starts from this window
+          // instead of fighting a hard scale bound.
+          setChartXWindow(chart, min, fullMaxTime);
           updateVisibleRangeLabel(chart);
           clearActiveRangePill();
           if (btn) btn.classList.add("active");
@@ -9582,7 +9697,8 @@
             },
             zoom: {
               limits: { x: { min: pvcXMin, max: pvcXMax } },
-              pan: { enabled: true, mode: "x", onPanComplete: updatePvcReadout },
+              // Off — see wireChartXDrag; two pan implementations would double up.
+              pan: { enabled: false, mode: "x" },
               zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
                       drag: { enabled: false }, onZoomComplete: updatePvcReadout }
             }
@@ -9610,10 +9726,13 @@
           }
         }
       });
+      wireChartXDrag(canvas2, function () { return window.__wfPortfolioValueChart; },
+        pvcXMin, pvcXMax, updatePvcReadout);
+
       // Double-click to reset the zoom back to the full range.
       canvas2.ondblclick = function () {
         if (!window.__wfPortfolioValueChart) return;
-        window.__wfPortfolioValueChart.resetZoom();
+        resetChartXWindow(window.__wfPortfolioValueChart, pvcXMin, pvcXMax);
         updatePvcReadout();
       };
 
@@ -9623,7 +9742,9 @@
     if (resetBtn && !resetBtn.dataset.bound) {
       resetBtn.dataset.bound = "1";
       resetBtn.addEventListener("click", function () {
-        if (window.__wfValueChart) window.__wfValueChart.resetZoom();
+        if (window.__wfValueChart && typeof window.__wfValueChart.resetZoom === "function") {
+          window.__wfValueChart.resetZoom();
+        }
         var rangePicker = document.getElementById("value-chart-range-picker");
         if (rangePicker) {
           Array.prototype.forEach.call(rangePicker.querySelectorAll(".range-pill"), function (btn) { btn.classList.remove("active"); });

@@ -159,6 +159,102 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   ok(mid.value !== initial.value,
      "C9 and reports that window's value, not the current one", [mid.value, initial.value]);
 
+  async function zoomTo(chartVar, fromIso, toIso) {
+    return p.evaluate(([v, a, z]) => {
+      const ch = window[v];
+      if (!ch) return null;
+      ch.zoomScale("x", { min: new Date(a).getTime(), max: new Date(z).getTime() }, "none");
+      const cb = ch.options.plugins.zoom.zoom.onZoomComplete;
+      if (cb) cb({ chart: ch });
+      return true;
+    }, [chartVar, fromIso, toIso]);
+  }
+
+
+  // Click-and-drag, with real mouse events, on both charts. This is the whole point
+  // of owning the pan rather than leaving it to a plugin we cannot load here.
+  async function dragChart(canvasId, dx) {
+    const box = await p.evaluate((id) => {
+      const c = document.getElementById(id);
+      if (!c) return null;
+      const r = c.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, canvasId);
+    if (!box) return null;
+    await p.mouse.move(box.x, box.y);
+    await p.mouse.down();
+    // Several steps: the handler ignores the first few pixels as a click.
+    for (let i = 1; i <= 5; i++) await p.mouse.move(box.x + (dx * i) / 5, box.y);
+    await p.mouse.up();
+    await p.waitForTimeout(200);
+    return true;
+  }
+  async function xWindow(v) {
+    return p.evaluate((k) => {
+      const ch = window[k];
+      const sc = ch && ch.scales && ch.scales.x;
+      return sc ? { min: sc.min, max: sc.max } : null;
+    }, v);
+  }
+
+  for (const c of [
+    { name: "Account Value", canvas: "portfolio-value-chart", chart: "__wfPortfolioValueChart" },
+    { name: "Growth", canvas: "value-chart", chart: "__wfValueChart" },
+  ]) {
+    // Zoom in first: with the whole range on screen there is nowhere to pan to,
+    // and a drag correctly does nothing.
+    await zoomTo(c.chart, "2024-03-01", "2024-06-01");
+    await p.waitForTimeout(150);
+    const before = await xWindow(c.chart);
+    await dragChart(c.canvas, 200);       // drag right → window moves back in time
+    const after = await xWindow(c.chart);
+    console.log("  drag " + c.name + " " + JSON.stringify({ before, after }));
+    ok(after && before && after.min < before.min,
+       "E " + c.name + ": dragging right moves the window back in time",
+       [before && before.min, after && after.min]);
+    ok(after && Math.abs((after.max - after.min) - (before.max - before.min)) < 1000,
+       "E " + c.name + ": the window keeps its width — a drag pans, it does not zoom",
+       [before && before.max - before.min, after && after.max - after.min]);
+
+    // Drag past the start. One gesture cannot get there — the pointer is clamped to
+    // the viewport, so a single "huge" drag only ever moves a screen's worth, which
+    // is why asking for 5000px silently tested nothing. Repeat until it piles up.
+    for (let i = 0; i < 12; i++) await dragChart(c.canvas, 700);
+    const clamped = await xWindow(c.chart);
+    const limit = await p.evaluate((k) => {
+      const z = window[k].options.plugins.zoom.limits.x;
+      return { min: z.min, max: z.max };
+    }, c.chart);
+    ok(clamped.min >= limit.min - 1,
+       "E " + c.name + ": dragging past the first point stops at it",
+       [clamped.min, limit.min]);
+
+    // And back the other way, to the last point.
+    for (let i = 0; i < 24; i++) await dragChart(c.canvas, -700);
+    const clampedR = await xWindow(c.chart);
+    ok(clampedR.max <= limit.max + 1,
+       "E " + c.name + ": dragging past the last point stops at it",
+       [clampedR.max, limit.max]);
+
+    // A click with the tiny wobble a real hand produces must not shift the chart.
+    // Dispatching down+up with no move at all would pass whether or not the guard
+    // exists, since the move handler never runs — the wobble is the whole test.
+    const beforeClick = await xWindow(c.chart);
+    const box = await p.evaluate((id) => {
+      const r = document.getElementById(id).getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, c.canvas);
+    await p.mouse.move(box.x, box.y);
+    await p.mouse.down();
+    await p.mouse.move(box.x + 2, box.y);
+    await p.mouse.up();
+    await p.waitForTimeout(150);
+    const afterClick = await xWindow(c.chart);
+    ok(afterClick.min === beforeClick.min && afterClick.max === beforeClick.max,
+       "E " + c.name + ": a click with a 2px wobble leaves the window alone",
+       [beforeClick, afterClick]);
+  }
+
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
   console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
   await b.close();
