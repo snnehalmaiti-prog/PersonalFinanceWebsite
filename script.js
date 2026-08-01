@@ -8962,7 +8962,18 @@
     return result;
   }
 
+  // A single dashboard load calls renderValueChart a dozen times — portfolio
+  // select, benchmark apply, each sheet that finishes loading, the overview
+  // flows event. Each call is a multi-second async chain, and every one that
+  // is already obsolete by the time its data arrives still pays the full cost
+  // of recomputing thousands of timeline points and rebuilding the charts.
+  // Stamp each call with a generation and drop it at every async resumption
+  // point once a newer call has started. The newest call is never superseded,
+  // so the chart the user ends up looking at is always the complete one.
+  var _vcGen = 0;
   function renderValueChart() {
+    var _vcMyGen = ++_vcGen;
+    function _superseded() { return _vcMyGen !== _vcGen; }
     var canvas = document.getElementById("value-chart");
     var statusEl = document.getElementById("value-chart-status");
     var rangeEl = document.getElementById("value-chart-range");
@@ -8985,6 +8996,7 @@
     statusEl.textContent = "Resolving mutual fund scheme codes…";
 
     buildInstrumentSchemeMap().then(function (schemeMap) {
+      if (_superseded()) return null;
       var selectedPortfolio = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
       var unitEvents = buildInstrumentUnitEvents(selectedPortfolio);
       var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
@@ -9091,6 +9103,7 @@
         goldPriceHistoryPromise,
         stockPricesPromise
       ]).then(function (outerResults) {
+        if (_superseded()) return null;
         var navHistories = outerResults[0];
         var currentGoldPrice = outerResults[1];
         var goldPriceHistory = outerResults[2];
@@ -9407,6 +9420,7 @@
 
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
         fetchIndexHistory().then(function (indexHistory) {
+          if (_superseded()) return null;
           var indexData = indexHistory && indexHistory[indexKey];
           var indexPrices = indexData && indexData.prices ? indexData.prices : null;
           var normIdxPoints = [];
@@ -9454,8 +9468,13 @@
           if (verdictEl) verdictEl.hidden = true;
           return { normIdxPoints: normIdxPoints };
         }).then(function (idxResult) {
+          // A superseded index fetch resolves to null. Drawing on that would put
+          // the Growth chart up with no benchmark and, worse, from a stale
+          // render's data — so bail instead of falling through to the empty case.
+          if (_superseded()) return;
           _renderNormalizedChart(idxResult ? idxResult.normIdxPoints : []);
         }).catch(function () {
+          if (_superseded()) return;
           _renderNormalizedChart([]);
         });
 
