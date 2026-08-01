@@ -31,8 +31,12 @@ function days() {
   return out;
 }
 // navAt: iso -> nav
-function navSeries(navAt) {
-  return days().map((iso) => { const [y, m, dd] = iso.split("-"); return { date: `${dd}-${m}-${y}`, nav: String(navAt(iso)) }; }).reverse();
+function navSeries(navAt, navStart) {
+  // navStart truncates the history the way a real scheme code does when it points
+  // at a plan launched after the money went in: the units exist from the buy date,
+  // the prices only start later.
+  return days().filter((iso) => !navStart || iso >= navStart)
+    .map((iso) => { const [y, m, dd] = iso.split("-"); return { date: `${dd}-${m}-${y}`, nav: String(navAt(iso)) }; }).reverse();
 }
 function idxSeries(f) { const o = {}; days().forEach((iso) => { o[iso] = f(iso); }); return o; }
 
@@ -131,6 +135,17 @@ const SCENARIOS = [
            ["1-Jun-2024", "Snnehal", "Fund A", "Buy", "100", "0"]],
     nav: (iso) => (iso >= "2024-06-01" ? 10 : 20),
     probe: ["2024-05-31", "2024-06-01", "2024-12-01"] },
+  { name: "S12 bought before the NAV history begins",
+    // The reported bug. The money went in on 1 Jan, but the price history the app
+    // can fetch only starts on 1 Jun — so the units are worth nothing it can see
+    // until then and the curve cannot start until June. The chart used to open its
+    // window at the TRANSACTION instead, leaving five months of empty space to the
+    // left of its own first point while the period line named a year with nothing
+    // drawn in it.
+    txns: [["1-Jan-2024", "Snnehal", "Fund A", "Buy", "100", "10"]],
+    nav: (iso) => (iso >= "2024-09-01" ? 20 : 10),
+    navStart: "2024-06-01",
+    probe: ["2024-06-01", "2024-12-01"] },
 ];
 
 (async () => {
@@ -142,7 +157,7 @@ const SCENARIOS = [
     await p.route("**://*.supabase.co/**", (r) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: "[]" }));
     await p.route("**://cdn.jsdelivr.net/**", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: "" }));
     await p.route("**://fonts.googleapis.com/**", (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
-    await p.route("**://api.mfapi.in/**", (r) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ data: navSeries(sc.nav) }) }));
+    await p.route("**://api.mfapi.in/**", (r) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ data: navSeries(sc.nav, sc.navStart) }) }));
     await p.route("**/amfi_isin_map.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ fetchedAt: 1, data: { INF1: "100033" } }) }));
     await p.route("**/amfi_nav.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ fetchedAt: 1, data: { "100033": sc.nav(END) } }) }));
     await p.route("**/stock_prices.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ usd_inr_history: {}, prices: Object.assign({ __USD_INR__: { price: 84 } },
@@ -186,7 +201,10 @@ const SCENARIOS = [
       const at = (iso) => { const h = port.filter((q) => new Date(q.x).toISOString().slice(0, 10) <= iso).pop(); return h ? +h.y.toFixed(2) : null; };
       const o = {}; probe.forEach((d) => { o[d] = at(d); });
       const first = port[0], last = port[port.length - 1];
+      const lim = ((((cfg.options || {}).plugins || {}).zoom || {}).limits || {}).x || {};
       return { vals: o, n: port.length,
+               winStart: lim.min == null ? null : new Date(lim.min).toISOString().slice(0, 10),
+               period: (document.getElementById("avc-period") || {}).textContent,
                firstDate: new Date(first.x).toISOString().slice(0, 10),
                finalNav: +last.y.toFixed(3), first: port[0] ? +port[0].y.toFixed(2) : null,
                nonFinite: port.filter((q) => !isFinite(q.y)).length,
@@ -212,6 +230,13 @@ const SCENARIOS = [
     console.log("\n" + sc.name + "  " + JSON.stringify(res));
     if (!res.err) {
       ok(res.first === 100, sc.name + " starts at 100", res.first);
+      // The window must open where the curve does. If it opens earlier the chart
+      // draws empty space; if later, its own first points are off-screen.
+      ok(res.winStart === res.firstDate,
+         sc.name + " opens its window at its first plotted point",
+         [res.winStart, res.firstDate]);
+      ok(res.period === "SINCE " + res.firstDate.slice(0, 4),
+         sc.name + " and names that year in the period line", [res.period, res.firstDate]);
       ok(res.nonFinite === 0, sc.name + " has no non-finite point", res.nonFinite);
       // 1% tolerance: the CAGR rate is read from a 2-decimal percentage, and the
       // two paths sample the portfolio at different frequencies.
@@ -226,6 +251,14 @@ const SCENARIOS = [
 
   console.log("\n=== Expected vs actual ===");
   const R = (k) => global["R_" + k] || {};
+  // S12: the curve starts in June because that is when the portfolio can first be
+  // valued — and the window and the period line must say June too, not January.
+  ok(R("S12").firstDate === "2024-06-01",
+     "S12a the curve starts where the price history does", R("S12").firstDate);
+  ok(R("S12").winStart === "2024-06-01",
+     "S12b and the chart opens there — no empty gap back to the transaction", R("S12").winStart);
+  ok(near(R("S12").vals["2024-12-01"], 200),
+     "S12c and the doubling after that still reads 200", R("S12").vals);
   // S1: NAV doubles, no further flows -> 200.
   ok(near(R("S1").vals["2024-05-31"], 100), "S1a flat while the NAV is flat", R("S1").vals);
   ok(near(R("S1").vals["2024-12-01"], 200), "S1b a fund that doubles reads 200", R("S1").vals);

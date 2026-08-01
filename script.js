@@ -9422,6 +9422,23 @@
           return { x: p.x, y: _twr.nav[i] };
         });
 
+        // Open the window where the curve actually starts, not at the first equity
+        // transaction. The two are the same date only when every instrument held
+        // then can be priced then. They are not when an instrument's price history
+        // begins after it was bought — a fund bought in 2018 whose NAV history only
+        // reaches back to 2021, a ticker that no longer resolves — because units
+        // with no price contribute nothing, the portfolio reads as worthless, and
+        // the curve cannot start until the prices do. The axis meanwhile still
+        // spanned from the transaction, so the chart opened with years of empty
+        // space to the left of its own first point and the period line named a
+        // year nothing was drawn in.
+        //
+        // Anchoring on the first plotted point makes the axis, the period line and
+        // the curve all read off the same date, so they cannot disagree.
+        if (normPortPoints[basePortIdx] && normPortPoints[basePortIdx].x) {
+          fullMinTime = normPortPoints[basePortIdx].x.getTime();
+        }
+
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
         fetchIndexHistory().then(function (indexHistory) {
           if (_superseded()) return null;
