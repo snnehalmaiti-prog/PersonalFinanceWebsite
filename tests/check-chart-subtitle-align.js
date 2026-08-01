@@ -2,7 +2,7 @@
 // Guard: the period line under each chart title must sit flush with the title.
 //
 // The card already pads 20px; the subtitle rule added its own horizontal margin on
-// top of that, so "SINCE 2018" was indented 20px past the "GROWTH OF ₹100" it
+// top of that, so "SINCE 2018" was indented 20px past the "Portfolio Performance" title it
 // belongs to, and the header's own bottom margin left an 11px gap between them.
 //
 // Geometry, so it is checked as geometry — tests/measure-subtitle-align.js renders
@@ -22,7 +22,10 @@ function check(cond, msg) { if (!cond) { console.error("  FAIL " + msg); failed+
 
 // Comments first: a /* ... */ inside the rule otherwise matches as the declaration.
 const CSS_BARE = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
-const rule = (CSS_BARE.match(/\.avc-subtitle\s*\{[^}]*\}/) || [""])[0];
+// Anchor on a rule whose SELECTOR is exactly .avc-subtitle. A descendant rule
+// like ".avc-subtitle-row .avc-subtitle { flex: ... }" contains the same text and
+// would otherwise be picked up as the margin rule, which it is not.
+const rule = (CSS_BARE.match(/(?:^|[}\n])\s*\.avc-subtitle\s*\{[^}]*\}/m) || [""])[0];
 check(rule, ".avc-subtitle rule is missing");
 
 const margin = (rule.match(/margin:\s*([^;]+);/) || [])[1];
@@ -47,8 +50,8 @@ check(/id="avc-period"/.test(HTML) && /id="pvc-period"/.test(HTML),
   "both period lines need their ids — the zoom readout writes to them");
 
 // The titles must be plain titles; a period appended there is what this replaced.
-check(/id="avc-eyebrow">GROWTH OF &#8377;100<\/span>/.test(HTML),
-  "the Growth title must be the title alone, with the period on its own line");
+check(/id="avc-eyebrow">Portfolio Performance<\/span>/.test(HTML),
+  "the performance title must be the title alone, with the period on its own line");
 check(/id="pvc-eyebrow">ACCOUNT VALUE<\/span>/.test(HTML),
   "the Account Value title must be the title alone, with the period on its own line");
 

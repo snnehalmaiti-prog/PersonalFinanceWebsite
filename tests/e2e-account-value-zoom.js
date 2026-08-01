@@ -104,7 +104,7 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
      "A3a the Account Value title is the title alone", initial.eyebrow);
   ok(initial.period === "OVER TIME",
      "A3b with OVER TIME on the period line beneath it", initial.period);
-  ok(initial.gEyebrow === "GROWTH OF ₹100",
+  ok(initial.gEyebrow === "Portfolio Performance",
      "A3c the Growth title is the title alone", initial.gEyebrow);
   ok(/^SINCE \d{4}$/.test(initial.gPeriod || ""),
      "A3d with SINCE <year> on the period line beneath it", initial.gPeriod);
@@ -196,7 +196,7 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
     await p.waitForTimeout(200);
     const g = await read();
     console.log("  growth interior " + JSON.stringify({ e: g.gEyebrow, p: g.gPeriod }));
-    ok(g.gEyebrow === "GROWTH OF ₹100",
+    ok(g.gEyebrow === "Portfolio Performance",
        "D1 Growth: the title never changes with the zoom", g.gEyebrow);
     ok(/^FROM 2024 · TO JUN 2024$/.test(g.gPeriod || ""),
        "D2 Growth: the period line names the window", g.gPeriod);

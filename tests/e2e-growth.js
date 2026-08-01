@@ -1,4 +1,4 @@
-// GROWTH OF Rs100 — end-to-end, in a real browser, against hand-computable data.
+// Portfolio Performance (Growth of Rs100) — end-to-end, in a real browser, against hand-computable data.
 //
 // The chart's inputs (NAV history, stock history, FX, AMFI scheme resolution) are
 // all stubbed, so every expected figure below is worked out by hand rather than

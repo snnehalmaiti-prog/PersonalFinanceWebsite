@@ -1,4 +1,4 @@
-// GROWTH OF ₹100 — the time-weighted return series behind the chart.
+// Portfolio Performance (Growth of ₹100) — the time-weighted return series behind the chart.
 //
 // TWR answers "what would ₹100 left alone have become", so the timing and size of
 // contributions must not touch it. The old recurrence carried a unit count and

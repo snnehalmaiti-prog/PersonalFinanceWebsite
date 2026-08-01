@@ -73,7 +73,7 @@ hand after UI changes:
 
 ## e2e-growth.js
 
-The GROWTH OF ₹100 chart, end to end, against hand-computable data — NAV history,
+The Portfolio Performance chart (Growth of ₹100), end to end, against hand-computable data — NAV history,
 stock history, FX and AMFI resolution are all stubbed, so the expected figures are
 worked out by hand rather than by re-running the shipped formula. Same reason it is
 not in `run-all.js`: needs a static server and Playwright's Chromium.
@@ -123,6 +123,25 @@ fixture out of dashboard.html's own markup, so it cannot drift from what it chec
     node tests/measure-subtitle-align.js
 
 Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
+
+## e2e-growth-include-fi.js
+
+The Portfolio Performance chart's "Include Fixed Income" toggle. The point is the
+arithmetic, not the button: folding in a balance means folding in its
+CONTRIBUTIONS too, or every deposit reads as instant growth.
+
+    node tests/e2e-growth-include-fi.js
+
+The fixture makes that mistake impossible to miss. A fund doubles (100 → 200);
+a ₹1,00,000 savings balance is deposited into a ₹1,00,000 account halfway through
+and earns nothing. With FI on the curve must NOT move on the deposit day, and must
+end at 150 — 3,00,000 over 2,000 units — not 200 and not 400. A second fixture
+credits ₹20,000 of EPF interest instead, which IS return and must lift the same
+curve to 160.
+
+Five mutants fail it: value folded in without contributions, contributions
+without value, EPF interest counted as a contribution, the choice not persisted,
+and the note frozen.
 
 ## e2e-integration-smoke.js
 

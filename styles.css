@@ -4280,6 +4280,18 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #value-chart, #portfolio-value-chart { cursor: grab; touch-action: pan-y; }
 #value-chart:active, #portfolio-value-chart:active { cursor: grabbing; }
 
+/* Period line and the Fixed Income toggle share a row: the toggle belongs with
+   the chart it changes, and the header is already full with the legend. */
+.avc-subtitle-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.avc-subtitle-row .avc-subtitle { flex: 0 1 auto; }
+.avc-fi-toggle {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  padding: 3px 11px;
+  border: 1px solid var(--border);
+}
+.avc-fi-toggle.active { border-color: var(--text); }
+
 /* The period line under each chart title. Carries the whole-range description at
    rest ("SINCE 2018", "OVER TIME") and the visible window while zoomed, so a
    zoomed chart never leaves you guessing what you are looking at. */
