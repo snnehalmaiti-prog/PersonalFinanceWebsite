@@ -9489,7 +9489,13 @@
         var calloutDateEl = document.getElementById("value-chart-callout-date");
         var rangePicker = document.getElementById("value-chart-range-picker");
 
+        // The index series only exists once the benchmark fetch lands. Hold on to
+        // it so the zoom readout can report the index at the window's edge too,
+        // and not just the portfolio.
+        var _avcIdxSeries = [];
+
         function _renderNormalizedChart(normIdxPoints) {
+        _avcIdxSeries = normIdxPoints || [];
         if (window.__wfValueChart) window.__wfValueChart.destroy();
         var ctx = canvas.getContext("2d");
         var fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 340);
@@ -9616,15 +9622,38 @@
           if (rangeEl) rangeEl.textContent = new Date(xScale.min).toLocaleDateString() + " – " + new Date(xScale.max).toLocaleDateString();
           // The period line follows the zoom: at rest it names the inception year,
           // zoomed it names the window. The title above it never changes.
-          var periodEl3 = document.getElementById("avc-period");
-          if (!periodEl3) return;
           var lo = isFinite(xScale.min) ? xScale.min : fullMinTime;
           var hi = isFinite(xScale.max) ? xScale.max : fullMaxTime;
           var full = lo <= fullMinTime + 1 && hi >= fullMaxTime - 1;
-          periodEl3.textContent = full
-            ? (_avcInceptionYear ? "SINCE " + _avcInceptionYear : "SINCE INCEPTION")
-            : ("FROM " + new Date(lo).getFullYear() +
-               " · TO " + _avcMonthFmt.format(new Date(hi)).toUpperCase());
+          var periodEl3 = document.getElementById("avc-period");
+          if (periodEl3) {
+            periodEl3.textContent = full
+              ? (_avcInceptionYear ? "SINCE " + _avcInceptionYear : "SINCE INCEPTION")
+              : ("FROM " + new Date(lo).getFullYear() +
+                 " · TO " + _avcMonthFmt.format(new Date(hi)).toUpperCase());
+          }
+          // Both legend figures follow the window, the same way Account Value's
+          // does: what ₹100 had grown to at the RIGHT EDGE of what is on screen,
+          // not what it is worth today. Zoomed to a window that ends in 2021, a
+          // legend still reading today's figure describes a different chart from
+          // the one being looked at.
+          setAvcLegend("avc-portfolio-value", normPortPoints, hi);
+          setAvcLegend("avc-index-value", _avcIdxSeries, hi);
+        }
+
+        // Last plotted value at or before t. Deliberately "at or before" and
+        // deliberately skipping nulls: it must name a value the series actually
+        // has on screen, never one interpolated across a gap.
+        function setAvcLegend(elId, series, t) {
+          var el = document.getElementById(elId);
+          if (!el) return;
+          var hit = null;
+          for (var i = 0; i < (series || []).length; i++) {
+            var pt = series[i];
+            if (!pt || pt.x.getTime() > t) break;
+            if (pt.y != null) hit = pt;
+          }
+          el.textContent = hit ? "₹" + Math.round(hit.y) : "—";
         }
 
         function clearActiveRangePill() {

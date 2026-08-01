@@ -89,6 +89,8 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
       eyebrow: (document.getElementById("pvc-eyebrow")||{}).textContent,
       gEyebrow: (document.getElementById("avc-eyebrow")||{}).textContent,
       gPeriod: (document.getElementById("avc-period")||{}).textContent,
+      gPort: (document.getElementById("avc-portfolio-value")||{}).textContent,
+      gIdx: (document.getElementById("avc-index-value")||{}).textContent,
       spanDays: sc ? Math.round((sc.max - sc.min) / 864e5) : null,
     };
   });
@@ -198,6 +200,20 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
        "D1 Growth: the title never changes with the zoom", g.gEyebrow);
     ok(/^FROM 2024 · TO JUN 2024$/.test(g.gPeriod || ""),
        "D2 Growth: the period line names the window", g.gPeriod);
+    // The legend must describe the chart on screen, not today.
+    ok(/^₹\d/.test(g.gPort || "") && g.gPort !== initial.gPort,
+       "D2a Growth: Portfolio Value follows the window", [g.gPort, initial.gPort]);
+    // Not just "different" — the right number. One buy and no later flows, so
+    // growth of ₹100 is exactly the NAV ratio, and the NAV compounds at a known
+    // rate from a known date. The window ends 2024-06-01, 517 days in.
+    {
+      const days = Math.round((new Date("2024-06-01") - new Date("2023-01-01")) / 864e5);
+      const want = Math.round(100 * Math.pow(DAILY, days));
+      ok(g.gPort === "₹" + want,
+         "D2c Growth: and it is 100 × " + DAILY + "^" + days + " = ₹" + want, g.gPort);
+    }
+    ok(/^₹\d/.test(g.gIdx || "") && g.gIdx !== initial.gIdx,
+       "D2b Growth: Index Value follows the window", [g.gIdx, initial.gIdx]);
     // The Growth chart has no dblclick reset; put the window back where it
     // started, which is what the reset button and a pan-to-the-edge both do.
     await p.evaluate(() => {
@@ -211,6 +227,9 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
     const gr = await read();
     ok(/^SINCE \d{4}$/.test(gr.gPeriod || ""),
        "D3 Growth: double-click restores SINCE <year>", gr.gPeriod);
+    ok(gr.gPort === initial.gPort && gr.gIdx === initial.gIdx,
+       "D3a and both legend figures come back to the whole-period ones",
+       [gr.gPort, initial.gPort, gr.gIdx, initial.gIdx]);
   }
 
   // Click-and-drag, with real mouse events, on both charts. This is the whole point
