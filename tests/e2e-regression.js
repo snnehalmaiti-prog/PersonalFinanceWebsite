@@ -53,13 +53,27 @@ const SHEETS = {
     ["1-May-2025", "Snnehal", "EPF", "Fixed Income", "Provident Fund", "Interest", "300"]],
 };
 
+// Records for the current calendar year, from January up to and including THIS
+// month. Anchored on today rather than hard-coded: the record list shows the
+// current month, so a fixture that stops at a fixed month silently starts failing
+// the day the clock passes it — which is exactly what happened when this ran on
+// 1 August against records that stopped in July.
+const TODAY_E2E = new Date();
+const E2E_YEAR = TODAY_E2E.getFullYear();
+const E2E_LAST_MONTH = TODAY_E2E.getMonth() + 1; // 1-based, includes the current month
 const expenseRecords = (() => {
   const out = []; let id = 0;
-  for (let m = 1; m <= 7; m++) {
-    const mm = String(m).padStart(2, "0");
-    out.push({ id: "i" + id++, type: "income", amount: 203000, txn_date: "2026-" + mm + "-05", txn_at: "2026-" + mm + "-05T00:00:00Z", created_at: "2026-" + mm + "-05T00:00:00Z", account_id: "acc-0", category_id: "cat-0", payment_method_id: "pm-0" });
-    out.push({ id: "e" + id++, type: "expense", amount: 120000, txn_date: "2026-" + mm + "-10", txn_at: "2026-" + mm + "-10T00:00:00Z", created_at: "2026-" + mm + "-10T00:00:00Z", account_id: "acc-0", category_id: "cat-1", payment_method_id: "pm-1" });
-    out.push({ id: "b" + id++, type: "budget", amount: 90000, txn_date: "2026-" + mm + "-01", txn_at: "2026-" + mm + "-01T00:00:00Z", created_at: "2026-" + mm + "-01T00:00:00Z", account_id: "acc-0", category_id: "cat-0", payment_method_id: "pm-0" });
+  const iso = (m, d) => E2E_YEAR + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+  for (let m = 1; m <= E2E_LAST_MONTH; m++) {
+    const mk = (pre, type, amount, day, cat, pm) => out.push({
+      id: pre + id++, type: type, amount: amount,
+      txn_date: iso(m, day), txn_at: iso(m, day) + "T00:00:00Z", created_at: iso(m, day) + "T00:00:00Z",
+      account_id: "acc-0", category_id: cat, payment_method_id: pm,
+    });
+    // Day 1 so the current month has rows however early in it the suite runs.
+    mk("i", "income", 203000, 1, "cat-0", "pm-0");
+    mk("e", "expense", 120000, 1, "cat-1", "pm-1");
+    mk("b", "budget", 90000, 1, "cat-0", "pm-0");
   }
   return out;
 })();
@@ -220,13 +234,19 @@ function ok(cond, name, detail) {
       .filter((c) => ids.indexOf(c.id) !== -1 && (c.labels || []).indexOf("Jan") === 0)
       .map((c) => c.labels.join(",")), EXPENSE_MONTHLY);
     ok(labels.length >= 1, "E1 the monthly charts were built", labels);
-    // The fixture's expense data runs Jan–Jul, so the axis must end at Jul. Asserting
-    // the exact label set, not merely "no September": a one-month overrun draws
-    // August, which a Sep-only check waves through. (test-month-columns.js pins the
-    // arithmetic itself; this confirms the rendered chart actually uses it.)
-    const WANT = ["Jan,Feb,Mar,Apr,May,Jun,Jul", "Jan,Feb,Mar,Apr,May,Jun,Jul,YTD"];
+    // The fixture runs January through the CURRENT month, so the axis must end
+    // there. Derived, not hard-coded: this assertion used to name July and started
+    // failing the moment the clock reached August. The exact label set is checked,
+    // not merely "no September" — a one-month overrun draws the next month, which a
+    // single-month check waves through. (test-month-columns.js pins the arithmetic;
+    // this confirms the rendered chart uses it.)
+    const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    // The chart keeps a six-month floor, so an early-year run still draws six.
+    const months = MON.slice(0, Math.max(6, E2E_LAST_MONTH)).join(",");
+    const WANT = [months, months + ",YTD"];
     ok(labels.length >= 2 && labels.every((l) => WANT.indexOf(l) !== -1),
-       "E2 the monthly axes end at the last month with data (Jul), with no padding", labels);
+       "E2 the monthly axes end at the last month with data (" +
+       MON[Math.max(6, E2E_LAST_MONTH) - 1] + "), with no padding", labels);
   }
 
   console.log("\nF. Overview totals reconcile");
