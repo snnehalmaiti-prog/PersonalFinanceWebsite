@@ -9614,47 +9614,9 @@
       canvas2.ondblclick = function () {
         if (!window.__wfPortfolioValueChart) return;
         window.__wfPortfolioValueChart.resetZoom();
-        _pvcSetActiveRange("ALL");
         updatePvcReadout();
       };
 
-      // Range pills. "1M" is the point of the exercise: one click to the last month
-      // of the series, with its end value and its move already on screen.
-      function _pvcSetActiveRange(key) {
-        var picker = document.getElementById("pvc-range-picker");
-        if (!picker) return;
-        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (b) {
-          b.classList.toggle("active", b.getAttribute("data-pvc-range") === key);
-        });
-      }
-      (function wirePvcRangePicker() {
-        var picker = document.getElementById("pvc-range-picker");
-        if (!picker || !points.length) return;
-        var MONTHS = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
-        Array.prototype.forEach.call(picker.querySelectorAll("[data-pvc-range]"), function (btn) {
-          var key = btn.getAttribute("data-pvc-range");
-          // Offered only where there is enough history to show; a 1Y window on six
-          // months of data is just the full range wearing a different label.
-          if (MONTHS[key]) {
-            var need = _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime();
-            var enough = need > pvcXMin;
-            btn.disabled = !enough;
-            btn.classList.toggle("is-disabled", !enough);
-          }
-          btn.onclick = function () {
-            var chart = window.__wfPortfolioValueChart;
-            if (!chart || btn.disabled) return;
-            if (key === "ALL") {
-              chart.resetZoom();
-            } else {
-              var from = Math.max(pvcXMin, _addMonthsClamped(new Date(pvcXMax), -MONTHS[key]).getTime());
-              chart.zoomScale("x", { min: from, max: pvcXMax }, "none");
-            }
-            _pvcSetActiveRange(key);
-            updatePvcReadout();
-          };
-        });
-      }());
       updatePvcReadout();
     }
 

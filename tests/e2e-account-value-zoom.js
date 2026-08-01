@@ -1,9 +1,12 @@
-// ACCOUNT VALUE · OVER TIME — the range pills and the zoom-following readout.
+// ACCOUNT VALUE · OVER TIME — the zoom-following readout.
 //
-// The chart already zoomed (wheel/pinch/drag), but the readout beside the title
-// always showed today's value, so zooming told you the SHAPE of a period without
-// telling you its numbers. The readout now follows the visible window: the value at
-// its right edge and the change across it. "1M" makes the last month one click.
+// The chart zooms (wheel/pinch/drag), but the readout beside the title used to show
+// today's value whatever was on screen, so zooming told you the SHAPE of a period
+// without telling you its numbers. It now follows the visible window: the value at
+// its right edge and the change across it.
+//
+// The range pills that used to drive these windows have been removed, so the test
+// opens each one directly — which is also the only way a user can now reach them.
 //
 // Chart.js and its zoom plugin cannot load here (no CDN), so this models an x scale
 // with min/max plus zoomScale/resetZoom. It therefore covers the wiring and the
@@ -28,8 +31,7 @@ const SHEETS = {
 // NAV compounds at a fixed 0.16%/day, so every window's expected change is
 // 1.0016^days - 1 and can be checked against the readout without trusting the app.
 const DAILY = 1.0016;
-const SHORT = process.env.PVC_SHORT === "1";
-const NAV_START = SHORT ? "2024-10-15" : "2023-01-01", NAV_END = "2024-12-01";
+const NAV_START = "2023-01-01", NAV_END = "2024-12-01";
 function navSeries() {
   const out = []; const d = new Date(NAV_START + "T00:00:00"); const e = new Date(NAV_END + "T00:00:00");
   let n = 10;
@@ -84,8 +86,6 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
       value: (document.getElementById("pvc-current-value")||{}).textContent,
       change: (() => { const e = document.getElementById("pvc-range-change"); return e && !e.hidden ? e.textContent : null; })(),
       spanDays: sc ? Math.round((sc.max - sc.min) / 864e5) : null,
-      active: [...document.querySelectorAll("[data-pvc-range]")].filter(b=>b.classList.contains("active")).map(b=>b.textContent),
-      disabled: [...document.querySelectorAll("[data-pvc-range]")].filter(b=>b.disabled).map(b=>b.textContent),
     };
   });
   const initial = await read();
@@ -93,104 +93,71 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   ok(initial.spanDays > 0, "A1 the chart rendered with an x range", initial);
   ok(initial.name === "Current Value", "A2 unzoomed, the readout is the current value", initial.name);
   ok(initial.change === null, "A3 and shows no change — there is no window to compare", initial.change);
-  ok(initial.active.join() === "All", "A4 All is the active pill on load", initial.active);
+  ok(await p.evaluate(() => document.querySelectorAll("[data-pvc-range]").length) === 0,
+     "A4 the range pills are gone from the markup");
+
+  // The pills used to drive these windows. They are gone, so the test opens each
+  // one the way a wheel-zoom does — which is also the only thing a user can now do.
+  async function zoomDays(days) {
+    return p.evaluate((d) => {
+      const ch = window.__wfPortfolioValueChart;
+      const max = ch.options.plugins.zoom.limits.x.max;
+      const min = max - d * 864e5;
+      ch.zoomScale("x", { min: min, max: max }, "none");
+      const cb = ch.options.plugins.zoom.zoom.onZoomComplete;
+      if (cb) cb({ chart: ch });
+    }, days);
+  }
 
   const seen = {};
-  for (const r of ["1M", "3M", "6M", "1Y", "ALL"]) {
-    const btn = await p.evaluate((k) => {
-      const b = document.querySelector(`[data-pvc-range="${k}"]`);
-      return b ? { disabled: b.disabled } : null;
-    }, r);
-    if (!btn) { ok(false, "pill " + r + " exists"); continue; }
-    if (btn.disabled) { seen[r] = { disabled: true }; console.log("  " + r.padEnd(4) + " disabled"); continue; }
-    await p.evaluate((k) => document.querySelector(`[data-pvc-range="${k}"]`).click(), r);
-    await p.waitForTimeout(300);
-    seen[r] = await read();
-    console.log("  " + r.padEnd(4) + " " + JSON.stringify(seen[r]));
+  for (const d of [30, 91, 366]) {
+    await zoomDays(d);
+    await p.waitForTimeout(200);
+    seen[d] = await read();
+    console.log("  " + String(d).padStart(3) + "d " + JSON.stringify(seen[d]));
   }
 
-  if (SHORT) {
-    // Only ~1.5 months of history: a 3M/6M/1Y window would just be the full range
-    // wearing a longer label, so those pills must be switched off rather than lying.
-    // `seen[k].disabled === true` marks a pill that was skipped; a pill that WAS
-    // clicked yields the readout object instead (whose own `disabled` field is the
-    // list of other disabled pills, hence the explicit === true).
-    ok(seen["1M"] && seen["1M"].disabled !== true && seen["1M"].spanDays === 30,
-       "B1 1M is still offered on a short history, and opens a 30-day window", seen["1M"]);
-    ok(seen["3M"] && seen["3M"].disabled === true, "B2 3M is disabled — there is not 3 months of data", seen["3M"]);
-    ok(seen["6M"] && seen["6M"].disabled === true, "B3 6M is disabled", seen["6M"]);
-    ok(seen["1Y"] && seen["1Y"].disabled === true, "B4 1Y is disabled", seen["1Y"]);
-  } else {
-    ok(seen["1M"].spanDays === 30, "C1 1M opens a 30-day window", seen["1M"].spanDays);
-    ok(seen["3M"].spanDays === 91, "C2 3M opens a 91-day window", seen["3M"].spanDays);
-    ok(seen["1Y"].spanDays === 366, "C3 1Y opens a one-year window", seen["1Y"].spanDays);
-    ok(/^Value · /.test(seen["1M"].name), "C4 zoomed, the readout names the month it ends in", seen["1M"].name);
-    ok(seen["1M"].change && seen["1M"].change.indexOf("₹") !== -1,
-       "C5 and shows the change across the window", seen["1M"].change);
+  ok(seen[30].spanDays === 30, "C1 a 30-day window is 30 days wide", seen[30].spanDays);
+  ok(/^Value · /.test(seen[30].name), "C2 zoomed, the readout names the month it ends in", seen[30].name);
+  ok(seen[30].change && seen[30].change.indexOf("₹") !== -1,
+     "C3 and shows the change across the window", seen[30].change);
 
-    // The NAV compounds at a known daily rate, so each window's percentage is
-    // arithmetic, not something to take the app's word for.
-    ["1M", "3M", "1Y"].forEach(function (k) {
-      const m = pctOf(seen[k].change);
-      const want = (Math.pow(DAILY, seen[k].spanDays) - 1) * 100;
-      ok(m && Math.abs(parseFloat(m[2]) - want) < 0.05,
-         "C6 " + k + " change matches " + DAILY + "^" + seen[k].spanDays + " = " + want.toFixed(2) + "%",
-         seen[k].change);
-      ok(m && m[1] !== "\u2212" && m[1] !== "-", "C7 " + k + " a rising series reads as a gain", seen[k].change);
-    });
+  // The NAV compounds at a known daily rate, so each window's percentage is
+  // arithmetic, not something to take the app's word for.
+  [30, 91, 366].forEach(function (d) {
+    const m = pctOf(seen[d].change);
+    const want = (Math.pow(DAILY, seen[d].spanDays) - 1) * 100;
+    ok(m && Math.abs(parseFloat(m[2]) - want) < 0.05,
+       "C4 " + d + "d change matches " + DAILY + "^" + seen[d].spanDays + " = " + want.toFixed(2) + "%",
+       seen[d].change);
+    ok(m && m[1] !== "\u2212" && m[1] !== "-", "C5 " + d + "d a rising series reads as a gain", seen[d].change);
+  });
 
-    ok(seen["ALL"].name === "Current Value" && seen["ALL"].change === null,
-       "C8 All returns the readout to the current value", seen["ALL"]);
-    ok(seen["ALL"].spanDays === initial.spanDays, "C9 and restores the full range", [seen["ALL"].spanDays, initial.spanDays]);
+  // Double-click resets the zoom and the readout with it.
+  await p.evaluate(() => document.getElementById("portfolio-value-chart").ondblclick());
+  await p.waitForTimeout(200);
+  const afterDbl = await read();
+  ok(afterDbl.name === "Current Value" && afterDbl.change === null,
+     "C6 double-click restores the whole-period readout", afterDbl);
+  ok(afterDbl.spanDays === initial.spanDays, "C7 and the full range", [afterDbl.spanDays, initial.spanDays]);
 
-    // Double-click resets zoom AND the pills — the control must not disagree with
-    // the chart it drives.
-    await p.evaluate((k) => document.querySelector(`[data-pvc-range="${k}"]`).click(), "1M");
-    await p.waitForTimeout(200);
-    await p.evaluate(() => document.getElementById("portfolio-value-chart").ondblclick());
-    await p.waitForTimeout(200);
-    const afterDbl = await read();
-    ok(afterDbl.active.join() === "All" && afterDbl.change === null,
-       "C10 double-click resets both the zoom and the active pill", afterDbl);
-
-    // The point of the feature: a window that does NOT end at today must report
-    // ITS end value, not the current one. Every range pill ends at the last point,
-    // so only an interior window — what a wheel-zoom or a drag-pan produces — can
-    // tell a window-aware readout from one that just prints the final value.
-    const interior = await p.evaluate(() => {
-      const ch = window.__wfPortfolioValueChart;
-      const pts = ch.data.datasets[0].data;
-      const end = new Date("2024-06-01T00:00:00").getTime();
-      const start = new Date("2024-05-01T00:00:00").getTime();
-      ch.zoomScale("x", { min: start, max: end }, "none");
-      // Same path the plugin's gesture callbacks take.
-      document.getElementById("portfolio-value-chart").dispatchEvent(new Event("noop"));
-      return { finalValue: pts[pts.length - 1].y };
-    });
-    // Drive the readout the way onZoomComplete would.
-    await p.evaluate(() => {
-      const b = document.querySelector('[data-pvc-range="1M"]');
-      b.click(); // reset to a known state first
-    });
-    await p.waitForTimeout(200);
-    await p.evaluate(() => {
-      const ch = window.__wfPortfolioValueChart;
-      ch.zoomScale("x", { min: new Date("2024-05-01T00:00:00").getTime(),
-                          max: new Date("2024-06-01T00:00:00").getTime() }, "none");
-      const z = ch.options.plugins.zoom.zoom.onZoomComplete;
-      if (z) z({ chart: ch });
-    });
-    await p.waitForTimeout(200);
-    const mid = await read();
-    console.log("  interior " + JSON.stringify(mid));
-    ok(/Jun 2024/.test(mid.name || ""),
-       "C11 an interior window names the month it ends in, not today", mid.name);
-    ok(mid.value !== seen["ALL"].value,
-       "C12 and reports that window's value, not the current one",
-       [mid.value, seen["ALL"].value, interior.finalValue]);
-    ok(mid.change && mid.change.indexOf("₹") !== -1,
-       "C13 with the change across that window", mid.change);
-  }
+  // The point of the feature: a window that does NOT end at today must report ITS
+  // end value, not the current one. A window ending at the last point looks the
+  // same either way, so only an interior one discriminates.
+  await p.evaluate(() => {
+    const ch = window.__wfPortfolioValueChart;
+    ch.zoomScale("x", { min: new Date("2024-05-01T00:00:00").getTime(),
+                        max: new Date("2024-06-01T00:00:00").getTime() }, "none");
+    const cb = ch.options.plugins.zoom.zoom.onZoomComplete;
+    if (cb) cb({ chart: ch });
+  });
+  await p.waitForTimeout(200);
+  const mid = await read();
+  console.log("  interior " + JSON.stringify(mid));
+  ok(/Jun 2024/.test(mid.name || ""),
+     "C8 an interior window names the month it ends in, not today", mid.name);
+  ok(mid.value !== initial.value,
+     "C9 and reports that window's value, not the current one", [mid.value, initial.value]);
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
   console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
