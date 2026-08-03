@@ -35,6 +35,7 @@ const guards = [
   { name: "shared script.js guards", cmd: "node", args: [path.join(TESTS_DIR, "check-shared-script-guards.js")] },
   { name: "portfolio card lines", cmd: "node", args: [path.join(TESTS_DIR, "check-portfolio-card-lines.js")] },
   { name: "chart pan/zoom config", cmd: "node", args: [path.join(TESTS_DIR, "check-chart-pan.js")] },
+  { name: "tablet breakpoint scope", cmd: "node", args: [path.join(TESTS_DIR, "check-tablet-breakpoint.js")] },
   { name: "chart subtitle alignment", cmd: "node", args: [path.join(TESTS_DIR, "check-chart-subtitle-align.js")] },
   { name: "value-chart render generation guard", cmd: "node", args: [path.join(TESTS_DIR, "check-render-generation-guard.js")] },
   { name: "holdings Open/Closed toggles", cmd: "node", args: [path.join(TESTS_DIR, "check-holdings-toggles.js")] },

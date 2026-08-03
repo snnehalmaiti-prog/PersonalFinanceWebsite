@@ -124,6 +124,29 @@ fixture out of dashboard.html's own markup, so it cannot drift from what it chec
 
 Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
 
+## check-tablet-breakpoint.js / measure-tablet-layout.js
+
+Between the phone breakpoint at 760px and the width the desktop layout needs, the
+Overview stats row and the Benchmark card were single nowrap flex rows whose items
+could shrink below the width of their own text. Values were drawn over each other
+("₹58,41,173" landing on "₹72,69,941") and every Benchmark label ellipsised down to
+"Portfolio Rolling…", which no longer names its column.
+
+`measure-tablet-layout.js` measures it in a browser at ten widths — text spill
+(scrollWidth > clientWidth) and overlapping TEXT rectangles, using Range boxes so
+it is the ink that is checked rather than the padding:
+
+    python3 -m http.server 8098 &
+    node tests/measure-tablet-layout.js
+
+Before the fix: overlaps and clipping at 768, 810, 834 and 1024; nothing at 480,
+760, 1080 or above. After: clean at all ten.
+
+`check-tablet-breakpoint.js` is in run-all.js and pins the SCOPE, which the
+measurement cannot: widen the band to cover phones and desktop and the browser
+measurement still passes at every width — the grid layout does not overlap
+anywhere, it is simply wrong for those form factors. Six mutants fail the guard.
+
 ## e2e-integration-smoke.js
 
 Every other suite runs on a small isolated fixture. This one runs the whole

@@ -4299,3 +4299,51 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .avc-legend-change { font-size: 0.72rem; font-weight: 600; margin-left: 6px; }
 .avc-legend-change.pvc-up { color: var(--emerald); }
 .avc-legend-change.pvc-down { color: #EF4444; }
+
+/* ── Tablet only (761–1100px) ──────────────────────────────────────────────
+   Between the phone breakpoint at 760px and the width the desktop layout
+   actually needs, both of these cards are still a single nowrap flex row —
+   and their items are allowed to shrink below the width of the text inside
+   them. Seven Overview stats want ~1080px and three Benchmark columns per
+   group want more than half of one, so the values were drawn on top of each
+   other ("₹58,41,173" landing on "₹72,69,941") and every Benchmark label was
+   ellipsised down to "Portfolio Rolling…", which does not say which column it
+   labels. Measured, not guessed: tests/measure-tablet-layout.js reports the
+   overlaps and clipping at 768/810/834/1024 and none at 480, 760 or ≥1080.
+
+   Phone and desktop are untouched — this band is the whole defect. */
+@media (min-width: 761px) and (max-width: 1100px) {
+  /* Seven stats on one line do not fit; give them two rows of four instead of
+     letting each one overflow its own box. */
+  .overview-stats-inline {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    overflow: visible;
+  }
+  .overview-stat-divider { display: none; }
+  .overview-stat-inline {
+    min-width: 0;
+    padding: 12px 16px;
+    gap: 4px;
+    border-top: 1px solid var(--border);
+  }
+  .overview-stat-value { font-size: 1rem; }
+  .overview-stat-label { font-size: 0.58rem; letter-spacing: 0.06em; }
+
+  /* Benchmark: the two groups of three shared one line. Give each its own. */
+  .benchmark-result { flex-wrap: wrap; overflow: visible; row-gap: 14px; }
+  .benchmark-group { flex: 1 1 100%; }
+  .benchmark-divider { display: none; }
+  .benchmark-col { flex: 1 1 0; }
+  /* Wrap rather than ellipsise. A label is there to name its number, and a
+     truncated one does not — "Nifty 50 Rolling R…" and "Portfolio Rolling…"
+     were indistinguishable from each other at a glance. */
+  .benchmark-col-label {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .benchmark-col-value { font-size: 1.3rem; }
+  .benchmark-col-verdict { padding-left: 16px; }
+}
