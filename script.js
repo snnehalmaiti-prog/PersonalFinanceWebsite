@@ -7140,14 +7140,16 @@
       equityRefreshNavBtn.disabled = true;
       equityRefreshNavBtn.textContent = "Triggering…";
 
-      // Clear locally cached NAV/ISIN data (Mutual Funds) + stock prices
-      // (Stocks/ETF) so both current values re-fetch fresh.
-      Object.keys(localStorage).forEach(function (key) {
-        if (key.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(key);
+      // Drop every cached NAV/price payload — IndexedDB and in-memory included, not
+      // just the localStorage keys these caches used to live in — then re-render, so
+      // the button changes what is on screen rather than only queueing a workflow.
+      clearMarketDataCaches().then(function () {
+        try {
+          renderValueChart();
+          updateDashboardStats();
+          renderEquityHoldingsTable();
+        } catch (e) {}
       });
-      localStorage.removeItem(AMFI_ISIN_MAP_CACHE_KEY);
-      localStorage.removeItem(AMFI_NAV_MAP_CACHE_KEY);
-      localStorage.removeItem("wf-stock-prices-json");
 
       // Restore the button to its resting label after showing the outcome.
       function resetNavBtn(delay) {
@@ -7164,7 +7166,10 @@
         var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
         var branch = gh.branch || "main";
         var body = JSON.stringify({ ref: branch });
-        Promise.all(["update-amfi-nav.yml", "update-amfi-isin-map.yml"].map(function (wf) {
+        // update-mf-history.yml too: it is what rebuilds the bundled NAV history,
+        // so leaving it out would refresh today's NAV while the history the charts
+        // are drawn from stayed as it was.
+        Promise.all(["update-amfi-nav.yml", "update-amfi-isin-map.yml", "update-mf-history.yml"].map(function (wf) {
           return fetch(apiBase + wf + "/dispatches", { method: "POST", headers: headers, body: body })
             .then(function (r) { return r.ok; })
             .catch(function () { return false; });
@@ -8446,6 +8451,39 @@
   // see it, because one scheme resolves long before the next pass starts; it only
   // appears once enough schemes are in flight to push the writes behind the reads.
   var _navSessionCache = {};
+
+  // "Refresh NAV" has to actually clear the caches, and they no longer all live in
+  // localStorage: the per-scheme NAV histories, the two AMFI maps, the MF history
+  // bundle and the stock prices are IndexedDB entries now. Clearing the old
+  // localStorage keys alone silently does nothing — the button would report success
+  // and serve exactly the same figures.
+  //
+  // The in-memory session state has to go too, or the re-render that follows reads
+  // the promises already resolved on this page and nothing changes until a reload.
+  function clearMarketDataCaches() {
+    _navSessionCache = {};
+    _navHistoryPromises = {};
+    _amfiNavMapSessionPromise = null;
+    _amfiIsinMapPromise = null;
+    _mfHistoryPromise = null;
+    _stockMergedCache = null;
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k.indexOf(NAV_CACHE_PREFIX) === 0) localStorage.removeItem(k);  // pre-IDB leftovers
+      });
+      localStorage.removeItem("wf-stock-prices-json");
+    } catch (e) {}
+    if (!window.WfIdb) return Promise.resolve();
+    // By PREFIX, not by a list of keys. Every bulky market payload is stored under
+    // BLOB_CACHE_PREFIX — both AMFI maps, stock prices, stock history, the MF
+    // history bundle — so this cannot miss one by forgetting to add it here, which
+    // is exactly what the enumerated list did. The expense snapshot is keyed
+    // differently and is not market data, so it is left alone.
+    return Promise.all([
+      WfIdb.removePrefix(NAV_IDB_PREFIX),
+      WfIdb.removePrefix(BLOB_CACHE_PREFIX)
+    ]).then(function () {}, function () {});
+  }
 
   function _navCacheGet(schemeCode) {
     if (_navSessionCache[schemeCode]) {

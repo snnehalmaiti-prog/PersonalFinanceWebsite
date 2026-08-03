@@ -76,5 +76,24 @@
     return withStore("readwrite", function (store) { return store.clear(); });
   }
 
-  window.WfIdb = { get: idbGet, set: idbSet, remove: idbDelete, clear: idbClear };
+  // Every key, so a caller can drop a family of entries by prefix. "Refresh NAV"
+  // needs this: the per-scheme NAV entries are keyed by scheme code, so there is
+  // no fixed list of them to delete.
+  function idbKeys() {
+    return withStore("readonly", function (store) { return store.getAllKeys(); })
+      .then(function (keys) { return keys || []; })
+      .catch(function () { return []; });
+  }
+
+  // Drop every key starting with `prefix`. Resolves either way — a cache that
+  // cannot be cleared must not stop the refresh it is part of.
+  function idbRemovePrefix(prefix) {
+    return idbKeys().then(function (keys) {
+      var doomed = keys.filter(function (k) { return String(k).indexOf(prefix) === 0; });
+      return Promise.all(doomed.map(idbDelete)).then(function () { return doomed.length; });
+    }).catch(function () { return 0; });
+  }
+
+  window.WfIdb = { get: idbGet, set: idbSet, remove: idbDelete, clear: idbClear,
+                   keys: idbKeys, removePrefix: idbRemovePrefix };
 })();

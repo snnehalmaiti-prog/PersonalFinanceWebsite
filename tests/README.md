@@ -175,6 +175,21 @@ measurement cannot: widen the band to cover phones and desktop and the browser
 measurement still passes at every width — the grid layout does not overlap
 anywhere, it is simply wrong for those form factors. Six mutants fail the guard.
 
+## "Refresh NAV" (covered in e2e-nav-cache.js, X-series)
+
+The button lives on settings.html, not the dashboard — a test that clicks it on
+the dashboard silently presses nothing.
+
+It has to clear caches that no longer live where they used to. When NAV history
+moved to IndexedDB, the handler still deleted localStorage keys, so it reported
+success and served exactly the same figures. The clear is now by PREFIX rather
+than an enumerated list of keys, because the list is precisely what went stale.
+
+X2/X3 check the caches are gone; X4 checks the next load actually refetches,
+which is the part a user would notice. X3 allows a blob written AFTER the press —
+the button clears and then re-renders, so a fresh refetch reappearing is correct
+and only a leftover with an older stamp is a failure.
+
 ## e2e-nav-bundle.js / test_mf_history.py
 
 mf_history.json holds every mapped fund's NAV history in one same-origin file,

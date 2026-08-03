@@ -257,6 +257,79 @@ function ok(cond, name, detail) {
   ok(mfapiHits === 1,
      "B2 and refetched ONCE for the load, not once per render pass", mfapiHits);
 
+  // ── "Refresh NAV" must actually clear the caches ──
+  // The caches moved to IndexedDB; a button that still deletes localStorage keys
+  // reports success and serves exactly the same figures. The button lives on
+  // settings.html, not the dashboard, so this has to go there to press it.
+  const idbNavKeys = () => p.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open("wf-cache");
+    req.onsuccess = () => {
+      const db = req.result;
+      const name = [...db.objectStoreNames][0];
+      if (!name) return resolve({ nav: 0, amfi: 0 });
+      const all = db.transaction(name, "readonly").objectStore(name).getAllKeys();
+      all.onsuccess = () => {
+        const keys = [...all.result];
+        const amfi = keys.filter((k) => String(k).indexOf("blob:wf-amfi") === 0);
+        if (!amfi.length) return resolve({ nav: keys.filter((k) => String(k).indexOf("nav:") === 0).length, amfi: 0, oldestAmfi: null });
+        // Read their stamps: after the button, a surviving AMFI blob is only OK if
+        // it was written AFTER the press — i.e. it was cleared and refetched, not
+        // left in place.
+        const store2 = db.transaction(name, "readonly").objectStore(name);
+        let seen = 0, oldest = Infinity;
+        amfi.forEach((k) => {
+          const g = store2.get(k);
+          g.onsuccess = () => {
+            const v = g.result;
+            if (v && v.fetchedAt) oldest = Math.min(oldest, v.fetchedAt);
+            if (++seen === amfi.length) {
+              resolve({ nav: keys.filter((q) => String(q).indexOf("nav:") === 0).length,
+                        amfi: amfi.length, oldestAmfi: oldest === Infinity ? null : oldest });
+            }
+          };
+        });
+      };
+      all.onerror = () => resolve({ nav: -1, amfi: -1, oldestAmfi: null });
+    };
+    req.onerror = () => resolve({ nav: -1, amfi: -1 });
+  }));
+
+  const before = await idbNavKeys();
+  ok(before.nav > 0, "X0 there are cached NAV entries for the button to clear", before);
+
+  const pressedAt = Date.now();
+  await p.goto(`http://127.0.0.1:${PORT}/settings.html?nosw=1`, { waitUntil: "load" });
+  await p.waitForTimeout(3000);
+  const pressed = await p.evaluate(() => {
+    const btn = document.getElementById("equity-refresh-nav");
+    if (!btn) return false;
+    btn.click();
+    return true;
+  });
+  ok(pressed, "X1 the Refresh NAV button is on the settings page and was pressed", pressed);
+  await p.waitForTimeout(3000);
+  const after = await idbNavKeys();
+  console.log("  refresh NAV: nav " + before.nav + " -> " + after.nav +
+    ", amfi blobs " + before.amfi + " -> " + after.amfi);
+  ok(after.nav === 0,
+     "X2 it clears the per-scheme NAV cache — that lives in IndexedDB now, so " +
+     "clearing localStorage keys alone would silently do nothing", after.nav);
+  // Not "gone": the button clears AND re-renders, so an AMFI map is legitimately
+  // fetched again straight away. What must be true is that nothing SURVIVED the
+  // clear — any blob present now has to have been written after the press.
+  ok(after.amfi === 0 || (after.oldestAmfi && after.oldestAmfi >= pressedAt),
+     "X3 and no AMFI map cache survives the clear — one written afterwards is a " +
+     "fresh refetch, not a leftover",
+     { amfi: after.amfi, oldestAmfi: after.oldestAmfi, pressedAt: pressedAt });
+
+  // The real proof: the next dashboard load has to go back to the network.
+  mfapiHits = 0;
+  await load();
+  console.log("  load after Refresh NAV: mfapi=" + mfapiHits);
+  ok(mfapiHits >= 1,
+     "X4 so the next load refetches the history instead of serving the cache the " +
+     "button claimed to clear", mfapiHits);
+
   ok(bundleHits >= 1,
      "F1 the bundle is looked for — a 404 must fall through to the per-fund path, " +
      "not break the load", bundleHits);
