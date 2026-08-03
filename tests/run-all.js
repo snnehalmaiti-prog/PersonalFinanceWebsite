@@ -43,6 +43,7 @@ const guards = [
   { name: "dashboard load path", cmd: "node", args: [path.join(TESTS_DIR, "check-load-path.js")] },
   { name: "service worker routes", cmd: "node", args: [path.join(TESTS_DIR, "check-sw-routes.js")] },
   { name: "debt reclassification call sites", cmd: "node", args: [path.join(TESTS_DIR, "check-debt-callsites.js")] },
+  { name: "fetch_mf_history.py units", cmd: "python3", args: [path.join(TESTS_DIR, "test_mf_history.py")] },
   { name: "asset versions use placeholder", cmd: "node", args: [path.join(ROOT, "tools", "stamp-assets.js"), "--check"] },
 ];
 

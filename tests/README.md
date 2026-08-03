@@ -175,6 +175,31 @@ measurement cannot: widen the band to cover phones and desktop and the browser
 measurement still passes at every width — the grid layout does not overlap
 anywhere, it is simply wrong for those form factors. Six mutants fail the guard.
 
+## e2e-nav-bundle.js / test_mf_history.py
+
+mf_history.json holds every mapped fund's NAV history in one same-origin file,
+built nightly by fetch_mf_history.py from mfmapping.json (which the dashboard
+pushes on every mapping sync, exactly as it already does for stocksetf_mapping).
+Without it a cold load asks api.mfapi.in for one fund at a time.
+
+    python3 -m http.server 8098 &
+    node tests/e2e-nav-bundle.js
+    python3 tests/test_mf_history.py     # also in run-all.js
+
+The bundle is only ever an optimisation, so the suite's most important assertion
+is N2: the same portfolio with NO bundle at all must show EXACTLY the same figure.
+A fund the bundle does not carry (newly mapped, job not run yet) falls through to
+the per-fund request, and a missing bundle 404s harmlessly.
+
+Note R4: R2 alone proves nothing, because the bundle has its own 12-hour blob
+cache and would stay at zero requests whether or not anything was written per
+fund. R4 drops that blob first.
+
+The Python side is tested for the failures that are silent rather than loud —
+mfapi dates are dd-mm-yyyy, so a month of 13 or a day of 30 in February must be
+rejected rather than rolled over into a plausible wrong date, and the Scheme Code
+column is found by name because the sheet is user-edited.
+
 ## e2e-nav-cache.js
 
 Mutual fund NAV history is immutable — a NAV published in 2019 is still that

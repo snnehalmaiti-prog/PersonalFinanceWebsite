@@ -77,6 +77,10 @@ function ok(cond, name, detail) {
   await p.route("**/amfi_nav.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(), data: { [CODE]: amfiEntry } })));
   await p.route("**/stock_prices.json*", (r) => r.fulfill(j({ prices: { __USD_INR__: { price: 84 } }, usd_inr_history: {}, index_history: {} })));
   await p.route("**/stock_history.json*", (r) => r.fulfill(j({ stock_history: {} })));
+  // No bundle in this suite: everything below is the per-fund fallback path, which
+  // is what a repo without the nightly workflow is on. The bundle gets its own file.
+  let bundleHits = 0;
+  await p.route("**/mf_history.json*", (r) => { bundleHits++; r.fulfill({ status: 404, body: "" }); });
 
   await p.addInitScript(() => {
     window.Chart = function (ctx, cfg) {
@@ -253,6 +257,9 @@ function ok(cond, name, detail) {
   ok(mfapiHits === 1,
      "B2 and refetched ONCE for the load, not once per render pass", mfapiHits);
 
+  ok(bundleHits >= 1,
+     "F1 the bundle is looked for — a 404 must fall through to the per-fund path, " +
+     "not break the load", bundleHits);
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   await b.close();

@@ -8285,7 +8285,11 @@
     var mappingRows = getSheetRows("stocksetfmapping");
     if (mappingRows && mappingRows.length > 1) pushMappingToGitHub(mappingRows);
   }});
-  initSheetCard("mfmapping");
+  // Pushed for the same reason the stocks mapping is: the workflow that bundles
+  // NAV history needs to know which schemes the user actually holds.
+  initSheetCard("mfmapping", {}, function afterSync(rows) {
+    if (rows && rows.length > 1) pushMappingToGitHub(rows, "mfmapping.json");
+  });
 
   // ─── GitHub integration: push stocksetf_mapping.json after every mapping sync ──
   function loadGhSettings() {
@@ -8317,14 +8321,15 @@
     showGhToast._h = setTimeout(function () { t.style.display = "none"; }, 6000);
   }
 
-  function pushMappingToGitHub(rows) {
+  function pushMappingToGitHub(rows, fileName) {
     var gh = loadGhSettings();
     if (!gh.owner || !gh.repo || !gh.token) {
       showGhToast("GitHub push skipped: set owner, repo & token in Settings.", false);
       return; // not configured
     }
     var content = btoa(unescape(encodeURIComponent(JSON.stringify(rows))));
-    var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/contents/stocksetf_mapping.json";
+    var file = fileName || "stocksetf_mapping.json";
+    var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/contents/" + file;
     var headers = { "Authorization": "Bearer " + gh.token, "Content-Type": "application/json", "Accept": "application/vnd.github+json" };
     // GET current SHA (needed for update)
     fetch(apiBase + (gh.branch ? "?ref=" + encodeURIComponent(gh.branch) : ""), { headers: headers })
@@ -8337,7 +8342,7 @@
           showGhToast("✓ Mapping already up to date.", true);
           return null;
         }
-        var body = { message: "chore: update stocksetf_mapping.json", content: content };
+        var body = { message: "chore: update " + file, content: content };
         if (gh.branch) body.branch = gh.branch;
         if (existing && existing.sha) body.sha = existing.sha;
         return fetch(apiBase, { method: "PUT", headers: headers, body: JSON.stringify(body) });
@@ -8514,6 +8519,77 @@
   var _navHistoryPromises = {};
 
   // Resolve the base NAV history (cache-or-fetch), deduped across concurrent callers.
+  // ─── The bundle ────────────────────────────────────────────────────────────
+  // mf_history.json holds every mapped fund's history in one same-origin file,
+  // built nightly by fetch_mf_history.py. Without it a cold load asks
+  // api.mfapi.in for one fund at a time — eighteen requests for an eighteen-fund
+  // portfolio, per user, per day, against a free community service. The stocks
+  // side has worked this way for a while; this is the same arrangement for funds.
+  //
+  // It is strictly an optimisation. A fund missing from it — newly added, or the
+  // nightly job has not run since it was mapped — falls through to the per-fund
+  // request exactly as before, so a repo with no bundle at all still works.
+  var MF_HISTORY_STATIC_FILE = "mf_history.json";
+  var MF_HISTORY_CACHE_KEY = "wf-mf-history-static";
+  var MF_HISTORY_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  var _mfHistoryPromise = null;
+
+  function fetchMfHistoryBundle() {
+    if (_mfHistoryPromise) return _mfHistoryPromise;
+    _mfHistoryPromise = _blobCacheGet(MF_HISTORY_CACHE_KEY, MF_HISTORY_MAX_AGE_MS).then(function (cached) {
+      if (cached && cached.data) return cached.data;
+      return fetch(MF_HISTORY_STATIC_FILE, { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (payload) {
+          var map = (payload && payload.mf_history) || null;
+          if (map && Object.keys(map).length) {
+            _blobCacheSet(MF_HISTORY_CACHE_KEY, { data: map });
+            return map;
+          }
+          return {};
+        })
+        .catch(function () { return {}; });     // no bundle in this repo — fine
+    }).catch(function () { return {}; });
+    return _mfHistoryPromise;
+  }
+
+  // { "YYYY-MM-DD": nav } -> the [{date, nav}] shape the rest of the app expects,
+  // ascending, which is what every consumer assumes.
+  function _navSeriesFromBundle(byIso) {
+    var out = [];
+    Object.keys(byIso).forEach(function (iso) {
+      var parts = String(iso).split("-");
+      if (parts.length !== 3) return;
+      var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      var nav = parseNumber(byIso[iso]);
+      if (d && nav) out.push({ date: d, nav: nav });
+    });
+    out.sort(function (a, b) { return a.date - b.date; });
+    return out;
+  }
+
+  // The 30-day backstop is a routine re-read with nothing urgent about it, so it
+  // may come from the bundle: one request covers every fund that is due, instead of
+  // one each. A restatement does NOT come through here — see the call site.
+  function _navRefresh(schemeCode) {
+    return _navFetchFromBundle(schemeCode).then(function (fromBundle) {
+      return fromBundle || _navFetchFromNetwork(schemeCode);
+    });
+  }
+
+  function _navFetchFromBundle(schemeCode) {
+    return fetchMfHistoryBundle().then(function (map) {
+      var byIso = map && map[schemeCode];
+      if (!byIso) return null;
+      var series = _navSeriesFromBundle(byIso);
+      if (!series.length) return null;
+      // Stored per scheme like a network result, so later loads read the small
+      // per-fund entry and never touch the bundle again.
+      _navCacheSet(schemeCode, series);
+      return series;
+    }).catch(function () { return null; });
+  }
+
   function _navFetchFromNetwork(schemeCode) {
     return fetch("https://api.mfapi.in/mf/" + schemeCode)
       .then(function (res) { return res.json(); })
@@ -8539,14 +8615,22 @@
     if (_navHistoryPromises[schemeCode]) return _navHistoryPromises[schemeCode];
 
     var p = _navCacheGet(schemeCode).then(function (cached) {
-      if (!cached) return _navFetchFromNetwork(schemeCode);
+      if (!cached) {
+        return _navFetchFromBundle(schemeCode).then(function (fromBundle) {
+          return fromBundle || _navFetchFromNetwork(schemeCode);
+        });
+      }
       // Already resolved this load, so it has been through the checks below once.
       if (cached._session) return cached.data;
       if (Date.now() - (cached.fetchedAt || 0) >= NAV_HISTORY_BACKSTOP_MS) {
-        return _navFetchFromNetwork(schemeCode);
+        return _navRefresh(schemeCode);
       }
       return _navSeriesWasRestated(schemeCode, cached.data).then(function (restated) {
         if (!restated) { _navSessionCache[schemeCode] = cached.data; return cached.data; }
+        // Straight to mfapi, NOT the bundle. The bundle is rebuilt nightly, so it
+        // can easily be older than the correction — serving it here would re-cache
+        // the stale series and the restatement would be detected again on the next
+        // load, and the next, until the bundle caught up.
         dbg("[NAV] scheme " + schemeCode + ": AMFI restated a held NAV — refetching");
         return _navFetchFromNetwork(schemeCode);
       });
