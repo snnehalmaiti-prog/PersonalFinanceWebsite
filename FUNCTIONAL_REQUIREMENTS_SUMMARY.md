@@ -1,4 +1,4 @@
-# PF Dashboard — Executive Summary
+# Kosha — Executive Summary
 
 **A client-side personal finance dashboard** (vanilla JS on GitHub Pages) that unifies investments and expenses into one INR-normalised view. Investment data is read from per-user **Google Sheets**; authentication, the settings sync row, and the expense ledger live in **Supabase** (Row-Level Security per user). All calculations run in the browser.
 

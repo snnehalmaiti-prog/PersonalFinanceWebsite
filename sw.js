@@ -1,4 +1,4 @@
-/* PF Dashboard service worker — Phase 2 (app shell + offline).
+/* Kosha service worker — Phase 2 (app shell + offline).
  *
  * Scope: the directory this file is served from (repo root on Pages, i.e.
  * /PersonalFinanceWebsite/). All routing below is written relative to that.

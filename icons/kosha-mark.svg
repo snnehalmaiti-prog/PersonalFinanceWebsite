@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-label="Kosha">
+  <!-- Kosha monogram K: a stem, a bowl, and an arm that ends in a dot.
+       Geometry traced from the reference artwork (mark 99x139px), mapped into a
+       24x24 box so it stays legible at the 24px app-icon size it was drawn for.
+       currentColor throughout, so it inherits whatever the surface needs. -->
+  <g stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Stem: down the left, hooking right at the foot. -->
+    <path d="M5.8 2.6 V17.7 C5.8 19.5 6.9 20.6 8.7 20.6" />
+    <!-- Bowl: from the top, out to the right, back down to meet the stem's foot. -->
+    <path d="M9.7 2.6 C14.9 3.1 18.4 6.6 18.4 11.6 C18.4 16.8 14.7 20.6 8.7 20.6" />
+    <!-- Arm: down from the top right into the dot. -->
+    <path d="M18.1 2.8 L12.6 11.3" />
+  </g>
+  <circle cx="11.9" cy="12" r="1.15" fill="currentColor" />
+</svg>

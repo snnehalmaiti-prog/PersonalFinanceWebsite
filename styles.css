@@ -206,8 +206,15 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-size: 1.15rem;
   color: var(--text);
 }
-.logo-mark { display: inline-flex; color: var(--navy); }
-[data-theme="dark"] .logo-mark { color: var(--emerald); }
+/* Kosha monogram. Fixed brand colours rather than themed ones — a logo that
+   changes hue with the page reads as two different logos. Dark mode inverts the
+   tile and the ink instead, so the mark keeps its contrast without keeping its
+   colour scheme from a different brand. */
+.logo-mark { display: inline-flex; }
+.logo-mark .logo-bg { fill: #0F1B2D; }
+.logo-mark .logo-ink { color: #E8C36F; }
+[data-theme="dark"] .logo-mark .logo-bg { fill: #E8C36F; }
+[data-theme="dark"] .logo-mark .logo-ink { color: #0F1B2D; }
 
 .main-nav {
   display: flex;

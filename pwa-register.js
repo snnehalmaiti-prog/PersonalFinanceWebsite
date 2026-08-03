@@ -1,4 +1,4 @@
-/* PF Dashboard — PWA install chip (Phase 1: no service worker yet).
+/* Kosha — PWA install chip (Phase 1: no service worker yet).
  *
  * Behaviour:
  *   - On Chromium browsers, capture the `beforeinstallprompt` event and show
@@ -177,7 +177,7 @@
   if (isIOS && isSafari && localStorage.getItem(STORAGE_IOS_HINT_DISMISSED) !== "1") {
     var iosChip = makeChip("Install app", function () {
       alert(
-        "To install PF Dashboard on your iPhone or iPad:\n\n" +
+        "To install Kosha on your iPhone or iPad:\n\n" +
         "1. Tap the Share button in Safari.\n" +
         "2. Scroll down and choose \"Add to Home Screen\".\n" +
         "3. Tap Add."

@@ -1,6 +1,6 @@
 {
-  "name": "PF Dashboard — Personal Finance",
-  "short_name": "PF Dashboard",
+  "name": "Kosha — Personal Finance",
+  "short_name": "Kosha",
   "description": "Track stocks, mutual funds, PPF, FDs and more in one INR-normalised view.",
   "start_url": "./dashboard.html",
   "scope": "./",

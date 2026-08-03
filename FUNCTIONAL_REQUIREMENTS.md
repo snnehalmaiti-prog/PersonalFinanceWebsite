@@ -1,6 +1,6 @@
 # Personal Finance Dashboard — Functional Requirements Document
 
-**Product:** PF Dashboard (a.k.a. Wealthfolio)
+**Product:** Kosha (formerly Kosha / Wealthfolio)
 **Type:** Client-side single-page web app (vanilla HTML/CSS/JS, no build step), hosted on GitHub Pages.
 **Backend:** Supabase (auth + a `user_settings` row and Expense-manager tables) and Google Sheets (investment transaction data, read-only).
 **Currency:** All values normalised to **INR (₹)**. US instruments are converted from USD.

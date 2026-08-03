@@ -124,6 +124,25 @@ fixture out of dashboard.html's own markup, so it cannot drift from what it chec
 
 Measured before → after: dx 20px → 0, gap 10.9px → 2.9px.
 
+## check-branding.js
+
+The product is Kosha and the monogram is drawn from one source. A rename is the
+kind of change that half-lands — the header says one thing, the tab title
+another, the installed PWA a third — so every user-visible place the name appears
+is listed: page titles, the manifest name and short_name, and the iOS
+home-screen title.
+
+The mark is pinned the same way. `icons/kosha-mark.svg` is the source of truth
+for the geometry and `tools/make-icons.js` renders every PNG from it, so the
+inline copies in the page headers must carry the same three strokes — otherwise
+the favicon and the header show different logos. Regenerate the PNGs with:
+
+    node tools/make-icons.js
+
+Five mutants fail it: the old name back in a title, a wrong manifest short_name,
+a header mark that has drifted from the SVG, a missing icon file, and a changed
+stroke in the source SVG.
+
 ## check-tablet-breakpoint.js / measure-tablet-layout.js
 
 Between the phone breakpoint at 760px and the width the desktop layout needs, the
