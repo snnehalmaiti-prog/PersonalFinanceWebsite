@@ -4346,4 +4346,13 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   }
   .benchmark-col-value { font-size: 1.3rem; }
   .benchmark-col-verdict { padding-left: 16px; }
+
+  /* Expense tab. BREAKDOWN and SETTLEMENT share a two-column grid above 760px,
+     which on a tablet gives each about half of ~1000px. That is not enough for
+     either: the spend table wants a column per account and ends up cut off
+     mid-figure ("₹1,4", "₹46,7"), and SETTLEMENT puts two person cards side by
+     side inside its half, squeezing each to ~145px so "TRANSFER AMOUNT" wraps
+     onto two lines and the amounts run out of room. One card per row fixes both
+     without changing either card's own internals. */
+  .acc-charts-grid { grid-template-columns: 1fr; }
 }

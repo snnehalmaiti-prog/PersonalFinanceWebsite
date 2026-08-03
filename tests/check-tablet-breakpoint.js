@@ -62,6 +62,10 @@ check(/\.benchmark-result\s*\{[^}]*flex-wrap:\s*wrap/.test(block),
 check(/\.benchmark-col-label\s*\{[^}]*white-space:\s*normal/.test(block),
   "Benchmark labels must wrap rather than ellipsise on tablet — a label " +
   "truncated to \"Portfolio Rolling…\" no longer names its column");
+check(/\.acc-charts-grid\s*\{[^}]*grid-template-columns:\s*1fr\s*[;}]/.test(block),
+  "the Expense tab's BREAKDOWN and SETTLEMENT cards must get a row each on " +
+  "tablet — sharing a two-column grid cuts the spend table off mid-figure and " +
+  "squeezes the two settlement person cards to about 145px");
 
 // And that the phone block is still there and still its own thing: this fix must
 // not have been achieved by widening the phone breakpoint.

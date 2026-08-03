@@ -142,6 +142,15 @@ it is the ink that is checked rather than the padding:
 Before the fix: overlaps and clipping at 768, 810, 834 and 1024; nothing at 480,
 760, 1080 or above. After: clean at all ten.
 
+`measure-tablet-expense.js` does the same for the Expense tab, where BREAKDOWN
+and SETTLEMENT share the same two-column grid: on tablet the spend table
+overflowed its card by up to 141px (cut off mid-figure) and the two settlement
+person cards were squeezed to ~145px each, wrapping "TRANSFER AMOUNT" onto two
+lines. Note the route order in it — Playwright matches the most recently
+registered route first, so the supabase catch-all has to be registered BEFORE the
+per-table routes or the expense tab loads with no data and the whole file
+measures nothing.
+
 `check-tablet-breakpoint.js` is in run-all.js and pins the SCOPE, which the
 measurement cannot: widen the band to cover phones and desktop and the browser
 measurement still passes at every width — the grid layout does not overlap
