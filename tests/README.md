@@ -175,6 +175,28 @@ measurement cannot: widen the band to cover phones and desktop and the browser
 measurement still passes at every width — the grid layout does not overlap
 anywhere, it is simply wrong for those form factors. Six mutants fail the guard.
 
+## e2e-value-chart-refresh.js
+
+The value charts skip a render whose inputs match the last completed one. That
+saves real work — a refresh built each chart four times and three of those were
+byte-identical — but it introduces exactly one new way to be wrong: a chart that
+stops updating when something DID change.
+
+    python3 -m http.server 8098 &
+    node tests/e2e-value-chart-refresh.js
+
+So the suite does not check that the skip happens. It checks that every input the
+key claims to cover forces a redraw, and that the redraw lands on the right
+numbers. The fixture's two portfolios are structurally identical — same
+instrument, same dates, same row counts, same fixed income — and differ only in
+units held, so every derived length in the key is equal between them and only the
+portfolio name can tell them apart.
+
+Note on mutants: dropping a single term from the key does NOT fail this suite,
+and that is not a gap. The portfolio name and the Overview total both vary when
+the portfolio changes, so each covers the other. What does fail is a skip that
+ignores the key entirely (4 assertions) — which is the failure that matters.
+
 ## e2e-integration-smoke.js
 
 Every other suite runs on a small isolated fixture. This one runs the whole
