@@ -175,6 +175,29 @@ measurement cannot: widen the band to cover phones and desktop and the browser
 measurement still passes at every width — the grid layout does not overlap
 anywhere, it is simply wrong for those form factors. Six mutants fail the guard.
 
+## e2e-nav-cache.js
+
+Mutual fund NAV history is immutable — a NAV published in 2019 is still that
+number — so it is cached in IndexedDB with no clock expiry, and the daily tail
+comes from amfi_nav.json, which is downloaded anyway.
+
+    python3 -m http.server 8098 &
+    node tests/e2e-nav-cache.js
+
+The risk is the mirror image of the saving: a series that never refreshes, so a
+correction from AMFI is never picked up. So the suite is about the ways a series
+must still be refetched — a NAV restated for a date already held, and a cache
+older than the 30-day backstop — plus the fact that a plain refresh fetches
+nothing and that the legacy localStorage entries are swept.
+
+Two fixture traps worth knowing, both of which produced confidently wrong runs
+before being found. The two sources do NOT share a date format: mfapi.in is
+numeric ("01-12-2024"), amfi_nav is a month name ("01-Dec-2024"). Getting it
+wrong is silent — parseMfApiDate builds an Invalid Date, the entry survives the
+truthiness filter, and the series caches with unusable dates. And the AMFI stub
+must quote the EXACT nav mfapi served for the same date, or the app correctly
+reads the difference as a restatement and refetches everything.
+
 ## e2e-value-chart-refresh.js
 
 The value charts skip a render whose inputs match the last completed one. That

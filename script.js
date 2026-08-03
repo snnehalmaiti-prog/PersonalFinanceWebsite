@@ -8389,8 +8389,99 @@
   });
 
   // ===== Current Value Over Time chart =====
-  var NAV_CACHE_PREFIX = "wf-nav-cache-";
-  var NAV_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+  // NAV history is IMMUTABLE once published: the NAV a fund reported in 2019 is
+  // still that number today. It used to be cached in localStorage under a 24-hour
+  // expiry, so the first load of every day threw away eight years of unchanging
+  // prices and re-downloaded all of it — 18 funds measured at 2.61 MB, against a
+  // measured localStorage quota of 4.94 MB. Past about 34 funds the write failed,
+  // and because the write is wrapped in a bare catch it failed SILENTLY: nothing
+  // was ever cached again and every refresh refetched everything.
+  //
+  // So: keep it in IndexedDB (async, roomy, stores Dates as Dates with no JSON at
+  // all), and stop expiring it on a clock. Freshness does not need an expiry —
+  // amfi_nav.json already carries today's NAV for all 14,222 schemes and
+  // withAmfiNavOverride already appends it, so the tail is covered without asking
+  // mfapi.in for anything.
+  var NAV_CACHE_PREFIX = "wf-nav-cache-";     // legacy localStorage; swept below
+  var NAV_IDB_PREFIX = "nav:";
+  // AMFI does occasionally restate a NAV it has already published. Two things
+  // catch that. First, cheaply and immediately: amfi_nav.json gives a (date, nav)
+  // per scheme, and if we already hold that date with a DIFFERENT nav then the
+  // series has been corrected under us and is refetched. Second, as a backstop for
+  // any restatement further back than that one date, the whole series is refetched
+  // if it is older than this — rare enough to cost nothing, often enough that
+  // drift cannot live forever.
+  var NAV_HISTORY_BACKSTOP_MS = 30 * 24 * 60 * 60 * 1000;
+  // A NAV is published to 4dp; anything above this is a real restatement rather
+  // than a float artefact of round-tripping through storage.
+  var NAV_RESTATEMENT_EPSILON = 0.0005;
+
+  // One-time reclaim of the megabytes the old localStorage cache is holding.
+  // Without this the quota stays full and every OTHER localStorage write —
+  // sheet data, settings — keeps failing for as long as the entries sit there.
+  function _sweepLegacyNavCache() {
+    try {
+      var doomed = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(NAV_CACHE_PREFIX) === 0) doomed.push(k);
+      }
+      doomed.forEach(function (k) { localStorage.removeItem(k); });
+      if (doomed.length) dbg("[NAV] reclaimed " + doomed.length + " legacy localStorage entries");
+    } catch (e) {}
+  }
+  _sweepLegacyNavCache();
+
+  // Resolved series for this page session.
+  //
+  // The IndexedDB write is fire-and-forget, so a later render pass can ask for a
+  // scheme before the previous pass's write has landed — and fetch it again.
+  // Measured on an 18-fund portfolio: without this, a refresh made 72 NAV requests
+  // (four render passes x 18 schemes) instead of none. A single-scheme test cannot
+  // see it, because one scheme resolves long before the next pass starts; it only
+  // appears once enough schemes are in flight to push the writes behind the reads.
+  var _navSessionCache = {};
+
+  function _navCacheGet(schemeCode) {
+    if (_navSessionCache[schemeCode]) {
+      return Promise.resolve({ data: _navSessionCache[schemeCode], _session: true });
+    }
+    if (!window.WfIdb) return Promise.resolve(null);
+    return WfIdb.get(NAV_IDB_PREFIX + schemeCode).then(function (entry) {
+      if (!entry || !entry.data || !entry.data.length) return null;
+      return entry;
+    }).catch(function () { return null; });
+  }
+  function _navCacheSet(schemeCode, data) {
+    if (!data || !data.length) return;
+    _navSessionCache[schemeCode] = data;
+    if (!window.WfIdb) return;
+    // Structured clone keeps the Date objects, so there is no parse on read and no
+    // stringify on write — the whole reason this moved off localStorage.
+    try { WfIdb.set(NAV_IDB_PREFIX + schemeCode, { fetchedAt: Date.now(), data: data }); } catch (e) {}
+  }
+
+  // Has AMFI restated a NAV we already hold? Uses the map that is downloaded
+  // anyway, so this costs one lookup rather than a request.
+  function _navSeriesWasRestated(schemeCode, series) {
+    return fetchAmfiNavMap().then(function (navMap) {
+      var entry = navMap && navMap[schemeCode];
+      if (!entry) return false;
+      var d = parseAmfiNavDate(entry.date);
+      var nav = parseNumber(entry.nav);
+      if (!d || !nav) return false;
+      var t = d.getTime();
+      for (var i = series.length - 1; i >= 0; i--) {
+        var pt = series[i];
+        if (!pt || !pt.date) continue;
+        var pt_t = pt.date.getTime();
+        if (pt_t < t) break;               // sorted ascending: past the date, stop
+        if (pt_t !== t) continue;
+        return Math.abs(pt.nav - nav) > NAV_RESTATEMENT_EPSILON;
+      }
+      return false;                        // date not held yet — an append, not a restatement
+    }).catch(function () { return false; });
+  }
 
   function parseMfApiDate(d) {
     var parts = String(d || "").split("-");
@@ -8423,35 +8514,45 @@
   var _navHistoryPromises = {};
 
   // Resolve the base NAV history (cache-or-fetch), deduped across concurrent callers.
-  function fetchNavHistoryBase(schemeCode) {
-    var cacheKey = NAV_CACHE_PREFIX + schemeCode;
-    try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey));
-      if (cached && Date.now() - cached.fetchedAt < NAV_CACHE_MAX_AGE_MS) {
-        var revived = (cached.data || []).map(function (entry) { return { date: new Date(entry.date), nav: entry.nav }; });
-        return Promise.resolve(revived);
-      }
-    } catch (e) {}
-
-    if (_navHistoryPromises[schemeCode]) return _navHistoryPromises[schemeCode];
-
-    var p = fetch("https://api.mfapi.in/mf/" + schemeCode)
+  function _navFetchFromNetwork(schemeCode) {
+    return fetch("https://api.mfapi.in/mf/" + schemeCode)
       .then(function (res) { return res.json(); })
       .then(function (json) {
         var data = (json.data || [])
           .map(function (entry) { return { date: parseMfApiDate(entry.date), nav: parseNumber(entry.nav) }; })
           .filter(function (entry) { return entry.date; })
           .sort(function (a, b) { return a.date - b.date; });
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), data: data }));
-        } catch (e) {}
+        _navCacheSet(schemeCode, data);
         return data;
       })
       .catch(function (err) {
         console.error("Failed to fetch NAV history for scheme " + schemeCode + ":", err);
         return [];
-      })
-      .then(function (data) { delete _navHistoryPromises[schemeCode]; return data; }, function (e) { delete _navHistoryPromises[schemeCode]; throw e; });
+      });
+  }
+
+  function fetchNavHistoryBase(schemeCode) {
+    // The dedup has to wrap the CACHE READ too, not just the network call. The read
+    // is async now, so without this every render path that wants the same scheme
+    // arrives before IndexedDB answers, all miss, and all fetch — which is the
+    // stampede the cache exists to prevent.
+    if (_navHistoryPromises[schemeCode]) return _navHistoryPromises[schemeCode];
+
+    var p = _navCacheGet(schemeCode).then(function (cached) {
+      if (!cached) return _navFetchFromNetwork(schemeCode);
+      // Already resolved this load, so it has been through the checks below once.
+      if (cached._session) return cached.data;
+      if (Date.now() - (cached.fetchedAt || 0) >= NAV_HISTORY_BACKSTOP_MS) {
+        return _navFetchFromNetwork(schemeCode);
+      }
+      return _navSeriesWasRestated(schemeCode, cached.data).then(function (restated) {
+        if (!restated) { _navSessionCache[schemeCode] = cached.data; return cached.data; }
+        dbg("[NAV] scheme " + schemeCode + ": AMFI restated a held NAV — refetching");
+        return _navFetchFromNetwork(schemeCode);
+      });
+    })
+      .then(function (data) { delete _navHistoryPromises[schemeCode]; return data; },
+            function (e) { delete _navHistoryPromises[schemeCode]; throw e; });
 
     _navHistoryPromises[schemeCode] = p;
     return p;
