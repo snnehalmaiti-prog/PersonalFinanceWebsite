@@ -5574,7 +5574,11 @@
           instrument: instrument, units: units, avgNav: units > 0 ? investedCost / units : 0,
           currNav: currNav, invested: invested, current: current, pnl: pnl, pnlPct: pnlPct,
           dayChgPct: dayChgPct, xirrPct: (x == null || !isFinite(x)) ? null : x * 100,
-          _portfolio: portfolio
+          _portfolio: portfolio,
+          // Kept so that merging one instrument across portfolios can recompute a
+          // real XIRR from the combined flows. Averaging the per-portfolio XIRRs
+          // would be wrong — XIRR is not additive.
+          _xirrFlows: flows
         });
       });
     });
@@ -5995,6 +5999,78 @@
     return out;
   }
 
+  // Collapse one instrument held in several portfolios into a single row.
+  //
+  // Viewing "All" used to list the same fund once per portfolio, so a holding
+  // split across two portfolios read as two unrelated positions and neither row
+  // showed what was actually held. Amounts and units add up; the per-unit figures
+  // are re-derived from the merged totals (a plain average of two average costs
+  // is wrong whenever the two portfolios hold different quantities); and XIRR is
+  // recomputed from the combined cash flows, because a rate of return is not
+  // additive and cannot be averaged either.
+  //
+  // Only called when the portfolio filter is "all" — a specific portfolio has
+  // nothing to merge — and always AFTER the open/closed filter, so an instrument
+  // that is open in one portfolio and closed in another stays on two tabs.
+  function _mergeHoldingRowsByInstrument(rows, opts) {
+    opts = opts || {};
+    var unitsKey = opts.unitsKey || "units";
+    var sumKeys = opts.sumKeys || [];
+    var avgPairs = opts.avgPairs || [];      // [avgKey, totalKey] → total / units
+    var pctPairs = opts.pctPairs || [];      // [pctKey, partKey, wholeKey] → part/whole
+    var order = [], byName = {};
+    rows.forEach(function (r) {
+      var k = normalizeText(r.instrument || "");
+      if (!byName[k]) { byName[k] = []; order.push(k); }
+      byName[k].push(r);
+    });
+    return order.map(function (k) {
+      var group = byName[k];
+      var names = [];
+      group.forEach(function (r) {
+        var pn = (r._portfolio || "").trim();
+        if (pn && names.indexOf(pn) === -1) names.push(pn);
+      });
+      if (group.length === 1) {
+        var solo = {}; for (var s in group[0]) solo[s] = group[0][s];
+        solo._portfolios = names;
+        return solo;
+      }
+      var m = {}; for (var f in group[0]) m[f] = group[0][f];
+      m._portfolios = names;
+      m._portfolio = names.join(" · ");
+      [unitsKey].concat(sumKeys).forEach(function (key) {
+        var any = false, tot = 0;
+        group.forEach(function (r) {
+          if (r[key] == null || !isFinite(r[key])) return;
+          any = true; tot += r[key];
+        });
+        m[key] = any ? tot : null;
+      });
+      var units = m[unitsKey] || 0;
+      avgPairs.forEach(function (p) {
+        m[p[0]] = (units > 0 && m[p[1]] != null) ? m[p[1]] / units : null;
+      });
+      pctPairs.forEach(function (p) {
+        var whole = m[p[2]];
+        m[p[1]] = m[p[1]] == null ? null : m[p[1]];
+        m[p[0]] = (whole && isFinite(whole) && m[p[1]] != null) ? (m[p[1]] / whole) * 100 : 0;
+      });
+      var flows = [];
+      var haveFlows = group.every(function (r) { return Array.isArray(r._xirrFlows); });
+      if (haveFlows) {
+        group.forEach(function (r) { flows = flows.concat(r._xirrFlows); });
+        var x = calculateXIRR(flows);
+        m.xirrPct = (x == null || !isFinite(x)) ? null : x * 100;
+        m._xirrFlows = flows;
+      } else {
+        // Better no number than a wrong one — an averaged XIRR is not an XIRR.
+        m.xirrPct = null;
+      }
+      return m;
+    });
+  }
+
   function renderSeHoldingsCardList(rowsData, region, usdInrToday) {
     var listId = region === "us" ? "seh-us-list" : "seh-india-list";
     var eyebrowId = region === "us" ? "seh-us-eyebrow" : "seh-india-eyebrow";
@@ -6049,6 +6125,14 @@
     var filtered = inScope.filter(function (h) {
       return regionShowClosed ? _isClosedRow(h) : !_isClosedRow(h);
     });
+    if (!regionPortfolio || regionPortfolio === "all") {
+      filtered = _mergeHoldingRowsByInstrument(filtered, {
+        unitsKey: "units",
+        sumKeys: ["investedINR", "currentINR", "investedUSD", "currentUSD", "dayChangeINR", "pnl"],
+        avgPairs: [["avgCostINR", "investedINR"], ["avgCostUSD", "investedUSD"]],
+        pctPairs: [["pnlPct", "pnl", "investedINR"]]
+      });
+    }
     var sParts = String(regionSort).split("-");
     var sortKey = sParts[0];
     var sortDir = sParts[1] === "asc" ? 1 : -1;
@@ -6106,7 +6190,10 @@
       var avgCostStr = (h.avgCostUSD != null)
         ? _fmtUsd(h.avgCostUSD)
         : '₹' + Number(h.avgCostINR || 0).toFixed(2);
-      var subLine = (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ' + avgCostStr;
+      // On "All" a merged row names every portfolio it was summed from.
+      var sePfNames = (h._portfolios && h._portfolios.length > 1) ? h._portfolios.join(" + ") : "";
+      var subLine = (sePfNames ? escapeHtml(sePfNames) + ' · ' : "") +
+        (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ' + avgCostStr;
       return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
@@ -14015,6 +14102,16 @@
       var closed = r.units < 1;
       return state.showClosed ? closed : !closed;
     });
+    if (!state.portfolio || state.portfolio === "all") {
+      filtered = _mergeHoldingRowsByInstrument(filtered, {
+        unitsKey: "units",
+        sumKeys: ["invested", "current", "pnl", "dayChgINR"],
+        avgPairs: [["avgNav", "invested"]],
+        pctPairs: [["pnlPct", "pnl", "invested"]]
+        // currNav and dayChgPct are per-unit properties of the instrument itself,
+        // identical across portfolios, so the first row's values carry over.
+      });
+    }
     var parts = String(state.sort || "pnl-desc").split("-");
     var sortKey = parts[0];
     var sortDir = parts[1] === "asc" ? 1 : -1;
@@ -14046,9 +14143,10 @@
       var pal = _avatarFor(r.instrument, i);
       var code = _shortCode(r.instrument);
       var seg = lookupSegment(segmentMap, r.instrument);
-      // The Debt table can show the same instrument once per portfolio, so name the
-      // portfolio — otherwise two rows read as identical duplicates.
-      var sub = (r._portfolio ? escapeHtml(r._portfolio) + " · " : "") +
+      // Name the portfolio(s) the holding sits in. On "All" a merged row lists
+      // every portfolio it was summed from, so the figures can be traced back.
+      var pfNames = (r._portfolios && r._portfolios.length) ? r._portfolios.join(" + ") : (r._portfolio || "");
+      var sub = (pfNames ? escapeHtml(pfNames) + " · " : "") +
         escapeHtml(seg) + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
       var isSip = _isSipInstrument(r.instrument);
       var pnlPos = r.pnl >= 0;
@@ -15298,7 +15396,10 @@
             dayChangeINR: dayChangeINR,
             pnl: pnl,
             pnlPct: pnlPct,
-            xirrPct: xirrPct
+            xirrPct: xirrPct,
+            // See the MF builder: merging across portfolios recomputes XIRR from
+            // the combined flows rather than averaging per-portfolio rates.
+            _xirrFlows: xirrFlows
           });
         });
 

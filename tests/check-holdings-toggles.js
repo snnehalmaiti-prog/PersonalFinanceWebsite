@@ -165,8 +165,12 @@ check(/data-dbth-portfolio/.test(SRC), "the debt portfolio pill is not wired");
 check(/_portfolio: r\._portfolio \|\| ""/.test(SRC),
   "Stocks/ETF debt rows must carry their portfolio through the normalisation, or the filter drops them");
 
-check(/r\._portfolio \? escapeHtml\(r\._portfolio\)/.test(SRC),
-  "the same instrument can appear once per portfolio — the row must name which one");
+// On "All" the same instrument is now merged into one row across portfolios, so
+// the sub-line names every portfolio it was summed from rather than a single one.
+check(/_portfolios && r\._portfolios\.length\) \? r\._portfolios\.join/.test(SRC),
+  "a merged row must name every portfolio it was summed from");
+check(/pfNames \? escapeHtml\(pfNames\)/.test(SRC),
+  "the row must name its portfolio(s), or merged rows are untraceable");
 
 check(/<h3 class="mfh-title">Debt ETF\/Mutual Fund Holding<\/h3>/.test(HTML),
   'the debt card must be titled "Debt ETF/Mutual Fund Holding"');
