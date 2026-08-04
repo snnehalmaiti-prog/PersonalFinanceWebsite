@@ -128,6 +128,38 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
      "C4 the grand total reconciles — it did before the fix too, which is why " +
      "the per-category figures are the assertions that matter",
      { got: total, want: PHYSICAL + ETF + EQUITY });
+  // ── Region Split: the same double-apply, in the other consumer ──────────
+  // _renderRegionSplit rebuilt an "MF only" figure as b.equity − SE total. But
+  // computePortfolioCurrentBreakdown had already taken the commodity ETF out of
+  // b.equity, so subtracting the full SE total removed it twice, and
+  // Math.max(0, …) hid the negative. With no mutual fund to absorb it the clamp
+  // fires and the ETF lands in India twice — here the grand total IS wrong,
+  // unlike in Category Split.
+  await p.evaluate((s) => {
+    localStorage.setItem("wf-isc-mode", "region");
+    localStorage.setItem("wf-equity-data", JSON.stringify(s));   // no MF holdings
+  }, [TXN]);
+  await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
+  await p.waitForTimeout(Number(process.env.WAIT || 10000));
+
+  const region = await p.evaluate(() => {
+    const out = { total: (document.getElementById("isc-total-value") || {}).textContent, rows: {} };
+    document.querySelectorAll("#isc-list .isc-row").forEach((r) => {
+      const n = r.querySelector(".isc-row-name"), v = r.querySelector(".isc-row-amount");
+      if (n && v) out.rows[n.textContent.trim()] = v.textContent;
+    });
+    return out;
+  });
+  console.log("  Region Split (no MF): " + JSON.stringify(region));
+
+  ok(near(money(region.rows["India"]), PHYSICAL + ETF, 5),
+     "R1 India = physical gold + the India-listed gold ETF, counted ONCE",
+     { got: money(region.rows["India"]), want: PHYSICAL + ETF, doubleCounted: PHYSICAL + ETF * 2 });
+  ok(near(money(region.total), PHYSICAL + ETF, 5),
+     "R2 and the grand total is right — the clamp used to inflate it, so unlike " +
+     "Category Split the total IS a real assertion here",
+     { got: money(region.total), want: PHYSICAL + ETF });
+
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   await b.close();

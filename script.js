@@ -11151,10 +11151,19 @@
     ]).then(function (res) {
       var b = res[0] || { equity: 0, fixedIncome: 0, commodity: 0 };
       var se = res[1] || { India: 0, US: 0 };
-      // b.equity = MF + SE (both regions); isolate the MF part.
-      var mfCur = Math.max(0, (b.equity || 0) - (se.India || 0) - (se.US || 0));
-      var india = mfCur + (b.fixedIncome || 0) + (b.commodity || 0) + (se.India || 0);
+      // b.equity is NOT "MF + SE": computePortfolioCurrentBreakdown has already
+      // moved commodity- and fixed-income-category funds/ETFs out of it and into
+      // b.commodity / b.fixedIncome. Reconstructing an MF-only figure by
+      // subtracting the full SE total therefore subtracted those instruments a
+      // second time, and Math.max(0, …) then hid the negative — a gold ETF held
+      // with little or no mutual fund landed in India twice AND inflated the
+      // grand total.
+      //
+      // The three buckets already sum to the whole portfolio, so no MF-only
+      // figure is needed: everything is India except US-listed Stocks/ETF. This
+      // also keeps a US-listed commodity ETF in US rather than India.
       var us = se.US || 0;
+      var india = Math.max(0, (b.equity || 0) + (b.fixedIncome || 0) + (b.commodity || 0) - us);
       if (india + us <= UNITS_EPSILON) return;
       currentByRegion = { India: india, US: us };
       draw();
