@@ -4004,9 +4004,12 @@
   }
 
   // Reads the user-configured India-retail premium % (0 = raw international spot).
+  // The default must match what settings.html shows in the unsaved field, or a
+  // user who never pressed Save is valued at a percentage they were never shown.
+  var GOLD_PREMIUM_DEFAULT_PCT = 15;
   function getGoldPremiumMultiplier() {
     var raw = localStorage.getItem("wf-gold-premium-pct");
-    var pct = raw == null || raw === "" ? 0 : parseFloat(raw);
+    var pct = raw == null || raw === "" ? GOLD_PREMIUM_DEFAULT_PCT : parseFloat(raw);
     if (!isFinite(pct)) pct = 0;
     return 1 + pct / 100;
   }
@@ -5113,14 +5116,18 @@
       var buyPrice = dateStr && historicalPrices && historicalPrices[dateStr];
       var sellPrice = sellDateStr && historicalPrices && historicalPrices[sellDateStr];
 
-      var invested, current, realizedProfit;
+      var invested, current, realizedProfit, priceUnavailable = false;
       if (isSold) {
         invested = 0;
         current = 0;
         realizedProfit = (buyPrice && sellPrice && grams > 0) ? (sellPrice - buyPrice) * grams : 0;
       } else {
         invested = (buyPrice && grams > 0) ? grams * buyPrice : 0;
-        current = (goldPricePerGram && grams > 0) ? grams * goldPricePerGram : invested;
+        // No live rate: fall back to cost basis so the row still carries a value,
+        // but flag it. Silently showing what you paid as what it is worth reads as
+        // a real (and always exactly break-even) valuation.
+        priceUnavailable = !goldPricePerGram && grams > 0;
+        current = priceUnavailable ? invested : (grams > 0 ? grams * goldPricePerGram : 0);
         realizedProfit = 0;
       }
 
@@ -5128,7 +5135,8 @@
         invested: invested, current: current, grams: isSold ? 0 : grams,
         soldGrams: isSold ? grams : 0,
         soldInvested: (isSold && buyPrice && grams > 0) ? grams * buyPrice : 0,
-        dateStr: dateStr, sellDateStr: sellDateStr, isSold: isSold, realizedProfit: realizedProfit });
+        dateStr: dateStr, sellDateStr: sellDateStr, isSold: isSold, realizedProfit: realizedProfit,
+        priceUnavailable: priceUnavailable });
     });
     return holdings;
   }
@@ -5245,7 +5253,11 @@
         } catch (e) {}
         return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
       })() : null;
-      statusEl.textContent = "";
+      // Without a live rate every row is valued at cost, so the card would show a
+      // flat 0% return that looks like real data. Say so instead.
+      statusEl.textContent = allHoldings.some(function (h) { return h.priceUnavailable; })
+        ? "Gold rate unavailable — showing cost basis, not current value."
+        : "";
       tableWrap.hidden = true;
       try { renderCmHoldingsCardList(allHoldings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
     });
@@ -11304,19 +11316,23 @@
     var _lastCommEtfMf = 0;         // last commodity-MF/ETF current total applied
     function recomputeTotals(commEtfMfCurrentTotal) {
       _lastCommEtfMf = commEtfMfCurrentTotal;
-      var eqBase, fiC, commPhys;
       if (_allCur) {
-        eqBase = _allCur.eq;        // MF+SE current (incl. commodity-category funds)
-        fiC = _allCur.fi;
-        commPhys = _allCur.comm;    // physical gold current
-      } else {
-        // Invested placeholder: eqInvByP excludes commodity MF/ETF, so add it back
-        // for the base that commEtfMfCurrentTotal is subtracted from.
-        eqBase = 0; commPhys = 0; fiC = 0;
-        Object.keys(eqInvByP).forEach(function (n) { eqBase += eqInvByP[n]; });
-        Object.keys(commInvByP).forEach(function (n) { eqBase += commInvByP[n]; });
-        Object.keys(fiInvByP).forEach(function (n) { fiC += fiInvByP[n]; });
+        // computePortfolioCurrentBreakdown has ALREADY moved commodity-category
+        // funds/ETFs out of Equity and into Commodity. Applying
+        // commEtfMfCurrentTotal here as well counted a gold ETF twice in
+        // Commodity and subtracted it twice from Equity — net-zero on the grand
+        // total, which is why it looked plausible. Take these as-is.
+        catTotal["Equity"] = Math.max(0, _allCur.eq);
+        catTotal["Fixed Income"] = fiExcluded ? 0 : _allCur.fi;
+        catTotal["Commodity"] = fiExcluded ? 0 : _allCur.comm;
+        return;
       }
+      // Invested placeholder: eqInvByP excludes commodity MF/ETF, so add it back
+      // for the base that commEtfMfCurrentTotal is subtracted from.
+      var eqBase = 0, commPhys = 0, fiC = 0;
+      Object.keys(eqInvByP).forEach(function (n) { eqBase += eqInvByP[n]; });
+      Object.keys(commInvByP).forEach(function (n) { eqBase += commInvByP[n]; });
+      Object.keys(fiInvByP).forEach(function (n) { fiC += fiInvByP[n]; });
       catTotal["Equity"] = Math.max(0, eqBase - commEtfMfCurrentTotal);
       catTotal["Fixed Income"] = fiExcluded ? 0 : fiC;
       catTotal["Commodity"] = (fiExcluded ? 0 : commPhys) + commEtfMfCurrentTotal;
