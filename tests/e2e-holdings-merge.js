@@ -147,6 +147,17 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
     ok(new RegExp("@ ₹" + IND_AVG.toFixed(2)).test(r.sub),
        "I4 average cost re-derived from merged totals", { sub: r.sub, want: IND_AVG.toFixed(2) });
     ok(/Alpha/.test(r.sub) && /Beta/.test(r.sub), "I5 sub-line names both portfolios", r.sub);
+    // The merged row must show a REAL rate, recomputed from the combined flows.
+    // There are two Stocks/ETF row builders and only the per-portfolio one feeds
+    // this list; carrying the flows on the wrong one left this cell at "—".
+    // Both lots were bought on the same date, so the whole position is
+    // 2000 out on 1-Jan-2024 worth 2250 today — a closed-form check.
+    const yrs = (Date.now() - new Date("2024-01-01T00:00:00").getTime()) / (365.25 * 24 * 3600 * 1000);
+    const wantXirr = (Math.pow(IND_CUR / IND_INV, 1 / yrs) - 1) * 100;
+    const gotXirr = parseFloat(String(r.nums[5]).replace(/[^0-9.\-]/g, ""));
+    ok(/%/.test(r.nums[5] || "") && isFinite(gotXirr) && near(gotXirr, wantXirr, 0.5),
+       "I6 XIRR is recomputed from the combined cash flows, not dropped",
+       { cell: r.nums[5], got: gotXirr, want: Number(wantXirr.toFixed(2)) });
   }
 
   // A holding in ONE portfolio must be left exactly as it was — no merge

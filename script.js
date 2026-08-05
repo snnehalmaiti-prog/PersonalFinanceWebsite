@@ -5508,7 +5508,12 @@
             pnlPct: pnlPct,
             xirrPct: xirrPct,
             isClosed: isClosed,
-            _portfolio: p
+            _portfolio: p,
+            // This is the builder that feeds the India/US card lists (the other
+            // one serves the legacy table). Merging one instrument across
+            // portfolios recomputes XIRR from the combined flows, so they have to
+            // travel on the row — without them the merged row has no XIRR to show.
+            _xirrFlows: xirrFlows
           };
         });
       });
