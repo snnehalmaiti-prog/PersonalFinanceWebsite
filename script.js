@@ -6209,18 +6209,22 @@
       var avgCostStr = (h.avgCostUSD != null)
         ? _fmtUsd(h.avgCostUSD)
         : '₹' + Number(h.avgCostINR || 0).toFixed(2);
-      // On "All" a merged row names every portfolio it was summed from.
+      // Three deliberate lines under the name rather than one that wraps
+      // mid-sentence: the portfolio(s), then the holding, then its share of
+      // invested. On "All" a merged row names every portfolio it was summed
+      // from; with a single portfolio that line is simply absent and the
+      // holding line moves up.
       var sePfNames = (h._portfolios && h._portfolios.length > 1) ? h._portfolios.join(" + ") : "";
-      var subLine = (sePfNames ? escapeHtml(sePfNames) + ' · ' : "") +
-        (segment ? escapeHtml(segment) : "—") + ' · ' + (h.units || 0).toFixed(2) + ' @ ' + avgCostStr;
+      var subLine = (sePfNames ? '<div class="mfh-inst-sub">' + escapeHtml(sePfNames) + '</div>' : "") +
+        '<div class="mfh-inst-sub">' + (segment ? escapeHtml(segment) : "—") + ' · ' +
+          (h.units || 0).toFixed(2) + ' @ ' + avgCostStr + '</div>' +
+        '<div class="mfh-inst-share">' + _investedSharePct(h.investedINR || 0, totalInvestedINR) + '</div>';
       return '<div class="mfh-row mfh-color-' + pal.accent + '" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;">' +
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) +
-              '<span class="mfh-share-pct">' + _investedSharePct(h.investedINR || 0, totalInvestedINR) + '</span>' +
-              badges + '</div>' +
-            '<div class="mfh-inst-sub">' + subLine + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) + badges + '</div>' +
+            subLine +
           '</div>' +
         '</div>' +
         _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null)) +
@@ -14172,8 +14176,10 @@
       // Name the portfolio(s) the holding sits in. On "All" a merged row lists
       // every portfolio it was summed from, so the figures can be traced back.
       var pfNames = (r._portfolios && r._portfolios.length) ? r._portfolios.join(" + ") : (r._portfolio || "");
-      var sub = (pfNames ? escapeHtml(pfNames) + " · " : "") +
-        escapeHtml(seg) + " · " + r.units.toFixed(1) + " units @ ₹" + r.avgNav.toFixed(2);
+      var sub = (pfNames ? '<div class="mfh-inst-sub">' + escapeHtml(pfNames) + '</div>' : "") +
+        '<div class="mfh-inst-sub">' + escapeHtml(seg) + " · " + r.units.toFixed(1) +
+          " units @ ₹" + r.avgNav.toFixed(2) + '</div>' +
+        '<div class="mfh-inst-share">' + _investedSharePct(r.invested, totalInvested) + '</div>';
       var isSip = _isSipInstrument(r.instrument);
       var pnlPos = r.pnl >= 0;
       var xirrCls = r.xirrPct == null ? "mfh-muted" : (r.xirrPct >= 0 ? "" : "mfh-negative");
@@ -14183,9 +14189,8 @@
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + escapeHtml(truncateInstrumentNameToFund(r.instrument)) +
-              '<span class="mfh-share-pct">' + _investedSharePct(r.invested, totalInvested) + '</span></div>' +
-            '<div class="mfh-inst-sub">' + sub + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(truncateInstrumentNameToFund(r.instrument)) + '</div>' +
+            sub +
           '</div>' +
         '</div>' +
         '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</div>' +

@@ -169,7 +169,9 @@ check(/_portfolio: r\._portfolio \|\| ""/.test(SRC),
 // the sub-line names every portfolio it was summed from rather than a single one.
 check(/_portfolios && r\._portfolios\.length\) \? r\._portfolios\.join/.test(SRC),
   "a merged row must name every portfolio it was summed from");
-check(/pfNames \? escapeHtml\(pfNames\)/.test(SRC),
+// The portfolio(s) now get their own line above the holding line, rather than
+// being prefixed onto it — but they must still be named.
+check(/pfNames \? '<div class="mfh-inst-sub">' \+ escapeHtml\(pfNames\)/.test(SRC),
   "the row must name its portfolio(s), or merged rows are untraceable");
 
 check(/<h3 class="mfh-title">Debt ETF\/Mutual Fund Holding<\/h3>/.test(HTML),

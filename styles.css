@@ -3878,6 +3878,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .mfh-inst-name { font-size: 0.72rem !important; }
 .mfh-inst-sub { font-size: 0.62rem !important; }
+/* Tracks .mfh-inst-name at every breakpoint — same size, never bold. */
+.mfh-inst-share { font-size: 0.72rem !important; }
 .mfh-num-primary, .mfh-num-pnl-value, .mfh-num-xirr { font-size: 0.72rem !important; }
 .mfh-num-pnl-pct { font-size: 0.6rem !important; }
 .mfh-num-day { font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
@@ -3908,11 +3910,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-num-pnl-value.mfh-negative { color: var(--negative); }
 .mfh-num-pnl-pct { font-size: 0.68rem; font-weight: 600; color: var(--emerald); }
 .mfh-num-pnl-pct.mfh-negative { color: var(--negative); }
-/* Share of invested, sitting to the right of the instrument name. Inherits the
-   name's font entirely — size, weight and colour — so it reads as part of the
-   same line. .mfh-inst-name is a flex row with a 6px gap, which supplies the
-   spacing; no margin of its own. */
-.mfh-inst-name .mfh-share-pct { font: inherit; color: inherit; }
+/* Share of invested — its own line, below the holding line. Same size as the
+   instrument name so it reads as part of the same block, but NOT bold: it is a
+   weight, and bold would compete with the name for the eye. */
+.mfh-inst-share { font-size: 0.82rem; font-weight: 400; color: var(--text); }
 .mfh-num-xirr { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-xirr.mfh-negative { color: var(--negative); }
 .mfh-num-xirr.mfh-muted { color: var(--muted); }

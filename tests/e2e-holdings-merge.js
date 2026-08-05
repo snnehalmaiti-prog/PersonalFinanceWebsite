@@ -128,15 +128,16 @@ let mfAlphaRows = null;
         const el = r.querySelector(".mfh-inst-name");
         if (!el) return "";
         const c = el.cloneNode(true);
-        c.querySelectorAll(".mfh-share-pct, .mfh-sip-badge").forEach((x) => x.remove());
+        c.querySelectorAll(".mfh-sip-badge").forEach((x) => x.remove());
         return c.textContent.trim();
       })(),
-      sub: (r.querySelector(".mfh-inst-sub") || {}).textContent || "",
+      sub: [...r.querySelectorAll(".mfh-inst-sub")].map((e) => e.textContent.trim()).join(" · "),
+      subLines: [...r.querySelectorAll(".mfh-inst-sub")].map((e) => e.textContent.trim()),
       nums: [...r.querySelectorAll(".mfh-col-num")].map((c) => {
         const prim = c.querySelector(".mfh-num-primary, .mfh-num-pnl-value");
         return (prim || c).textContent.trim();
       }),
-      share: (r.querySelector(".mfh-inst-name .mfh-share-pct") || {}).textContent || "",
+      share: ((r.querySelector(".mfh-inst-share") || {}).textContent || "").trim(),
       investedCell: (r.querySelectorAll(".mfh-col-num")[0] || {}).textContent || "",
     }));
   }, id);
@@ -256,35 +257,35 @@ let mfAlphaRows = null;
   const place = await p.evaluate(() => {
     const row = document.querySelector("#mfh-list .mfh-row");
     if (!row) return null;
+    const body = row.querySelector(".mfh-inst-body");
     const name = row.querySelector(".mfh-inst-name");
-    const pct = row.querySelector(".mfh-share-pct");
-    if (!name || !pct) return { hasName: !!name, hasPct: !!pct };
-    const cs = getComputedStyle(pct), cn = getComputedStyle(name);
+    const share = row.querySelector(".mfh-inst-share");
+    if (!body || !name || !share) return { hasName: !!name, hasShare: !!share };
+    const cs = getComputedStyle(share), cn = getComputedStyle(name);
+    const kids = [...body.children];
+    const subs = kids.filter((e) => e.classList.contains("mfh-inst-sub"));
     return {
-      insideName: name.contains(pct),
       // The list sits in an inactive tab, so every rect is 0x0 and geometry
-      // cannot be measured here. DOM order plus a horizontal flex container is
-      // what actually puts the share to the right of the name, so assert that:
-      // the share is the LAST child, after the name's text node.
-      afterNameText: (() => {
-        const kids = [...name.childNodes];
-        const ti = kids.findIndex((n) => n.nodeType === 3 && n.textContent.trim());
-        return ti !== -1 && kids.indexOf(pct) > ti;
-      })(),
-      // display resolves to "none" for an unrendered subtree in Chrome, so it
-      // says nothing here; flex-direction and gap do resolve, and they are what
-      // place the share after the name rather than beneath it.
-      nameIsFlexRow: cn.flexDirection === "row" && cn.gap !== "normal" && cn.gap !== "0px",
-      sameFont: cs.fontSize === cn.fontSize && cs.fontWeight === cn.fontWeight &&
-                cs.fontFamily === cn.fontFamily && cs.color === cn.color,
+      // cannot be measured. Source order inside a block container is what puts
+      // these lines in sequence, so assert that instead.
+      order: kids.map((e) => e.className.trim()),
+      shareIsLast: kids[kids.length - 1] === share,
+      // Portfolio line, then holding line, then the share.
+      holdingAfterPortfolio: subs.length === 2 && /units|@/.test(subs[1].textContent),
+      shareAfterHolding: subs.length >= 1 && kids.indexOf(share) > kids.indexOf(subs[subs.length - 1]),
+      shareNotBold: Number(cs.fontWeight) < 600,
+      nameIsBold: Number(cn.fontWeight) >= 600,
+      sameSizeAsName: cs.fontSize === cn.fontSize,
       investedCellText: (row.querySelectorAll(".mfh-col-num")[0] || {}).textContent || "",
     };
   });
   console.log("  placement: " + JSON.stringify(place));
-  ok(place && place.insideName && place.afterNameText && place.nameIsFlexRow,
-     "S7 the share sits to the right of the instrument name", place);
-  ok(place && place.sameFont,
-     "S8 in the same font as the name — size, weight, family and colour", place);
+  ok(place && place.holdingAfterPortfolio && place.shareAfterHolding && place.shareIsLast,
+     "S7 name, then portfolio(s), then the holding, then the share — in that order", place);
+  ok(place && place.shareNotBold && place.nameIsBold,
+     "S8 the share is NOT bold, though the name it sits under is", place);
+  ok(place && place.sameSizeAsName,
+     "S8b but the same size as the name", place);
   ok(place && !/%/.test(place.investedCellText),
      "S9 and no longer under the Invested amount", place && place.investedCellText);
 
