@@ -3908,6 +3908,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-num-pnl-value.mfh-negative { color: var(--negative); }
 .mfh-num-pnl-pct { font-size: 0.68rem; font-weight: 600; color: var(--emerald); }
 .mfh-num-pnl-pct.mfh-negative { color: var(--negative); }
+/* Share of invested. Reuses the P&L sub-line's size and position but must stay
+   neutral — it is a weight, not a gain, and green would read as a return. */
+.mfh-num-pnl-pct.mfh-share-pct { color: var(--muted); font-weight: 500; }
 .mfh-num-xirr { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-xirr.mfh-negative { color: var(--negative); }
 .mfh-num-xirr.mfh-muted { color: var(--muted); }

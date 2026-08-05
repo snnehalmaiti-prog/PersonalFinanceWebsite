@@ -6004,6 +6004,16 @@
     return out;
   }
 
+  // A holding's share of the invested total currently on screen. The base is
+  // whatever the list is showing, so switching portfolio or Open/Closed re-scales
+  // every row and the column still reads 100%. Sub-1% holdings keep a decimal
+  // rather than collapsing to "0%".
+  function _investedSharePct(invested, total) {
+    if (!(total > 0) || invested == null || !isFinite(invested)) return "—";
+    var pc = (invested / total) * 100;
+    return (pc > 0 && pc < 1 ? pc.toFixed(1) : String(Math.round(pc))) + "%";
+  }
+
   // Collapse one instrument held in several portfolios into a single row.
   //
   // Viewing "All" used to list the same fund once per portfolio, so a holding
@@ -6166,15 +6176,28 @@
     function _fmtUsd(v) { return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     // Amount cell: INR as the primary value, with the native USD amount beneath it
     // for US rows (mirrors the P&L value/return two-line layout). usd==null → INR only.
-    function _seAmtCell(inr, usd) {
-      if (usd == null) return '<div class="mfh-col-num mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</div>';
+    // share: optional "12%" line under the amount. A US row already carries its
+    // native USD beneath the INR, so the share joins that line rather than making
+    // the cell three deep.
+    function _seAmtCell(inr, usd, share) {
+      if (usd == null) {
+        if (!share) return '<div class="mfh-col-num mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</div>';
+        return '<div class="mfh-col-num mfh-num-pnl">' +
+          '<span class="mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
+          '<span class="mfh-num-pnl-pct mfh-share-pct">' + share + '</span></div>';
+      }
       // Neutral primary (mfh-num-primary), NOT the green mfh-num-pnl-value — an
       // amount isn't a gain/loss, so it must match the black India/MF columns.
       // The mfh-num-pnl wrapper only supplies the two-line stacking.
       return '<div class="mfh-col-num mfh-num-pnl">' +
         '<span class="mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
-        '<span class="mfh-num-pnl-pct" style="color:var(--muted);font-weight:500;">' + _fmtUsd(usd) + '</span></div>';
+        '<span class="mfh-num-pnl-pct" style="color:var(--muted);font-weight:500;">' +
+          _fmtUsd(usd) + (share ? ' · ' + share : "") + '</span></div>';
     }
+    // Share of the invested total for this region's currently filtered list — so
+    // India and US each read 100% on their own, and both re-scale when the
+    // portfolio pill or the Open/Closed segment changes what is shown.
+    var totalInvestedINR = filtered.reduce(function (s, h) { return s + (h.investedINR || 0); }, 0);
     var body = filtered.map(function (h, i) {
       var pal = SE_AVATAR_PALETTE[i % SE_AVATAR_PALETTE.length];
       var m = mapping[normalizeText(h.instrument)];
@@ -6207,7 +6230,8 @@
             '<div class="mfh-inst-sub">' + subLine + '</div>' +
           '</div>' +
         '</div>' +
-        _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null)) +
+        _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null),
+                   _investedSharePct(h.investedINR || 0, totalInvestedINR)) +
         _seAmtCell(h.currentINR || 0, (h.currentUSD != null ? h.currentUSD : null)) +
         (h.ltpINR != null
           ? _seAmtCell(h.ltpINR, (h.ltpUSD != null ? h.ltpUSD : null))
@@ -14139,6 +14163,11 @@
       '<span class="mfh-col-num mfh-sortable" data-mfh-sort-col="xirr">XIRR' + _arrow("xirr") + '</span>' +
       '</div>';
     var subInv = 0, subCur = 0, subDay = 0, subPnl = 0;
+    // Each row's share of invested. Computed up front, not from the subInv the
+    // map accumulates — that one is still zero while the first row is drawn.
+    // The base is the FILTERED set, so it re-scales to 100% whenever the
+    // portfolio pill or the Open/Closed segment changes what is on screen.
+    var totalInvested = filtered.reduce(function (s, r) { return s + (r.invested || 0); }, 0);
     var body = filtered.map(function (r, i) {
       subInv += r.invested || 0;
       subCur += r.current || 0;
@@ -14166,7 +14195,10 @@
             '<div class="mfh-inst-sub">' + sub + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</div>' +
+        '<div class="mfh-col-num mfh-num-pnl">' +
+          '<span class="mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</span>' +
+          '<span class="mfh-num-pnl-pct mfh-share-pct">' + _investedSharePct(r.invested, totalInvested) + '</span>' +
+        '</div>' +
         '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.current) + '>' + formatCurrency(r.current) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + ltpStr + '</div>' +
         (function () {
