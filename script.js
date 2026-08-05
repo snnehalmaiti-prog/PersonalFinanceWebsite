@@ -6176,23 +6176,14 @@
     function _fmtUsd(v) { return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     // Amount cell: INR as the primary value, with the native USD amount beneath it
     // for US rows (mirrors the P&L value/return two-line layout). usd==null → INR only.
-    // share: optional "12%" line under the amount. A US row already carries its
-    // native USD beneath the INR, so the share joins that line rather than making
-    // the cell three deep.
-    function _seAmtCell(inr, usd, share) {
-      if (usd == null) {
-        if (!share) return '<div class="mfh-col-num mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</div>';
-        return '<div class="mfh-col-num mfh-num-pnl">' +
-          '<span class="mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
-          '<span class="mfh-num-pnl-pct mfh-share-pct">' + share + '</span></div>';
-      }
+    function _seAmtCell(inr, usd) {
+      if (usd == null) return '<div class="mfh-col-num mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</div>';
       // Neutral primary (mfh-num-primary), NOT the green mfh-num-pnl-value — an
       // amount isn't a gain/loss, so it must match the black India/MF columns.
       // The mfh-num-pnl wrapper only supplies the two-line stacking.
       return '<div class="mfh-col-num mfh-num-pnl">' +
         '<span class="mfh-num-primary"' + _crTitle(inr) + '>' + formatCurrency(inr) + '</span>' +
-        '<span class="mfh-num-pnl-pct" style="color:var(--muted);font-weight:500;">' +
-          _fmtUsd(usd) + (share ? ' · ' + share : "") + '</span></div>';
+        '<span class="mfh-num-pnl-pct" style="color:var(--muted);font-weight:500;">' + _fmtUsd(usd) + '</span></div>';
     }
     // Share of the invested total for this region's currently filtered list — so
     // India and US each read 100% on their own, and both re-scale when the
@@ -6226,12 +6217,13 @@
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) + badges + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(h.instrument) +
+              '<span class="mfh-share-pct">' + _investedSharePct(h.investedINR || 0, totalInvestedINR) + '</span>' +
+              badges + '</div>' +
             '<div class="mfh-inst-sub">' + subLine + '</div>' +
           '</div>' +
         '</div>' +
-        _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null),
-                   _investedSharePct(h.investedINR || 0, totalInvestedINR)) +
+        _seAmtCell(h.investedINR || 0, (h.investedUSD != null ? h.investedUSD : null)) +
         _seAmtCell(h.currentINR || 0, (h.currentUSD != null ? h.currentUSD : null)) +
         (h.ltpINR != null
           ? _seAmtCell(h.ltpINR, (h.ltpUSD != null ? h.ltpUSD : null))
@@ -14191,14 +14183,12 @@
         '<div class="mfh-inst">' +
           '<div class="mfh-avatar" style="background:' + pal.bg + ';color:' + pal.fg + ';">' + code + '</div>' +
           '<div class="mfh-inst-body">' +
-            '<div class="mfh-inst-name">' + escapeHtml(truncateInstrumentNameToFund(r.instrument)) + '</div>' +
+            '<div class="mfh-inst-name">' + escapeHtml(truncateInstrumentNameToFund(r.instrument)) +
+              '<span class="mfh-share-pct">' + _investedSharePct(r.invested, totalInvested) + '</span></div>' +
             '<div class="mfh-inst-sub">' + sub + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="mfh-col-num mfh-num-pnl">' +
-          '<span class="mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</span>' +
-          '<span class="mfh-num-pnl-pct mfh-share-pct">' + _investedSharePct(r.invested, totalInvested) + '</span>' +
-        '</div>' +
+        '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.invested) + '>' + formatCurrency(r.invested) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary"' + _crTitle(r.current) + '>' + formatCurrency(r.current) + '</div>' +
         '<div class="mfh-col-num mfh-num-primary">' + ltpStr + '</div>' +
         (function () {

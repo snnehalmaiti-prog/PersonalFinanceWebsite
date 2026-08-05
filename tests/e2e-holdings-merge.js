@@ -121,13 +121,22 @@ let mfAlphaRows = null;
       const n = r.querySelector(".mfh-inst-name");
       return n && n.textContent.trim();
     }).map((r) => ({
-      name: (r.querySelector(".mfh-inst-name") || {}).textContent || "",
+      // The share now sits inside the name element. Strip the element itself
+      // rather than pattern-matching a trailing "33%" off the text — that ate
+      // the "2" in "INDIA CO 2".
+      name: (() => {
+        const el = r.querySelector(".mfh-inst-name");
+        if (!el) return "";
+        const c = el.cloneNode(true);
+        c.querySelectorAll(".mfh-share-pct, .mfh-sip-badge").forEach((x) => x.remove());
+        return c.textContent.trim();
+      })(),
       sub: (r.querySelector(".mfh-inst-sub") || {}).textContent || "",
       nums: [...r.querySelectorAll(".mfh-col-num")].map((c) => {
         const prim = c.querySelector(".mfh-num-primary, .mfh-num-pnl-value");
         return (prim || c).textContent.trim();
       }),
-      share: (r.querySelector(".mfh-share-pct") || {}).textContent || "",
+      share: (r.querySelector(".mfh-inst-name .mfh-share-pct") || {}).textContent || "",
       investedCell: (r.querySelectorAll(".mfh-col-num")[0] || {}).textContent || "",
     }));
   }, id);
@@ -229,9 +238,9 @@ let mfAlphaRows = null;
   ok(near(sumShare(india), 100, 1), "S3 and add up to 100%", sumShare(india));
   // The US list is scoped to itself, so its single holding is the whole of it.
   // US rows carry the share on the native-USD line rather than a third line.
-  ok(us && us.length === 1 && /100%/.test(us[0].investedCell),
+  ok(us && us.length === 1 && us[0].share === "100%",
      "S4 the US list is its own base — one holding there is 100% of US, " +
-     "not a slice of the India total", us && us[0] && us[0].investedCell);
+     "not a slice of the India total", us && us[0] && us[0].share);
 
   // The recompute that matters: picking a portfolio re-bases the column.
   // Alpha holds 4000 of Aurora and 3000 of Borealis → 57 / 43, not 70 / 30.
@@ -241,6 +250,43 @@ let mfAlphaRows = null;
   ok(shares(mfAlphaRows).join(",") !== shares(mfAll).join(","),
      "S6 and they genuinely differ from the All figures — otherwise S5 proves nothing",
      { all: shares(mfAll), alpha: shares(mfAlphaRows) });
+
+  // Placement and typography, measured rather than assumed: the share sits beside
+  // the instrument name in the same font, and no longer under the Invested figure.
+  const place = await p.evaluate(() => {
+    const row = document.querySelector("#mfh-list .mfh-row");
+    if (!row) return null;
+    const name = row.querySelector(".mfh-inst-name");
+    const pct = row.querySelector(".mfh-share-pct");
+    if (!name || !pct) return { hasName: !!name, hasPct: !!pct };
+    const cs = getComputedStyle(pct), cn = getComputedStyle(name);
+    return {
+      insideName: name.contains(pct),
+      // The list sits in an inactive tab, so every rect is 0x0 and geometry
+      // cannot be measured here. DOM order plus a horizontal flex container is
+      // what actually puts the share to the right of the name, so assert that:
+      // the share is the LAST child, after the name's text node.
+      afterNameText: (() => {
+        const kids = [...name.childNodes];
+        const ti = kids.findIndex((n) => n.nodeType === 3 && n.textContent.trim());
+        return ti !== -1 && kids.indexOf(pct) > ti;
+      })(),
+      // display resolves to "none" for an unrendered subtree in Chrome, so it
+      // says nothing here; flex-direction and gap do resolve, and they are what
+      // place the share after the name rather than beneath it.
+      nameIsFlexRow: cn.flexDirection === "row" && cn.gap !== "normal" && cn.gap !== "0px",
+      sameFont: cs.fontSize === cn.fontSize && cs.fontWeight === cn.fontWeight &&
+                cs.fontFamily === cn.fontFamily && cs.color === cn.color,
+      investedCellText: (row.querySelectorAll(".mfh-col-num")[0] || {}).textContent || "",
+    };
+  });
+  console.log("  placement: " + JSON.stringify(place));
+  ok(place && place.insideName && place.afterNameText && place.nameIsFlexRow,
+     "S7 the share sits to the right of the instrument name", place);
+  ok(place && place.sameFont,
+     "S8 in the same font as the name — size, weight, family and colour", place);
+  ok(place && !/%/.test(place.investedCellText),
+     "S9 and no longer under the Invested amount", place && place.investedCellText);
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 

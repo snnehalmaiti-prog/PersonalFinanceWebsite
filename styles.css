@@ -3908,9 +3908,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mfh-num-pnl-value.mfh-negative { color: var(--negative); }
 .mfh-num-pnl-pct { font-size: 0.68rem; font-weight: 600; color: var(--emerald); }
 .mfh-num-pnl-pct.mfh-negative { color: var(--negative); }
-/* Share of invested. Reuses the P&L sub-line's size and position but must stay
-   neutral — it is a weight, not a gain, and green would read as a return. */
-.mfh-num-pnl-pct.mfh-share-pct { color: var(--muted); font-weight: 500; }
+/* Share of invested, sitting to the right of the instrument name. Inherits the
+   name's font entirely — size, weight and colour — so it reads as part of the
+   same line. .mfh-inst-name is a flex row with a 6px gap, which supplies the
+   spacing; no margin of its own. */
+.mfh-inst-name .mfh-share-pct { font: inherit; color: inherit; }
 .mfh-num-xirr { font-size: 0.82rem; font-weight: 700; color: var(--emerald); }
 .mfh-num-xirr.mfh-negative { color: var(--negative); }
 .mfh-num-xirr.mfh-muted { color: var(--muted); }
