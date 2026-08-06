@@ -3397,12 +3397,16 @@
     // Closed. Not (subtotalCur − subtotalInv), since Closed shows Current as 0.
     var subSum = subtotalPnl;
     var subPct = subtotalInv > 0 ? (subSum / subtotalInv) * 100 : 0;
-    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 12px;">' +
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 2fr) 1fr 1fr 1fr 1fr 0.9fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 6px;">' +
       '<div style="grid-column:span 2;font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);">SUB-TOTAL · ' + filtered.length + ' HOLDINGS</div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subtotalInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(subtotalCur) + '</div>' +
-      '<div class="mfh-col-num" style="color:' + (subSum > 0 ? "var(--emerald)" : subSum < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subSum > 0 ? "+" : "") + formatCurrency(subSum) + '</div>' +
-      '<div class="mfh-col-num" style="color:' + (subPct > 0 ? "var(--emerald)" : subPct < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subPct > 0 ? "+" : "") + subPct.toFixed(2) + '%</div>' +
+      // mfh-num-primary / mfh-num-xirr carry the type size. Without them these two
+      // cells inherited the document's 16px while Invested and Current sat at
+      // 0.72rem beside them, so the row read as two different sizes and the wider
+      // text broke between the sign and the digits. Same classes as the body rows.
+      '<div class="mfh-col-num mfh-num-primary" style="color:' + (subSum > 0 ? "var(--emerald)" : subSum < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subSum > 0 ? "+" : "") + formatCurrency(subSum) + '</div>' +
+      '<div class="mfh-col-num mfh-num-xirr" style="color:' + (subPct > 0 ? "var(--emerald)" : subPct < 0 ? "var(--negative)" : "var(--muted)") + ';">' + (subPct > 0 ? "+" : "") + subPct.toFixed(2) + '%</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
     try { applyHoldingsFold("fih-list"); } catch (e) {}
@@ -5359,12 +5363,12 @@
       '</div>';
     }).join("");
     var _subPct = _subInv > 0 ? (_subPnl / _subInv) * 100 : 0;
-    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 12px;margin-top:6px;">' +
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;background:var(--bg);font-weight:700;border-radius:8px;padding:10px 6px;margin-top:6px;">' +
       '<div style="grid-column:span 4;font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);">SUB-TOTAL · ' + holdings.length + ' HOLDINGS</div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(_subInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary">' + formatCurrency(_subCur) + '</div>' +
       '<div class="mfh-col-num mfh-num-day ' + (Math.abs(_subDay) < 0.01 ? "mfh-muted" : (_subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(_subDay) < 0.01 ? "—" : ((_subDay >= 0 ? "+" : "") + formatCurrency(_subDay))) + '</div>' +
-      '<div class="mfh-col-num ' + (_subPct > 0 ? "mfh-positive" : _subPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (_subPct > 0 ? "+" : "") + _subPct.toFixed(2) + '%</div>' +
+      '<div class="mfh-col-num mfh-num-xirr ' + (_subPct > 0 ? "mfh-positive" : _subPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (_subPct > 0 ? "+" : "") + _subPct.toFixed(2) + '%</div>' +
       '</div>';
     list.innerHTML = header + body + footer;
     try { applyHoldingsFold("cmh-list"); } catch (e) {}
@@ -6250,7 +6254,7 @@
     var subPnl = subCur - subInv;
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
-    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;">' +
+    var footer = '<div class="mfh-row" style="grid-template-columns: minmax(200px, 2.4fr) 1fr 1fr 1fr 0.9fr 1fr 0.85fr;background:var(--bg);padding:10px 6px;border-radius:8px;font-weight:700;">' +
       '<div style="font-size:0.72rem;">' + label + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + count + ' HOLDINGS' + (region === "us" ? " · INR / USD" : "") + '</div></div>' +
       _seAmtCell(subInv, (region === "us" ? subInvUSD : null)) +
       _seAmtCell(subCur, (region === "us" ? subCurUSD : null)) +
@@ -14215,7 +14219,7 @@
     }).join("");
     var subPct = subInv > 0 ? (subPnl / subInv) * 100 : 0;
     var subDayPct = (subCur - subDay) > 0 ? (subDay / (subCur - subDay)) * 100 : null;
-    var footer = '<div class="mfh-row" style="' + mfhGrid + 'background:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700;margin-top:6px;">' +
+    var footer = '<div class="mfh-row" style="' + mfhGrid + 'background:var(--bg);padding:10px 6px;border-radius:8px;font-weight:700;margin-top:6px;">' +
       '<div style="font-size:0.72rem;">' + (state.showClosed ? "Closed" : "Open") + ' subtotal<div style="font-size:0.55rem;letter-spacing:0.11em;text-transform:uppercase;color:var(--muted);margin-top:2px;">' + filtered.length + ' HOLDINGS</div></div>' +
       '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subInv) + '>' + formatCurrency(subInv) + '</div>' +
       '<div class="mfh-col-num mfh-num-primary"' + _crTitle(subCur) + '>' + formatCurrency(subCur) + '</div>' +

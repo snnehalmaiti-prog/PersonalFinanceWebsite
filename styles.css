@@ -3901,7 +3901,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 }
 .mfh-inst-body { min-width: 0; }
 .mfh-inst-name { font-size: 0.82rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.mfh-sip-badge { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em; padding: 1px 5px; border-radius: 3px; background: var(--surface-alt); color: var(--muted); }
+/* inline-block, so a badge too long for its column ("Public Provident Fund",
+   "Savings Account") wraps INSIDE one continuous tinted box. As a plain inline
+   span each wrapped line got its own background and rounded corners, which read
+   as two unrelated badges stacked on top of each other. max-width keeps it
+   inside the column instead of pushing the grid track wider. */
+.mfh-sip-badge { display: inline-block; max-width: 100%; font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em; padding: 1px 5px; border-radius: 3px; background: var(--surface-alt); color: var(--muted); }
 .mfh-inst-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .mfh-col-num { text-align: right; font-variant-numeric: tabular-nums; }
 .mfh-num-primary { font-size: 0.82rem; font-weight: 600; color: var(--text); }
