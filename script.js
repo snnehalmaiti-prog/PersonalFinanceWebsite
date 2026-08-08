@@ -10462,11 +10462,12 @@
         yearSel.innerHTML = yearList.map(function(y){ return '<option value="'+y+'">'+y+'</option>'; }).join("");
       }
       yearSel.value = __mcfYear;
-      yearSel.style.display = __mcfAllTime ? "none" : "";
       yearSel.onchange = function() {
         __mcfYear = yearSel.value;
         _drawMcfChart();
       };
+      _wfYpAttach(yearSel);
+      _wfYpSetHidden(yearSel, __mcfAllTime);
     }
     var allBtn = document.getElementById("mcf-alltime");
     if (allBtn) {
@@ -10474,7 +10475,7 @@
       allBtn.onclick = function() {
         __mcfAllTime = !__mcfAllTime;
         allBtn.classList.toggle("active", !!__mcfAllTime);
-        if (yearSel) yearSel.style.display = __mcfAllTime ? "none" : "";
+        if (yearSel) _wfYpSetHidden(yearSel, __mcfAllTime);
         _drawMcfChart();
       };
     }
@@ -10483,6 +10484,128 @@
   }
 
   window.renderMonthlyCashFlow = renderMonthlyCashFlow;
+
+  // ─── Decade-grid year picker ─────────────────────────────────────────────
+  //
+  // Replaces the native <select> on the three monthly cards with a decade grid:
+  // a "2020 – 2029" header with ‹ › arrows and the ten years laid out four to a
+  // row. Years the card has no data for are shown but greyed and unclickable, so
+  // the gaps in your history are visible instead of silently absent — a native
+  // select could only omit them, which reads as though those years never existed.
+  //
+  // The <select> stays in the DOM as the source of truth: choosing a year sets
+  // its value and dispatches "change", so every existing onchange handler keeps
+  // working untouched, and the enabled set is exactly its option list — which
+  // each card already builds from its own records.
+  // Declared as functions, not a `var` holding an IIFE. renderMonthlyInvestment-
+  // ByCategory is called synchronously from populatePortfolioSelect during
+  // script.js's own top-level execution (script.js:556), i.e. long before a
+  // `var` this far down the file would be assigned — function declarations hoist,
+  // an IIFE's result does not. The same ordering already bites _marketSource.
+  var _wfYpPop = null;   // only ever read for truthiness, so undefined is fine
+
+  function _wfYpClose() {
+    if (!_wfYpPop) return;
+    try { _wfYpPop.remove(); } catch (e) {}
+    _wfYpPop = null;
+    document.removeEventListener("mousedown", _wfYpDocDown, true);
+    document.removeEventListener("keydown", _wfYpKeyDown, true);
+  }
+  function _wfYpDocDown(ev) {
+    if (_wfYpPop && !_wfYpPop.contains(ev.target) &&
+        !(_wfYpPop.__btn && _wfYpPop.__btn.contains(ev.target))) _wfYpClose();
+  }
+  function _wfYpKeyDown(ev) { if (ev.key === "Escape") _wfYpClose(); }
+
+  function _wfYpOpen(sel, btn) {
+    _wfYpClose();
+    var available = [];
+    for (var i = 0; i < sel.options.length; i++) available.push(String(sel.options[i].value));
+    var current = String(sel.value || available[available.length - 1] || new Date().getFullYear());
+    var decade = Math.floor(Number(current) / 10) * 10;
+
+    var pop = document.createElement("div");
+    pop.className = "wf-yp-pop";
+    pop.__btn = btn;
+    // Fixed positioning: the cards clip their overflow, so an absolutely
+    // positioned popover would be cut off at the card edge.
+    var r = btn.getBoundingClientRect();
+    pop.style.top = Math.round(r.bottom + 6) + "px";
+    pop.style.left = Math.round(r.left) + "px";
+
+    function paint() {
+      var head = '<div class="wf-yp-head">' +
+        '<button type="button" class="wf-yp-nav" data-yp-nav="-1" aria-label="Previous decade">&lsaquo;</button>' +
+        '<span class="wf-yp-range">' + decade + ' &ndash; ' + (decade + 9) + '</span>' +
+        '<button type="button" class="wf-yp-nav" data-yp-nav="1" aria-label="Next decade">&rsaquo;</button>' +
+        '</div>';
+      var cells = "";
+      for (var y = decade; y <= decade + 9; y++) {
+        var ys = String(y);
+        var has = available.indexOf(ys) !== -1;
+        cells += '<button type="button" class="wf-yp-year' +
+          (has ? "" : " is-disabled") + (ys === current ? " is-selected" : "") + '"' +
+          (has ? ' data-yp-year="' + ys + '"' : ' disabled aria-disabled="true"') +
+          '>' + ys + '</button>';
+      }
+      pop.innerHTML = head + '<div class="wf-yp-grid">' + cells + '</div>';
+      Array.prototype.forEach.call(pop.querySelectorAll("[data-yp-nav]"), function (b) {
+        b.addEventListener("click", function () {
+          decade += Number(b.getAttribute("data-yp-nav")) * 10;
+          paint();
+        });
+      });
+      Array.prototype.forEach.call(pop.querySelectorAll("[data-yp-year]"), function (b) {
+        b.addEventListener("click", function () {
+          sel.value = b.getAttribute("data-yp-year");
+          _wfYpClose();
+          // The <select> stays authoritative, so the card's own handler runs.
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          _wfYpAttach(sel);
+        });
+      });
+    }
+    paint();
+    document.body.appendChild(pop);
+    _wfYpPop = pop;
+    document.addEventListener("mousedown", _wfYpDocDown, true);
+    document.addEventListener("keydown", _wfYpKeyDown, true);
+  }
+
+  // Idempotent: safe to call on every render. Builds the button on first use and
+  // afterwards just re-syncs its label with the <select>, which the cards
+  // reassign as their data and filters change.
+  function _wfYpAttach(sel) {
+    if (!sel) return;
+    var btn = sel.__wfYpBtn;
+    if (!btn) {
+      sel.style.display = "none";
+      sel.setAttribute("data-wf-yp", "1");
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mic-dropdown-btn wf-yp-btn";
+      btn.setAttribute("aria-haspopup", "dialog");
+      btn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        if (_wfYpPop && _wfYpPop.__btn === btn) { _wfYpClose(); return; }
+        _wfYpOpen(sel, btn);
+      });
+      sel.parentNode.insertBefore(btn, sel.nextSibling);
+      sel.__wfYpBtn = btn;
+    }
+    btn.textContent = String(sel.value || "");
+    btn.style.display = (sel.getAttribute("data-wf-yp-hidden") === "1") ? "none" : "";
+  }
+
+  // The cards used to hide the year control via sel.style.display. The select is
+  // permanently hidden once attached, so they flag it here and the button follows.
+  function _wfYpSetHidden(sel, hidden) {
+    if (!sel) return;
+    sel.setAttribute("data-wf-yp-hidden", hidden ? "1" : "0");
+    if (sel.__wfYpBtn) sel.__wfYpBtn.style.display = hidden ? "none" : "";
+  }
+
+  window.WfYearPicker = { attach: _wfYpAttach, setHidden: _wfYpSetHidden, close: _wfYpClose };
 
   // ─── Expense by Category pie (with year selector + category→sub drill-down) ──
   var __epcYear = null;
@@ -10613,6 +10736,7 @@
       }
       yearSel.value = __epcYear;
       yearSel.onchange = function () { __epcYear = yearSel.value; __epcDrillCat = null; __epcDrillSub = null; renderExpenseCategoryPie(); };
+      _wfYpAttach(yearSel);
     }
     if (backBtn) {
       backBtn.style.display = __epcDrillCat ? "" : "none";
@@ -13726,7 +13850,8 @@
         drawMonthlyInvestCatChart(__monthlyInvestCatYear);
       };
       yearSel.value = __monthlyInvestCatYear;
-      yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
+      _wfYpAttach(yearSel);
+      _wfYpSetHidden(yearSel, __monthlyInvestCatAllTime);
     }
 
     var idleBtn = document.getElementById("monthly-invest-cat-idle");
@@ -13786,7 +13911,7 @@
       allBtn.onclick = function () {
         __monthlyInvestCatAllTime = !__monthlyInvestCatAllTime;
         allBtn.classList.toggle("active", !!__monthlyInvestCatAllTime);
-        if (yearSel) yearSel.style.display = __monthlyInvestCatAllTime ? "none" : "";
+        if (yearSel) _wfYpSetHidden(yearSel, __monthlyInvestCatAllTime);
         drawMonthlyInvestCatChart(__monthlyInvestCatAllTime ? "all" : __monthlyInvestCatYear);
       };
       // Update chevron text based on state

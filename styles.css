@@ -3380,6 +3380,29 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .epc-txn-meta { font-size: 0.62rem; color: var(--muted); }
 .epc-txn-amt { font-size: 0.76rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ── Decade-grid year picker ─────────────────────────────────────────────── */
+.wf-yp-btn { font-variant-numeric: tabular-nums; }
+/* Fixed, not absolute: the cards clip their overflow, which would cut the
+   popover off at the card edge. Positioned from the button's viewport rect. */
+.wf-yp-pop { position: fixed; z-index: 60; min-width: 232px; padding: 10px 12px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14); }
+.wf-yp-head { display: grid; grid-template-columns: 24px 1fr 24px; align-items: center; margin-bottom: 8px; }
+.wf-yp-range { text-align: center; font-size: 0.86rem; font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums; }
+.wf-yp-nav { border: 0; background: transparent; cursor: pointer; color: var(--muted);
+  font-size: 1rem; line-height: 1; padding: 4px; border-radius: 6px; }
+.wf-yp-nav:hover { background: var(--surface-alt); color: var(--text); }
+.wf-yp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.wf-yp-year { border: 0; background: transparent; cursor: pointer; border-radius: 8px;
+  padding: 9px 4px; font-size: 0.82rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.wf-yp-year:hover { background: var(--surface-alt); }
+.wf-yp-year.is-selected { background: var(--text); color: var(--surface); font-weight: 700; }
+/* A year with no records is shown but unusable, so a gap in the history is
+   visible rather than silently missing from the list. */
+.wf-yp-year.is-disabled { color: var(--border); cursor: default; }
+.wf-yp-year.is-disabled:hover { background: transparent; }
 .cashflow-ytd-row {
   display: flex; gap: 14px; flex-wrap: nowrap; margin: 4px 0 10px;
   font-size: 0.82rem; overflow-x: auto;

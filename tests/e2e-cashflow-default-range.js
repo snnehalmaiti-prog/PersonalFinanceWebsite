@@ -108,7 +108,13 @@ function ok(cond, name, detail) {
               || (window.__charts || []).pop();
     return {
       yearValue: sel ? sel.value : null,
-      yearVisible: sel ? getComputedStyle(sel).display !== "none" : null,
+      // The native select is permanently hidden now that the decade-grid picker
+      // drives it; the button beside it is the visible control.
+      yearVisible: (() => {
+        const btn = sel && sel.nextElementSibling;
+        if (btn && btn.classList.contains("wf-yp-btn")) return getComputedStyle(btn).display !== "none";
+        return sel ? getComputedStyle(sel).display !== "none" : null;
+      })(),
       allTimeActive: btn ? btn.classList.contains("active") : null,
       labels: last ? last.labels : null,
       count: last && last.labels ? last.labels.length : 0,
