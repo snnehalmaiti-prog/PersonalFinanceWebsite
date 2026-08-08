@@ -170,6 +170,10 @@ let mfAlphaRows = null;
   const indco = (india || []).filter((r) => /^INDIA CO$/.test(r.name.trim()));
 
   ok(indco.length === 1, "I1 INDIA CO, held in two portfolios, is ONE row", (india || []).map((r) => r.name));
+  const indco2 = (india || []).filter((r) => /INDIA CO 2/.test(r.name));
+  ok(indco2.length === 1 && indco2[0].subLines[0] === "Alpha",
+     "I6 a single-portfolio India holding names its portfolio too",
+     indco2.length ? indco2[0].subLines : indco2);
   if (indco.length === 1) {
     const r = indco[0];
     ok(near(money(r.nums[0]), IND_INV, 2), "I2 invested is the sum", { got: money(r.nums[0]), want: IND_INV });
@@ -197,7 +201,13 @@ let mfAlphaRows = null;
   if (usco.length === 1) {
     ok(near(money(usco[0].nums[0]), US_INV_USD * USD_INR, 5),
        "U2 and still values in INR at the USD rate", { got: money(usco[0].nums[0]) });
-    ok(!/Alpha \+/.test(usco[0].sub), "U3 with no portfolio-merge prefix", usco[0].sub);
+    ok(!/\+/.test(usco[0].subLines[0] || ""), "U3 with no merge join in its portfolio line",
+       usco[0].subLines);
+    // A holding in ONE portfolio must still name it: showing the portfolio only
+    // for merged rows left single-portfolio rows anonymous, and made the India/US
+    // lists read differently from Mutual Fund Holding.
+    ok(usco[0].subLines.length === 2 && usco[0].subLines[0] === "Alpha",
+       "U4 and still names the single portfolio it belongs to", usco[0].subLines);
   }
 
   // Picking one portfolio must show THAT portfolio's figures, not the merged ones.

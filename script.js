@@ -6218,7 +6218,14 @@
       // invested. On "All" a merged row names every portfolio it was summed
       // from; with a single portfolio that line is simply absent and the
       // holding line moves up.
-      var sePfNames = (h._portfolios && h._portfolios.length > 1) ? h._portfolios.join(" + ") : "";
+      // Always name the portfolio, not just when the row was merged from several.
+      // Showing it only for merged rows meant a holding in one portfolio had no
+      // portfolio line at all, so the India/US lists read differently from Mutual
+      // Fund Holding — which has always named it — and you could not tell whose a
+      // single-portfolio holding was without switching the pill.
+      var sePfNames = (h._portfolios && h._portfolios.length)
+        ? h._portfolios.join(" + ")
+        : (h._portfolio || "");
       var subLine = (sePfNames ? '<div class="mfh-inst-sub">' + escapeHtml(sePfNames) + '</div>' : "") +
         '<div class="mfh-inst-sub">' + (segment ? escapeHtml(segment) : "—") + ' · ' +
           (h.units || 0).toFixed(2) + ' @ ' + avgCostStr + '</div>' +
