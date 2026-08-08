@@ -10490,9 +10490,87 @@
   var __epcMonthMode = false; // false = whole year; true = a specific month
   var __epcMonth = new Date().getMonth(); // 0-11 when in month mode
   var __epcDrillCat = null; // null = top-level categories; else a categoryId
+  // Third level: a sub-category id (or "__other_<top>"), showing the individual
+  // transactions behind that slice instead of another doughnut.
+  var __epcDrillSub = null;
+  var __epcDrillSubLabel = "";
   var __EPC_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   var __EPC_PALETTE = ["#E8623A", "#F5A623", "#4DC0B5", "#8B5CF6", "#3B82F6", "#10B981",
                        "#EC4899", "#84CC16", "#F97316", "#6366F1", "#14B8A6", "#D946EF"];
+  // The doughnut and the transaction list occupy the same slot; only one shows.
+  function _epcShowChart() {
+    var wrap = document.getElementById("epc-wrap");
+    var legend = document.getElementById("epc-legend");
+    var txns = document.getElementById("epc-txns");
+    if (wrap) wrap.hidden = false;
+    if (legend) legend.hidden = false;
+    if (txns) { txns.hidden = true; txns.innerHTML = ""; }
+  }
+
+  // Every transaction behind one sub-category slice.
+  //
+  // Ordering: in Month mode the period is already a single month, so plain date
+  // order is all there is. Otherwise the view spans the whole selected year and
+  // the rows are grouped under month headings, oldest month first — which is
+  // what "sort by month for the selected year" asks for, and reads the way a
+  // statement does. Within a month, date order again.
+  function _epcRenderTxns(yearRecs, topId, subId, periodLbl, accounts, topLevelId, subIdOf, statusEl) {
+    var wrap = document.getElementById("epc-wrap");
+    var legend = document.getElementById("epc-legend");
+    var host = document.getElementById("epc-txns");
+    if (!host) return;
+    if (wrap) wrap.hidden = true;
+    if (legend) legend.hidden = true;
+    host.hidden = false;
+
+    var acctName = {};
+    (accounts || []).forEach(function (a) { acctName[String(a.id)] = a.name || "Account"; });
+
+    var rows = yearRecs.filter(function (r) {
+      if (!r.category_id) return false;
+      if (topLevelId(r.category_id) !== topId) return false;
+      return subIdOf(r, topId) === subId;
+    }).sort(function (a, b) {
+      return String(a.txn_date).localeCompare(String(b.txn_date));
+    });
+
+    var total = rows.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+    if (statusEl) {
+      statusEl.textContent = __epcDrillSubLabel + " · " + rows.length + " transaction" +
+        (rows.length === 1 ? "" : "s") + " · " + formatCurrency(total) + " · " + periodLbl;
+    }
+    if (!rows.length) {
+      host.innerHTML = '<p class="muted small" style="padding:14px;text-align:center;">No transactions for ' +
+        escapeHtml(periodLbl) + '.</p>';
+      return;
+    }
+
+    var html = "", lastMonth = null;
+    rows.forEach(function (r) {
+      var iso = String(r.txn_date);
+      var mk = iso.slice(0, 7);
+      // Month headings only when the period spans a year; in Month mode every
+      // row sits in the same month and a heading would just repeat the title.
+      if (!__epcMonthMode && mk !== lastMonth) {
+        lastMonth = mk;
+        var mi = Number(iso.slice(5, 7)) - 1;
+        html += '<div class="epc-txn-month">' + escapeHtml(__EPC_MONTHS[mi] || mk) + '</div>';
+      }
+      var day = iso.slice(8, 10) + " " + (__EPC_MONTHS[Number(iso.slice(5, 7)) - 1] || "").slice(0, 3);
+      var note = (r.note || "").trim();
+      var acct = r.account_id ? (acctName[String(r.account_id)] || "") : "";
+      var meta = [day, acct].filter(Boolean).join(" · ");
+      html += '<div class="epc-txn-row">' +
+        '<div class="epc-txn-body">' +
+          '<div class="epc-txn-name">' + escapeHtml(note || "(no note)") + '</div>' +
+          '<div class="epc-txn-meta">' + escapeHtml(meta) + '</div>' +
+        '</div>' +
+        '<div class="epc-txn-amt">' + formatCurrency(Number(r.amount) || 0) + '</div>' +
+      '</div>';
+    });
+    host.innerHTML = html;
+  }
+
   function renderExpenseCategoryPie() {
     var canvas = document.getElementById("epc-chart");
     var statusEl = document.getElementById("epc-status");
@@ -10534,15 +10612,22 @@
         yearSel.innerHTML = yearList.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join("");
       }
       yearSel.value = __epcYear;
-      yearSel.onchange = function () { __epcYear = yearSel.value; __epcDrillCat = null; renderExpenseCategoryPie(); };
+      yearSel.onchange = function () { __epcYear = yearSel.value; __epcDrillCat = null; __epcDrillSub = null; renderExpenseCategoryPie(); };
     }
     if (backBtn) {
       backBtn.style.display = __epcDrillCat ? "" : "none";
-      backBtn.onclick = function () { __epcDrillCat = null; renderExpenseCategoryPie(); };
+      // One level at a time: transactions → sub-categories → categories.
+      backBtn.onclick = function () {
+        if (__epcDrillSub) __epcDrillSub = null;
+        else __epcDrillCat = null;
+        renderExpenseCategoryPie();
+      };
     }
     if (subtitleEl) {
-      subtitleEl.textContent = __epcDrillCat ? nameOf(__epcDrillCat) : "";
-      subtitleEl.style.display = __epcDrillCat ? "" : "none";
+      var _crumb = !__epcDrillCat ? ""
+        : (__epcDrillSub ? nameOf(__epcDrillCat) + " › " + __epcDrillSubLabel : nameOf(__epcDrillCat));
+      subtitleEl.textContent = _crumb;
+      subtitleEl.style.display = _crumb ? "" : "none";
     }
 
     // Account dropdown: All accounts + each account.
@@ -10558,7 +10643,7 @@
       }
       if (wantAcct.indexOf(__epcAccount) === -1) __epcAccount = "all";
       acctSel.value = __epcAccount;
-      acctSel.onchange = function () { __epcAccount = acctSel.value; __epcDrillCat = null; renderExpenseCategoryPie(); };
+      acctSel.onchange = function () { __epcAccount = acctSel.value; __epcDrillCat = null; __epcDrillSub = null; renderExpenseCategoryPie(); };
     }
 
     // Month toggle + month dropdown: when active, view a specific month of the year.
@@ -10569,12 +10654,12 @@
     }
     if (monthToggle) {
       monthToggle.classList.toggle("active", __epcMonthMode);
-      monthToggle.onclick = function () { __epcMonthMode = !__epcMonthMode; __epcDrillCat = null; renderExpenseCategoryPie(); };
+      monthToggle.onclick = function () { __epcMonthMode = !__epcMonthMode; __epcDrillCat = null; __epcDrillSub = null; renderExpenseCategoryPie(); };
     }
     if (monthSel) {
       monthSel.style.display = __epcMonthMode ? "" : "none";
       monthSel.value = String(__epcMonth);
-      monthSel.onchange = function () { __epcMonth = Number(monthSel.value); __epcDrillCat = null; renderExpenseCategoryPie(); };
+      monthSel.onchange = function () { __epcMonth = Number(monthSel.value); __epcDrillCat = null; __epcDrillSub = null; renderExpenseCategoryPie(); };
     }
 
     // Aggregate expenses for the selected year (+ month when in month mode) + account.
@@ -10615,6 +10700,14 @@
       }
     });
 
+    // ── Third level: the transactions behind one sub-category ───────────────
+    if (__epcDrillCat && __epcDrillSub) {
+      _epcRenderTxns(yearRecs, __epcDrillCat, __epcDrillSub, periodLbl, accounts,
+                     topLevelId, subIdOf, statusEl);
+      return;
+    }
+    _epcShowChart();
+
     var entries = Object.keys(sums).map(function (id) {
       var label = (id.indexOf("__other_") === 0) ? "Other" : nameOf(id);
       return { id: id, label: label, value: sums[id] };
@@ -10622,13 +10715,14 @@
       .sort(function (a, b) { return b.value - a.value; });
 
     if (!entries.length) {
+      _epcShowChart();
       if (statusEl) statusEl.textContent = "No expenses" + (__epcDrillCat ? " in this category" : "") + " for " + periodLbl + ".";
       if (window.__epcChart) { try { window.__epcChart.destroy(); } catch (e) {} window.__epcChart = null; }
       return;
     }
     var total = entries.reduce(function (s, e) { return s + e.value; }, 0);
     if (statusEl) statusEl.textContent = (__epcDrillCat ? nameOf(__epcDrillCat) + " · " : "") + "Total " + formatCurrency(total) + " · " + periodLbl +
-      (__epcDrillCat ? "" : " · tap a slice for sub-categories");
+      (__epcDrillCat ? " · tap a slice for transactions" : " · tap a slice for sub-categories");
 
     var colors = entries.map(function (_, i) { return __EPC_PALETTE[i % __EPC_PALETTE.length]; });
     if (window.__epcChart) { try { window.__epcChart.destroy(); } catch (e) {} window.__epcChart = null; }
@@ -10654,26 +10748,33 @@
           }
         },
         onClick: function (evt, els) {
-          if (__epcDrillCat) return; // already drilled — no further levels
           if (!els || !els.length) return;
-          var id = entries[els[0].index].id;
-          if (!hasSubByTop[id]) return; // no sub-categories to drill into
-          __epcDrillCat = id;
+          var e = entries[els[0].index];
+          if (__epcDrillCat) {
+            // Already in a category: a slice is a sub-category, so open its
+            // transactions rather than doing nothing.
+            __epcDrillSub = e.id;
+            __epcDrillSubLabel = e.label;
+          } else {
+            if (!hasSubByTop[e.id]) return; // no sub-categories to drill into
+            __epcDrillCat = e.id;
+          }
           renderExpenseCategoryPie();
         }
       }
     });
     // Pointer cursor over drillable slices.
-    canvas.style.cursor = __epcDrillCat ? "default" : "pointer";
+    canvas.style.cursor = "pointer";
 
     // Custom legend list showing every (sub)category with its expense + %.
     var legendEl = document.getElementById("epc-legend");
     if (legendEl) {
       legendEl.innerHTML = entries.map(function (e, i) {
         var pct = total > 0 ? (e.value / total * 100).toFixed(1) : "0";
-        var drillable = !__epcDrillCat && hasSubByTop[e.id];
+        var drillable = __epcDrillCat ? true : !!hasSubByTop[e.id];
         return '<div class="epc-legend-item' + (drillable ? " epc-legend-drill" : "") + '"' +
-          (drillable ? ' role="button" tabindex="0" data-epc-cat="' + escapeHtml(String(e.id)) + '"' : "") + '>' +
+          (drillable ? ' role="button" tabindex="0" data-epc-cat="' + escapeHtml(String(e.id)) +
+            '" data-epc-label="' + escapeHtml(String(e.label)) + '"' : "") + '>' +
           '<span class="epc-legend-dot" style="background:' + colors[i] + '"></span>' +
           '<span class="epc-legend-name"' + _crTitle(e.value) + '>' + escapeHtml(e.label) + '</span>' +
           '<span class="epc-legend-val">' + formatCurrency(e.value) + '</span>' +
@@ -10681,7 +10782,15 @@
       }).join("");
       // Clicking a drillable legend row drills in, matching a slice click.
       Array.prototype.forEach.call(legendEl.querySelectorAll("[data-epc-cat]"), function (row) {
-        function drill() { __epcDrillCat = row.getAttribute("data-epc-cat"); renderExpenseCategoryPie(); }
+        function drill() {
+          if (__epcDrillCat) {
+            __epcDrillSub = row.getAttribute("data-epc-cat");
+            __epcDrillSubLabel = row.getAttribute("data-epc-label") || "";
+          } else {
+            __epcDrillCat = row.getAttribute("data-epc-cat");
+          }
+          renderExpenseCategoryPie();
+        }
         row.addEventListener("click", drill);
         row.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); drill(); } });
       });
