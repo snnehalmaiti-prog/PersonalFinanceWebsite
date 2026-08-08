@@ -3385,7 +3385,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .wf-yp-btn { font-variant-numeric: tabular-nums; }
 /* Fixed, not absolute: the cards clip their overflow, which would cut the
    popover off at the card edge. Positioned from the button's viewport rect. */
-.wf-yp-pop { position: fixed; z-index: 60; min-width: 232px; padding: 10px 12px 12px;
+/* An explicit width, not min-width: shrink-to-fit let the box narrow when it was
+   near the viewport edge, and the four 1fr columns squeezed with it instead of
+   keeping the grid intact. */
+.wf-yp-pop { position: fixed; z-index: 60; width: 248px; box-sizing: border-box; padding: 10px 12px 12px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14); }
 .wf-yp-head { display: grid; grid-template-columns: 24px 1fr 24px; align-items: center; margin-bottom: 8px; }

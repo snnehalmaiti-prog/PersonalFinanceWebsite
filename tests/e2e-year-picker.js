@@ -200,6 +200,48 @@ const CARDS = [
      "P11 clicking a greyed year changes nothing", greyedClick);
   await p.evaluate(() => window.WfYearPicker.close());
 
+  // ── the popover must stay on screen, at every width ──────────────────────
+  // These buttons sit at the right edge of their card. Anchoring the popover's
+  // left to the button pushed it past the viewport, and the four-column grid
+  // squeezed and clipped instead of moving. Measured, not assumed.
+  const geom = (selId) => p.evaluate((id) => {
+    const sel = document.getElementById(id);
+    const btn = sel.nextElementSibling;
+    btn.click();
+    const pop = document.querySelector(".wf-yp-pop");
+    if (!pop) return { error: "no popover" };
+    const r = pop.getBoundingClientRect();
+    const cells = [...pop.querySelectorAll(".wf-yp-year")].map((c) => c.getBoundingClientRect());
+    const rows = {};
+    cells.forEach((c) => { const k = Math.round(c.top); rows[k] = (rows[k] || 0) + 1; });
+    const perRow = Object.keys(rows).sort((a, b) => a - b).map((k) => rows[k]);
+    return {
+      left: Math.round(r.left), right: Math.round(r.right),
+      top: Math.round(r.top), bottom: Math.round(r.bottom),
+      vw: document.documentElement.clientWidth, vh: document.documentElement.clientHeight,
+      perRow: perRow,
+      // Any cell whose ink is wider than its box means the grid squeezed.
+      squeezed: [...pop.querySelectorAll(".wf-yp-year")].some((c) => c.scrollWidth > c.clientWidth + 1),
+    };
+  }, selId);
+
+  for (const w of [1500, 1280, 1024, 900]) {
+    await p.setViewportSize({ width: w, height: 1000 });
+    await p.waitForTimeout(400);
+    for (const card of CARDS) {
+      const g = await geom(card.sel);
+      await p.evaluate(() => window.WfYearPicker.close());
+      if (g.error) { ok(false, `G0 ${w}px ${card.name}: popover opened`, g); continue; }
+      ok(g.left >= 0 && g.right <= g.vw && g.top >= 0 && g.bottom <= g.vh,
+         `G1 ${w}px ${card.name}: the popover is fully inside the viewport`, g);
+      ok(g.perRow.join(",") === "4,4,2",
+         `G2 ${w}px ${card.name}: the grid keeps four columns (4,4,2)`, g.perRow);
+      ok(g.squeezed === false,
+         `G3 ${w}px ${card.name}: no year cell is squeezed narrower than its text`, g);
+    }
+  }
+  await p.setViewportSize({ width: 1500, height: 1400 });
+
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   await b.close();

@@ -10517,6 +10517,34 @@
   }
   function _wfYpKeyDown(ev) { if (ev.key === "Escape") _wfYpClose(); }
 
+  // Keep the whole popover on screen. These buttons sit at the right edge of
+  // their card, so anchoring the popover's left to the button pushed it past the
+  // viewport: the grid could not fit four columns in what was left, so the cells
+  // squeezed and the right half was clipped. Measured after insertion, because
+  // the width depends on the rendered contents.
+  function _wfYpPlace(pop, btn) {
+    var M = 8;                                   // margin from the viewport edge
+    var r = btn.getBoundingClientRect();
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var vw = document.documentElement.clientWidth;
+    var vh = document.documentElement.clientHeight;
+
+    // Prefer left-aligned with the button; fall back to right-aligned, then to
+    // simply pinned inside the viewport.
+    var left = r.left;
+    if (left + w > vw - M) left = r.right - w;
+    if (left < M) left = M;
+    if (left + w > vw - M) left = Math.max(M, vw - M - w);
+
+    // Below the button unless there is no room, in which case above it.
+    var top = r.bottom + 6;
+    if (top + h > vh - M && r.top - 6 - h >= M) top = r.top - 6 - h;
+    if (top + h > vh - M) top = Math.max(M, vh - M - h);
+
+    pop.style.left = Math.round(left) + "px";
+    pop.style.top = Math.round(top) + "px";
+  }
+
   function _wfYpOpen(sel, btn) {
     _wfYpClose();
     var available = [];
@@ -10528,10 +10556,8 @@
     pop.className = "wf-yp-pop";
     pop.__btn = btn;
     // Fixed positioning: the cards clip their overflow, so an absolutely
-    // positioned popover would be cut off at the card edge.
-    var r = btn.getBoundingClientRect();
-    pop.style.top = Math.round(r.bottom + 6) + "px";
-    pop.style.left = Math.round(r.left) + "px";
+    // positioned popover would be cut off at the card edge. Placement happens
+    // after it is in the DOM, once its real size is known — see _wfYpPlace.
 
     function paint() {
       var head = '<div class="wf-yp-head">' +
@@ -10567,6 +10593,7 @@
     }
     paint();
     document.body.appendChild(pop);
+    _wfYpPlace(pop, btn);
     _wfYpPop = pop;
     document.addEventListener("mousedown", _wfYpDocDown, true);
     document.addEventListener("keydown", _wfYpKeyDown, true);
