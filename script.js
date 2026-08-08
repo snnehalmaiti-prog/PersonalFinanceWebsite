@@ -10368,7 +10368,10 @@
   // ── Monthly Cash Flow chart (Income / Investment / Expense) ──────────────
   var __mcfChart;
   var __mcfYear;
-  var __mcfAllTime = true;
+  // Opens on the current year, not All time. Years of history compress this
+  // year's bars to slivers, and the months you are actually reconciling are the
+  // recent ones — All time stays one click away.
+  var __mcfAllTime = false;
   var __mcfData; // { byMonth: { "YYYY-MM": { income, expense, investment } }, yearList }
 
   function buildMcfInvestmentByMonth() {
@@ -10445,7 +10448,13 @@
       if (statusEl) statusEl.textContent = "No expense records yet.";
       return;
     }
-    if (!__mcfYear || yearList.indexOf(__mcfYear) < 0) __mcfYear = yearList[yearList.length - 1];
+    if (!__mcfYear || yearList.indexOf(__mcfYear) < 0) {
+      // The current year when it has records, otherwise the most recent year
+      // that does — landing on an empty chart in January would be worse than
+      // showing the last year with something in it.
+      var _thisYear = String(new Date().getFullYear());
+      __mcfYear = yearList.indexOf(_thisYear) >= 0 ? _thisYear : yearList[yearList.length - 1];
+    }
     if (yearSel) {
       var existing = [];
       for (var oi = 0; oi < yearSel.options.length; oi++) existing.push(yearSel.options[oi].value);
