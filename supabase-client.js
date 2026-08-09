@@ -177,9 +177,10 @@
       SYNC_KEYS.forEach(function (k) { localStorage.removeItem(k); });
       localStorage.removeItem("wf-gh-token");
       // Snapshot bookkeeping is per-user: left behind, it would tell the next
-      // user on this device that today is already recorded (skipping their
-      // write) and that their backfill has already run.
+      // user on this device that today is already recorded and skip their write.
       localStorage.removeItem("wf-snapshot-last");
+      // No longer written, but old installs still carry it — and while it was
+      // set it suppressed the backfill entirely.
       localStorage.removeItem("wf-snapshot-backfill-done");
       sessionStorage.removeItem("wf-cloud-synced");
     } catch (e) {}

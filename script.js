@@ -16029,7 +16029,6 @@
   var _snapDone = false;                // at most one write attempt per load
   var SNAP_TABLE = "net_worth_snapshots";
   var SNAP_LAST_KEY = "wf-snapshot-last";
-  var SNAP_BACKFILL_KEY = "wf-snapshot-backfill-done";
 
   function _snapReady() {
     return typeof window.WfSnapshots !== "undefined" &&
@@ -16094,13 +16093,22 @@
   // Month ends the Account Value line can reconstruct, for the dates that have
   // no row yet. Flagged as reconstructions in wf-snapshots.planBackfill — a
   // backfilled point came from the very derivation this table exists to escape.
+  // Runs on EVERY load, filling whichever completed months have no row — not
+  // once, ever. That distinction is the fix for gaps: leave the dashboard shut
+  // for three months and the old one-shot backfill (latched after its first
+  // run) left a permanent three-month hole, so the next comparison spanned the
+  // whole absence and read "over 3 months" instead of three monthly rows.
+  // Reopening now reconstructs the months you missed.
+  //
+  // Cheap to repeat: months already stored are filtered out, so a load with
+  // nothing missing writes nothing, and a reconstruction written once is never
+  // rewritten — it stops moving the moment it is stored, like any other row.
+  //
   // Called from both the write path and the Account Value render, whichever
-  // finishes first. Debounced and latched so the pair can't race into two
-  // backfills of the same months, and so a chart that re-renders (portfolio
-  // switch, refresh) doesn't re-run it.
+  // finishes first, latched per load so the pair can't both write.
   var _snapBackfillTimer = null, _snapBackfillStarted = false;
   function _snapBackfillSoon() {
-    if (_snapBackfillStarted || localStorage.getItem(SNAP_BACKFILL_KEY) === "1") return;
+    if (_snapBackfillStarted) return;
     if (_snapBackfillTimer) clearTimeout(_snapBackfillTimer);
     _snapBackfillTimer = setTimeout(function () {
       _snapBackfill().then(function (n) { if (n) renderNetWorthMonthly(); });
@@ -16113,10 +16121,6 @@
     // those apart from the outside took a round trip that should not have been
     // necessary.
     if (_snapBackfillStarted) { dbg("[Snapshot] backfill: already running"); return Promise.resolve(0); }
-    if (localStorage.getItem(SNAP_BACKFILL_KEY) === "1") {
-      dbg("[Snapshot] backfill: already done on this device (clear wf-snapshot-backfill-done to redo)");
-      return Promise.resolve(0);
-    }
     // No series yet is NOT a reason to give up for good — the chart may still be
     // loading. Return without latching, so whichever caller comes next retries.
     if (!_snapAccountValuePoints || !_snapAccountValuePoints.length) {
@@ -16140,9 +16144,8 @@
       var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600);
       dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
           " already stored, " + plan.length + " to write");
-      if (!plan.length) { localStorage.setItem(SNAP_BACKFILL_KEY, "1"); return 0; }
+      if (!plan.length) return 0;
       return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
-        localStorage.setItem(SNAP_BACKFILL_KEY, "1");
         dbg("[Snapshot] backfilled " + plan.length + " month ends");
         return plan.length;
       });

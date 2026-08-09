@@ -60,6 +60,7 @@ const monthlyNav = () => {
   const p = await ctx.newPage();
 
   const snapPosts = [];   // every write aimed at net_worth_snapshots
+  let existingDates = [];  // what the table already holds, for the SELECT
   const errs = [];
   p.on("pageerror", (e) => errs.push(e.message));
 
@@ -77,7 +78,7 @@ const monthlyNav = () => {
         return r.fulfill({ status: 201, contentType: "application/json",
           headers: { "access-control-allow-origin": "*" }, body: "[]" });
       }
-      return r.fulfill(j([]));          // SELECT: nothing recorded yet
+      return r.fulfill(j(existingDates.map((d) => ({ snapshot_date: d }))));
     }
     return r.fulfill(j([]));
   });
@@ -191,6 +192,41 @@ const monthlyNav = () => {
   console.log("  filtered: live=" + liveRows().length + " total posts=" + snapPosts.length);
   ok(liveRows().length === 0,
      "S15 a load filtered to one portfolio records no snapshot", liveRows());
+
+  // ── Gaps: reopening after an absence fills the months you missed ─────────
+  // The backfill used to latch after its first run, so three months away left a
+  // permanent three-month hole and the next comparison spanned the whole
+  // absence. It must fill whatever is missing, every load — and only what is
+  // missing, or it would rewrite months that were genuinely recorded.
+  await seed();
+  await load();                                      // fresh table: everything written
+  const allMonths = backRows().map((r) => r.snapshot_date).sort();
+  // Taken from the data, not computed: the series' month-end is its last point
+  // in the month, which is wherever the price history happens to fall.
+  const missing = [allMonths[1], allMonths[2]];
+  existingDates = allMonths.filter((d) => missing.indexOf(d) === -1);
+  console.log("  gap: months=" + allMonths.length + " stored=" + existingDates.length +
+              " missing=" + JSON.stringify(missing));
+  ok(allMonths.length > 3 && existingDates.length === allMonths.length - 2,
+     "S17b (setup) a two-month gap was carved out of a full history",
+     { months: allMonths.length, stored: existingDates.length });
+
+  // Deliberately NOT re-seeded: seed() clears localStorage, which would make
+  // every load look like a fresh device and hide a backfill that latches after
+  // its first run — the exact behaviour being fixed.
+  await load();
+  const filled = backRows().map((r) => r.snapshot_date).sort();
+  console.log("  gap fill: " + JSON.stringify(filled));
+  ok(filled.length === 2 && filled[0] === missing[0] && filled[1] === missing[1],
+     "S18 a later load fills exactly the missing month ends — the gap closes instead of " +
+     "persisting as one long span", { filled, missing });
+
+  existingDates = allMonths;
+  await load();
+  ok(backRows().length === 0,
+     "S19 and with nothing missing it writes nothing, so running every load is free",
+     backRows().map((r) => r.snapshot_date));
+  existingDates = [];
 
   // ── Fixed income hidden: nothing is written, live OR backfilled ──────────
   // The live rules refuse this case. The backfill bypasses them entirely — it
