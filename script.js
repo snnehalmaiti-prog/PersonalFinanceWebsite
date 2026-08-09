@@ -2634,7 +2634,11 @@
 
   // Shared by the "Savings/Investment Holding" and "Fixed Deposit Holding" tables —
   // both read the same FD sheet but render mutually-exclusive Instrument Sub Category subsets.
-  function buildFdHoldingsList(rows, portfolioFilter, includeSubCategory) {
+  // asOf lets a caller value the same holdings at a past date instead of now,
+  // which is what separating accrued interest from market movement needs: the
+  // same deposits, the clock moved back. Optional and defaulted, so every
+  // existing caller keeps valuing at today.
+  function buildFdHoldingsList(rows, portfolioFilter, includeSubCategory, asOf) {
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var bankIdx = header.indexOf("bank");
@@ -2650,7 +2654,7 @@
       return null;
     }
 
-    var today = new Date();
+    var today = asOf || new Date();
     var holdings = [];
     // Investment Corpus/Savings Account rows represent a running balance, not standalone
     // holdings — only the latest transaction per (Portfolio, Bank, Instrument) counts.
@@ -16251,6 +16255,70 @@
     return out;
   }
 
+  // Interest accrued per month on deposits and provident fund.
+  //
+  // Taken out of the residual because it is not market movement: a fixed deposit
+  // compounding at 7% does not care what equities did, and crediting that to
+  // "market" overstated both good months and bad ones.
+  //
+  // Measured by valuing the SAME holdings at two month ends — the deposits held
+  // fixed, only the clock moved — and taking the difference. A deposit opened
+  // during the month has no earlier valuation to difference against, so it is
+  // skipped rather than having its whole principal counted as interest.
+  //
+  // Savings Account and Investment Corpus are deliberately NOT included. Their
+  // balances are typed in, and the balance you type already contains whatever
+  // interest the account paid, so it is inside the parked-cash flow that
+  // _nwmContributionsByMonth adds. Counting it here as well would subtract it
+  // from the market twice.
+  function _nwmInterestByMonth() {
+    var out = {};
+    var rows = getSheetRows("fd");
+    if (!rows || rows.length < 2) return out;
+    var earliest = null, today = new Date();
+    try {
+      var hs = buildFdHoldingsList(rows, "all", _nwmIsAccruing) || [];
+      hs.forEach(function (h) { if (h.startDate && (!earliest || h.startDate < earliest)) earliest = h.startDate; });
+    } catch (e) { return out; }
+    if (!earliest) return out;
+
+    // Key by identity + start date so two deposits at the same bank are not
+    // merged; merging them would let one maturing hide another's accrual.
+    function valuedAt(d) {
+      var m = {};
+      var list = buildFdHoldingsList(rows, "all", _nwmIsAccruing, d) || [];
+      list.forEach(function (h) {
+        // Defensive: buildFdHoldingsList currently values a not-yet-opened
+        // deposit at its principal, so such a row appears in BOTH valuations and
+        // the matched-keys rule already keeps its principal out of interest.
+        // This keeps that true if it ever starts omitting them instead.
+        if (!h.startDate || h.startDate > d) return;
+        var k = normalizeText(h.portfolio) + "|" + normalizeText(h.bank) + "|" +
+                normalizeText(h.instrument) + "|" + formatDateISO(h.startDate);
+        m[k] = (m[k] || 0) + (h.current || 0);
+      });
+      return m;
+    }
+
+    var cur = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+    var end = new Date(today.getFullYear(), today.getMonth(), 1);
+    var prevVals = valuedAt(new Date(cur.getFullYear(), cur.getMonth(), 0, 23, 59, 59));
+    while (cur <= end) {
+      var eom = new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 23, 59, 59);
+      // The month in progress accrues only up to now, not to a future month end.
+      var vals = valuedAt(eom > today ? today : eom);
+      var mk = cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0");
+      out[mk] = WfSnapshots.accruedBetween(prevVals, vals);
+      prevVals = vals;
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return out;
+  }
+
+  function _nwmIsAccruing(normSub) {
+    return _fiIsTermDeposit(normSub) || isProvidentFundSub(normSub);
+  }
+
   function _nwmSigned(n) {
     return (n > 0 ? "+" : n < 0 ? "−" : "") + formatCurrency(Math.abs(n));
   }
@@ -16271,6 +16339,7 @@
     if (r.delta != null) {
       h += '<div class="nwm-attr">';
       h += '<span>invested <b>' + _nwmSigned(r.contributions) + '</b></span>';
+      if (r.interest) h += '<span>interest <b>' + _nwmSigned(r.interest) + '</b></span>';
       h += '<span>market <b>' + _nwmSigned(r.market) + '</b></span>';
       if (r.gapMonths > 1) h += '<span>over ' + r.gapMonths + ' months</span>';
       if (r.estimated) h += '<span>from a reconstructed month</span>';
@@ -16314,7 +16383,7 @@
   // Both parts can be negative (a withdrawal, a losing month) and stack away
   // from the axis in that direction, so the bar's extent is the month's total
   // change and its sign is visible at a glance.
-  var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A";
+  var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
   var NWM_MAX_BARS = 24;
   var _nwmChart = null, _nwmChartSig = null;
 
@@ -16344,14 +16413,23 @@
 
     var labels = bars.map(function (r) { return _nwmMonthLabel(r.month); });
     var invested = bars.map(function (r) { return r.contributions; });
+    var interest = bars.map(function (r) { return r.interest || 0; });
     var market = bars.map(function (r) { return r.market; });
+    // Nothing accrues interest — no deposits, no provident fund — so the segment
+    // is dropped rather than drawn as a permanent zero-height sliver in the
+    // legend.
+    var anyInterest = interest.some(function (v) { return Math.abs(v) > 0.005; });
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
     var invColors = bars.map(function (r) { return _nwmFade(NWM_INV, r.estimated); });
+    var intColors = bars.map(function (r) { return _nwmFade(NWM_INT, r.estimated); });
     var mktColors = bars.map(function (r) {
       return _nwmFade(r.market >= 0 ? NWM_UP : NWM_DOWN, r.estimated);
     });
+
+    var intKey = document.getElementById("nwm-key-interest");
+    if (intKey) intKey.hidden = !anyInterest;
 
     _nwmChart = window.__wfNwmChart = new Chart(canvas.getContext ? canvas.getContext("2d") : canvas, {
       type: "bar",
@@ -16359,10 +16437,14 @@
         labels: labels,
         datasets: [
           { label: "Invested", data: invested, backgroundColor: invColors, stack: "chg",
-            borderWidth: 0, borderRadius: 2 },
+            borderWidth: 0, borderRadius: 2 }
+        ].concat(anyInterest ? [
+          { label: "Interest", data: interest, backgroundColor: intColors, stack: "chg",
+            borderWidth: 0, borderRadius: 2 }
+        ] : []).concat([
           { label: "Market", data: market, backgroundColor: mktColors, stack: "chg",
             borderWidth: 0, borderRadius: 2 }
-        ]
+        ])
       },
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -16388,6 +16470,7 @@
                 if (!r) return "";
                 var out = ["Change: " + _nwmSigned(r.delta),
                            "Closing: " + formatCurrency(r.total)];
+                if (r.interest) out.splice(1, 0, "Interest: " + _nwmSigned(r.interest));
                 if (r.gapMonths > 1) out.push("Covers " + r.gapMonths + " months");
                 if (r.estimated) out.push("Measured from a reconstructed month");
                 return out;
@@ -16460,7 +16543,8 @@
     card.hidden = false;
     WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
       .then(function (rows) {
-        _nwmRender(WfSnapshots.buildMonthlyChange(rows || [], _nwmContributionsByMonth()));
+        _nwmRender(WfSnapshots.buildMonthlyChange(rows || [],
+          _nwmContributionsByMonth(), _nwmInterestByMonth()));
       })
       .catch(function (e) {
         // A missing table is the expected state until the migration is run, and

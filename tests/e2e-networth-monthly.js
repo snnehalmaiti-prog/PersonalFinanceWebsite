@@ -35,8 +35,21 @@ const SHEETS = {
   // The Jul rise is money moved, not money earned — the case that used to be
   // attributed to the market.
   "wf-fd-data": [FD_HDR,
-    ["31-May-2025", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "200000", "", "0%", ""],
-    ["10-Jul-2025", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "250000", "", "0%", ""]],
+    ["31-May-2025", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "200000", "", "12%", ""],
+    ["10-Jul-2025", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "250000", "", "12%", ""],
+    // A second savings account, opened long before the window and never changed,
+    // paying 12%. Its balance contributes nothing (it does not move), but it
+    // WOULD accrue visibly if savings interest were counted as interest — which
+    // it must not be, since a typed balance already contains it.
+    ["1-Jan-2024", "Snnehal", "SBI", "Savings Two", "Fixed Income", "Savings Account", "Deposit", "500000", "", "12%", ""],
+    // A term deposit opened well before the window, so it accrues through both
+    // months with no principal movement — pure interest, which must not be
+    // reported as the market.
+    ["1-Jan-2020", "Snnehal", "HDFC", "Deposit One", "Fixed Income", "Fixed Deposit", "Deposit", "1000000", "1-Jan-2030", "8%", ""],
+    // And one opened DURING the window. Its ₹1,00,000 principal is a
+    // contribution; counting it as interest because it appeared between two
+    // valuations is the mistake the open-date filter exists to prevent.
+    ["10-Jul-2025", "Snnehal", "ICICI", "Deposit Two", "Fixed Income", "Fixed Deposit", "Deposit", "100000", "1-Jul-2030", "8%", ""]],
   "wf-fixedincome-data": [["Transaction Date", "Portfolio Name", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Amount"]],
 };
 
@@ -151,17 +164,21 @@ const money = (t) => {
   // savings account. That second half is the fix: a running balance is not a
   // transaction, so it used to be missing from contributions while counting
   // fully towards net worth, and the difference was blamed on the market.
-  ok(jul.includes("80,000"),
-     "N8 contributions include BOTH the fund buy and the rise in the savings balance", jul);
-  ok(jul.includes("1,30,000"),
-     "N9 and the market is the remainder: down 50k after putting in 80k means the market lost 1.3L", jul);
+  ok(jul.includes("1,80,000"),
+     "N8 contributions include the fund buy, the savings rise and the new deposit", jul);
+  ok(/interest \+₹1[0-9],[0-9]{3}/.test(jul),
+     "N9 deposit interest is named rather than credited to the market", jul);
+  ok(/market −₹2,4[0-9],[0-9]{3}/.test(jul),
+     "N9c and the market is what is left: down 50k after putting in 1.8L and earning " +
+     "10k of interest means prices took 2.4L", jul);
   ok(!jul.includes("+₹30,000"),
      "N9b specifically, parked cash is not left out — that omission read as a ₹50,000 market gain", jul);
 
   // Jun: 1,200,000 − 1,000,000 = +200,000, of which 50,000 was invested.
   eq(money(rows[1].delta), 200000, "N10 an up month");
-  ok(rows[1].attr.includes("50,000") && rows[1].attr.includes("1,50,000"),
-     "N11 attributed the same way — 50k invested, 1.5L from the market", rows[1].attr);
+  ok(rows[1].attr.includes("+₹50,000") && /market \+₹1,3[0-9],[0-9]{3}/.test(rows[1].attr),
+     "N11 attributed the same way — 50k invested, the rest split between interest and market",
+     rows[1].attr);
 
   eq(rows[2].delta.trim(), "—",
      "N12 the oldest month has nothing to compare against and invents no attribution");
@@ -205,35 +222,60 @@ const money = (t) => {
     eq(chart.type, "bar", "B2 bars, not a line — a second net-worth line would just " +
        "restate the Account Value chart");
     ok(chart.xStacked && chart.yStacked, "B3 stacked on both axes, so a bar's extent is the month's change");
-    eq(chart.sets.length, 2, "B4 two segments and no category split");
-    eq(chart.sets.map((s) => s.label).join(","), "Invested,Market", "B5 the two things that move net worth");
-    ok(chart.sets[0].stack === chart.sets[1].stack, "B6 in one stack");
+    eq(chart.sets.length, 3, "B4 three segments and no category split");
+    eq(chart.sets.map((s) => s.label).join(","), "Invested,Interest,Market",
+       "B5 the three things that move net worth");
+    ok(chart.sets.every((s) => s.stack === chart.sets[0].stack), "B6 in one stack");
 
     // Only months with a change get a bar; May has nothing to compare against.
     eq(chart.labels.length, 2, "B7 the first snapshot has no bar — there is nothing to compare it against");
     eq(chart.labels[0], "Jun 2025", "B8 oldest on the left");
     eq(chart.labels[1], "Jul 2025", "B9 newest on the right");
 
-    // Same arithmetic as the rows: Jun +50k invested / +1.5L market, Jul +30k / −80k.
-    eq(JSON.stringify(chart.sets[0].data), JSON.stringify([50000, 80000]),
-       "B10 the invested segment carries the contributions, parked cash included");
-    eq(JSON.stringify(chart.sets[1].data), JSON.stringify([150000, -130000]),
-       "B11 and the market segment the remainder, negative when the market lost");
+    const seg = (name) => chart.sets.find((s) => s.label === name);
+    eq(JSON.stringify(seg("Invested").data), JSON.stringify([50000, 180000]),
+       "B10 the invested segment carries every contribution: the fund buy, the rise in " +
+       "the savings balance, and the new deposit's principal");
+
+    // The ₹10L deposit at 8% accrues roughly ₹10,300 a month. Bounded rather
+    // than pinned: the accrual runs to "now", so an exact figure would drift
+    // with the date the suite happens to run.
+    const int = seg("Interest").data;
+    // Bounded, not pinned: accrual runs to "now", so an exact figure would drift
+    // with the date the suite runs. The ceiling is what does the work — the
+    // savings account pays 12% here, so if its interest were counted as well
+    // (it is already inside the parked-cash flow) the figure would clear it.
+    ok(int.every((v) => v > 8000 && v < 12000),
+       "B11a the deposit's accrual is measured, and only the deposits'", int);
+
+    // The invariant that matters: the segments are the change, exactly. If any
+    // leg is double-counted or dropped, this is what catches it.
+    const inv = seg("Invested").data, mkt = seg("Market").data;
+    const deltas = [200000, -50000];
+    [0, 1].forEach((i) => {
+      const sum = inv[i] + int[i] + mkt[i];
+      ok(Math.abs(sum - deltas[i]) < 1,
+         "B11b" + i + " invested + interest + market equals the month's change",
+         { sum, want: deltas[i], inv: inv[i], int: int[i], mkt: mkt[i] });
+    });
+    ok(mkt[0] > 0 && mkt[1] < 0,
+       "B11c the market leg keeps its sign — a gaining month and a losing one", mkt);
 
     // A losing month must not be drawn in the gaining colour. Asserted against
     // the specific hues, not merely "the two differ" — Jun is faded and Jul is
     // not, so a difference exists even when both are green.
-    const UP = "16,185,129", DOWN = "232,98,58";   // #10B981 / #E8623A
-    ok(String(chart.sets[1].colors[0]).includes(UP),
-       "B12 the gaining month is drawn in the gain colour", chart.sets[1].colors[0]);
-    ok(String(chart.sets[1].colors[1]).toUpperCase() === "#E8623A",
-       "B12b and the losing month in the loss colour", chart.sets[1].colors[1]);
-    ok(!String(chart.sets[1].colors[1]).includes(UP) && DOWN.length > 0,
-       "B12c specifically, a loss is never drawn as a gain", chart.sets[1].colors);
+    const UP = "16,185,129";   // #10B981
+    ok(String(seg("Market").colors[0]).includes(UP),
+       "B12 the gaining month is drawn in the gain colour", seg("Market").colors[0]);
+    ok(String(seg("Market").colors[1]).toUpperCase() === "#E8623A",
+       "B12b and the losing month in the loss colour", seg("Market").colors[1]);
+    ok(!String(seg("Market").colors[1]).includes(UP),
+       "B12c specifically, a loss is never drawn as a gain", seg("Market").colors);
     // Jun is measured from May, which is a reconstruction — so it is faded.
-    ok(/rgba/.test(String(chart.sets[0].colors[0])) && !/rgba/.test(String(chart.sets[0].colors[1])),
+    ok(/rgba/.test(String(inv[0] !== undefined && seg("Invested").colors[0])) &&
+       !/rgba/.test(String(seg("Invested").colors[1])),
        "B13 a month measured from a reconstruction is faded, while a fully recorded one is solid",
-       chart.sets[0].colors);
+       seg("Invested").colors);
   }
 
   // ── Empty state ─────────────────────────────────────────────────────────

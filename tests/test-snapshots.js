@@ -298,5 +298,55 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
   eq(fixed[0].contributions, 50000, "P10 and the ₹50,000 is recorded as what it was");
 }
 
+// ── Interest as a third term ────────────────────────────────────────────────
+// A fixed deposit compounding at 7% does not care what equities did. Leaving
+// its accrual in the residual credited price movement for it.
+{
+  const rows = [R("2026-03-31", 1000000), R("2026-04-30", 1100000)];
+  const two = S.buildMonthlyChange(rows, { "2026-04": 40000 });
+  const three = S.buildMonthlyChange(rows, { "2026-04": 40000 }, { "2026-04": 25000 });
+  eq(two[0].market, 60000, "I1 (baseline) with two terms the deposit interest lands in market");
+  eq(three[0].interest, 25000, "I2 with three it is named");
+  eq(three[0].market, 35000, "I3 and taken out of the residual");
+  eq(three[0].contributions, 40000, "I4 contributions are untouched by it");
+  eq(three[0].delta, 100000, "I5 and the three terms still sum to the change");
+  ok(three[0].contributions + three[0].interest + three[0].market === three[0].delta,
+     "I6 exactly — the bar segments must total the bar");
+}
+{
+  // Omitting the argument must not change any existing answer.
+  const rows = [R("2026-03-31", 100), R("2026-04-30", 150)];
+  const a = S.buildMonthlyChange(rows, { "2026-04": 20 });
+  eq(a[0].interest, 0, "I7 no interest series means no interest");
+  eq(a[0].market, 30, "I8 and the model collapses to the original two terms");
+}
+{
+  // Interest accrues across a skipped month too.
+  const rows = [R("2026-01-31", 1000), R("2026-04-30", 2000)];
+  const out = S.buildMonthlyChange(rows, {},
+    { "2026-02": 10, "2026-03": 10, "2026-04": 10, "2026-01": 999 });
+  eq(out[0].interest, 30, "I9 interest is summed across a gap, and the earlier month excluded");
+}
+{
+  const rows = [R("2026-03-31", 1000000), R("2026-04-30", 990000)];
+  const out = S.buildMonthlyChange(rows, {}, { "2026-04": 5000 });
+  eq(out[0].market, -15000,
+     "I10 a month that earned interest and still fell lost MORE than the headline says");
+}
+
+// accruedBetween — the same holdings, valued at two dates.
+{
+  eq(S.accruedBetween({ a: 100, b: 200 }, { a: 107, b: 214 }), 21,
+     "A1 accrual is the difference across matched holdings");
+  eq(S.accruedBetween({ a: 100 }, { a: 107, b: 500000 }), 7,
+     "A2 a deposit opened during the month is skipped — its principal is not interest");
+  eq(S.accruedBetween({ a: 100, b: 500000 }, { a: 107 }), 7,
+     "A3 and one that matured is skipped too — its principal leaving is not a loss");
+  eq(S.accruedBetween({}, {}), 0, "A4 nothing held, nothing accrued");
+  eq(S.accruedBetween(null, { a: 1 }), 0, "A5 a missing earlier valuation yields nothing, not the whole balance");
+  eq(S.accruedBetween({ a: 200 }, { a: 100 }), -100,
+     "A6 a fall is reported as it is rather than clamped — it would mean the input is wrong");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

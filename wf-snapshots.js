@@ -235,10 +235,16 @@
   // (investments minus withdrawals). A month missing from it contributes zero,
   // which is right: no transactions means no contributions.
   //
+  // interestByMonth is the same shape for accrued income — deposit and provident
+  // fund interest. It is taken OUT of the residual: interest is money the
+  // portfolio earned by sitting still, and leaving it in "market" credited price
+  // movement for it. Omit the argument and the model collapses to two terms.
+  //
   // Returned newest first, which is the order it is read in.
-  function buildMonthlyChange(rows, contribByMonth) {
+  function buildMonthlyChange(rows, contribByMonth, interestByMonth) {
     var series = monthEndSeries(rows);
     var contrib = contribByMonth || {};
+    var interest = interestByMonth || {};
     var out = series.map(function (row, i) {
       var prev = i > 0 ? series[i - 1] : null;
       var o = {
@@ -246,7 +252,7 @@
         invested: row.invested, equity: row.equity,
         fixed_income: row.fixed_income, commodity: row.commodity,
         by_portfolio: row.by_portfolio, backfilled: row.backfilled,
-        delta: null, contributions: null, market: null,
+        delta: null, contributions: null, interest: null, market: null,
         estimated: false, gapMonths: 0
       };
       if (!prev) return o;
@@ -255,10 +261,14 @@
       // Every month after the previous snapshot up to and including this one.
       // Using only this month's contributions across a gap would book the
       // skipped months' investing as market movement.
-      var c = 0;
-      eachMonthAfter(prev.month, row.month).forEach(function (m) { c += Number(contrib[m]) || 0; });
+      var c = 0, inc = 0;
+      eachMonthAfter(prev.month, row.month).forEach(function (m) {
+        c += Number(contrib[m]) || 0;
+        inc += Number(interest[m]) || 0;
+      });
       o.contributions = round2(c);
-      o.market = round2(o.delta - c);
+      o.interest = round2(inc);
+      o.market = round2(o.delta - c - inc);
       o.estimated = row.backfilled || prev.backfilled;
       return o;
     });
@@ -293,6 +303,24 @@
     return out;
   }
 
+  // Interest accrued between two valuations of the SAME holdings.
+  //
+  // Both maps are keyed by holding. Only keys present in both count: a deposit
+  // that did not exist at the earlier date has no accrual to measure, and
+  // counting its whole principal as interest is precisely the mistake this
+  // guards against. A holding that has since disappeared (matured, closed) is
+  // dropped for the mirror-image reason — its principal leaving is not a loss.
+  function accruedBetween(prevByKey, curByKey) {
+    if (!prevByKey || !curByKey) return 0;
+    var sum = 0;
+    Object.keys(curByKey).forEach(function (k) {
+      if (!(k in prevByKey)) return;
+      var a = Number(prevByKey[k]) || 0, b = Number(curByKey[k]) || 0;
+      sum += b - a;
+    });
+    return round2(sum);
+  }
+
   function monthsBetween(a, b) {
     var pa = a.split("-"), pb = b.split("-");
     return (+pb[0] - +pa[0]) * 12 + (+pb[1] - +pa[1]);
@@ -316,6 +344,7 @@
     monthEndSeries: monthEndSeries,
     buildMonthlyChange: buildMonthlyChange,
     parkedCashFlows: parkedCashFlows,
+    accruedBetween: accruedBetween,
     localDateKey: localDateKey,
     monthKey: monthKey,
     isStable: isStable,
