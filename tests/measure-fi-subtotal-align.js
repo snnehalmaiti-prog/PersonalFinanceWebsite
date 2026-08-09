@@ -18,7 +18,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/measure-fi-subtotal-align.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 // Seven-figure values on purpose: the overflow is a function of rendered text
@@ -62,7 +62,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1280, height: 1400 } });
   const p = await ctx.newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));

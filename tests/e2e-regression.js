@@ -9,7 +9,7 @@
 // 8098, and Playwright's Chromium at $PLAYWRIGHT_BROWSERS_PATH). Not part of
 // run-all.js: it needs a browser, which CI here does not have.
 const PORT = process.env.PORT || 8098;
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
 const FD_HDR = ["Transaction Date", "Portfolio Name", "Bank", "Instrument Name", "Instrument Category",
@@ -86,7 +86,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1400, height: 1100 } });
   const p = await ctx.newPage();
   const pageErrors = [];

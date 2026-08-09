@@ -11,7 +11,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/e2e-mic-idle-cash.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
@@ -51,7 +51,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 1500, height: 1200 } })).newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
   await p.route("**://*.supabase.co/**", (r) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: "[]" }));

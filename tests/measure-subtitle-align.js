@@ -9,7 +9,7 @@
 //     node tests/measure-subtitle-align.js
 //
 // Expected: dx 0 (flush left with the title) and a small positive gap.
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const fs = require("fs");
 const path = require("path");
 const ROOT = path.join(__dirname, "..");
@@ -38,7 +38,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 900, height: 700 } })).newPage();
   await p.goto(`http://127.0.0.1:${PORT}/__subtitle-align-fixture.html`, { waitUntil: "load" });
   await p.waitForTimeout(400);

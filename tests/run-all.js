@@ -6,7 +6,12 @@
 // invisible until someone thought to run it. This discovers suites from the
 // directory, so a new tests/test-*.js file is picked up automatically.
 //
-// Usage: node tests/run-all.js     (exits non-zero if anything fails)
+// This runner covers everything that needs only Node. The browser suites
+// (tests/e2e-*.js, tests/measure-*.js) need Chromium and a web server and are run
+// by tests/run-browser.js — CI runs BOTH, as two separate jobs.
+//
+// Usage: node tests/run-all.js       fast: guards + unit suites  (~30s)
+//        node tests/run-browser.js   slow: 19 browser suites     (~11 min)
 "use strict";
 
 const fs = require("fs");
@@ -42,6 +47,7 @@ const guards = [
   { name: "holdings Open/Closed toggles", cmd: "node", args: [path.join(TESTS_DIR, "check-holdings-toggles.js")] },
   { name: "dashboard load path", cmd: "node", args: [path.join(TESTS_DIR, "check-load-path.js")] },
   { name: "service worker routes", cmd: "node", args: [path.join(TESTS_DIR, "check-sw-routes.js")] },
+  { name: "browser suites runnable in CI", cmd: "node", args: [path.join(TESTS_DIR, "check-browser-suites.js")] },
   { name: "gold premium default parity", cmd: "node", args: [path.join(TESTS_DIR, "check-gold-premium-default.js")] },
   { name: "debt reclassification call sites", cmd: "node", args: [path.join(TESTS_DIR, "check-debt-callsites.js")] },
   { name: "fetch_mf_history.py units", cmd: "python3", args: [path.join(TESTS_DIR, "test_mf_history.py")] },

@@ -16,7 +16,7 @@
 //
 //     node tools/serve.js &
 //     node tests/e2e-account-value-zoom.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
 const SHEETS = {
@@ -46,7 +46,7 @@ function ok(cond, name, detail) {
 }
 const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 1500, height: 1100 } })).newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
   await p.route("**://*.supabase.co/**", (r) => r.fulfill({ status:200, contentType:"application/json", headers:{"access-control-allow-origin":"*"}, body:"[]" }));

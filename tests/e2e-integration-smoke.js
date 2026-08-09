@@ -20,7 +20,7 @@
 // Exercises: both value charts (hover readout, zoom, drag, period line), all
 // three CASH FLOW · MONTHLY modes and the switches between them, the idle-cash
 // legend, and the year / all-time controls. Asserts zero page errors throughout.
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
@@ -90,7 +90,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 1500, height: 1200 } })).newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
   const r = (pat, body, ct) => p.route(pat, (x) => x.fulfill({ status: 200, contentType: ct || "application/json", headers: { "access-control-allow-origin": "*" }, body }));

@@ -12,7 +12,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/e2e-value-chart-refresh.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
@@ -77,7 +77,7 @@ const READ = () => {
 };
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 1500, height: 1100 } })).newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
   const j = (body) => ({ status: 200, contentType: "application/json",

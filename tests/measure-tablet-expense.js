@@ -18,7 +18,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/measure-tablet-expense.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const UID = "u1";
@@ -143,7 +143,7 @@ const PROBE = () => {
 };
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 1280, height: 1100 } })).newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
   const json = (body) => ({ status: 200, contentType: "application/json",

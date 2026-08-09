@@ -14,7 +14,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/e2e-fd-subcategories.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const FD_HDR = ["Transaction Date", "Portfolio Name", "Bank", "Instrument Name", "Instrument Category",
@@ -43,7 +43,7 @@ function ok(cond, name, detail) {
 const money = (t) => { const m = String(t || "").match(/[\d,]+(?:\.\d+)?/); return m ? Number(m[0].replace(/,/g, "")) : 0; };
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1500, height: 1400 } });
   const p = await ctx.newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
@@ -119,13 +119,21 @@ const money = (t) => { const m = String(t || "").match(/[\d,]+(?:\.\d+)?/); retu
        `F1 ${sub}: appears in Fixed Income Holding at all`, v.holdingRows);
     ok(money(v.subtotalCurrent) > 0,
        `F2 ${sub}: carries a current value instead of ₹0`, v.subtotalCurrent);
-    ok(v.subtotalInvested === base.subtotalInvested && v.subtotalCurrent === base.subtotalCurrent,
+    // Within ₹5: these are separate page loads and the accrual runs to "now", so
+    // demanding an exact match tests the clock, not the valuation. ₹5 on ₹7.77
+    // lakh is far tighter than any real difference in treatment would be.
+    ok(money(v.subtotalInvested) === money(base.subtotalInvested) &&
+       Math.abs(money(v.subtotalCurrent) - money(base.subtotalCurrent)) <= 5,
        `F3 ${sub}: values identically to a Fixed Deposit — the sub-category name ` +
        `must not change what the money is worth`,
        { got: [v.subtotalInvested, v.subtotalCurrent], want: [base.subtotalInvested, base.subtotalCurrent] });
-    ok(v.categorySplitFI === base.categorySplitFI && money(v.categorySplitFI) > 0,
+    // Compared WITHIN this variant's own page load, not against the baseline's.
+    // The accrual compounds to "now", so two loads minutes apart differ by a
+    // rupee — comparing across them made this flake by exactly ₹1 in CI, where
+    // the suites run back to back over ten minutes.
+    ok(money(v.categorySplitFI) > 0 && money(v.categorySplitFI) === money(v.subtotalCurrent),
        `F4 ${sub}: reaches Category Split too, not just the holdings card`,
-       { got: v.categorySplitFI, want: base.categorySplitFI });
+       { categorySplit: v.categorySplitFI, holdingsCard: v.subtotalCurrent });
   }
 
   // A running balance and a provident fund must NOT be swept into the term-deposit

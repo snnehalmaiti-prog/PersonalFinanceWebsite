@@ -12,7 +12,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/e2e-expense-txn-drill.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const YEAR = new Date().getFullYear();
@@ -66,7 +66,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1500, height: 1300 } });
   const p = await ctx.newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));

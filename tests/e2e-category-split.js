@@ -9,7 +9,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/e2e-category-split.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 // ₹10,000/gram exactly: 311035 / 31.1035.
@@ -53,7 +53,7 @@ function ok(cond, name, detail) {
 const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1400, height: 1200 } });
   const p = await ctx.newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));

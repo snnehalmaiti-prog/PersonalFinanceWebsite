@@ -27,3 +27,31 @@ jobs:
           node-version: "22"
       - name: Run tests and guards
         run: node tests/run-all.js
+
+  # The browser suites hold most of the assertions that catch valuation bugs —
+  # the gold-ETF double count, the sub-total misalignment, the invisible bonds
+  # were all found here. They need Chromium and a web server, so until now they
+  # ran only when someone remembered two extra commands locally, which meant in
+  # practice they did not gate anything.
+  #
+  # Separate job so a browser failure is distinguishable at a glance from a unit
+  # failure, and so the fast guards still report in under a minute.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Pinned: an unpinned Playwright would silently change browser version
+      # between runs, and these suites measure rendered geometry.
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.62.1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      # run-browser.js serves the repo itself on 127.0.0.1 and discovers every
+      # tests/e2e-*.js and tests/measure-*.js, so a new suite is picked up
+      # without touching this file.
+      - name: Run browser suites
+        run: node tests/run-browser.js

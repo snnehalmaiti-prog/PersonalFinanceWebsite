@@ -13,7 +13,7 @@
 // tests: a period return that let contributions dilute the line, contributions
 // taken from instruments the value series cannot price, and US flows counted in
 // dollars against rupee values.
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
 const MAP = [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Scheme Code", "ISIN"],
@@ -159,7 +159,7 @@ const SCENARIOS = [
 ];
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   for (const sc of SCENARIOS) {
     const ctx = await b.newContext({ viewport: { width: 1400, height: 1000 } });
     const p = await ctx.newPage();

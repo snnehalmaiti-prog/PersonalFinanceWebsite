@@ -14,7 +14,7 @@
 //
 //     python3 -m http.server 8098 &
 //     node tests/e2e-nav-cache.js
-const { chromium } = require("playwright");
+const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
 const CODE = "100033";
@@ -56,7 +56,7 @@ function ok(cond, name, detail) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch();
   // One context throughout: IndexedDB has to survive between loads, which is the
   // whole point. A fresh context per load would measure nothing.
   const ctx = await b.newContext({ viewport: { width: 1400, height: 1000 } });
