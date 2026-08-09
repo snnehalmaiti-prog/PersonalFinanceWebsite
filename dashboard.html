@@ -411,6 +411,10 @@
           <h3 class="isc-title">Realized Profit</h3>
           <div style="display:flex;gap:6px;align-items:center;">
             <select id="profit-cat-portfolio" class="mic-dropdown-btn mic-year-sel" aria-label="Select portfolio"></select>
+            <!-- "All time" used to be an option inside the year dropdown. The
+                 decade grid can only hold real years, so it becomes its own
+                 toggle — the same pairing the two monthly cards already use. -->
+            <button id="profit-cat-alltime" type="button" class="mic-dropdown-btn">All time</button>
             <select id="profit-cat-year" class="mic-dropdown-btn mic-year-sel" aria-label="Select year"></select>
           </div>
         </div>

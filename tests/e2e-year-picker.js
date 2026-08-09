@@ -33,7 +33,11 @@ const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transacti
 const SHEETS = {
   // Investment rows in the same two years, so CASH FLOW · MONTHLY has the same
   // shape of history as the two expense cards.
-  "wf-equity-data": [TXN].concat(HAVE.map((y) => [`5-Feb-${y}`, "Snnehal", "Fund A", "Buy", "100", "10"])),
+  // A buy and a later sell in each year, so Realized Profit books a gain in
+  // exactly the same two years as the expense cards have records.
+  "wf-equity-data": [TXN]
+    .concat(HAVE.map((y) => [`5-Feb-${y}`, "Snnehal", "Fund A", "Buy", "100", "10"]))
+    .concat(HAVE.map((y) => [`5-Mar-${y}`, "Snnehal", "Fund A", "Sell", "50", "14"])),
   "wf-mfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Scheme Code", "ISIN"],
     ["Fund A", "Equity", "Flexi Cap", "100001", "INFA"]],
   "wf-stocksetf-data": [TXN],
@@ -52,9 +56,11 @@ function ok(cond, name, detail) {
 }
 
 const CARDS = [
-  { name: "CASH FLOW · MONTHLY",        sel: "monthly-invest-cat-year" },
+  { name: "CASH FLOW · MONTHLY",         sel: "monthly-invest-cat-year" },
   { name: "Income & Expenses · MONTHLY", sel: "mcf-year" },
   { name: "EXPENSE BY CATEGORY",         sel: "epc-year" },
+  // Realized Profit uses the same control; its year list comes from booked sells.
+  { name: "Realized Profit",             sel: "profit-cat-year", allTimeBtn: "profit-cat-alltime" },
 ];
 
 (async () => {
@@ -241,6 +247,59 @@ const CARDS = [
     }
   }
   await p.setViewportSize({ width: 1500, height: 1400 });
+
+  // ── Realized Profit: All time moved out of the dropdown into a toggle ────
+  // It used to be an option inside the year <select>. The grid holds real years
+  // only, so the capability has to survive somewhere else — losing it would be a
+  // regression dressed up as consistency.
+  await p.evaluate(() => window.WfYearPicker.close());
+  const rp = () => p.evaluate(() => {
+    const sel = document.getElementById("profit-cat-year");
+    const btn = sel.nextElementSibling;
+    const all = document.getElementById("profit-cat-alltime");
+    return {
+      label: (document.getElementById("profit-cat-total-label") || {}).textContent || "",
+      total: (document.getElementById("profit-cat-total") || {}).textContent || "",
+      allActive: all ? all.classList.contains("active") : null,
+      yearBtnShown: btn ? getComputedStyle(btn).display !== "none" : null,
+      yearOptions: [...sel.options].map((o) => o.value),
+    };
+  });
+
+  const r0 = await rp();
+  console.log("  realized profit, initial: " + JSON.stringify(r0));
+  ok(r0.yearOptions.every((v) => /^\d{4}$/.test(v)),
+     "R1 the year list holds real years only — no 'all' pseudo-year", r0.yearOptions);
+  ok(r0.allActive === true && /ALL TIME/.test(r0.label) && r0.yearBtnShown === false,
+     "R2 All time is a toggle, active by default, and hides the year button", r0);
+
+  await p.evaluate(() => document.getElementById("profit-cat-alltime").click());
+  await p.waitForTimeout(700);
+  const r1 = await rp();
+  console.log("  after leaving All time: " + JSON.stringify(r1));
+  ok(r1.allActive === false && r1.yearBtnShown === true && new RegExp(String(THIS_YEAR)).test(r1.label),
+     "R3 turning it off reveals the year picker and scopes the card to a year", r1);
+
+  await p.evaluate((y) => {
+    const sel = document.getElementById("profit-cat-year");
+    sel.nextElementSibling.click();
+    [...document.querySelectorAll(".wf-yp-year")].find((c) => c.textContent.trim() === String(y)).click();
+  }, OLD_YEAR);
+  await p.waitForTimeout(700);
+  const r2 = await rp();
+  console.log("  after picking " + OLD_YEAR + ": " + JSON.stringify(r2));
+  ok(new RegExp(String(OLD_YEAR)).test(r2.label),
+     "R4 picking a year re-scopes the card", r2.label);
+  // All time must genuinely differ from a single year, or R3/R4 prove nothing.
+  ok(r2.total !== r0.total,
+     "R5 and its total differs from All time — the filter really applies",
+     { allTime: r0.total, year: r2.total });
+
+  await p.evaluate(() => document.getElementById("profit-cat-alltime").click());
+  await p.waitForTimeout(700);
+  const r3 = await rp();
+  ok(r3.allActive === true && r3.total === r0.total,
+     "R6 and All time returns to the unfiltered figure", { back: r3.total, first: r0.total });
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 

@@ -12135,7 +12135,12 @@
     });
   }
 
-  var __profitCatYear = "all";
+  // Year selection now matches EXPENSE BY CATEGORY: a decade-grid picker holding
+  // real years only, with "All time" split out into its own toggle. The buckets
+  // are still keyed by year plus an "all" bucket, so the lookup key is derived
+  // from the two pieces of state rather than stored as a fake year.
+  var __profitCatYear = null;
+  var __profitCatAllTime = true;
   var __profitCatPortfolio = "all";
   var __profitCatExpanded = {}; // category → expanded?
   function renderProfitByCategoryCard() {
@@ -12167,22 +12172,42 @@
     var portfolioFilter = __profitCatPortfolio;
     buildRealizedProfitByCategory(portfolioFilter).then(function (data) {
       var years = data.years || [];
-      // Year dropdown: All time + each year (desc). Rebuild only when changed.
-      var wantOpts = ["all"].concat(years.slice().reverse());
+      // Real years only, ascending — the picker greys the rest of the decade, so
+      // a year with no realized profit is visible rather than absent.
+      var wantOpts = years.slice().sort();
       var haveOpts = [];
       for (var oi = 0; oi < yearSel.options.length; oi++) haveOpts.push(yearSel.options[oi].value);
       if (haveOpts.join(",") !== wantOpts.join(",")) {
         yearSel.innerHTML = wantOpts.map(function (y) {
-          return '<option value="' + y + '">' + (y === "all" ? "All time" : y) + '</option>';
+          return '<option value="' + y + '">' + y + '</option>';
         }).join("");
       }
-      if (wantOpts.indexOf(__profitCatYear) === -1) __profitCatYear = "all";
-      yearSel.value = __profitCatYear;
-      yearSel.onchange = function () { __profitCatYear = yearSel.value; renderProfitByCategoryCard(); };
+      if (!__profitCatYear || wantOpts.indexOf(__profitCatYear) === -1) {
+        __profitCatYear = wantOpts.length ? wantOpts[wantOpts.length - 1] : null;
+      }
+      if (__profitCatYear) yearSel.value = __profitCatYear;
+      yearSel.onchange = function () {
+        __profitCatYear = yearSel.value;
+        __profitCatAllTime = false;
+        renderProfitByCategoryCard();
+      };
+      _wfYpAttach(yearSel);
+      _wfYpSetHidden(yearSel, __profitCatAllTime || !wantOpts.length);
 
-      if (labelEl) labelEl.textContent = __profitCatYear === "all" ? "REALIZED PROFIT · ALL TIME" : ("REALIZED PROFIT · " + __profitCatYear);
+      var allBtn = document.getElementById("profit-cat-alltime");
+      if (allBtn) {
+        allBtn.classList.toggle("active", !!__profitCatAllTime);
+        allBtn.onclick = function () {
+          __profitCatAllTime = !__profitCatAllTime;
+          renderProfitByCategoryCard();
+        };
+      }
 
-      var byCat = data.buckets[__profitCatYear] || {};
+      // "all" is a bucket key, not a selectable year.
+      var bucketKey = (__profitCatAllTime || !__profitCatYear) ? "all" : __profitCatYear;
+      if (labelEl) labelEl.textContent = bucketKey === "all" ? "REALIZED PROFIT · ALL TIME" : ("REALIZED PROFIT · " + bucketKey);
+
+      var byCat = data.buckets[bucketKey] || {};
       var cats = Object.keys(byCat).map(function (cat) {
         var subs = byCat[cat];
         var catTotal = Object.keys(subs).reduce(function (s, k) { return s + subs[k]; }, 0);
@@ -12198,7 +12223,7 @@
       var yearNote = "";
       if (!cats.length) {
         listEl.innerHTML = "";
-        if (statusEl) statusEl.textContent = "No realized profit booked" + (__profitCatYear === "all" ? " yet." : " in " + __profitCatYear + ".");
+        if (statusEl) statusEl.textContent = "No realized profit booked" + (bucketKey === "all" ? " yet." : " in " + bucketKey + ".");
         return;
       }
       if (statusEl) statusEl.textContent = yearNote;
