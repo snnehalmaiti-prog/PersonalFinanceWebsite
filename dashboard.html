@@ -323,6 +323,20 @@
       </div>
       </div><!-- /ov-charts-card -->
 
+      <!-- Net Worth · Monthly — read from recorded snapshots, not recomputed -->
+      <div class="value-chart-card nwm-card" id="net-worth-monthly-card" style="margin-top:16px;">
+        <div class="nwm-header">
+          <div>
+            <h3 class="nwm-title">Net Worth &middot; Monthly</h3>
+            <p class="nwm-subtitle" id="nwm-subtitle">RECORDED MONTH ENDS</p>
+          </div>
+          <span class="nwm-count" id="nwm-count"></span>
+        </div>
+        <p class="muted small nwm-status" id="nwm-status">Loading…</p>
+        <div class="nwm-list" id="nwm-list"></div>
+        <p class="muted small nwm-foot" id="nwm-foot" hidden></p>
+      </div>
+
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->
       <div id="monthly-invest-row" style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;margin-top:16px;">
       <div class="value-chart-card mic-card" id="monthly-invest-cat-card" style="width:100%;box-sizing:border-box;">

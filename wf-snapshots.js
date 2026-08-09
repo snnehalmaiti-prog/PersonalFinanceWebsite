@@ -174,7 +174,119 @@
     });
   }
 
+  // ── Reading snapshots back ────────────────────────────────────────────────
+
+  // One row per calendar month: the latest snapshot in it, oldest first.
+  //
+  // The current month is kept — it is the "so far" row, and its date says how
+  // far "so far" goes. Rows are normalised here so every consumer sees the same
+  // shape whether the row came from the database or a fixture.
+  function monthEndSeries(rows) {
+    if (!rows || !rows.length) return [];
+    var byMonth = {};
+    rows.forEach(function (r) {
+      if (!r) return;
+      var date = String(r.snapshot_date || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+      // Number(null) is 0 and Number("") is 0, both finite — so the null check
+      // has to come first or a row with no total renders as a net worth of zero.
+      if (r.total == null || r.total === "") return;
+      var total = Number(r.total);
+      if (!isFinite(total)) return;
+      var m = date.slice(0, 7);
+      if (byMonth[m] && byMonth[m].date >= date) return;
+      byMonth[m] = {
+        month: m,
+        date: date,
+        total: total,
+        invested: numOrNull(r.invested),
+        equity: numOrNull(r.equity),
+        fixed_income: numOrNull(r.fixed_income),
+        commodity: numOrNull(r.commodity),
+        by_portfolio: r.by_portfolio || null,
+        backfilled: !!(r.meta && (r.meta.backfilled || r.meta.source === "backfill"))
+      };
+    });
+    return Object.keys(byMonth).sort().map(function (m) { return byMonth[m]; });
+  }
+
+  function numOrNull(v) {
+    if (v == null || v === "") return null;
+    var n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+
+  // Month-over-month change, split into what you put in and what the market did.
+  //
+  //   Δ net worth = contributions + market movement
+  //
+  // Both terms come from different places — the change from two snapshots, the
+  // contributions from the transaction sheets — so market movement is what is
+  // left over. That makes it only as good as its inputs, and the flags below say
+  // when it isn't good:
+  //
+  //   estimated   one of the two endpoints is a reconstruction, so the change is
+  //               partly derived from today's sheets and is not a record
+  //   gapMonths   the previous snapshot is not the previous month; contributions
+  //               are summed across the whole gap, but a longer gap means a
+  //               coarser attribution
+  //
+  // contribByMonth maps "YYYY-MM" to NET contributions for that month
+  // (investments minus withdrawals). A month missing from it contributes zero,
+  // which is right: no transactions means no contributions.
+  //
+  // Returned newest first, which is the order it is read in.
+  function buildMonthlyChange(rows, contribByMonth) {
+    var series = monthEndSeries(rows);
+    var contrib = contribByMonth || {};
+    var out = series.map(function (row, i) {
+      var prev = i > 0 ? series[i - 1] : null;
+      var o = {
+        month: row.month, date: row.date, total: row.total,
+        invested: row.invested, equity: row.equity,
+        fixed_income: row.fixed_income, commodity: row.commodity,
+        by_portfolio: row.by_portfolio, backfilled: row.backfilled,
+        delta: null, contributions: null, market: null,
+        estimated: false, gapMonths: 0
+      };
+      if (!prev) return o;
+      o.delta = round2(row.total - prev.total);
+      o.gapMonths = monthsBetween(prev.month, row.month);
+      // Every month after the previous snapshot up to and including this one.
+      // Using only this month's contributions across a gap would book the
+      // skipped months' investing as market movement.
+      var c = 0;
+      eachMonthAfter(prev.month, row.month).forEach(function (m) { c += Number(contrib[m]) || 0; });
+      o.contributions = round2(c);
+      o.market = round2(o.delta - c);
+      o.estimated = row.backfilled || prev.backfilled;
+      return o;
+    });
+    return out.reverse();
+  }
+
+  function monthsBetween(a, b) {
+    var pa = a.split("-"), pb = b.split("-");
+    return (+pb[0] - +pa[0]) * 12 + (+pb[1] - +pa[1]);
+  }
+
+  // The months in (from, to] — exclusive of the earlier endpoint, inclusive of
+  // the later one, because the earlier month's contributions are already inside
+  // the earlier snapshot's total.
+  function eachMonthAfter(from, to) {
+    var out = [], y = +from.split("-")[0], m = +from.split("-")[1];
+    for (var guard = 0; guard < 1200; guard++) {
+      m++; if (m > 12) { m = 1; y++; }
+      var key = y + "-" + (m < 10 ? "0" : "") + m;
+      out.push(key);
+      if (key >= to) break;
+    }
+    return out;
+  }
+
   root.WfSnapshots = {
+    monthEndSeries: monthEndSeries,
+    buildMonthlyChange: buildMonthlyChange,
     localDateKey: localDateKey,
     monthKey: monthKey,
     isStable: isStable,

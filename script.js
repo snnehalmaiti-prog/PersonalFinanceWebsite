@@ -16135,8 +16135,180 @@
           });
         })
         .then(function () { return _snapBackfill(); })
+        // Re-read after writing, so today's row and the backfill appear on the
+        // load that created them rather than only on the next one.
+        .then(function () { renderNetWorthMonthly(); })
         .catch(function (e) { dbg("[Snapshot] write failed:", e && e.message); });
     }, 1500);
+  }
+
+  // ===== Net Worth · Monthly (Phase 2: reading the snapshots back) ==========
+  //
+  // The card the snapshot table exists for. Two things it can show that nothing
+  // else on the dashboard can:
+  //
+  //   1. A past month's net worth that does not move when an old transaction is
+  //      corrected — because it is read, not recomputed.
+  //   2. The month's change split into what you put in and what the market did.
+  //      Δ = contributions + market, so market is the remainder; the
+  //      contributions half comes from the same monthly aggregation the Cash
+  //      Flow card uses.
+  //
+  // Rows built from a reconstruction are labelled and greyed. A backfilled month
+  // came from replaying today's sheets, so it carries none of (1)'s guarantee,
+  // and a card that drew them identically would be claiming more than it knows.
+  var NWM_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var _nwmExpanded = {};
+
+  function _nwmMonthLabel(m) {
+    var p = String(m).split("-");
+    return NWM_MONTHS[(+p[1] || 1) - 1] + " " + p[0];
+  }
+
+  // Net contributions per month, household-wide: money in minus money out, from
+  // the same builder the Cash Flow card uses. Passed "all" explicitly — the
+  // snapshots are whole net worth, so attributing their change with one
+  // portfolio's flows would blame the market for the other portfolio's investing.
+  function _nwmContributionsByMonth() {
+    var out = {};
+    try {
+      var d = buildMonthlyInvestCatData("all");
+      if (!d) return out;
+      Object.keys(d.byMonthGrp || {}).forEach(function (m) {
+        var s = 0, g = d.byMonthGrp[m];
+        Object.keys(g).forEach(function (k) { s += g[k] || 0; });
+        out[m] = (out[m] || 0) + s;
+      });
+      Object.keys(d.byMonthGrpOut || {}).forEach(function (m) {
+        var s = 0, g = d.byMonthGrpOut[m];
+        Object.keys(g).forEach(function (k) { s += g[k] || 0; });
+        out[m] = (out[m] || 0) - s;
+      });
+    } catch (e) {}
+    return out;
+  }
+
+  function _nwmSigned(n) {
+    return (n > 0 ? "+" : n < 0 ? "−" : "") + formatCurrency(Math.abs(n));
+  }
+
+  function _nwmRowHtml(r, idx) {
+    var cls = r.delta == null ? "nwm-flat" : r.delta > 0 ? "nwm-up" : r.delta < 0 ? "nwm-down" : "nwm-flat";
+    var open = !!_nwmExpanded[r.month];
+    var h = '<div class="nwm-row' + (r.estimated || r.backfilled ? " is-estimated" : "") + '">';
+    h += '<button type="button" class="nwm-row-head" data-nwm-month="' + escapeHtml(r.month) + '"' +
+         ' aria-expanded="' + (open ? "true" : "false") + '">';
+    h += '<span class="nwm-month">' + _nwmMonthLabel(r.month) +
+         (r.backfilled ? '<span class="nwm-tag" title="Reconstructed from your transactions, not recorded on the day">est</span>' : "") +
+         '</span>';
+    h += '<span class="nwm-total"' + _crTitle(r.total) + '>' + formatCurrency(r.total) + '</span>';
+    h += '<span class="nwm-delta ' + cls + '">' + (r.delta == null ? "—" : _nwmSigned(r.delta)) + '</span>';
+    h += '</button>';
+
+    if (r.delta != null) {
+      h += '<div class="nwm-attr">';
+      h += '<span>invested <b>' + _nwmSigned(r.contributions) + '</b></span>';
+      h += '<span>market <b>' + _nwmSigned(r.market) + '</b></span>';
+      if (r.gapMonths > 1) h += '<span>over ' + r.gapMonths + ' months</span>';
+      if (r.estimated) h += '<span>from a reconstructed month</span>';
+      h += '</div>';
+    }
+
+    if (open) {
+      h += '<div class="nwm-detail">';
+      var any = false;
+      [["Equity", r.equity], ["Fixed Income", r.fixed_income], ["Commodity", r.commodity]]
+        .forEach(function (p) {
+          if (p[1] == null) return;
+          any = true;
+          h += '<span>' + p[0] + ' <b>' + formatCurrency(p[1]) + '</b></span>';
+        });
+      if (r.by_portfolio) {
+        Object.keys(r.by_portfolio).forEach(function (name) {
+          var v = r.by_portfolio[name];
+          if (!v) return;
+          var t = (v.equity || 0) + (v.fixed_income || 0) + (v.commodity || 0);
+          any = true;
+          h += '<span>' + escapeHtml(name) + ' <b>' + formatCurrency(t) + '</b></span>';
+        });
+      }
+      // Backfilled rows have no split at all — say so rather than showing an
+      // empty strip that reads as "nothing was held".
+      if (!any) h += '<span>No category split — this month was reconstructed from the value history.</span>';
+      h += '<span>as of ' + escapeHtml(r.date) + '</span>';
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function _nwmRender(rows) {
+    var listEl = document.getElementById("nwm-list");
+    var statusEl = document.getElementById("nwm-status");
+    var countEl = document.getElementById("nwm-count");
+    var footEl = document.getElementById("nwm-foot");
+    if (!listEl) return;
+
+    if (!rows.length) {
+      listEl.innerHTML = "";
+      if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.textContent = "No snapshots recorded yet. Your net worth is recorded once " +
+          "each day you open the dashboard; the first month-over-month comparison appears " +
+          "once there are two months of them.";
+      }
+      if (countEl) countEl.textContent = "";
+      if (footEl) footEl.hidden = true;
+      return;
+    }
+    if (statusEl) statusEl.hidden = true;
+    listEl.innerHTML = rows.map(_nwmRowHtml).join("");
+    var recorded = rows.filter(function (r) { return !r.backfilled; }).length;
+    if (countEl) {
+      countEl.textContent = rows.length + " month" + (rows.length === 1 ? "" : "s") +
+        (recorded < rows.length ? " · " + recorded + " recorded" : "");
+    }
+    if (footEl) {
+      var est = rows.length - recorded;
+      footEl.hidden = false;
+      footEl.textContent = est
+        ? est + " earlier month" + (est === 1 ? " was" : "s were") + " reconstructed from your " +
+          "transaction history (marked “est”) — unlike recorded months, those can still change " +
+          "if you edit an old transaction."
+        : "Recorded month ends. These do not change when you edit an old transaction.";
+    }
+    listEl.querySelectorAll(".nwm-row-head").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var m = btn.getAttribute("data-nwm-month");
+        _nwmExpanded[m] = !_nwmExpanded[m];
+        _nwmRender(rows);
+      });
+    });
+  }
+
+  function renderNetWorthMonthly() {
+    var card = document.getElementById("net-worth-monthly-card");
+    if (!card) return;
+    var statusEl = document.getElementById("nwm-status");
+    if (!(window.WfAuth && WfAuth.isLoggedIn()) || !window.WfDb || !window.WfSnapshots) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
+      .then(function (rows) {
+        _nwmRender(WfSnapshots.buildMonthlyChange(rows || [], _nwmContributionsByMonth()));
+      })
+      .catch(function (e) {
+        // A missing table is the expected state until the migration is run, and
+        // is worth saying plainly rather than leaving the card on "Loading…".
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.textContent = /404|does not exist|relation/i.test(String(e && e.message))
+            ? "Snapshot table not set up yet — run supabase-migration-snapshots.sql in the Supabase SQL editor."
+            : "Couldn't load snapshots: " + (e && e.message ? e.message : e);
+        }
+        dbg("[Snapshot] read failed:", e && e.message);
+      });
   }
 
   // Debounced off the load-completion events, rather than waiting for a fixed
@@ -16155,6 +16327,11 @@
     ["wf-overview-flows-ready", "wf-se-xirr-ready"].forEach(function (ev) {
       document.addEventListener(ev, _snapSchedule);
     });
+    // Show what is already recorded straight away. The write happens seconds
+    // later and re-renders; waiting for it would leave the card on "Loading…"
+    // for the whole of a slow load, and blank forever on a load that refuses to
+    // write.
+    renderNetWorthMonthly();
   })();
 
   // ===== Signup form (demo only, no backend) =====

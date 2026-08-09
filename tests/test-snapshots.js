@@ -163,5 +163,107 @@ const SERIES = [
   eq(me[0].snapshot_date, "2026-06-30", "B17 the real one survives");
 }
 
+// ── Reading back: month-end series ──────────────────────────────────────────
+const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, meta: { source: "live" } }, extra || {});
+{
+  const s = S.monthEndSeries([
+    R("2026-06-02", 100), R("2026-06-30", 150), R("2026-06-15", 120),
+    R("2026-07-31", 200)
+  ]);
+  eq(s.length, 2, "M1 one row per month");
+  eq(s[0].total, 150, "M2 the LATEST snapshot in the month wins, whatever order they arrive in");
+  eq(s[0].month, "2026-06", "M3 keyed by month");
+  eq(s[1].total, 200, "M4 oldest first");
+}
+{
+  // Postgres hands dates back as timestamps often enough that slicing matters.
+  const s = S.monthEndSeries([R("2026-06-30T00:00:00+05:30", 150)]);
+  eq(s.length, 1, "M5 a timestamp-shaped date is accepted");
+  eq(s[0].date, "2026-06-30", "M6 and trimmed to the day");
+}
+{
+  const s = S.monthEndSeries([R("garbage", 1), R("2026-06-30", null), R("2026-07-31", 200)]);
+  eq(s.length, 1, "M7 unparseable dates and non-numeric totals are dropped, not rendered as 0");
+}
+{
+  const s = S.monthEndSeries([R("2026-06-30", 150, { meta: { source: "backfill", backfilled: true } })]);
+  eq(s[0].backfilled, true, "M8 reconstructions are surfaced to the renderer");
+  eq(S.monthEndSeries([R("2026-06-30", 150)])[0].backfilled, false, "M9 recorded ones are not");
+}
+{
+  // numeric() comes back from PostgREST as a string.
+  const s = S.monthEndSeries([R("2026-06-30", "150.5", { equity: "100.25", invested: "" })]);
+  eq(s[0].total, 150.5, "M10 string totals are coerced");
+  eq(s[0].equity, 100.25, "M11 so are string categories");
+  eq(s[0].invested, null, "M12 and an empty one stays null rather than becoming 0");
+}
+
+// ── Reading back: monthly change ────────────────────────────────────────────
+{
+  const rows = [R("2026-05-31", 1000000), R("2026-06-30", 1200000), R("2026-07-31", 1150000)];
+  const c = { "2026-06": 90000, "2026-07": 90000 };
+  const out = S.buildMonthlyChange(rows, c);
+  eq(out.length, 3, "C1 one row per month");
+  eq(out[0].month, "2026-07", "C2 newest first — the order it is read in");
+
+  eq(out[0].delta, -50000, "C3 change is against the previous month's snapshot");
+  eq(out[0].contributions, 90000, "C4 contributions come from the transaction sheets");
+  eq(out[0].market, -140000,
+     "C5 market movement is the remainder: you added 90k and still finished 50k down");
+
+  eq(out[1].delta, 200000, "C6 the up month");
+  eq(out[1].market, 110000, "C7 of which 110k was the market");
+
+  eq(out[2].delta, null, "C8 the oldest row has nothing to compare against");
+  eq(out[2].market, null, "C9 and no attribution is invented for it");
+}
+{
+  // The gap case. Skipping the dashboard for two months must not book those
+  // months' investing as market movement.
+  const rows = [R("2026-05-31", 1000000), R("2026-08-31", 1400000)];
+  const c = { "2026-06": 50000, "2026-07": 50000, "2026-08": 50000 };
+  const out = S.buildMonthlyChange(rows, c);
+  eq(out[0].gapMonths, 3, "C10 the gap is reported");
+  eq(out[0].contributions, 150000,
+     "C11 contributions are summed across the whole gap, not just the closing month");
+  eq(out[0].market, 250000, "C12 leaving the market with the rest");
+}
+{
+  // The earlier endpoint's own month is already inside its total.
+  const rows = [R("2026-05-31", 1000000), R("2026-06-30", 1100000)];
+  const out = S.buildMonthlyChange(rows, { "2026-05": 999999, "2026-06": 40000 });
+  eq(out[0].contributions, 40000,
+     "C13 May's contributions are NOT counted again — they are already in May's total");
+}
+{
+  const rows = [R("2026-05-31", 100, { meta: { source: "backfill", backfilled: true } }),
+                R("2026-06-30", 150)];
+  const out = S.buildMonthlyChange(rows, {});
+  eq(out[0].estimated, true,
+     "C14 an attribution against a reconstructed endpoint is flagged — half of it is not a record");
+  eq(out[0].delta, 50, "C15 but it is still computed");
+}
+{
+  const rows = [R("2026-05-31", 100), R("2026-06-30", 150)];
+  eq(S.buildMonthlyChange(rows, {})[0].estimated, false,
+     "C16 two recorded endpoints are not flagged");
+  eq(S.buildMonthlyChange(rows, {})[0].contributions, 0,
+     "C17 a month with no transactions contributes zero, not null");
+  eq(S.buildMonthlyChange(rows, {})[0].market, 50, "C18 so all of it was the market");
+}
+{
+  eq(S.buildMonthlyChange([], {}).length, 0, "C19 no snapshots, no rows");
+  eq(S.buildMonthlyChange(null, null).length, 0, "C20 and null inputs do not throw");
+  eq(S.buildMonthlyChange([R("2026-06-30", 100)], {}).length, 1,
+     "C21 a single snapshot still renders — it just has no change yet");
+}
+{
+  // A year boundary in the gap walk.
+  const rows = [R("2025-11-30", 100), R("2026-02-28", 400)];
+  const out = S.buildMonthlyChange(rows, { "2025-12": 10, "2026-01": 20, "2026-02": 30 });
+  eq(out[0].gapMonths, 3, "C22 gaps count across a year boundary");
+  eq(out[0].contributions, 60, "C23 and pick up every month in it");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
