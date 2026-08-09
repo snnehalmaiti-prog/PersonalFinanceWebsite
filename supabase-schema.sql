@@ -86,3 +86,49 @@ ALTER TABLE market_data ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS market_data_read ON market_data;
 CREATE POLICY market_data_read ON market_data FOR SELECT USING (true);
 GRANT SELECT ON market_data TO anon, authenticated;
+
+-- ── Net-worth snapshots ─────────────────────────────────────────────────────
+-- A RECORD of what the portfolio was worth on a date, as opposed to the Account
+-- Value chart, which is recomputed from the sheets on every load. That is the
+-- point of the table: editing a 2019 transaction rewrites a derivation, but must
+-- not rewrite a record.
+--
+-- One row per (user, local calendar date), upserted — opening the dashboard five
+-- times in a day updates today's row rather than appending five.
+--
+-- equity/fixed_income/commodity are nullable because backfilled rows are
+-- reconstructed from the single Account Value line, which has no category split;
+-- writing zeros there would invent a portfolio that held nothing. meta.source
+-- distinguishes 'live' (recorded) from 'backfill' (reconstructed).
+CREATE TABLE IF NOT EXISTS net_worth_snapshots (
+  user_id       uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  snapshot_date date NOT NULL,
+  total         numeric NOT NULL,
+  invested      numeric,
+  equity        numeric,
+  fixed_income  numeric,
+  commodity     numeric,
+  by_portfolio  jsonb,
+  meta          jsonb,
+  created_at    timestamptz DEFAULT now(),
+  updated_at    timestamptz DEFAULT now(),
+  PRIMARY KEY (user_id, snapshot_date)
+);
+
+ALTER TABLE net_worth_snapshots ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "own snapshots select"
+  ON net_worth_snapshots FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "own snapshots insert"
+  ON net_worth_snapshots FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "own snapshots update"
+  ON net_worth_snapshots FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- No DELETE policy: a record you can silently drop is not a record. Removing a
+-- snapshot is a deliberate act, done from the SQL editor.

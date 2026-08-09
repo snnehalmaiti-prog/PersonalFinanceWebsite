@@ -9800,6 +9800,11 @@
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
         try { _renderPortfolioValueChart(pointsAll); } catch (e) {}
 
+        // Keep the series the snapshot backfill reconstructs history from. Only
+        // the unfiltered one: a backfill built from a single portfolio's line
+        // would record one person's share as the household's net worth.
+        if (selectedPortfolio === "all") _snapAccountValuePoints = pointsAll;
+
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
 
@@ -15998,6 +16003,159 @@
 
   initBenchmarkCard();
   initRollingReturnSummary();
+
+  // ===== Net-worth snapshots (Phase 1: record + backfill) ====================
+  //
+  // Writes one row per local calendar date recording what the portfolio was
+  // actually worth. The Account Value chart is a derivation — it is recomputed
+  // from the sheets on every load, so correcting a 2019 transaction silently
+  // rewrites 2019. A snapshot is a record, and must not move.
+  //
+  // Which makes refusing to write the important half. The dashboard resolves
+  // progressively (mutual funds, then stocks, then gold), so for the first few
+  // seconds of every load the total on screen is a partial one; storing it would
+  // bake a permanent false dip into history. The rules live in wf-snapshots.js
+  // (pure, unit-tested); everything here is plumbing to feed them.
+  var _snapAccountValuePoints = null;   // set by the Account Value render, "all" only
+  var _snapDone = false;                // at most one write attempt per load
+  var SNAP_TABLE = "net_worth_snapshots";
+  var SNAP_LAST_KEY = "wf-snapshot-last";
+  var SNAP_BACKFILL_KEY = "wf-snapshot-backfill-done";
+
+  function _snapReady() {
+    return typeof window.WfSnapshots !== "undefined" &&
+           window.WfDb && typeof WfDb.upsert === "function" &&
+           window.WfAuth && WfAuth.isLoggedIn();
+  }
+
+  // Everything evaluateWrite needs, read at one instant.
+  function _snapContext(breakdown, byPortfolio) {
+    var fdRows = getSheetRows("fd");
+    return {
+      total: getOverviewCurrentTotal(),
+      invested: getOverviewInvestedTotal(),
+      breakdown: breakdown,
+      byPortfolio: byPortfolio,
+      portfolioFilter: localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all",
+      fiExcluded: isFixedIncomeExcluded(),
+      savingsExcluded: isSavingsInvestmentExcluded(),
+      goldStale: !!(_goldRateMeta && _goldRateMeta.stale),
+      hasCommodity: !!(fdRows && _hasCommodityRows(fdRows, "all")),
+      dateKey: WfSnapshots.localDateKey(),
+      marketSource: _marketSource
+    };
+  }
+
+  // Already recorded today, at the same value? Then this load has nothing to add.
+  // Cheap, and it keeps three open tabs from writing the same row three times.
+  function _snapAlreadyWritten(dateKey, total) {
+    try {
+      var last = JSON.parse(localStorage.getItem(SNAP_LAST_KEY) || "null");
+      return !!(last && last.date === dateKey && WfSnapshots.isStable(last.total, total));
+    } catch (e) { return false; }
+  }
+
+  function _snapRecordWritten(row) {
+    try {
+      localStorage.setItem(SNAP_LAST_KEY, JSON.stringify({ date: row.snapshot_date, total: row.total }));
+    } catch (e) {}
+  }
+
+  function _snapByPortfolio() {
+    var names = collectPortfolioNamesFromSheets(["equity", "stocksetf", "fd", "fixedincome"]);
+    if (!names.length) return Promise.resolve(null);
+    return Promise.all(names.map(function (n) {
+      return computePortfolioCurrentBreakdown(n)
+        .then(function (b) { return { name: n, b: b }; })
+        .catch(function () { return null; });
+    })).then(function (res) {
+      var out = {};
+      res.forEach(function (r) {
+        if (!r || !r.b) return;
+        out[r.name] = {
+          equity: Math.round(r.b.equity || 0),
+          fixed_income: Math.round(r.b.fixedIncome || 0),
+          commodity: Math.round(r.b.commodity || 0)
+        };
+      });
+      return Object.keys(out).length ? out : null;
+    }).catch(function () { return null; });
+  }
+
+  // Month ends the Account Value line can reconstruct, for the dates that have
+  // no row yet. Flagged as reconstructions in wf-snapshots.planBackfill — a
+  // backfilled point came from the very derivation this table exists to escape.
+  function _snapBackfill() {
+    if (localStorage.getItem(SNAP_BACKFILL_KEY) === "1") return Promise.resolve(0);
+    if (!_snapAccountValuePoints || !_snapAccountValuePoints.length) return Promise.resolve(0);
+    // The Account Value series honours the exclusion toggles, so with fixed
+    // income or savings hidden its line is a partial one — reconstructing years
+    // of history off it would write a permanently understated past. The write
+    // rules refuse a live snapshot for the same reason; the backfill, which
+    // bypasses them, has to refuse for itself.
+    if (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) return Promise.resolve(0);
+    var points = _snapAccountValuePoints;
+    return WfDb.select(SNAP_TABLE, "select=snapshot_date").then(function (rows) {
+      var have = (rows || []).map(function (r) { return String(r.snapshot_date).slice(0, 10); });
+      var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600);
+      if (!plan.length) { localStorage.setItem(SNAP_BACKFILL_KEY, "1"); return 0; }
+      return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
+        localStorage.setItem(SNAP_BACKFILL_KEY, "1");
+        dbg("[Snapshot] backfilled " + plan.length + " month ends");
+        return plan.length;
+      });
+    }).catch(function (e) { dbg("[Snapshot] backfill skipped:", e && e.message); return 0; });
+  }
+
+  // The stability check: read the total, wait, read it again. A slice landing in
+  // between moves it, and the write is abandoned for this load. Cheaper and far
+  // more reliable than trying to enumerate every async path that feeds the total.
+  function _snapRun() {
+    if (_snapDone || !_snapReady()) return;
+    _snapDone = true;
+    var first = getOverviewCurrentTotal();
+    var dateKey = WfSnapshots.localDateKey();
+    if (!(first > 0)) return;
+    if (_snapAlreadyWritten(dateKey, first)) { _snapBackfill(); return; }
+
+    setTimeout(function () {
+      Promise.all([computePortfolioCurrentBreakdown("all").catch(function () { return null; }),
+                   _snapByPortfolio()])
+        .then(function (parts) {
+          var ctx = _snapContext(parts[0], parts[1]);
+          ctx.totalAgain = first;
+          var decision = WfSnapshots.evaluateWrite(ctx);
+          if (!decision.write) {
+            dbg("[Snapshot] not recorded: " + decision.reasons.join(", "));
+            return null;
+          }
+          return WfDb.upsert(SNAP_TABLE, decision.row, "user_id,snapshot_date").then(function () {
+            _snapRecordWritten(decision.row);
+            dbg("[Snapshot] recorded " + decision.row.snapshot_date + " = " + decision.row.total);
+          });
+        })
+        .then(function () { return _snapBackfill(); })
+        .catch(function (e) { dbg("[Snapshot] write failed:", e && e.message); });
+    }, 1500);
+  }
+
+  // Debounced off the load-completion events, rather than waiting for a fixed
+  // set of them: wf-se-xirr-ready never fires for a portfolio holding no stocks,
+  // so requiring both would silently never record anything for such a user.
+  // Each event pushes the attempt out, so the run happens after the last slice
+  // settles; the stability check then catches anything still in flight.
+  var _snapTimer = null;
+  function _snapSchedule() {
+    if (_snapDone) return;
+    if (_snapTimer) clearTimeout(_snapTimer);
+    _snapTimer = setTimeout(_snapRun, 3000);
+  }
+  (function _snapWire() {
+    if (!document.getElementById("overview-total-current-value")) return;
+    ["wf-overview-flows-ready", "wf-se-xirr-ready"].forEach(function (ev) {
+      document.addEventListener(ev, _snapSchedule);
+    });
+  })();
 
   // ===== Signup form (demo only, no backend) =====
   var form = document.getElementById("signup-form");

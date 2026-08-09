@@ -176,6 +176,11 @@
     try {
       SYNC_KEYS.forEach(function (k) { localStorage.removeItem(k); });
       localStorage.removeItem("wf-gh-token");
+      // Snapshot bookkeeping is per-user: left behind, it would tell the next
+      // user on this device that today is already recorded (skipping their
+      // write) and that their backfill has already run.
+      localStorage.removeItem("wf-snapshot-last");
+      localStorage.removeItem("wf-snapshot-backfill-done");
       sessionStorage.removeItem("wf-cloud-synced");
     } catch (e) {}
     // Drop the cached expense snapshot too. It holds this user's transaction
@@ -423,6 +428,24 @@
     });
   }
 
+  // Upsert on a composite key (e.g. net_worth_snapshots' (user_id, snapshot_date)).
+  // dbInsert would 409 on the second write of the same day; merge-duplicates makes
+  // a repeat load update the existing row instead of appending a duplicate — the
+  // same rule saveSheetData follows.
+  function dbUpsert(table, row, onConflict) {
+    return getValidToken().then(function (token) {
+      if (!token) return null;
+      var uid = getUserId();
+      if (!uid) return null;
+      var payload = Array.isArray(row)
+        ? row.map(function (r) { return Object.assign({ user_id: uid }, r); })
+        : Object.assign({ user_id: uid }, row);
+      var path = table + (onConflict ? "?on_conflict=" + encodeURIComponent(onConflict) : "");
+      return dbRequest("POST", path, payload, token,
+        "resolution=merge-duplicates,return=minimal");
+    });
+  }
+
   function dbUpdate(table, id, patch) {
     return getValidToken().then(function (token) {
       if (!token) return null;
@@ -444,6 +467,7 @@
   window.WfDb = {
     select: dbSelect,
     insert: dbInsert,
+    upsert: dbUpsert,
     update: dbUpdate,
     remove: dbDelete
   };

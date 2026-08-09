@@ -11,7 +11,7 @@
 // by tests/run-browser.js — CI runs BOTH, as two separate jobs.
 //
 // Usage: node tests/run-all.js       fast: guards + unit suites  (~30s)
-//        node tests/run-browser.js   slow: 19 browser suites     (~11 min)
+//        node tests/run-browser.js   slow: all browser suites    (~12 min)
 "use strict";
 
 const fs = require("fs");
@@ -32,6 +32,7 @@ const guards = [
   { name: "syntax: script.js", cmd: "node", args: ["--check", path.join(ROOT, "script.js")] },
   { name: "syntax: wf-math.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-math.js")] },
   { name: "syntax: wf-overview.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-overview.js")] },
+  { name: "syntax: wf-snapshots.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-snapshots.js")] },
   { name: "syntax: expense.js", cmd: "node", args: ["--check", path.join(ROOT, "expense.js")] },
   { name: "syntax: supabase-client.js", cmd: "node", args: ["--check", path.join(ROOT, "supabase-client.js")] },
   { name: "syntax: sw.js", cmd: "node", args: ["--check", path.join(ROOT, "sw.js")] },
