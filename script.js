@@ -16286,6 +16286,101 @@
     return h + '</div>';
   }
 
+  // The change, drawn. One bar per month, stacked into the two things that move
+  // net worth: money you added and what the market did with it.
+  //
+  // Not a net-worth line — that is the Account Value chart, and since almost
+  // every snapshot was reconstructed from that same series a second line would
+  // be a monthly-sampled copy of it. The split is what only this data can show.
+  //
+  // Both parts can be negative (a withdrawal, a losing month) and stack away
+  // from the axis in that direction, so the bar's extent is the month's total
+  // change and its sign is visible at a glance.
+  var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A";
+  var NWM_MAX_BARS = 24;
+  var _nwmChart = null, _nwmChartSig = null;
+
+  function _nwmFade(hex, on) {
+    if (!on) return hex;
+    var n = parseInt(hex.slice(1), 16);
+    return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + ",0.35)";
+  }
+
+  function _nwmDrawChart(rows) {
+    var wrap = document.getElementById("nwm-chart-wrap");
+    var legend = document.getElementById("nwm-chart-legend");
+    var canvas = document.getElementById("nwm-chart");
+    if (!wrap || !canvas) return;
+    if (_nwmChart) { try { _nwmChart.destroy(); } catch (e) {} _nwmChart = window.__wfNwmChart = null; }
+
+    // Oldest first for the x axis, and only months that HAVE a change — the
+    // first snapshot has nothing to compare against, so it has no bar.
+    var bars = rows.filter(function (r) { return r.delta != null; }).slice(0, NWM_MAX_BARS).reverse();
+    if (typeof window.Chart !== "function" || bars.length < 1) {
+      wrap.hidden = true;
+      if (legend) legend.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    if (legend) legend.hidden = false;
+
+    var labels = bars.map(function (r) { return _nwmMonthLabel(r.month); });
+    var invested = bars.map(function (r) { return r.contributions; });
+    var market = bars.map(function (r) { return r.market; });
+    // A month measured from a reconstruction is faded rather than dropped:
+    // hiding it would leave an unexplained hole, and drawing it solid would
+    // claim it was observed.
+    var invColors = bars.map(function (r) { return _nwmFade(NWM_INV, r.estimated); });
+    var mktColors = bars.map(function (r) {
+      return _nwmFade(r.market >= 0 ? NWM_UP : NWM_DOWN, r.estimated);
+    });
+
+    _nwmChart = window.__wfNwmChart = new Chart(canvas.getContext ? canvas.getContext("2d") : canvas, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          { label: "Invested", data: invested, backgroundColor: invColors, stack: "chg",
+            borderWidth: 0, borderRadius: 2 },
+          { label: "Market", data: market, backgroundColor: mktColors, stack: "chg",
+            borderWidth: 0, borderRadius: 2 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: { stacked: true, grid: { display: false },
+               ticks: { font: { size: 10 }, maxRotation: 0, autoSkipPadding: 12 } },
+          y: { stacked: true, grid: { color: "rgba(0,0,0,0.06)" },
+               ticks: { font: { size: 10 },
+                        callback: function (v) { return formatCompactINR(v); } } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (c) {
+                return c.dataset.label + ": " + _nwmSigned(c.parsed.y);
+              },
+              // The bar's own arithmetic, spelled out: the two parts and what
+              // they sum to, plus where the month closed.
+              afterBody: function (items) {
+                var r = bars[items[0].dataIndex];
+                if (!r) return "";
+                var out = ["Change: " + _nwmSigned(r.delta),
+                           "Closing: " + formatCurrency(r.total)];
+                if (r.gapMonths > 1) out.push("Covers " + r.gapMonths + " months");
+                if (r.estimated) out.push("Measured from a reconstructed month");
+                return out;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   function _nwmRender(rows) {
     var listEl = document.getElementById("nwm-list");
     var statusEl = document.getElementById("nwm-status");
@@ -16303,9 +16398,15 @@
       }
       if (countEl) countEl.textContent = "";
       if (footEl) footEl.hidden = true;
+      _nwmDrawChart([]);
       return;
     }
     if (statusEl) statusEl.hidden = true;
+    // Only when the data actually changed. _nwmRender also runs on every
+    // expand/collapse, and rebuilding the chart for a row toggle would throw
+    // away and recreate it on each click.
+    var sig = rows.map(function (r) { return r.month + ":" + r.delta + ":" + r.market; }).join("|");
+    if (sig !== _nwmChartSig) { _nwmChartSig = sig; _nwmDrawChart(rows); }
     listEl.innerHTML = rows.map(_nwmRowHtml).join("");
     var recorded = rows.filter(function (r) { return !r.backfilled; }).length;
     if (countEl) {

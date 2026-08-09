@@ -93,7 +93,7 @@ const money = (t) => {
 
   await p.addInitScript(() => {
     window.Chart = function (c, cfg) {
-      this.data = cfg.data; this.options = cfg.options; this.scales = { x: {}, y: {} };
+      this.type = cfg.type; this.data = cfg.data; this.options = cfg.options; this.scales = { x: {}, y: {} };
       this.chartArea = { left: 0, right: 800, top: 0, bottom: 300 };
       this.zoomScale = function () {}; this.resetZoom = function () {}; this.destroy = function () {};
       this.update = function () {}; this.resize = function () {};
@@ -175,6 +175,55 @@ const money = (t) => {
      "N18 expanding a row shows the category split as stored", detail);
   ok(/Snnehal/.test(detail), "N19 and the per-portfolio breakdown", detail);
   ok(/2025-07-31/.test(detail), "N20 with the date the figure is as-of", detail);
+
+  // ── The stacked bars ────────────────────────────────────────────────────
+  // Read off the Chart config the page actually built, so the bars are asserted
+  // to carry the same numbers the rows do rather than merely to exist.
+  const chart = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    if (!c) return null;
+    return { type: c.type, labels: c.data.labels,
+      sets: c.data.datasets.map((d) => ({ label: d.label, data: d.data, stack: d.stack,
+        colors: d.backgroundColor })),
+      xStacked: !!(c.options.scales.x && c.options.scales.x.stacked),
+      yStacked: !!(c.options.scales.y && c.options.scales.y.stacked) };
+  });
+  console.log("  chart: " + JSON.stringify(chart));
+  ok(!!chart, "B1 the card draws a chart");
+  if (chart) {
+    eq(chart.type, "bar", "B2 bars, not a line — a second net-worth line would just " +
+       "restate the Account Value chart");
+    ok(chart.xStacked && chart.yStacked, "B3 stacked on both axes, so a bar's extent is the month's change");
+    eq(chart.sets.length, 2, "B4 two segments and no category split");
+    eq(chart.sets.map((s) => s.label).join(","), "Invested,Market", "B5 the two things that move net worth");
+    ok(chart.sets[0].stack === chart.sets[1].stack, "B6 in one stack");
+
+    // Only months with a change get a bar; May has nothing to compare against.
+    eq(chart.labels.length, 2, "B7 the first snapshot has no bar — there is nothing to compare it against");
+    eq(chart.labels[0], "Jun 2025", "B8 oldest on the left");
+    eq(chart.labels[1], "Jul 2025", "B9 newest on the right");
+
+    // Same arithmetic as the rows: Jun +50k invested / +1.5L market, Jul +30k / −80k.
+    eq(JSON.stringify(chart.sets[0].data), JSON.stringify([50000, 30000]),
+       "B10 the invested segment carries the contributions");
+    eq(JSON.stringify(chart.sets[1].data), JSON.stringify([150000, -80000]),
+       "B11 and the market segment the remainder, negative when the market lost");
+
+    // A losing month must not be drawn in the gaining colour. Asserted against
+    // the specific hues, not merely "the two differ" — Jun is faded and Jul is
+    // not, so a difference exists even when both are green.
+    const UP = "16,185,129", DOWN = "232,98,58";   // #10B981 / #E8623A
+    ok(String(chart.sets[1].colors[0]).includes(UP),
+       "B12 the gaining month is drawn in the gain colour", chart.sets[1].colors[0]);
+    ok(String(chart.sets[1].colors[1]).toUpperCase() === "#E8623A",
+       "B12b and the losing month in the loss colour", chart.sets[1].colors[1]);
+    ok(!String(chart.sets[1].colors[1]).includes(UP) && DOWN.length > 0,
+       "B12c specifically, a loss is never drawn as a gain", chart.sets[1].colors);
+    // Jun is measured from May, which is a reconstruction — so it is faded.
+    ok(/rgba/.test(String(chart.sets[0].colors[0])) && !/rgba/.test(String(chart.sets[0].colors[1])),
+       "B13 a month measured from a reconstruction is faded, while a fully recorded one is solid",
+       chart.sets[0].colors);
+  }
 
   // ── Empty state ─────────────────────────────────────────────────────────
   // The state every user is in before the migration is run. It must explain

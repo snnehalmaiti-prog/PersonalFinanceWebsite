@@ -4468,3 +4468,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .nwm-attr, .nwm-detail { margin-left: 0; }
   .nwm-total { font-size: 0.74rem; }
 }
+
+/* The change, as bars: each month stacked into what you put in and what the
+   market did. Deliberately NOT a second net-worth line — that would duplicate
+   the Account Value chart, which is drawn from the same history. */
+.nwm-chart-wrap { position: relative; height: 220px; margin: 10px 0 4px; }
+.nwm-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 6px;
+  font-size: 0.62rem; color: var(--muted); }
+.nwm-key { display: inline-flex; align-items: center; gap: 5px; }
+.nwm-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.nwm-swatch-inv { background: #3B82F6; }
+.nwm-swatch-up { background: #10B981; }
+.nwm-swatch-down { background: #E8623A; }
+.nwm-swatch-est { background: #3B82F6; opacity: 0.35; }
+@media (max-width: 640px) { .nwm-chart-wrap { height: 180px; } }
