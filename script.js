@@ -9803,7 +9803,16 @@
         // Keep the series the snapshot backfill reconstructs history from. Only
         // the unfiltered one: a backfill built from a single portfolio's line
         // would record one person's share as the household's net worth.
-        if (selectedPortfolio === "all") _snapAccountValuePoints = pointsAll;
+        // …and run the backfill off the back of it. The write path also tries,
+        // but it fires seconds after the Overview settles, while this chart waits
+        // on NAV and price history and can easily still be loading then — in
+        // which case the backfill found no series and did nothing. Triggering it
+        // from here means it runs whenever the series actually arrives, in
+        // whichever order that happens.
+        if (selectedPortfolio === "all") {
+          _snapAccountValuePoints = pointsAll;
+          _snapBackfillSoon();
+        }
 
         var first = timeline[0], last = timeline[timeline.length - 1];
         if (rangeEl) rangeEl.textContent = first.toLocaleDateString() + " – " + last.toLocaleDateString();
@@ -16085,19 +16094,52 @@
   // Month ends the Account Value line can reconstruct, for the dates that have
   // no row yet. Flagged as reconstructions in wf-snapshots.planBackfill — a
   // backfilled point came from the very derivation this table exists to escape.
+  // Called from both the write path and the Account Value render, whichever
+  // finishes first. Debounced and latched so the pair can't race into two
+  // backfills of the same months, and so a chart that re-renders (portfolio
+  // switch, refresh) doesn't re-run it.
+  var _snapBackfillTimer = null, _snapBackfillStarted = false;
+  function _snapBackfillSoon() {
+    if (_snapBackfillStarted || localStorage.getItem(SNAP_BACKFILL_KEY) === "1") return;
+    if (_snapBackfillTimer) clearTimeout(_snapBackfillTimer);
+    _snapBackfillTimer = setTimeout(function () {
+      _snapBackfill().then(function (n) { if (n) renderNetWorthMonthly(); });
+    }, 800);
+  }
+
   function _snapBackfill() {
-    if (localStorage.getItem(SNAP_BACKFILL_KEY) === "1") return Promise.resolve(0);
-    if (!_snapAccountValuePoints || !_snapAccountValuePoints.length) return Promise.resolve(0);
+    // Every exit below says why. A backfill that quietly does nothing is
+    // indistinguishable from one that ran and found nothing to do, and telling
+    // those apart from the outside took a round trip that should not have been
+    // necessary.
+    if (_snapBackfillStarted) { dbg("[Snapshot] backfill: already running"); return Promise.resolve(0); }
+    if (localStorage.getItem(SNAP_BACKFILL_KEY) === "1") {
+      dbg("[Snapshot] backfill: already done on this device (clear wf-snapshot-backfill-done to redo)");
+      return Promise.resolve(0);
+    }
+    // No series yet is NOT a reason to give up for good — the chart may still be
+    // loading. Return without latching, so whichever caller comes next retries.
+    if (!_snapAccountValuePoints || !_snapAccountValuePoints.length) {
+      dbg("[Snapshot] backfill: no Account Value series yet, will retry when it renders");
+      return Promise.resolve(0);
+    }
     // The Account Value series honours the exclusion toggles, so with fixed
     // income or savings hidden its line is a partial one — reconstructing years
     // of history off it would write a permanently understated past. The write
     // rules refuse a live snapshot for the same reason; the backfill, which
-    // bypasses them, has to refuse for itself.
-    if (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) return Promise.resolve(0);
+    // bypasses them, has to refuse for itself. Checked before latching, so
+    // turning the toggle back off lets the backfill run.
+    if (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) {
+      dbg("[Snapshot] backfill: skipped, an exclusion toggle is on");
+      return Promise.resolve(0);
+    }
+    _snapBackfillStarted = true;
     var points = _snapAccountValuePoints;
     return WfDb.select(SNAP_TABLE, "select=snapshot_date").then(function (rows) {
       var have = (rows || []).map(function (r) { return String(r.snapshot_date).slice(0, 10); });
       var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600);
+      dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
+          " already stored, " + plan.length + " to write");
       if (!plan.length) { localStorage.setItem(SNAP_BACKFILL_KEY, "1"); return 0; }
       return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
         localStorage.setItem(SNAP_BACKFILL_KEY, "1");

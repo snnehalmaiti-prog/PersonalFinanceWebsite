@@ -115,10 +115,10 @@ const monthlyNav = () => {
     }, [sheets, extra || {}]);
   };
 
-  const load = async () => {
+  const load = async (waitMs) => {
     snapPosts.length = 0; errs.length = 0;
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
-    await p.waitForTimeout(14000);      // load + the writer's 1.5s stability wait
+    await p.waitForTimeout(waitMs || 14000);   // load + the writer's stability wait
   };
 
   const liveRows = () => snapPosts.flatMap((q) => q.rows).filter((r) => r && r.meta && r.meta.source === "live");
