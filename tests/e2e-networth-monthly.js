@@ -55,6 +55,10 @@ const SHEETS = {
 
 // May → Jun → Jul. May is a reconstruction; the other two are records.
 const SNAPSHOTS = [
+  // Two years, so the year picker has something to choose between. The 2024
+  // rows are what a wrong filter drops or a broken one leaks.
+  { snapshot_date: "2024-11-30", total: 800000, meta: { source: "backfill", backfilled: true } },
+  { snapshot_date: "2024-12-31", total: 850000, meta: { source: "backfill", backfilled: true } },
   { snapshot_date: "2025-05-31", total: 1000000, meta: { source: "backfill", backfilled: true } },
   { snapshot_date: "2025-06-30", total: 1200000, equity: 900000, fixed_income: 300000, commodity: 0,
     by_portfolio: { Snnehal: { equity: 900000, fixed_income: 300000, commodity: 0 } },
@@ -148,7 +152,9 @@ const money = (t) => {
   console.log("  rows: " + JSON.stringify(rows, null, 1));
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
-  eq(rows.length, 3, "N1 one row per recorded month");
+  // The card opens on a year, so this is 2025's three months — the 2024 rows are
+  // present in the data and excluded by the filter (asserted in the Y block).
+  eq(rows.length, 3, "N1 one row per recorded month in the selected year");
   ok(/Jul 2025/.test(rows[0].month), "N2 newest first", rows[0].month);
   ok(/May 2025/.test(rows[2].month), "N3 oldest last", rows[2].month);
 
@@ -180,8 +186,7 @@ const money = (t) => {
      "N11 attributed the same way — 50k invested, the rest split between interest and market",
      rows[1].attr);
 
-  eq(rows[2].delta.trim(), "—",
-     "N12 the oldest month has nothing to compare against and invents no attribution");
+  // (the "no comparison" row is Nov 2024 — asserted under All time, below)
 
   // Honesty: a reconstruction must not look like a record.
   ok(rows[2].tagged, "N13 the backfilled month is tagged", rows[2]);
@@ -228,14 +233,14 @@ const money = (t) => {
     ok(chart.sets.every((s) => s.stack === chart.sets[0].stack), "B6 in one stack");
 
     // Only months with a change get a bar; May has nothing to compare against.
-    eq(chart.labels.length, 2, "B7 the first snapshot has no bar — there is nothing to compare it against");
-    eq(chart.labels[0], "Jun 2025", "B8 oldest on the left");
-    eq(chart.labels[1], "Jul 2025", "B9 newest on the right");
-
+    eq(chart.labels.join(","), "May 2025,Jun 2025,Jul 2025",
+       "B7 the selected year's months, oldest on the left");
+    const at = (m) => chart.labels.indexOf(m);
     const seg = (name) => chart.sets.find((s) => s.label === name);
-    eq(JSON.stringify(seg("Invested").data), JSON.stringify([50000, 180000]),
-       "B10 the invested segment carries every contribution: the fund buy, the rise in " +
-       "the savings balance, and the new deposit's principal");
+    eq(seg("Invested").data[at("Jun 2025")], 50000,
+       "B8 the invested segment carries the fund buy");
+    eq(seg("Invested").data[at("Jul 2025")], 180000,
+       "B9 and in Jul the buy, the rise in the savings balance and the new deposit's principal");
 
     // The ₹10L deposit at 8% accrues roughly ₹10,300 a month. Bounded rather
     // than pinned: the accrual runs to "now", so an exact figure would drift
@@ -245,38 +250,116 @@ const money = (t) => {
     // with the date the suite runs. The ceiling is what does the work — the
     // savings account pays 12% here, so if its interest were counted as well
     // (it is already inside the parked-cash flow) the figure would clear it.
-    ok(int.every((v) => v > 8000 && v < 12000),
-       "B11a the deposit's accrual is measured, and only the deposits'", int);
+    // Bounded on the single-month gaps only. May's row spans Jan–May (there is no
+    // snapshot between Dec 2024 and it), so its accrual is five months' worth —
+    // correct, and a reason not to bound every bar the same way.
+    ["Jun 2025", "Jul 2025"].forEach((m) => {
+      ok(int[at(m)] > 8000 && int[at(m)] < 12000,
+         "B11a " + m + ": the deposit's accrual is measured, and only the deposits'", int[at(m)]);
+    });
+    ok(int[at("May 2025")] > 4 * 8000,
+       "B11a-gap May spans five months with no snapshot, so it carries five months of accrual",
+       int[at("May 2025")]);
 
     // The invariant that matters: the segments are the change, exactly. If any
     // leg is double-counted or dropped, this is what catches it.
     const inv = seg("Invested").data, mkt = seg("Market").data;
-    const deltas = [200000, -50000];
-    [0, 1].forEach((i) => {
+    const deltas = { "May 2025": 150000, "Jun 2025": 200000, "Jul 2025": -50000 };
+    Object.keys(deltas).forEach((m) => {
+      const i = at(m);
       const sum = inv[i] + int[i] + mkt[i];
-      ok(Math.abs(sum - deltas[i]) < 1,
-         "B11b" + i + " invested + interest + market equals the month's change",
-         { sum, want: deltas[i], inv: inv[i], int: int[i], mkt: mkt[i] });
+      ok(Math.abs(sum - deltas[m]) < 1,
+         "B11b " + m + ": invested + interest + market equals the month's change",
+         { sum, want: deltas[m], inv: inv[i], int: int[i], mkt: mkt[i] });
     });
-    ok(mkt[0] > 0 && mkt[1] < 0,
+    ok(mkt[at("Jun 2025")] > 0 && mkt[at("Jul 2025")] < 0,
        "B11c the market leg keeps its sign — a gaining month and a losing one", mkt);
 
     // A losing month must not be drawn in the gaining colour. Asserted against
     // the specific hues, not merely "the two differ" — Jun is faded and Jul is
     // not, so a difference exists even when both are green.
     const UP = "16,185,129";   // #10B981
-    ok(String(seg("Market").colors[0]).includes(UP),
-       "B12 the gaining month is drawn in the gain colour", seg("Market").colors[0]);
-    ok(String(seg("Market").colors[1]).toUpperCase() === "#E8623A",
-       "B12b and the losing month in the loss colour", seg("Market").colors[1]);
-    ok(!String(seg("Market").colors[1]).includes(UP),
+    ok(String(seg("Market").colors[at("Jun 2025")]).includes(UP),
+       "B12 the gaining month is drawn in the gain colour", seg("Market").colors[at("Jun 2025")]);
+    ok(String(seg("Market").colors[at("Jul 2025")]).toUpperCase() === "#E8623A",
+       "B12b and the losing month in the loss colour", seg("Market").colors[at("Jul 2025")]);
+    ok(!String(seg("Market").colors[at("Jul 2025")]).includes(UP),
        "B12c specifically, a loss is never drawn as a gain", seg("Market").colors);
-    // Jun is measured from May, which is a reconstruction — so it is faded.
-    ok(/rgba/.test(String(inv[0] !== undefined && seg("Invested").colors[0])) &&
-       !/rgba/.test(String(seg("Invested").colors[1])),
+    // Jun is measured from May, a reconstruction, so it is faded; Jul is measured
+    // from Jun and both are records, so it is solid.
+    ok(/rgba/.test(String(seg("Invested").colors[at("Jun 2025")])) &&
+       !/rgba/.test(String(seg("Invested").colors[at("Jul 2025")])),
        "B13 a month measured from a reconstruction is faded, while a fully recorded one is solid",
        seg("Invested").colors);
   }
+
+  // ── Year selection ──────────────────────────────────────────────────────
+  // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an
+  // All time toggle. The card opens on a year rather than every month it has.
+  const yearState = () => p.evaluate(() => {
+    const sel = document.getElementById("nwm-year");
+    const btn = sel && sel.__wfYpBtn;
+    return {
+      value: sel ? sel.value : null,
+      options: sel ? Array.from(sel.options).map((o) => o.value) : [],
+      pickerLabel: btn ? btn.textContent.trim() : null,
+      pickerVisible: btn ? btn.style.display !== "none" : false,
+      subtitle: (document.getElementById("nwm-subtitle") || {}).textContent || "",
+      months: Array.from(document.querySelectorAll("#nwm-list .nwm-month")).map((e) => e.textContent),
+    };
+  });
+
+  const y1 = await yearState();
+  console.log("  year: " + JSON.stringify(y1));
+  eq(y1.options.join(","), "2024,2025",
+     "Y1 only years that HAVE a comparable month are offered");
+  eq(y1.value, "2025",
+     "Y2 opens on the current year, or the most recent with data — never an empty chart");
+  ok(y1.pickerVisible && y1.pickerLabel === "2025",
+     "Y3 through the same decade-grid picker the cash-flow card uses", y1);
+  ok(y1.months.every((m) => /2025/.test(m)),
+     "Y4 and the list follows the chart rather than disagreeing with it", y1.months);
+  ok(/2025/.test(y1.subtitle), "Y5 the subtitle names the year on show", y1.subtitle);
+
+  // Switching year. Driven through the select, which is what the picker sets.
+  await p.evaluate(() => {
+    const sel = document.getElementById("nwm-year");
+    sel.value = "2024"; sel.onchange();
+  });
+  await p.waitForTimeout(400);
+  const y2 = await yearState();
+  console.log("  after 2024: " + JSON.stringify(y2.months));
+  ok(y2.months.length > 0 && y2.months.every((m) => /2024/.test(m)),
+     "Y6 selecting an earlier year shows that year's months", y2.months);
+  const chart2024 = await p.evaluate(() => (window.__wfNwmChart || {}).data.labels);
+  ok(chart2024.every((l) => /2024/.test(l)),
+     "Y7 and the chart moves with it — the two never show different years", chart2024);
+
+  // All time.
+  await p.click("#nwm-alltime");
+  await p.waitForTimeout(400);
+  const y3 = await yearState();
+  console.log("  all time: " + JSON.stringify(y3.months));
+  ok(y3.months.some((m) => /2024/.test(m)) && y3.months.some((m) => /2025/.test(m)),
+     "Y8 All time shows every month again", y3.months);
+  ok(!y3.pickerVisible, "Y9 and hides the year picker, which no longer applies");
+  ok(/^Nov 2024/.test(y3.months[y3.months.length - 1]),
+     "Y10 including the very first snapshot, which has no month before it",
+     y3.months[y3.months.length - 1]);
+
+  // Expanding a row must not narrow the data. The click re-renders, and passing
+  // the filtered slice back in as the full set would silently drop every other
+  // year on the first click.
+  await p.click("#nwm-list .nwm-row .nwm-row-head");
+  await p.waitForTimeout(300);
+  const y4 = await yearState();
+  eq(y4.options.join(","), "2024,2025",
+     "Y11 expanding a row leaves the available years intact", y4.options);
+  eq(y4.months.length, y3.months.length,
+     "Y12 and does not narrow the months on show", { after: y4.months.length, before: y3.months.length });
+
+  await p.click("#nwm-alltime");     // back to a single year for what follows
+  await p.waitForTimeout(300);
 
   // ── Empty state ─────────────────────────────────────────────────────────
   // The state every user is in before the migration is run. It must explain

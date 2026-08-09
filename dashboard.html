@@ -330,7 +330,11 @@
             <h3 class="nwm-title">Net Worth &middot; Monthly</h3>
             <p class="nwm-subtitle" id="nwm-subtitle">RECORDED MONTH ENDS</p>
           </div>
-          <span class="nwm-count" id="nwm-count"></span>
+          <div class="mic-controls">
+            <button id="nwm-alltime" type="button" class="mic-dropdown-btn">All time <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+            <select id="nwm-year" class="mic-dropdown-btn mic-year-sel"></select>
+            <span class="nwm-count" id="nwm-count"></span>
+          </div>
         </div>
         <p class="muted small nwm-status" id="nwm-status">Loading…</p>
         <div class="nwm-chart-wrap" id="nwm-chart-wrap" hidden>

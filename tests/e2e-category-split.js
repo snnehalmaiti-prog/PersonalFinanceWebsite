@@ -164,6 +164,17 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
     return out;
   });
   console.log("  Region Split (no MF): " + JSON.stringify(region));
+  if (!region.rows["India"]) {
+    // Say what was actually on the page. A missing row scores as ₹0, which reads
+    // exactly like the double-count bug this suite exists to catch, so the
+    // failure has to distinguish the two rather than leave it to guesswork.
+    console.log("  DIAG " + JSON.stringify(await p.evaluate(() => ({
+      iscList: (document.getElementById("isc-list") || {}).innerHTML || "(no #isc-list)",
+      iscatList: ((document.getElementById("iscat-list") || {}).innerHTML || "").slice(0, 300),
+      mode: localStorage.getItem("wf-isc-mode"),
+      status: (document.getElementById("portfolio-split-status") || {}).textContent || ""
+    }))));
+  }
 
   ok(near(money(region.rows["India"]), PHYSICAL + ETF, 5),
      "R1 India = physical gold + the India-listed gold ETF, counted ONCE",

@@ -16271,7 +16271,12 @@
   // interest the account paid, so it is inside the parked-cash flow that
   // _nwmContributionsByMonth adds. Counting it here as well would subtract it
   // from the market twice.
-  function _nwmInterestByMonth() {
+  // fromMonth bounds the walk. buildMonthlyChange only ever reads months after
+  // the earliest snapshot, so valuing every month back to a deposit opened in
+  // 2015 costs two passes over the sheet per month for answers nobody reads —
+  // and page-load work is not free: two suites that compare figures rendered
+  // moments apart started drifting by a rupee when this ran unbounded.
+  function _nwmInterestByMonth(fromMonth) {
     var out = {};
     var rows = getSheetRows("fd");
     if (!rows || rows.length < 2) return out;
@@ -16301,6 +16306,13 @@
     }
 
     var cur = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+    // Start one month before the first snapshot: that month is the baseline the
+    // first comparison differences against, and nothing earlier is ever read.
+    if (fromMonth && /^\d{4}-\d{2}$/.test(fromMonth)) {
+      var fp = fromMonth.split("-");
+      var floor = new Date(+fp[0], +fp[1] - 2, 1);
+      if (floor > cur) cur = floor;
+    }
     var end = new Date(today.getFullYear(), today.getMonth(), 1);
     var prevVals = valuedAt(new Date(cur.getFullYear(), cur.getMonth(), 0, 23, 59, 59));
     while (cur <= end) {
@@ -16384,13 +16396,78 @@
   // from the axis in that direction, so the bar's extent is the month's total
   // change and its sign is visible at a glance.
   var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
+  // Bars are capped only when showing every year at once; a single year is 12
+  // months and needs no cap.
   var NWM_MAX_BARS = 24;
+  var __nwmYear = null;          // selected year, as a string
+  var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null, _nwmChartSig = null;
+  var _nwmAllRows = [];
+  function _nwmRerender() { _nwmChartSig = null; _nwmRender(_nwmAllRows); }
 
   function _nwmFade(hex, on) {
     if (!on) return hex;
     var n = parseInt(hex.slice(1), 16);
     return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + ",0.35)";
+  }
+
+  // Years that actually have a comparable month. Built from the rows rather
+  // than from a date range, so a year you have no snapshots for is greyed out in
+  // the picker instead of offering an empty chart.
+  function _nwmYearList(rows) {
+    var seen = {};
+    rows.forEach(function (r) { if (r.delta != null) seen[r.month.slice(0, 4)] = true; });
+    return Object.keys(seen).sort();
+  }
+
+  function _nwmForYear(rows) {
+    if (__nwmAllTime || !__nwmYear) return rows;
+    return rows.filter(function (r) { return r.month.slice(0, 4) === __nwmYear; });
+  }
+
+  function _nwmSyncYearControls(rows) {
+    var yearSel = document.getElementById("nwm-year");
+    var allBtn = document.getElementById("nwm-alltime");
+    var yearList = _nwmYearList(rows);
+    if (!yearList.length) {
+      if (yearSel) yearSel.style.display = "none";
+      if (allBtn) allBtn.style.display = "none";
+      return yearList;
+    }
+    if (allBtn) allBtn.style.display = "";
+    // The current year when it has months, otherwise the most recent that does —
+    // opening on an empty chart in January would be worse than showing the last
+    // year with something in it.
+    if (!__nwmYear || yearList.indexOf(__nwmYear) < 0) {
+      var thisYear = String(new Date().getFullYear());
+      __nwmYear = yearList.indexOf(thisYear) >= 0 ? thisYear : yearList[yearList.length - 1];
+    }
+    if (yearSel) {
+      yearSel.style.display = "";
+      var existing = [];
+      for (var i = 0; i < yearSel.options.length; i++) existing.push(yearSel.options[i].value);
+      if (existing.join(",") !== yearList.join(",")) {
+        yearSel.innerHTML = yearList.map(function (y) {
+          return '<option value="' + y + '">' + y + '</option>';
+        }).join("");
+      }
+      yearSel.value = __nwmYear;
+      yearSel.onchange = function () { __nwmYear = yearSel.value; _nwmRerender(); };
+      if (window.WfYearPicker) {
+        WfYearPicker.attach(yearSel);
+        WfYearPicker.setHidden(yearSel, __nwmAllTime);
+      }
+    }
+    if (allBtn) {
+      allBtn.classList.toggle("active", !!__nwmAllTime);
+      allBtn.onclick = function () {
+        __nwmAllTime = !__nwmAllTime;
+        allBtn.classList.toggle("active", !!__nwmAllTime);
+        if (yearSel && window.WfYearPicker) WfYearPicker.setHidden(yearSel, __nwmAllTime);
+        _nwmRerender();
+      };
+    }
+    return yearList;
   }
 
   function _nwmDrawChart(rows) {
@@ -16402,7 +16479,9 @@
 
     // Oldest first for the x axis, and only months that HAVE a change — the
     // first snapshot has nothing to compare against, so it has no bar.
-    var bars = rows.filter(function (r) { return r.delta != null; }).slice(0, NWM_MAX_BARS).reverse();
+    var bars = rows.filter(function (r) { return r.delta != null; });
+    if (__nwmAllTime) bars = bars.slice(0, NWM_MAX_BARS);   // rows are newest first
+    bars = bars.reverse();
     if (typeof window.Chart !== "function" || bars.length < 1) {
       wrap.hidden = true;
       if (legend) legend.hidden = true;
@@ -16503,6 +16582,9 @@
       return;
     }
     if (statusEl) statusEl.hidden = true;
+    _nwmAllRows = rows;
+    _nwmSyncYearControls(rows);
+    rows = _nwmForYear(rows);
     // Only when the data actually changed. _nwmRender also runs on every
     // expand/collapse, and rebuilding the chart for a row toggle would throw
     // away and recreate it on each click.
@@ -16513,6 +16595,11 @@
     if (countEl) {
       countEl.textContent = rows.length + " month" + (rows.length === 1 ? "" : "s") +
         (recorded < rows.length ? " · " + recorded + " recorded" : "");
+    }
+    var subEl = document.getElementById("nwm-subtitle");
+    if (subEl) {
+      subEl.textContent = (__nwmAllTime || !__nwmYear) ? "RECORDED MONTH ENDS"
+        : "RECORDED MONTH ENDS · " + __nwmYear;
     }
     if (footEl) {
       var est = rows.length - recorded;
@@ -16527,7 +16614,10 @@
       btn.addEventListener("click", function () {
         var m = btn.getAttribute("data-nwm-month");
         _nwmExpanded[m] = !_nwmExpanded[m];
-        _nwmRender(rows);
+        // Re-render from the FULL set, not the filtered one this closure holds —
+        // passing the year's slice back in would make it the new "all rows" and
+        // the year picker would lose every other year on the first click.
+        _nwmRerender();
       });
     });
   }
@@ -16543,8 +16633,15 @@
     card.hidden = false;
     WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
       .then(function (rows) {
-        _nwmRender(WfSnapshots.buildMonthlyChange(rows || [],
-          _nwmContributionsByMonth(), _nwmInterestByMonth()));
+        var list = rows || [];
+        // Nothing to attribute with fewer than two snapshots, so neither series
+        // is worth building.
+        var from = list.length > 1
+          ? list.map(function (r) { return String(r.snapshot_date).slice(0, 7); }).sort()[0]
+          : null;
+        _nwmRender(WfSnapshots.buildMonthlyChange(list,
+          from ? _nwmContributionsByMonth() : {},
+          from ? _nwmInterestByMonth(from) : {}));
       })
       .catch(function (e) {
         // A missing table is the expected state until the migration is run, and

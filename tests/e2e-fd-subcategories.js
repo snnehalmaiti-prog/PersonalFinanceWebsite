@@ -131,7 +131,15 @@ const money = (t) => { const m = String(t || "").match(/[\d,]+(?:\.\d+)?/); retu
     // The accrual compounds to "now", so two loads minutes apart differ by a
     // rupee — comparing across them made this flake by exactly ₹1 in CI, where
     // the suites run back to back over ten minutes.
-    ok(money(v.categorySplitFI) > 0 && money(v.categorySplitFI) === money(v.subtotalCurrent),
+    //
+    // Still ₹5 rather than exact, because the two figures are produced by
+    // different async paths within that one load: the clock advances between
+    // them, and how far depends on how much else the page is doing. What is
+    // being asserted is that the value REACHES Category Split, not that the
+    // second hand stood still — and ₹5 on ₹7.77 lakh cannot hide a real
+    // difference in treatment.
+    ok(money(v.categorySplitFI) > 0 &&
+       Math.abs(money(v.categorySplitFI) - money(v.subtotalCurrent)) <= 5,
        `F4 ${sub}: reaches Category Split too, not just the holdings card`,
        { categorySplit: v.categorySplitFI, holdingsCard: v.subtotalCurrent });
   }
