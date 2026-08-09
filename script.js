@@ -685,6 +685,28 @@
            s === "employee provident fund" || s === "epf" || s === "employee pension fund";
   }
 
+  // A TERM DEPOSIT: any Fixed Income sub-category that is neither a running
+  // balance (Savings Account / Investment Corpus, which carry a rolling figure
+  // and accrue monthly) nor a provident fund (which has its own interest
+  // engine). Recurring Deposit, Bond, NCD, Sovereign Gold Bond and anything else
+  // you write in that column land here.
+  //
+  // These paths used to test `normSubCategory === "fixed deposit"` exactly, so a
+  // row with any other sub-category contributed nothing to Current Value, the
+  // holdings lists, the cash flows or the account-value history — the money was
+  // not mis-valued, it was invisible. Matching by exclusion means a new
+  // instrument type is counted the day it is entered, with no table to update.
+  //
+  // Valuation is the FD rule: compounded quarterly at the stated Rate of Return
+  // until maturity. A blank or zero rate leaves the holding at par, so an
+  // unrated instrument degrades to its invested amount rather than disappearing.
+  function _fiIsTermDeposit(normSub) {
+    if (!normSub) return false;
+    if (normSub === "investment corpus" || normSub === "savings account") return false;
+    if (isProvidentFundSub(normSub)) return false;
+    return true;
+  }
+
   // EPF/PF interest rates configured in Settings → EPF Interest, keyed by the
   // financial-year START year (April-based FY, e.g. 2024 → FY 2024–25).
   // Returns { year: rateFraction } (8.10% → 0.081).
@@ -954,7 +976,7 @@
   function sumFdMaturedCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
-      return normSubCategory === "fixed deposit";
+      return _fiIsTermDeposit(normSubCategory);
     });
     if (!holdings) return 0;
     var total = 0;
@@ -970,7 +992,7 @@
   function sumFdActiveCurrentValue(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
-      return normSubCategory === "fixed deposit";
+      return _fiIsTermDeposit(normSubCategory);
     });
     if (!holdings) return 0;
     var total = 0;
@@ -1008,7 +1030,7 @@
   function sumFdRealizedProfit(rows, portfolioFilter) {
     if (!rows || !rows.length) return 0;
     var holdings = buildFdHoldingsList(rows, portfolioFilter, function (normSubCategory) {
-      return normSubCategory === "fixed deposit";
+      return _fiIsTermDeposit(normSubCategory);
     });
     if (!holdings) return 0;
     var total = 0;
@@ -1044,7 +1066,7 @@
       var pf = (row[pI] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(pf) !== normalizeText(portfolioFilter)) return;
       if (cI !== -1 && normalizeText(row[cI]) !== "fixed income") return;
-      if (normalizeText(row[sI] || "") !== "fixed deposit") return;
+      if (!_fiIsTermDeposit(normalizeText(row[sI] || ""))) return;
       var matD = parseFlexibleDate(row[mI]);
       if (!(matD && matD < todayD)) return; // not matured
       var principal = parseNumber(row[aI]);
@@ -1112,7 +1134,7 @@
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && portfolio.toLowerCase() !== portfolioFilter.toLowerCase()) return;
       if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
-      if (normalizeText(row[subCategoryIdx]) !== "fixed deposit") return;
+      if (!_fiIsTermDeposit(normalizeText(row[subCategoryIdx]))) return;
 
       var amount = parseNumber(row[amountIdx]);
       var date = parseFlexibleDate(row[dateIdx]);
@@ -1810,7 +1832,7 @@
         var txType = (fdIdx["transaction type"] !== -1 ? row[fdIdx["transaction type"]] || "" : "").trim();
         var normCategory = normalizeText(category);
         var normSubCategory = normalizeText(subCategory);
-        var isFixedDeposit = normCategory === "fixed income" && normSubCategory === "fixed deposit";
+        var isFixedDeposit = normCategory === "fixed income" && _fiIsTermDeposit(normSubCategory);
         var isCommodity = normCategory === "commodity";
         var isProvidentFund = normCategory === "fixed income" && isProvidentFundSub(normSubCategory);
 
@@ -2638,7 +2660,7 @@
       var invested = parseNumber(row[amountIdx]);
       var current = invested;
       var fdMatured = false;
-      if (normSubCategory === "fixed deposit") {
+      if (_fiIsTermDeposit(normSubCategory)) {
         var rate = parsePercentRate(row[rateIdx]);
         var startDate = parseFlexibleDate(row[dateIdx]);
         var maturityDate = parseFlexibleDate(row[maturityIdx]);
@@ -2749,7 +2771,7 @@
       var invested = parseNumber(row[amountIdx]);
       var current = invested;
       var fdMatured = false;
-      if (normSubCategory === "fixed deposit" && maturityIdx !== -1 && rateIdx !== -1) {
+      if (_fiIsTermDeposit(normSubCategory) && maturityIdx !== -1 && rateIdx !== -1) {
         var rate = parsePercentRate(row[rateIdx]);
         var startDate = parseFlexibleDate(row[dateIdx]);
         var maturityDate = parseFlexibleDate(row[maturityIdx]);
@@ -3331,7 +3353,11 @@
     // Fund and Stocks/ETF tables do.
     var fihScope = holdings.filter(function (h) {
       if (FIH_STATE.portfolio !== "all" && normalizeText(h.portfolio || "") !== normalizeText(FIH_STATE.portfolio)) return false;
-      if (_fiIsGold(h.subCategory)) return false; // gold shown in commodity card
+      // No gold exclusion here. These holdings are built from rows whose
+      // Instrument Category is "fixed income", and the Commodity card only takes
+      // rows categorised "commodity" — so a gold-flavoured sub-category (a
+      // Sovereign Gold Bond, say) was dropped from this list and shown on no
+      // other card, while still counting towards Category Split and net worth.
       return true;
     });
     var fihHasClosed = fihScope.some(function (h) { return !!h.matured; });
@@ -3422,12 +3448,13 @@
     // Wire portfolio pill toggle
     var pf = document.getElementById("fih-portfolio-toggle");
     if (pf) {
-      // Gold lives in the Commodity card, so a portfolio holding only gold has
-      // nothing here and its pill is disabled. Repainted every render because
-      // availability follows the data, not the wiring.
+      // Every fixed-income holding counts towards pill availability, including
+      // gold-flavoured sub-categories — see the note above: they are not on the
+      // Commodity card, so excluding them here disabled a pill for a portfolio
+      // that does have holdings. Repainted every render because availability
+      // follows the data, not the wiring.
       var withFi = [];
       (holdings || []).forEach(function (h) {
-        if (_fiIsGold(h.subCategory)) return;
         var pn = (h.portfolio || "").trim();
         if (pn && withFi.indexOf(pn) === -1) withFi.push(pn);
       });
@@ -3569,7 +3596,7 @@
 
     var selectedPortfolio = "all";
     var holdings = buildFdHoldingsList(rows, selectedPortfolio, function (normSubCategory) {
-      return normSubCategory === "fixed deposit";
+      return _fiIsTermDeposit(normSubCategory);
     });
     if (holdings === null) {
       statusEl.textContent = "Header row number is incorrect. Make adjustments by adding correct header row number.";
@@ -4150,7 +4177,7 @@
     fdRows.slice(1).forEach(function (row) {
       if (pIdx !== -1 && portfolioFilter !== "all" && normalizeText(row[pIdx]) !== normalizeText(portfolioFilter)) return;
       if (cIdx !== -1 && normalizeText(row[cIdx]) !== "fixed income") return;
-      if (sIdx === -1 || normalizeText(row[sIdx]) !== "fixed deposit") return;
+      if (sIdx === -1 || !_fiIsTermDeposit(normalizeText(row[sIdx]))) return;
       var buy = parseFlexibleDate(row[dIdx]); if (!buy || buy > asOf) return;
       var mat = mIdx !== -1 ? parseFlexibleDate(row[mIdx]) : null;
       if (mat && mat <= asOf) return; // matured before asOf → already realized
@@ -9214,7 +9241,7 @@
       var subCategory = normalizeText(row[subCategoryIdx]);
       var isBalance = (subCategory === "investment corpus" || subCategory === "savings account");
       var isPf = isProvidentFundSub(subCategory);
-      var isFd = (subCategory === "fixed deposit");
+      var isFd = _fiIsTermDeposit(subCategory);
       if (!isBalance && !isPf && !(isFd && includeFd)) return;
       if (excludeBalance && isBalance) return; // keep PF, drop parked cash
 
@@ -12544,7 +12571,13 @@
         // maturity month for the amount actually received (principal + interest,
         // same engine as the XIRR flows). Only for FDs that have ALREADY matured —
         // a future maturity is not a cash flow yet.
-        if (!isOut && normalizeText(row[subCatIdx] || "") === "fixed deposit" && maturityIdx !== -1) {
+        // Instrument Category must be Fixed Income: a Commodity row's maturity
+        // column holds a SELL date, and that sale is already its own row. The
+        // old exact "fixed deposit" test excluded commodity by accident; matching
+        // term deposits by exclusion means the category has to be checked here.
+        if (!isOut && maturityIdx !== -1 &&
+            (instrCatIdx === -1 || normalizeText(row[instrCatIdx] || "") === "fixed income") &&
+            _fiIsTermDeposit(normalizeText(row[subCatIdx] || ""))) {
           var matD = parseFlexibleDate(row[maturityIdx]);
           if (matD && matD < todayD) {
             var matVal = fdMaturityValue(Math.abs(amount), d, matD,

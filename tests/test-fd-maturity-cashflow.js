@@ -53,6 +53,11 @@ eval([
   "function countElapsedQuarters(start, asOf)",
   "function elapsedQuartersFractional(start, asOf)",
   "function fdMaturityValue(principal, startDate, maturityDate, rate)",
+  // Which FD-sheet sub-categories are term deposits. buildMonthlyInvestCatData
+  // consults it to decide whether a maturity books an inflow, so it has to come
+  // along — and isProvidentFundSub with it, since the predicate calls it.
+  "function isProvidentFundSub(sub)",
+  "function _fiIsTermDeposit(normSub)",
   "function buildMonthlyInvestCatData(portfolioOverride)",
 ].map(extract).join("\n\n"));
 
