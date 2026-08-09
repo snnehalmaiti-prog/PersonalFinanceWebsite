@@ -16230,6 +16230,24 @@
         out[m] = (out[m] || 0) - s;
       });
     } catch (e) {}
+
+    // Savings Account / Investment Corpus rows are running balances, not
+    // transactions, so they are absent from the aggregation above — while being
+    // fully present in net worth. Without them, moving salary into a savings
+    // account showed up as the market handing you money, every month.
+    // buildMonthlyIdleCashData already forward-fills the balance held at each
+    // month end; the flow is its month-over-month change.
+    try {
+      var idle = buildMonthlyIdleCashData("all");
+      var totals = {};
+      Object.keys((idle && idle.byMonthInstr) || {}).forEach(function (m) {
+        var s = 0, g = idle.byMonthInstr[m];
+        Object.keys(g).forEach(function (k) { s += g[k] || 0; });
+        totals[m] = s;
+      });
+      var parked = WfSnapshots.parkedCashFlows(totals);
+      Object.keys(parked).forEach(function (m) { out[m] = (out[m] || 0) + parked[m]; });
+    } catch (e) {}
     return out;
   }
 

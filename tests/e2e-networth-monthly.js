@@ -31,7 +31,12 @@ const SHEETS = {
     ["Aurora Fund", "Equity", "Flexi Cap", "100001", "INFA"]],
   "wf-stocksetf-data": [TXN],
   "wf-stocksetfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Market Segment", "Region", "Identifier", "Sector"]],
-  "wf-fd-data": [FD_HDR],
+  // Savings balances: running snapshots, ₹2L at end-May rising to ₹2.5L in Jul.
+  // The Jul rise is money moved, not money earned — the case that used to be
+  // attributed to the market.
+  "wf-fd-data": [FD_HDR,
+    ["31-May-2025", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "200000", "", "0%", ""],
+    ["10-Jul-2025", "Snnehal", "HDFC", "Savings", "Fixed Income", "Savings Account", "Deposit", "250000", "", "0%", ""]],
   "wf-fixedincome-data": [["Transaction Date", "Portfolio Name", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Amount"]],
 };
 
@@ -142,10 +147,16 @@ const money = (t) => {
   eq(money(rows[0].delta), -50000, "N6 the month's change is the difference between two snapshots");
   const jul = rows[0].attr;
   ok(/invested/.test(jul) && /market/.test(jul), "N7 the change is attributed", jul);
-  ok(jul.includes("30,000"),
-     "N8 contributions come from the transaction sheets — Jul's ₹30,000 buy", jul);
+  // Jul contributions = the ₹30,000 fund buy + the ₹50,000 that moved into the
+  // savings account. That second half is the fix: a running balance is not a
+  // transaction, so it used to be missing from contributions while counting
+  // fully towards net worth, and the difference was blamed on the market.
   ok(jul.includes("80,000"),
-     "N9 and the market is the remainder: down 50k while adding 30k means the market lost 80k", jul);
+     "N8 contributions include BOTH the fund buy and the rise in the savings balance", jul);
+  ok(jul.includes("1,30,000"),
+     "N9 and the market is the remainder: down 50k after putting in 80k means the market lost 1.3L", jul);
+  ok(!jul.includes("+₹30,000"),
+     "N9b specifically, parked cash is not left out — that omission read as a ₹50,000 market gain", jul);
 
   // Jun: 1,200,000 − 1,000,000 = +200,000, of which 50,000 was invested.
   eq(money(rows[1].delta), 200000, "N10 an up month");
@@ -204,9 +215,9 @@ const money = (t) => {
     eq(chart.labels[1], "Jul 2025", "B9 newest on the right");
 
     // Same arithmetic as the rows: Jun +50k invested / +1.5L market, Jul +30k / −80k.
-    eq(JSON.stringify(chart.sets[0].data), JSON.stringify([50000, 30000]),
-       "B10 the invested segment carries the contributions");
-    eq(JSON.stringify(chart.sets[1].data), JSON.stringify([150000, -80000]),
+    eq(JSON.stringify(chart.sets[0].data), JSON.stringify([50000, 80000]),
+       "B10 the invested segment carries the contributions, parked cash included");
+    eq(JSON.stringify(chart.sets[1].data), JSON.stringify([150000, -130000]),
        "B11 and the market segment the remainder, negative when the market lost");
 
     // A losing month must not be drawn in the gaining colour. Asserted against
