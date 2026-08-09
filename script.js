@@ -125,6 +125,24 @@
   var AMFI_NAV_MAP_STATIC_FILE = "amfi_nav.json";
   var lastAmfiFetchFailures = [];
 
+  // Which source each market payload came from, and when — read by the
+  // "Price Updated" indicator.
+  //
+  // Declared HERE rather than beside the fetch helpers 8,300 lines below, purely
+  // as ordering hygiene: selectPortfolio() runs at script.js:556, during this
+  // file's own top-level execution, and starts those fetches. `var` hoists the
+  // declaration but not the value, so anything assigned further down is undefined
+  // to any code that runs before the body gets there — including every async
+  // callback if the body ever aborts early.
+  //
+  // That is not hypothetical: an earlier version of the year picker was written
+  // as `var X = (function(){...})()` below this point, threw at line 556, and
+  // aborted the rest of the body — after which _marketSource was undefined and
+  // recording a source threw "Cannot set properties of undefined". The picker was
+  // the fault, not this variable; moving the declaration up just means the next
+  // such mistake does not take the market-source indicator down with it.
+  var _marketSource = {};
+
   // ─── Bulky payload cache (IndexedDB, not localStorage) ─────────────────────
   //
   // Three market-data payloads dominate a cold load: stock_prices.json (~2.3 MB),
@@ -1518,7 +1536,7 @@
     var fdRows = getSheetRows("fd");
     var epfRows = getSheetRows("fixedincome");
     var commDates = (!fiEx && fdRows) ? collectCommodityUniqueDates(fdRows, portfolio) : [];
-    var commodityPromise = (!fiEx && fdRows && commDates.length)
+    var commodityPromise = (!fiEx && fdRows && _hasCommodityRows(fdRows, portfolio))
       ? Promise.all([
           fetchGoldPriceINRPerGram().catch(function () { return null; }),
           Promise.all(commDates.map(function (d) {
@@ -2398,8 +2416,9 @@
     // Commodity invested amount added to Fixed Income asynchronously
     var fdRowsInv = getSheetRows("fd");
     var uniqueDatesInv = fdRowsInv ? collectCommodityUniqueDates(fdRowsInv, selected) : [];
+    var _hasCommInv = _hasCommodityRows(fdRowsInv, selected);
     Promise.all([
-      fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      _hasCommInv ? fetchGoldPriceINRPerGram().catch(function () { return null; }) : Promise.resolve(null),
       Promise.all(uniqueDatesInv.map(function (d) {
         return fetchXauInrForDate(d).then(function (p) { return { dateStr: d, price: p }; }).catch(function () { return { dateStr: d, price: null }; });
       }))
@@ -2434,8 +2453,9 @@
 
     // Fetch current gold price + all historical prices (buy and sell dates) for commodity rows
     var uniqueCommodityDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
+    var _hasComm = _hasCommodityRows(fdRows, selected);
     Promise.all([
-      fetchGoldPriceINRPerGram().catch(function () { return null; }),
+      _hasComm ? fetchGoldPriceINRPerGram().catch(function () { return null; }) : Promise.resolve(null),
       Promise.all(uniqueCommodityDates.map(function (dateStr) {
         return fetchXauInrForDate(dateStr).then(function (p) { return { dateStr: dateStr, price: p }; }).catch(function () { return { dateStr: dateStr, price: null }; });
       }))
@@ -5190,10 +5210,11 @@
 
     // Collect unique buy + sell dates from commodity rows to fetch historical prices
     var uniqueDates = collectCommodityUniqueDates(rows, selectedPortfolio);
+    var _hasCommCard = _hasCommodityRows(rows, selectedPortfolio);
 
     Promise.all([
-      fetchGoldPriceINRPerGram().catch(function () { return null; }),
-      fetchGoldDayChangeINRPerGram().catch(function () { return null; }),
+      _hasCommCard ? fetchGoldPriceINRPerGram().catch(function () { return null; }) : Promise.resolve(null),
+      _hasCommCard ? fetchGoldDayChangeINRPerGram().catch(function () { return null; }) : Promise.resolve(null),
       Promise.all(uniqueDates.map(function (dateStr) {
         return fetchXauInrForDate(dateStr).then(function (price) { return { dateStr: dateStr, price: price }; }).catch(function (e) { return { dateStr: dateStr, price: null }; });
       }))
@@ -6502,6 +6523,31 @@
   }
 
   // Returns all unique dates (buy + sell) for commodity rows — used to batch-fetch historical prices.
+  // Does this portfolio hold ANY commodity at all?
+  //
+  // Gates the gold-price fetches. Six call sites asked currency-api for the XAU
+  // rate unconditionally, so a portfolio with no commodity row still made a
+  // network request (and its dated historical requests) on every load.
+  //
+  // Deliberately independent of collectCommodityUniqueDates: gating on "are
+  // there any usable dates" would also skip a commodity row whose Transaction
+  // Date failed to parse, and that row still needs today's rate to be valued.
+  function _hasCommodityRows(fdRows, portfolioFilter) {
+    if (!fdRows || fdRows.length < 2) return false;
+    var header = fdRows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var categoryIdx = header.indexOf("instrument category");
+    if (categoryIdx === -1) return false;
+    for (var i = 1; i < fdRows.length; i++) {
+      var row = fdRows[i];
+      if (normalizeText(row[categoryIdx]) !== "commodity") continue;
+      if (portfolioFilter && portfolioFilter !== "all" && portfolioIdx !== -1 &&
+          normalizeText(row[portfolioIdx] || "") !== normalizeText(portfolioFilter)) continue;
+      return true;
+    }
+    return false;
+  }
+
   function collectCommodityUniqueDates(fdRows, portfolioFilter) {
     if (!fdRows || !fdRows.length) return [];
     var header = fdRows[0].map(normalizeText);
@@ -6608,6 +6654,7 @@
     var fdRowsForOverview = getSheetRows("fd");
     var commodityProfitPromise = (function () {
       if (!fdRowsForOverview || !fdRowsForOverview.length) return Promise.resolve({ profit: 0, flows: [] });
+      if (!_hasCommodityRows(fdRowsForOverview, selected)) return Promise.resolve({ profit: 0, flows: [] });
       var uniqueDatesOv = collectCommodityUniqueDates(fdRowsForOverview, selected);
       return Promise.all([
         fetchGoldPriceINRPerGram().catch(function () { return null; }),
@@ -8912,7 +8959,6 @@
   // source failing falls back to the other. Resolves to the map (or null).
   // Source of each market_data feed on the last resolution: 'supabase' | 'static'
   // (+ the timestamp used), so the UI can show a "Live" indicator.
-  var _marketSource = {};
   function getMarketSource(key) { return _marketSource[key] || null; }
   // Record the stock_prices source (set on the data object by fetchAllStockPrices)
   // into _marketSource so the Stocks/ETF "Price Updated" pill can badge it.
@@ -11640,7 +11686,7 @@
     // Fold in commodity (gold) as India once historical prices resolve.
     if (!fiExcluded) {
       var fdRows = getSheetRows("fd");
-      if (fdRows && fdRows.length) {
+      if (fdRows && fdRows.length && _hasCommodityRows(fdRows, "all")) {
         var uniqueDates = collectCommodityUniqueDates(fdRows, "all");
         Promise.all([
           fetchGoldPriceINRPerGram().catch(function () { return null; }),
@@ -11854,7 +11900,7 @@
     if (!fiExcluded) {
       var fdRows = getSheetRows("fd");
       var uniqueDates = fdRows ? collectCommodityUniqueDates(fdRows, selected) : [];
-      if (fdRows && fdRows.length) {
+      if (fdRows && fdRows.length && _hasCommodityRows(fdRows, selected)) {
         Promise.all([
           fetchGoldPriceINRPerGram().catch(function () { return null; }),
           Promise.all(uniqueDates.map(function (d) {
@@ -12050,7 +12096,9 @@
       ? collectCommodityUniqueDates(fdRows, portfolioFilter) : [];
     return Promise.all([
       fetchAllStockPrices().catch(function () { return {}; }),
-      fdRows ? fetchGoldPriceINRPerGram().catch(function () { return null; }) : Promise.resolve(null),
+      _hasCommodityRows(fdRows, portfolioFilter)
+        ? fetchGoldPriceINRPerGram().catch(function () { return null; })
+        : Promise.resolve(null),
       Promise.all(commDates.map(function (d) {
         return fetchXauInrForDate(d).then(function (p) { return { d: d, p: p }; }).catch(function () { return { d: d, p: null }; });
       }))
