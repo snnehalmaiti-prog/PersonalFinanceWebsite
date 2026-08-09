@@ -101,7 +101,19 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
   await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
   await p.waitForTimeout(Number(process.env.WAIT || 10000));
 
+  // Wait for rows to exist rather than trusting the fixed timeout above. The
+  // card's total renders before its rows do, so on a slower machine the read
+  // found a correct total and an empty list — which scores as ₹0 for a category
+  // and looks exactly like the double-count bug this suite exists to catch.
+  // A genuinely missing row still fails here, just after the wait instead of
+  // during it.
+  const rowsReady = (listId) =>
+    p.waitForFunction((id) => document.querySelectorAll("#" + id + " .isc-row").length > 0,
+                      listId, { timeout: 20000 })
+     .catch(() => { console.log("  (timed out waiting for #" + listId + " rows)"); });
+
   const money = (t) => Number(String(t || "").replace(/[^0-9.]/g, "")) || 0;
+  await rowsReady("iscat-list");
   const split = await p.evaluate(() => {
     const out = { total: (document.getElementById("iscat-total-value") || {}).textContent, rows: {} };
     document.querySelectorAll("#iscat-list .isc-row").forEach((r) => {
@@ -142,6 +154,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
   await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
   await p.waitForTimeout(Number(process.env.WAIT || 10000));
 
+  await rowsReady("isc-list");
   const region = await p.evaluate(() => {
     const out = { total: (document.getElementById("isc-total-value") || {}).textContent, rows: {} };
     document.querySelectorAll("#isc-list .isc-row").forEach((r) => {
