@@ -16207,7 +16207,6 @@
   // came from replaying today's sheets, so it carries none of (1)'s guarantee,
   // and a card that drew them identically would be claiming more than it knows.
   var NWM_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  var _nwmExpanded = {};
 
   function _nwmMonthLabel(m) {
     var p = String(m).split("-");
@@ -16335,55 +16334,7 @@
     return (n > 0 ? "+" : n < 0 ? "−" : "") + formatCurrency(Math.abs(n));
   }
 
-  function _nwmRowHtml(r, idx) {
-    var cls = r.delta == null ? "nwm-flat" : r.delta > 0 ? "nwm-up" : r.delta < 0 ? "nwm-down" : "nwm-flat";
-    var open = !!_nwmExpanded[r.month];
-    var h = '<div class="nwm-row' + (r.estimated || r.backfilled ? " is-estimated" : "") + '">';
-    h += '<button type="button" class="nwm-row-head" data-nwm-month="' + escapeHtml(r.month) + '"' +
-         ' aria-expanded="' + (open ? "true" : "false") + '">';
-    h += '<span class="nwm-month">' + _nwmMonthLabel(r.month) +
-         (r.backfilled ? '<span class="nwm-tag" title="Reconstructed from your transactions, not recorded on the day">est</span>' : "") +
-         '</span>';
-    h += '<span class="nwm-total"' + _crTitle(r.total) + '>' + formatCurrency(r.total) + '</span>';
-    h += '<span class="nwm-delta ' + cls + '">' + (r.delta == null ? "—" : _nwmSigned(r.delta)) + '</span>';
-    h += '</button>';
 
-    if (r.delta != null) {
-      h += '<div class="nwm-attr">';
-      h += '<span>invested <b>' + _nwmSigned(r.contributions) + '</b></span>';
-      if (r.interest) h += '<span>interest <b>' + _nwmSigned(r.interest) + '</b></span>';
-      h += '<span>market <b>' + _nwmSigned(r.market) + '</b></span>';
-      if (r.gapMonths > 1) h += '<span>over ' + r.gapMonths + ' months</span>';
-      if (r.estimated) h += '<span>from a reconstructed month</span>';
-      h += '</div>';
-    }
-
-    if (open) {
-      h += '<div class="nwm-detail">';
-      var any = false;
-      [["Equity", r.equity], ["Fixed Income", r.fixed_income], ["Commodity", r.commodity]]
-        .forEach(function (p) {
-          if (p[1] == null) return;
-          any = true;
-          h += '<span>' + p[0] + ' <b>' + formatCurrency(p[1]) + '</b></span>';
-        });
-      if (r.by_portfolio) {
-        Object.keys(r.by_portfolio).forEach(function (name) {
-          var v = r.by_portfolio[name];
-          if (!v) return;
-          var t = (v.equity || 0) + (v.fixed_income || 0) + (v.commodity || 0);
-          any = true;
-          h += '<span>' + escapeHtml(name) + ' <b>' + formatCurrency(t) + '</b></span>';
-        });
-      }
-      // Backfilled rows have no split at all — say so rather than showing an
-      // empty strip that reads as "nothing was held".
-      if (!any) h += '<span>No category split — this month was reconstructed from the value history.</span>';
-      h += '<span>as of ' + escapeHtml(r.date) + '</span>';
-      h += '</div>';
-    }
-    return h + '</div>';
-  }
 
   // The change, drawn. One bar per month, stacked into the two things that move
   // net worth: money you added and what the market did with it.
@@ -16398,9 +16349,11 @@
   var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
   var __nwmYear = null;          // selected year, as a string
   var __nwmAllTime = false;      // "All time" pressed
-  var _nwmChart = null, _nwmChartSig = null;
+  var _nwmChart = null;
   var _nwmAllRows = [];
-  function _nwmRerender() { _nwmChartSig = null; _nwmRender(_nwmAllRows); }
+  // Always from the FULL set. Passing the year's slice back in would make it the
+  // new "all rows" and the picker would lose every other year on the first use.
+  function _nwmRerender() { _nwmRender(_nwmAllRows); }
 
   function _nwmFade(hex, on) {
     if (!on) return hex;
@@ -16575,14 +16528,11 @@
   }
 
   function _nwmRender(rows) {
-    var listEl = document.getElementById("nwm-list");
     var statusEl = document.getElementById("nwm-status");
     var countEl = document.getElementById("nwm-count");
-    var footEl = document.getElementById("nwm-foot");
-    if (!listEl) return;
+    var subEl = document.getElementById("nwm-subtitle");
 
     if (!rows.length) {
-      listEl.innerHTML = "";
       if (statusEl) {
         statusEl.hidden = false;
         statusEl.textContent = "No snapshots recorded yet. Your net worth is recorded once " +
@@ -16590,7 +16540,6 @@
           "once there are two months of them.";
       }
       if (countEl) countEl.textContent = "";
-      if (footEl) footEl.hidden = true;
       _nwmDrawChart([]);
       return;
     }
@@ -16598,41 +16547,17 @@
     _nwmAllRows = rows;
     _nwmSyncYearControls(rows);
     rows = _nwmForYear(rows);
-    // Only when the data actually changed. _nwmRender also runs on every
-    // expand/collapse, and rebuilding the chart for a row toggle would throw
-    // away and recreate it on each click.
-    var sig = rows.map(function (r) { return r.month + ":" + r.delta + ":" + r.market; }).join("|");
-    if (sig !== _nwmChartSig) { _nwmChartSig = sig; _nwmDrawChart(rows); }
-    listEl.innerHTML = rows.map(_nwmRowHtml).join("");
+    _nwmDrawChart(rows);
+
     var recorded = rows.filter(function (r) { return !r.backfilled; }).length;
     if (countEl) {
       countEl.textContent = rows.length + " month" + (rows.length === 1 ? "" : "s") +
         (recorded < rows.length ? " · " + recorded + " recorded" : "");
     }
-    var subEl = document.getElementById("nwm-subtitle");
     if (subEl) {
       subEl.textContent = (__nwmAllTime || !__nwmYear) ? "RECORDED MONTH ENDS"
         : "RECORDED MONTH ENDS · " + __nwmYear;
     }
-    if (footEl) {
-      var est = rows.length - recorded;
-      footEl.hidden = false;
-      footEl.textContent = est
-        ? est + " earlier month" + (est === 1 ? " was" : "s were") + " reconstructed from your " +
-          "transaction history (marked “est”) — unlike recorded months, those can still change " +
-          "if you edit an old transaction."
-        : "Recorded month ends. These do not change when you edit an old transaction.";
-    }
-    listEl.querySelectorAll(".nwm-row-head").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var m = btn.getAttribute("data-nwm-month");
-        _nwmExpanded[m] = !_nwmExpanded[m];
-        // Re-render from the FULL set, not the filtered one this closure holds —
-        // passing the year's slice back in would make it the new "all rows" and
-        // the year picker would lose every other year on the first click.
-        _nwmRerender();
-      });
-    });
   }
 
   function renderNetWorthMonthly() {

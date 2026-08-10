@@ -4429,45 +4429,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   color: var(--muted); text-transform: uppercase; }
 .nwm-count { font-size: 0.62rem; color: var(--muted); white-space: nowrap; padding-top: 3px; }
 .nwm-status { margin: 10px 0 0; font-size: 0.72rem; }
-.nwm-list { margin-top: 8px; }
-.nwm-foot { margin: 10px 0 0; font-size: 0.66rem; font-style: italic; }
 
-.nwm-row { border-top: 1px solid var(--border); padding: 8px 0; }
-.nwm-row:first-child { border-top: 0; }
-.nwm-row-head { display: grid; grid-template-columns: 90px 1fr auto; align-items: baseline;
-  gap: 10px; width: 100%; background: none; border: 0; padding: 0; cursor: pointer;
-  text-align: left; color: inherit; font: inherit; }
-.nwm-month { font-size: 0.74rem; font-weight: 700; color: var(--text); }
-.nwm-total { font-size: 0.8rem; font-weight: 700; color: var(--text);
-  font-variant-numeric: tabular-nums; }
-.nwm-delta { font-size: 0.74rem; font-weight: 700; font-variant-numeric: tabular-nums;
-  justify-self: end; }
-.nwm-up { color: var(--pos, #10B981); }
-.nwm-down { color: var(--neg, #E8623A); }
-.nwm-flat { color: var(--muted); }
 
-/* The attribution line — the number this card exists to show. */
-.nwm-attr { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 3px 0 0 100px;
-  font-size: 0.64rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.nwm-attr b { font-weight: 700; color: var(--text); }
-
-/* A reconstruction, not a record. Muted and labelled, so a backfilled month
-   can never be mistaken for one that was actually observed. */
-.nwm-row.is-estimated .nwm-total,
-.nwm-row.is-estimated .nwm-month { color: var(--muted); }
-.nwm-tag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px;
-  font-size: 0.55rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--muted); background: var(--surface-alt); border: 1px solid var(--border); }
-
-.nwm-detail { margin: 6px 0 2px 100px; display: flex; flex-wrap: wrap; gap: 4px 16px;
-  font-size: 0.66rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.nwm-detail span b { color: var(--text); font-weight: 700; }
-
-@media (max-width: 640px) {
-  .nwm-row-head { grid-template-columns: 68px 1fr auto; gap: 8px; }
-  .nwm-attr, .nwm-detail { margin-left: 0; }
-  .nwm-total { font-size: 0.74rem; }
-}
 
 /* The change, as bars: each month stacked into what you put in and what the
    market did. Deliberately NOT a second net-worth line — that would duplicate

@@ -132,97 +132,79 @@ const money = (t) => {
       for (const k in s) localStorage.setItem(k, JSON.stringify(s[k])); }, SHEETS);
     errs.length = 0;
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
-    await p.waitForFunction(() => document.querySelectorAll("#nwm-list .nwm-row").length > 0 ||
-      (document.getElementById("nwm-status") && !document.getElementById("nwm-status").hidden),
+    // Any of the three end states: a chart, the explanatory status, or a count
+    // with no chart (one snapshot). Waiting only on the chart stalls the full
+    // timeout on the cases that correctly draw nothing.
+    await p.waitForFunction(() => !!window.__wfNwmChart ||
+      (document.getElementById("nwm-status") && !document.getElementById("nwm-status").hidden) ||
+      ((document.getElementById("nwm-count") || {}).textContent || "").length > 0,
       null, { timeout: 25000 }).catch(() => {});
     await p.waitForTimeout(1500);
   };
 
-  const readRows = () => p.evaluate(() => Array.from(document.querySelectorAll("#nwm-list .nwm-row")).map((el) => ({
-    month: (el.querySelector(".nwm-month") || {}).textContent || "",
-    total: (el.querySelector(".nwm-total") || {}).textContent || "",
-    delta: (el.querySelector(".nwm-delta") || {}).textContent || "",
-    attr: (el.querySelector(".nwm-attr") || {}).textContent || "",
-    estimated: el.classList.contains("is-estimated"),
-    tagged: !!el.querySelector(".nwm-tag"),
-  })));
-
-  await load();
-  const rows = await readRows();
-  console.log("  rows: " + JSON.stringify(rows, null, 1));
-  ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
-
-  // The card opens on a year, so this is 2025's three months — the 2024 rows are
-  // present in the data and excluded by the filter (asserted in the Y block).
-  eq(rows.length, 3, "N1 one row per recorded month in the selected year");
-  ok(/Jul 2025/.test(rows[0].month), "N2 newest first", rows[0].month);
-  ok(/May 2025/.test(rows[2].month), "N3 oldest last", rows[2].month);
-
-  eq(money(rows[0].total), 1150000, "N4 the total is the stored total, not a recomputation");
-  eq(money(rows[1].total), 1200000, "N5 same for the month before");
-
-  // Jul: 1,150,000 − 1,200,000 = −50,000, of which +30,000 was invested,
-  // so the market lost 80,000. This is the number the card exists for.
-  eq(money(rows[0].delta), -50000, "N6 the month's change is the difference between two snapshots");
-  const jul = rows[0].attr;
-  ok(/invested/.test(jul) && /market/.test(jul), "N7 the change is attributed", jul);
-  // Jul contributions = the ₹30,000 fund buy + the ₹50,000 that moved into the
-  // savings account. That second half is the fix: a running balance is not a
-  // transaction, so it used to be missing from contributions while counting
-  // fully towards net worth, and the difference was blamed on the market.
-  ok(jul.includes("1,80,000"),
-     "N8 contributions include the fund buy, the savings rise and the new deposit", jul);
-  ok(/interest \+₹1[0-9],[0-9]{3}/.test(jul),
-     "N9 deposit interest is named rather than credited to the market", jul);
-  ok(/market −₹2,4[0-9],[0-9]{3}/.test(jul),
-     "N9c and the market is what is left: down 50k after putting in 1.8L and earning " +
-     "10k of interest means prices took 2.4L", jul);
-  ok(!jul.includes("+₹30,000"),
-     "N9b specifically, parked cash is not left out — that omission read as a ₹50,000 market gain", jul);
-
-  // Jun: 1,200,000 − 1,000,000 = +200,000, of which 50,000 was invested.
-  eq(money(rows[1].delta), 200000, "N10 an up month");
-  ok(rows[1].attr.includes("+₹50,000") && /market \+₹1,3[0-9],[0-9]{3}/.test(rows[1].attr),
-     "N11 attributed the same way — 50k invested, the rest split between interest and market",
-     rows[1].attr);
-
-  // (the "no comparison" row is Nov 2024 — asserted under All time, below)
-
-  // Honesty: a reconstruction must not look like a record.
-  ok(rows[2].tagged, "N13 the backfilled month is tagged", rows[2]);
-  ok(!rows[0].tagged && !rows[1].tagged, "N14 recorded months are not");
-  ok(rows[1].estimated,
-     "N15 an attribution measured FROM a reconstruction is marked too — half of it is derived");
-  ok(!rows[0].estimated,
-     "N16 while a change between two recorded months carries no such caveat");
-
-  const foot = await p.evaluate(() => (document.getElementById("nwm-foot") || {}).textContent || "");
-  ok(/reconstruct/i.test(foot), "N17 the footnote says which months are reconstructions", foot);
-
-  // Expanding shows the stored split, which is stored only for recorded months.
-  await p.click("#nwm-list .nwm-row .nwm-row-head");
-  await p.waitForTimeout(300);
-  const detail = await p.evaluate(() => (document.querySelector("#nwm-list .nwm-detail") || {}).textContent || "");
-  console.log("  detail: " + JSON.stringify(detail));
-  ok(/Equity/.test(detail) && /8,50,000/.test(detail),
-     "N18 expanding a row shows the category split as stored", detail);
-  ok(/Snnehal/.test(detail), "N19 and the per-portfolio breakdown", detail);
-  ok(/2025-07-31/.test(detail), "N20 with the date the figure is as-of", detail);
-
-  // ── The stacked bars ────────────────────────────────────────────────────
-  // Read off the Chart config the page actually built, so the bars are asserted
-  // to carry the same numbers the rows do rather than merely to exist.
-  const chart = await p.evaluate(() => {
+  // The card is the chart — there is no row list — so everything is read off the
+  // Chart config the page actually built, plus the tooltip callbacks it wired,
+  // which are the only place the stored totals surface to a reader.
+  const readChart = () => p.evaluate(() => {
     const c = window.__wfNwmChart;
     if (!c) return null;
-    return { type: c.type, labels: c.data.labels,
+    const cb = c.options.plugins.tooltip.callbacks;
+    return {
+      type: c.type,
+      labels: c.data.labels,
       sets: c.data.datasets.map((d) => ({ label: d.label, data: d.data, stack: d.stack,
         colors: d.backgroundColor })),
       xStacked: !!(c.options.scales.x && c.options.scales.x.stacked),
-      yStacked: !!(c.options.scales.y && c.options.scales.y.stacked) };
+      yStacked: !!(c.options.scales.y && c.options.scales.y.stacked),
+      // What a reader actually sees on hover, per bar.
+      bodies: c.data.labels.map((_, i) => cb.afterBody([{ dataIndex: i }])),
+      segLabels: c.data.datasets.map((d, di) =>
+        cb.label({ dataset: d, parsed: { y: d.data[0] } })),
+    };
   });
+
+  await load();
+  ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
+
+  const chart = await readChart();
   console.log("  chart: " + JSON.stringify(chart));
-  ok(!!chart, "B1 the card draws a chart");
+  ok(!!chart, "N0 the card draws a chart");
+
+  // The card opens on a year, so this is 2025's three comparable months — the
+  // 2024 rows are in the data and excluded by the filter (asserted under Y).
+  eq(chart.labels.join(","), "May 2025,Jun 2025,Jul 2025",
+     "N1 one bar per comparable month in the selected year, oldest on the left");
+
+  // The stored totals reach the reader only through the tooltip now, so that is
+  // where they have to be asserted. A chart of changes that never shows the
+  // level it changed from would be missing half the story.
+  const jul = chart.bodies[chart.labels.indexOf("Jul 2025")].join(" | ");
+  const jun = chart.bodies[chart.labels.indexOf("Jun 2025")].join(" | ");
+  console.log("  jul tooltip: " + jul);
+  ok(/Closing: ₹11,50,000/.test(jul),
+     "N4 the tooltip carries the stored total, not a recomputation", jul);
+  ok(/Closing: ₹12,00,000/.test(jun), "N5 same for the month before", jun);
+  ok(/Change: −₹50,000/.test(jul),
+     "N6 and the change, which is the difference between two snapshots", jul);
+  ok(/Change: \+₹2,00,000/.test(jun), "N10 an up month", jun);
+
+  ok(/Interest: \+₹1[0-9],[0-9]{3}/.test(jul),
+     "N9 deposit interest is named rather than credited to the market", jul);
+  ok(/reconstructed/.test(jun),
+     "N15 an attribution measured FROM a reconstruction says so — half of it is derived", jun);
+  ok(!/reconstructed/.test(jul),
+     "N16 while a change between two recorded months carries no such caveat", jul);
+
+  // segLabels are built from each dataset's FIRST bar (May 2025): invested
+  // ₹2,00,000, five months of accrual, and the remainder.
+  ok(/^Invested: \+₹2,00,000$/.test(chart.segLabels[0]) &&
+     /^Interest: \+₹[\d,]+$/.test(chart.segLabels[1]) &&
+     /^Market: −₹[\d,]+$/.test(chart.segLabels[2]),
+     "N7 each segment names itself and its amount on hover", chart.segLabels);
+
+  // ── The stacked bars ────────────────────────────────────────────────────
+  // Read off the Chart config the page actually built, so the bars are asserted
+  // to carry real numbers rather than merely to exist.
   if (chart) {
     eq(chart.type, "bar", "B2 bars, not a line — a second net-worth line would just " +
        "restate the Account Value chart");
@@ -310,7 +292,9 @@ const money = (t) => {
       controlCount: document.querySelectorAll("#nwm-year, #nwm-year + .wf-yp-btn")
         .length,
       subtitle: (document.getElementById("nwm-subtitle") || {}).textContent || "",
-      months: Array.from(document.querySelectorAll("#nwm-list .nwm-month")).map((e) => e.textContent),
+      // The card IS the chart, so "what is on show" is its x axis.
+      months: ((window.__wfNwmChart || {}).data || {}).labels || [],
+      count: (document.getElementById("nwm-count") || {}).textContent || "",
     };
   });
 
@@ -325,8 +309,8 @@ const money = (t) => {
   ok(!y1.selectOnScreen,
      "Y3b and ONLY through it — the native select it replaces stays hidden, or the " +
      "card shows two year controls side by side", y1);
-  ok(y1.months.every((m) => /2025/.test(m)),
-     "Y4 and the list follows the chart rather than disagreeing with it", y1.months);
+  ok(y1.months.length === 3 && y1.months.every((m) => /2025/.test(m)),
+     "Y4 and the chart shows only that year", y1.months);
   ok(/2025/.test(y1.subtitle), "Y5 the subtitle names the year on show", y1.subtitle);
 
   // Switching year. Driven through the select, which is what the picker sets.
@@ -350,32 +334,35 @@ const money = (t) => {
   console.log("  all time: " + JSON.stringify(y3.months));
   ok(y3.months.some((m) => /2024/.test(m)) && y3.months.some((m) => /2025/.test(m)),
      "Y8 All time shows every month again", y3.months);
-  // Uncapped: the header counts every month, so the chart must draw every one.
-  // It used to draw the most recent 24 while claiming 150, which both
-  // contradicted the count and put the early years out of reach entirely.
-  const allBars = await p.evaluate(() => (window.__wfNwmChart || {}).data.labels.length);
-  eq(allBars, y3.months.length - 1,
-     "Y8b and charts every one of them, not a recent slice of them");
+  // Uncapped: the header counts every month it has, so the chart must draw
+  // every comparable one. It used to draw the most recent 24 while claiming
+  // 150, contradicting the count and putting the early years out of reach.
+  eq(y3.months.length, parseInt(y3.count, 10) - 1,
+     "Y8b as many bars as months counted, less the first — which has nothing " +
+     "before it to compare against", { bars: y3.months.length, header: y3.count });
   ok(!y3.pickerVisible, "Y9 and hides the year picker, which no longer applies");
   ok(!y3.selectOnScreen,
      "Y9b including the select behind it — hiding one and not the other is how a " +
      "stray dropdown appears", y3);
-  ok(/^Nov 2024/.test(y3.months[y3.months.length - 1]),
-     "Y10 including the very first snapshot, which has no month before it",
-     y3.months[y3.months.length - 1]);
+  eq(y3.months[0], "Dec 2024",
+     "Y10 starting at the oldest month that HAS a comparison — Nov 2024 is the " +
+     "first snapshot, so it has no bar", y3.months[0]);
 
-  // Expanding a row must not narrow the data. The click re-renders, and passing
-  // the filtered slice back in as the full set would silently drop every other
-  // year on the first click.
-  await p.click("#nwm-list .nwm-row .nwm-row-head");
+  await p.click("#nwm-alltime");     // back out of All time before switching years
+  await p.waitForTimeout(300);
+
+  // Switching year twice must not narrow the data: each re-render must start
+  // from the full set, not from the slice the previous one produced.
+  await p.evaluate(() => { const s = document.getElementById("nwm-year"); s.value = "2024"; s.onchange(); });
+  await p.waitForTimeout(300);
+  await p.evaluate(() => { const s = document.getElementById("nwm-year"); s.value = "2025"; s.onchange(); });
   await p.waitForTimeout(300);
   const y4 = await yearState();
   eq(y4.options.join(","), "2024,2025",
-     "Y11 expanding a row leaves the available years intact", y4.options);
-  eq(y4.months.length, y3.months.length,
-     "Y12 and does not narrow the months on show", { after: y4.months.length, before: y3.months.length });
-
-  await p.click("#nwm-alltime");     // back to a single year for what follows
+     "Y11 switching years leaves every year still available", y4.options);
+  eq(y4.months.length, 3,
+     "Y12 and going back to 2025 shows all three of its months again", y4.months);
+     // back to a single year for what follows
   await p.waitForTimeout(300);
 
   // ── A long history under All time ───────────────────────────────────────
@@ -400,14 +387,12 @@ const money = (t) => {
   await p.click("#nwm-alltime");
   await p.waitForTimeout(600);
   const long = await p.evaluate(() => ({
-    rows: document.querySelectorAll("#nwm-list .nwm-row").length,
     bars: (window.__wfNwmChart || {}).data.labels.length,
     first: ((window.__wfNwmChart || {}).data.labels || [])[0],
     count: (document.getElementById("nwm-count") || {}).textContent || "",
   }));
   console.log("  long history: " + JSON.stringify(long));
-  eq(long.rows, 48, "L1 all 48 months are listed");
-  eq(long.bars, 47, "L2 and all 47 comparable ones are charted — no recent-slice cap");
+  eq(long.bars, 47, "L2 all 47 comparable months are charted — no recent-slice cap");
   eq(long.first, "Feb 2022",
      "L3 starting at the oldest, not two years back from the newest");
   ok(long.count.indexOf("48") === 0,
@@ -429,8 +414,8 @@ const money = (t) => {
     const btn = sel && sel.__wfYpBtn;
     const all = document.getElementById("nwm-alltime");
     return {
-      rows: document.querySelectorAll("#nwm-list .nwm-row").length,
-      delta: (document.querySelector("#nwm-list .nwm-delta") || {}).textContent || "",
+      count: (document.getElementById("nwm-count") || {}).textContent || "",
+      chart: !!window.__wfNwmChart,
       selectOnScreen: sel ? getComputedStyle(sel).display !== "none" : false,
       pickerOnScreen: btn ? getComputedStyle(btn).display !== "none" : false,
       allTimeOnScreen: all ? getComputedStyle(all).display !== "none" : false,
@@ -438,9 +423,11 @@ const money = (t) => {
     };
   });
   console.log("  single snapshot: " + JSON.stringify(one));
-  eq(one.rows, 1, "S1 the one snapshot is shown");
-  eq(one.delta.trim(), "—",
-     "S2 with no change against it, and no attribution invented");
+  ok(one.count.indexOf("1 month") === 0,
+     "S1 the one snapshot is counted", one.count);
+  ok(!one.chart,
+     "S2 but nothing is charted — with nothing to compare against there is no change to draw",
+     one);
   ok(!one.selectOnScreen && !one.pickerOnScreen,
      "S3 no year control, since no year has anything to compare", one);
   ok(!one.allTimeOnScreen, "S4 nor an All time toggle", one);
