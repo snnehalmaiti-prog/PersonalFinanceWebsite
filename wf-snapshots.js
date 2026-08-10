@@ -176,13 +176,22 @@
 
   // ── Reading snapshots back ────────────────────────────────────────────────
 
-  // One row per calendar month: the latest snapshot in it, oldest first.
+  // One row per COMPLETED calendar month: the latest snapshot in it, oldest
+  // first. Rows are normalised here so every consumer sees the same shape
+  // whether they came from the database or a fixture.
   //
-  // The current month is kept — it is the "so far" row, and its date says how
-  // far "so far" goes. Rows are normalised here so every consumer sees the same
-  // shape whether the row came from the database or a fixture.
-  function monthEndSeries(rows) {
+  // The current month is excluded. Its latest snapshot is today, which is not a
+  // month end: charting it puts a part-month beside full ones, invites reading
+  // their heights against each other, and produces a bar that grows between
+  // visits. planBackfill has always taken that view; this is the reader agreeing
+  // with it, rather than one half of the code calling today a month end and the
+  // other half not.
+  //
+  // The daily snapshot is still recorded — it simply joins the series once the
+  // month it belongs to has finished.
+  function monthEndSeries(rows, todayKey) {
     if (!rows || !rows.length) return [];
+    var curMonth = (todayKey || localDateKey()).slice(0, 7);
     var byMonth = {};
     rows.forEach(function (r) {
       if (!r) return;
@@ -194,6 +203,7 @@
       var total = Number(r.total);
       if (!isFinite(total)) return;
       var m = date.slice(0, 7);
+      if (m >= curMonth) return;
       if (byMonth[m] && byMonth[m].date >= date) return;
       byMonth[m] = {
         month: m,
@@ -241,8 +251,8 @@
   // movement for it. Omit the argument and the model collapses to two terms.
   //
   // Returned newest first, which is the order it is read in.
-  function buildMonthlyChange(rows, contribByMonth, interestByMonth) {
-    var series = monthEndSeries(rows);
+  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey) {
+    var series = monthEndSeries(rows, todayKey);
     var contrib = contribByMonth || {};
     var interest = interestByMonth || {};
     var out = series.map(function (row, i) {

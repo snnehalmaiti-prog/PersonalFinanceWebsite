@@ -474,6 +474,37 @@ const money = (t) => {
   await p.waitForTimeout(300);
   snapshotRows = SNAPSHOTS;
 
+  // ── The month in progress ───────────────────────────────────────────────
+  // Today's snapshot is a real row and is written every day, but the month it
+  // belongs to has not finished. Charting it would put a part-month beside full
+  // ones and give a bar that grows between visits.
+  const today = new Date();
+  const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+                     "-" + String(d.getDate()).padStart(2, "0");
+  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  const twoMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, 0);
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  snapshotRows = [
+    { snapshot_date: iso(twoMonthEnd), total: 1000000, meta: { source: "backfill", backfilled: true } },
+    { snapshot_date: iso(lastMonthEnd), total: 1100000, meta: { source: "backfill", backfilled: true } },
+    { snapshot_date: iso(today), total: 1500000, meta: { source: "live" } },
+  ];
+  await load();
+  const cur = await p.evaluate(() => ({
+    labels: ((window.__wfNwmChart || {}).data || {}).labels || [],
+    count: (document.getElementById("nwm-count") || {}).textContent || "",
+  }));
+  const thisMonth = MON[today.getMonth()] + " " + today.getFullYear();
+  const prevMonth = MON[lastMonthEnd.getMonth()] + " " + lastMonthEnd.getFullYear();
+  console.log("  in-progress month: " + JSON.stringify(cur) + " (this=" + thisMonth + ")");
+  ok(cur.labels.indexOf(thisMonth) === -1,
+     "P1 the month in progress is not charted", { labels: cur.labels, thisMonth });
+  eq(cur.labels[cur.labels.length - 1], prevMonth,
+     "P2 the newest bar is the last COMPLETED month");
+  ok(cur.count.indexOf("2 month") === 0,
+     "P3 and it is not counted in the header either", cur.count);
+  snapshotRows = SNAPSHOTS;
+
   // ── Exactly one snapshot ────────────────────────────────────────────────
   // The state on the day you start recording: a row to show, but nothing to
   // compare it against. No year has a comparable month, so both year controls

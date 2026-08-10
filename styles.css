@@ -4449,7 +4449,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* Header stats, laid out like the Cash Flow card's: eyebrow and figures on one
    line, each label inline with its value. */
-#net-worth-monthly-card .mic-title-group { flex-direction: row; align-items: center; gap: 18px; flex-wrap: wrap; }
+/* Eyebrow on its own line with the figures beneath it, rather than sharing a
+   line: five figures plus the title do not fit on one row at tablet widths and
+   the last of them wrapped away on its own. */
+#net-worth-monthly-card .mic-title-group { flex-direction: column; align-items: flex-start; gap: 6px; }
 #net-worth-monthly-card .mic-stats-row { padding: 0; flex-wrap: wrap; }
 #net-worth-monthly-card .mic-stat { flex-direction: row; align-items: baseline; gap: 6px; }
 #net-worth-monthly-card .mic-stat-label { font-size: 0.55rem; }
@@ -4457,5 +4460,5 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #net-worth-monthly-card .mic-header { padding: 16px 20px 6px; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
-.nwm-scope { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.nwm-scope { margin-left: 8px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text); white-space: nowrap; }
