@@ -243,6 +243,8 @@ const money = (t) => {
   const back = await hover(null);
   eq(back.Opening, "₹3,50,000",
      "N17 moving off the chart puts the period's figures back", back);
+  // The fixture's newest year is 2025, which is in the past, so it needs no
+  // "year to date" qualifier. The current year gets one — asserted below.
   eq(await scope(), "2025", "N18 and the header names the period again");
 
   // ── The stacked bars ────────────────────────────────────────────────────
@@ -523,6 +525,12 @@ const money = (t) => {
      "P2 the newest bar is the last COMPLETED month");
   ok(cur.count.indexOf("2 month") === 0,
      "P3 and it is not counted in the header either", cur.count);
+  const curScope = await p.evaluate(() =>
+    (document.getElementById("nwm-scope") || {}).textContent || "");
+  console.log("  scope: " + JSON.stringify(curScope));
+  eq(curScope, String(new Date().getFullYear()) + " · Year to date",
+     "P4 the current year's resting figures are labelled year to date — they cover " +
+     "the year so far, and only its completed months");
   snapshotRows = SNAPSHOTS;
 
   // ── Exactly one snapshot ────────────────────────────────────────────────

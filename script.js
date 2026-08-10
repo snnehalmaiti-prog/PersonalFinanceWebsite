@@ -16577,6 +16577,15 @@
     });
   }
 
+  // What the resting figures describe. The current year reads "year to date"
+  // because that is what it is — the year so far, and only its completed
+  // months. A past year needs no such qualifier.
+  function _nwmScopeLabel() {
+    if (__nwmAllTime || !__nwmYear) return "All time";
+    var y = String(__nwmYear);
+    return y === String(new Date().getFullYear()) ? y + " · Year to date" : y;
+  }
+
   function _nwmStatsHtml(st) {
     return _nwmStatHtml("Opening", formatCurrency(st.opening)) +
       _nwmStatHtml("Closing", formatCurrency(st.closing)) +
@@ -16592,7 +16601,7 @@
   function _nwmRenderStats(rows) {
     var el = document.getElementById("nwm-stats");
     var scopeEl = document.getElementById("nwm-scope");
-    if (scopeEl) scopeEl.textContent = __nwmAllTime || !__nwmYear ? "All time" : String(__nwmYear);
+    if (scopeEl) scopeEl.textContent = _nwmScopeLabel();
     if (!el) return;
     var st = _nwmPeriodStats(rows);
     if (!st) { el.innerHTML = ""; return; }
