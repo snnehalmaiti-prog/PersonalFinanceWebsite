@@ -156,16 +156,22 @@ const money = (t) => {
       xStacked: !!(c.options.scales.x && c.options.scales.x.stacked),
       yStacked: !!(c.options.scales.y && c.options.scales.y.stacked),
       interaction: c.options.interaction || null,
+      // Slots vs data: every month of the period gets a label, but only months
+      // with a snapshot get bars. Confusing the two is how a placeholder would
+      // be mistaken for a month that really moved by zero.
+      filled: c.data.labels.filter((_, i) => c.data.datasets[0].data[i] != null),
       tooltipEnabled: !!(c.options.plugins.tooltip && c.options.plugins.tooltip.enabled),
       hasOnHover: typeof c.options.onHover === "function",
     };
   });
 
+  // The header uses CASH FLOW · MONTHLY's own markup, so this reads it the same
+  // way that card's split would be read.
   const readStats = () => p.evaluate(() => {
     const out = {};
-    document.querySelectorAll("#nwm-stats .mic-stat").forEach((el) => {
-      out[(el.querySelector(".mic-stat-label") || {}).textContent] =
-        (el.querySelector(".mic-stat-value") || {}).textContent;
+    document.querySelectorAll("#nwm-split .mic-hs-tot").forEach((el) => {
+      out[(el.querySelector(".mic-hs-tot-label") || {}).textContent] =
+        (el.querySelector("b") || {}).textContent;
     });
     return out;
   });
@@ -196,8 +202,11 @@ const money = (t) => {
 
   // The card opens on a year, so this is 2025's three comparable months — the
   // 2024 rows are in the data and excluded by the filter (asserted under Y).
-  eq(chart.labels.join(","), "May 2025,Jun 2025,Jul 2025",
-     "N1 one bar per comparable month in the selected year, oldest on the left");
+  eq(chart.labels.join(","),
+     "Jan 2025,Feb 2025,Mar 2025,Apr 2025,May 2025,Jun 2025,Jul 2025,Aug 2025,Sep 2025,Oct 2025,Nov 2025,Dec 2025",
+     "N1 every month of the year gets a slot, oldest on the left");
+  eq(chart.filled.join(","), "May 2025,Jun 2025,Jul 2025",
+     "N1b but only the months with a snapshot carry bars");
 
   // No tooltip at all: the figures go to the header, where they hold still.
   ok(!chart.tooltipEnabled && chart.hasOnHover,
@@ -229,7 +238,8 @@ const money = (t) => {
   ok(/^\+₹1,3[0-9],[0-9]{3}$/.test(junH["Market gain"]),
      "N11 a gaining month is labelled a gain", junH);
 
-  const scope = () => p.evaluate(() => (document.getElementById("nwm-scope") || {}).textContent || "");
+  const scope = () => p.evaluate(() =>
+    ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || ""));
   await hover("Jun 2025");
   ok(/Jun 2025/.test(await scope()),
      "N12 the header names the month it is describing");
@@ -238,6 +248,13 @@ const money = (t) => {
   ok(!/reconstruct/i.test(await scope()),
      "N15 the header does not spell out the reconstruction caveat", await scope());
   await hover("Jul 2025");
+
+  // A slot with no snapshot: named, but with nothing claimed about it. Showing
+  // zeros there would say the month didn't move, which is not what is known.
+  const emptyH = await hover("Feb 2025");
+  eq(Object.keys(emptyH).length, 0,
+     "N16b hovering a month with no snapshot shows no figures", emptyH);
+  eq(await scope(), "Feb 2025", "N16c but still names the month");
 
   // Leaving the chart restores the period's own totals.
   const back = await hover(null);
@@ -269,8 +286,8 @@ const money = (t) => {
     ok(chart.sets.every((s) => s.stack === chart.sets[0].stack), "B6 in one stack");
 
     // Only months with a change get a bar; May has nothing to compare against.
-    eq(chart.labels.join(","), "May 2025,Jun 2025,Jul 2025",
-       "B7 the selected year's months, oldest on the left");
+    eq(chart.filled.join(","), "May 2025,Jun 2025,Jul 2025",
+       "B7 bars for the year's comparable months, oldest on the left");
     const at = (m) => chart.labels.indexOf(m);
     const seg = (name) => chart.sets.find((s) => s.label === name);
     eq(seg("Invested").data[at("Jun 2025")], 50000,
@@ -403,8 +420,8 @@ const money = (t) => {
   ok(!y1.selectOnScreen,
      "Y3b and ONLY through it — the native select it replaces stays hidden, or the " +
      "card shows two year controls side by side", y1);
-  ok(y1.months.length === 3 && y1.months.every((m) => /2025/.test(m)),
-     "Y4 and the chart shows only that year", y1.months);
+  ok(y1.months.length === 12 && y1.months.every((m) => /2025/.test(m)),
+     "Y4 and the chart shows that year and no other", y1.months);
   // (the year on show is named by the picker button itself — Y3)
 
   // Switching year. Driven through the select, which is what the picker sets.
@@ -431,9 +448,13 @@ const money = (t) => {
   // Uncapped: the header counts every month it has, so the chart must draw
   // every comparable one. It used to draw the most recent 24 while claiming
   // 150, contradicting the count and putting the early years out of reach.
-  eq(y3.months.length, parseInt(y3.count, 10) - 1,
+  const filledAll = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    return c.data.labels.filter((_, i) => c.data.datasets[0].data[i] != null).length;
+  });
+  eq(filledAll, parseInt(y3.count, 10) - 1,
      "Y8b as many bars as months counted, less the first — which has nothing " +
-     "before it to compare against", { bars: y3.months.length, header: y3.count });
+     "before it to compare against", { bars: filledAll, header: y3.count });
   ok(!y3.pickerVisible, "Y9 and hides the year picker, which no longer applies");
   ok(!y3.selectOnScreen,
      "Y9b including the select behind it — hiding one and not the other is how a " +
@@ -454,8 +475,8 @@ const money = (t) => {
   const y4 = await yearState();
   eq(y4.options.join(","), "2024,2025",
      "Y11 switching years leaves every year still available", y4.options);
-  eq(y4.months.length, 3,
-     "Y12 and going back to 2025 shows all three of its months again", y4.months);
+  eq(y4.months.length, 12,
+     "Y12 and going back to 2025 shows its full axis again", y4.months);
      // back to a single year for what follows
   await p.waitForTimeout(300);
 
@@ -512,21 +533,27 @@ const money = (t) => {
     { snapshot_date: iso(today), total: 1500000, meta: { source: "live" } },
   ];
   await load();
-  const cur = await p.evaluate(() => ({
-    labels: ((window.__wfNwmChart || {}).data || {}).labels || [],
-    count: (document.getElementById("nwm-count") || {}).textContent || "",
-  }));
+  const cur = await p.evaluate(() => {
+    const c = window.__wfNwmChart || { data: { labels: [], datasets: [{ data: [] }] } };
+    return {
+      labels: c.data.labels,
+      filled: c.data.labels.filter((_, i) => c.data.datasets[0].data[i] != null),
+      count: (document.getElementById("nwm-count") || {}).textContent || "",
+    };
+  });
   const thisMonth = MON[today.getMonth()] + " " + today.getFullYear();
   const prevMonth = MON[lastMonthEnd.getMonth()] + " " + lastMonthEnd.getFullYear();
   console.log("  in-progress month: " + JSON.stringify(cur) + " (this=" + thisMonth + ")");
-  ok(cur.labels.indexOf(thisMonth) === -1,
-     "P1 the month in progress is not charted", { labels: cur.labels, thisMonth });
-  eq(cur.labels[cur.labels.length - 1], prevMonth,
+  ok(cur.labels.indexOf(thisMonth) !== -1,
+     "P1 the month in progress keeps its slot on the axis", { labels: cur.labels, thisMonth });
+  ok(cur.filled.indexOf(thisMonth) === -1,
+     "P1b but carries no bar — it is not a month end", { filled: cur.filled, thisMonth });
+  eq(cur.filled[cur.filled.length - 1], prevMonth,
      "P2 the newest bar is the last COMPLETED month");
   ok(cur.count.indexOf("2 month") === 0,
      "P3 and it is not counted in the header either", cur.count);
   const curScope = await p.evaluate(() =>
-    (document.getElementById("nwm-scope") || {}).textContent || "");
+    ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || ""));
   console.log("  scope: " + JSON.stringify(curScope));
   eq(curScope, String(new Date().getFullYear()) + " · Year to date",
      "P4 the current year's resting figures are labelled year to date — they cover " +

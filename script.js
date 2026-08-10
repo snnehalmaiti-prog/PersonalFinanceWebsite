@@ -16448,12 +16448,34 @@
 
     // Oldest first for the x axis, and only months that HAVE a change — the
     // first snapshot has nothing to compare against, so it has no bar.
-    // Every comparable month, uncapped. "All time" used to draw the most recent
-    // 24 while the header counted all 150, so the card contradicted itself and
-    // the years before the cap were simply unreachable. Chart.js skips x labels
-    // to fit; the bars themselves stay one per month.
-    var bars = rows.filter(function (r) { return r.delta != null; }).reverse();
-    if (typeof window.Chart !== "function" || bars.length < 1) {
+    // Every month of the period gets a slot, whether or not it has a snapshot —
+    // the same axis CASH FLOW · MONTHLY draws. A year shows Jan..Dec and a gap
+    // reads as a gap; without the placeholders, three scattered months would be
+    // drawn side by side as though they were consecutive.
+    //
+    // Uncapped: "All time" used to draw the most recent 24 while the header
+    // counted all 150, so the card contradicted itself and the earlier years
+    // were unreachable. Chart.js skips x labels to fit; the slots stay.
+    var have = {};
+    rows.forEach(function (r) { if (r.delta != null) have[r.month] = r; });
+    var months = Object.keys(have).sort();
+    var slots = [];
+    if (!__nwmAllTime && __nwmYear) {
+      for (var mi = 1; mi <= 12; mi++) {
+        slots.push(__nwmYear + "-" + (mi < 10 ? "0" : "") + mi);
+      }
+    } else if (months.length) {
+      var cy = +months[0].slice(0, 4), cm = +months[0].slice(5, 7);
+      var ey = +months[months.length - 1].slice(0, 4), em = +months[months.length - 1].slice(5, 7);
+      while (cy < ey || (cy === ey && cm <= em)) {
+        slots.push(cy + "-" + (cm < 10 ? "0" : "") + cm);
+        cm++; if (cm > 12) { cm = 1; cy++; }
+      }
+    }
+    // A slot with no snapshot is a placeholder: null data, so Chart.js draws no
+    // bar, and hovering it names the month with no figures.
+    var bars = slots.map(function (m) { return have[m] || { month: m, delta: null }; });
+    if (typeof window.Chart !== "function" || !months.length) {
       wrap.hidden = true;
       if (legend) legend.hidden = true;
       return;
@@ -16462,20 +16484,20 @@
     if (legend) legend.hidden = false;
 
     var labels = bars.map(function (r) { return _nwmMonthLabel(r.month); });
-    var invested = bars.map(function (r) { return r.contributions; });
-    var interest = bars.map(function (r) { return r.interest || 0; });
-    var market = bars.map(function (r) { return r.market; });
+    var invested = bars.map(function (r) { return r.delta == null ? null : r.contributions; });
+    var interest = bars.map(function (r) { return r.delta == null ? null : (r.interest || 0); });
+    var market = bars.map(function (r) { return r.delta == null ? null : r.market; });
     // Nothing accrues interest — no deposits, no provident fund — so the segment
     // is dropped rather than drawn as a permanent zero-height sliver in the
     // legend.
-    var anyInterest = interest.some(function (v) { return Math.abs(v) > 0.005; });
+    var anyInterest = interest.some(function (v) { return v != null && Math.abs(v) > 0.005; });
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
     var invColors = bars.map(function (r) { return _nwmFade(NWM_INV, r.estimated); });
     var intColors = bars.map(function (r) { return _nwmFade(NWM_INT, r.estimated); });
     var mktColors = bars.map(function (r) {
-      return _nwmFade(r.market >= 0 ? NWM_UP : NWM_DOWN, r.estimated);
+      return _nwmFade((r.market || 0) >= 0 ? NWM_UP : NWM_DOWN, r.estimated);
     });
 
     var intKey = document.getElementById("nwm-key-interest");
@@ -16554,24 +16576,43 @@
     return out;
   }
 
-  function _nwmStatHtml(label, value, cls) {
-    return '<div class="mic-stat"><span class="mic-stat-label">' + label + '</span>' +
-           '<span class="mic-stat-value ' + (cls || "") + '">' + value + '</span></div>';
+  // The header text, in exactly the markup CASH FLOW · MONTHLY uses for its own
+  // hover split: one row, a label naming what is described, then a run of
+  // label/value pairs. Identical classes, so the two cards read the same — and
+  // stay that way if either is restyled.
+  //
+  // The same row is painted whether or not the cursor is over the chart; only
+  // the label and the numbers change, so nothing moves as you hover.
+  function _nwmSplitHtml(label, st) {
+    function tot(name, value, cls) {
+      return '<span class="mic-hs-tot"><span class="mic-hs-tot-label">' + name + '</span>' +
+             '<b' + (cls ? ' class="' + cls + '"' : '') + '>' + value + '</b></span>';
+    }
+    var nums = "";
+    if (st) {
+      nums = tot("Opening", formatCurrency(st.opening)) +
+             tot("Closing", formatCurrency(st.closing)) +
+             tot("Invested", _nwmSigned(st.invested)) +
+             tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+             tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
+                 st.market < 0 ? "negative" : "mic-hs-pos");
+    }
+    return '<div class="mic-hs-row"><span class="mic-hs-month">' + escapeHtml(label) +
+           '</span>' + nums + '</div>';
   }
 
-  // A single month's figures, in the same five slots as the period's. Same
-  // labels, same arithmetic — a month IS a period of one — so the header never
-  // changes shape as the cursor moves across the chart.
+  // A single month's figures, in the same slots as the period's — a month is a
+  // period of one, so the row never changes shape as the cursor moves.
   function _nwmShowHovered(r) {
-    var el = document.getElementById("nwm-stats");
-    var scopeEl = document.getElementById("nwm-scope");
+    var el = document.getElementById("nwm-split");
     if (!el) return;
     if (!r) { _nwmRenderStats(_nwmForYear(_nwmAllRows)); return; }   // cursor left
-    if (scopeEl) {
-      scopeEl.textContent = _nwmMonthLabel(r.month) +
-        (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
-    }
-    el.innerHTML = _nwmStatsHtml({
+    var label = _nwmMonthLabel(r.month) +
+      (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
+    // A month with no snapshot keeps its place on the axis and its name here,
+    // but has no figures — the treatment CASH FLOW gives an empty month.
+    if (r.delta == null) { el.innerHTML = _nwmSplitHtml(label, null); return; }
+    el.innerHTML = _nwmSplitHtml(label, {
       opening: r.total - r.delta, closing: r.total,
       invested: r.contributions || 0, interest: r.interest || 0, market: r.market || 0
     });
@@ -16586,28 +16627,12 @@
     return y === String(new Date().getFullYear()) ? y + " · Year to date" : y;
   }
 
-  function _nwmStatsHtml(st) {
-    return _nwmStatHtml("Opening", formatCurrency(st.opening)) +
-      _nwmStatHtml("Closing", formatCurrency(st.closing)) +
-      _nwmStatHtml("Invested", _nwmSigned(st.invested)) +
-      _nwmStatHtml("Interest", _nwmSigned(st.interest), st.interest ? "positive" : "") +
-      _nwmStatHtml(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
-                   st.market < 0 ? "negative" : "positive");
-  }
-
-  // The period's figures, and the label that says which period. Both live here
-  // so that restoring one restores the other — setting the scope in the caller
-  // left the header still naming the hovered month after the cursor had gone.
   function _nwmRenderStats(rows) {
-    var el = document.getElementById("nwm-stats");
-    var scopeEl = document.getElementById("nwm-scope");
-    if (scopeEl) scopeEl.textContent = _nwmScopeLabel();
+    var el = document.getElementById("nwm-split");
     if (!el) return;
     var st = _nwmPeriodStats(rows);
-    if (!st) { el.innerHTML = ""; return; }
-    // One snapshot: a closing figure and nothing to decompose.
-    if (st.opening == null) { el.innerHTML = _nwmStatHtml("Closing", formatCurrency(st.closing)); return; }
-    el.innerHTML = _nwmStatsHtml(st);
+    // One snapshot, or none: a label, and no decomposition to show.
+    el.innerHTML = _nwmSplitHtml(_nwmScopeLabel(), st && st.opening != null ? st : null);
   }
 
   function _nwmRender(rows) {
