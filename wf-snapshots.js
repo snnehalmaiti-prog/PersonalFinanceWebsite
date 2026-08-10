@@ -277,10 +277,16 @@
   // movement for it. Omit the argument and the model collapses to two terms.
   //
   // Returned newest first, which is the order it is read in.
-  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey) {
+  // cashByMonth carries the two parked-cash flows, { corpus, savings }, each a
+  // month-keyed map. They are their own terms rather than part of contributions:
+  // money moved into a savings account is not investing, but it IS in net worth,
+  // so it has to be named and subtracted or the market would be credited for it.
+  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey, cashByMonth) {
     var series = monthEndSeries(rows, todayKey);
     var contrib = contribByMonth || {};
     var interest = interestByMonth || {};
+    var corpus = (cashByMonth && cashByMonth.corpus) || {};
+    var savings = (cashByMonth && cashByMonth.savings) || {};
     var out = series.map(function (row, i) {
       var prev = i > 0 ? series[i - 1] : null;
       var o = {
@@ -288,7 +294,8 @@
         invested: row.invested, equity: row.equity,
         fixed_income: row.fixed_income, commodity: row.commodity,
         by_portfolio: row.by_portfolio, backfilled: row.backfilled,
-        delta: null, contributions: null, interest: null, market: null,
+        delta: null, contributions: null, interest: null,
+        corpus: null, savings: null, market: null,
         estimated: false, gapMonths: 0
       };
       if (!prev) return o;
@@ -297,14 +304,18 @@
       // Every month after the previous snapshot up to and including this one.
       // Using only this month's contributions across a gap would book the
       // skipped months' investing as market movement.
-      var c = 0, inc = 0;
+      var c = 0, inc = 0, cor = 0, sav = 0;
       eachMonthAfter(prev.month, row.month).forEach(function (m) {
         c += Number(contrib[m]) || 0;
         inc += Number(interest[m]) || 0;
+        cor += Number(corpus[m]) || 0;
+        sav += Number(savings[m]) || 0;
       });
       o.contributions = round2(c);
       o.interest = round2(inc);
-      o.market = round2(o.delta - c - inc);
+      o.corpus = round2(cor);
+      o.savings = round2(sav);
+      o.market = round2(o.delta - c - inc - cor - sav);
       o.estimated = row.backfilled || prev.backfilled;
       return o;
     });
@@ -327,6 +338,26 @@
       sum += b - a;
     });
     return round2(sum);
+  }
+
+  // Month-over-month change in a running balance.
+  //
+  // Savings and Investment Corpus rows are balances, not transactions — each
+  // replaces the last — so the only flow they can yield is the difference. The
+  // first month counts in full: that money arrived at or before it.
+  //
+  // What a typed balance cannot say is how much of a rise was deposited and how
+  // much was interest the account paid. Both land here together.
+  function monthlyDeltas(byMonthTotal) {
+    var out = {};
+    if (!byMonthTotal) return out;
+    var prev = 0;
+    Object.keys(byMonthTotal).sort().forEach(function (m) {
+      var bal = Number(byMonthTotal[m]) || 0;
+      out[m] = round2(bal - prev);
+      prev = bal;
+    });
+    return out;
   }
 
   // Restate each month's total net of an amount held in that month.
@@ -408,6 +439,7 @@
     buildMonthlyChange: buildMonthlyChange,
     accruedBetween: accruedBetween,
     subtractByMonth: subtractByMonth,
+    monthlyDeltas: monthlyDeltas,
     forPortfolio: forPortfolio,
     localDateKey: localDateKey,
     monthKey: monthKey,

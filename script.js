@@ -12718,7 +12718,10 @@
   // every key's latest snapshot across the timeline and aggregate by instrument
   // name. Returns { byMonthInstr: { "YYYY-MM": { instrument: balance } },
   // instruments: [names], yearList: [years] }.
-  function buildMonthlyIdleCashData(portfolioOverride) {
+  // keyBy: "instrument" (default) or "subCategory". The Idle Cash card wants a
+  // line per account; the snapshot card wants Investment Corpus and Savings
+  // Account kept apart, which is the same forward-fill over a different key.
+  function buildMonthlyIdleCashData(portfolioOverride, keyBy) {
     var ovPortfolio = portfolioOverride || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var empty = { byMonthInstr: {}, instruments: [], yearList: [] };
     var rows = getSheetRows("fd");
@@ -12752,7 +12755,9 @@
       var bal = parseNumber(row[amtIdx]);
       var portfolio = (portIdx !== -1 ? row[portIdx] : "") || "";
       var bank = (bankIdx !== -1 ? row[bankIdx] : "") || "";
-      var instrument = ((instrIdx !== -1 ? row[instrIdx] : "") || "").trim() || bank.trim() || (row[subIdx] || "").trim() || "Idle Cash";
+      var instrument = keyBy === "subCategory"
+        ? ((row[subIdx] || "").trim() || "Idle Cash")
+        : (((instrIdx !== -1 ? row[instrIdx] : "") || "").trim() || bank.trim() || (row[subIdx] || "").trim() || "Idle Cash");
       var key = normalizeText(portfolio) + "||" + normalizeText(bank) + "||" + normalizeText(instrument);
       if (!snapsByKey[key]) snapsByKey[key] = { instrument: instrument, snaps: [] };
       snapsByKey[key].snaps.push({ date: d, balance: bal });
@@ -16373,6 +16378,30 @@
   // EXCLUDING idle cash. Moving money between a savings account and a fund then
   // changes nothing here — which is the point, because it changes nothing in
   // reality either.
+  // Investment Corpus and Savings Account balances at each month end, kept
+  // apart. Their month-over-month change becomes its own segment: that money is
+  // in net worth, so leaving it unnamed would have the market credited for it,
+  // but it is not investing either.
+  function _nwmCashByMonth(portfolio) {
+    var out = { corpus: {}, savings: {} };
+    try {
+      var idle = buildMonthlyIdleCashData(portfolio || "all", "subCategory");
+      var bal = { corpus: {}, savings: {} };
+      Object.keys((idle && idle.byMonthInstr) || {}).forEach(function (m) {
+        var g = idle.byMonthInstr[m];
+        Object.keys(g).forEach(function (sub) {
+          var n = normalizeText(sub);
+          var key = n === "investment corpus" ? "corpus" : n === "savings account" ? "savings" : null;
+          if (!key) return;
+          bal[key][m] = (bal[key][m] || 0) + (g[sub] || 0);
+        });
+      });
+      out.corpus = WfSnapshots.monthlyDeltas(bal.corpus);
+      out.savings = WfSnapshots.monthlyDeltas(bal.savings);
+    } catch (e) {}
+    return out;
+  }
+
   function _nwmParkedByMonth(portfolio) {
     var out = {};
     try {
@@ -16463,11 +16492,12 @@
   // from the axis in that direction, so the bar's extent is the month's total
   // change and its sign is visible at a glance.
   var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
+  var NWM_CORPUS = "#0EA5E9", NWM_SAVINGS = "#F59E0B";
   var __nwmYear = null;          // selected year, as a string
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null;
   var _nwmAllRows = [];
-  var _nwmParkedShown = false;    // whether anything was actually excluded
+  var _nwmCashShown = false;      // whether any parked cash moved in the period
   // Always from the FULL set. Passing the year's slice back in would make it the
   // new "all rows" and the picker would lose every other year on the first use.
   function _nwmRerender() { _nwmRender(_nwmAllRows); }
@@ -16594,22 +16624,33 @@
     var labels = bars.map(function (r) { return _nwmMonthLabel(r.month); });
     var invested = bars.map(function (r) { return r.delta == null ? null : r.contributions; });
     var interest = bars.map(function (r) { return r.delta == null ? null : (r.interest || 0); });
+    var corpus = bars.map(function (r) { return r.delta == null ? null : (r.corpus || 0); });
+    var savings = bars.map(function (r) { return r.delta == null ? null : (r.savings || 0); });
     var market = bars.map(function (r) { return r.delta == null ? null : r.market; });
     // Nothing accrues interest — no deposits, no provident fund — so the segment
     // is dropped rather than drawn as a permanent zero-height sliver in the
     // legend.
-    var anyInterest = interest.some(function (v) { return v != null && Math.abs(v) > 0.005; });
+    var nonZero = function (arr) {
+      return arr.some(function (v) { return v != null && Math.abs(v) > 0.005; });
+    };
+    var anyInterest = nonZero(interest), anyCorpus = nonZero(corpus), anySavings = nonZero(savings);
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
     var invColors = bars.map(function (r) { return _nwmFade(NWM_INV, r.estimated); });
     var intColors = bars.map(function (r) { return _nwmFade(NWM_INT, r.estimated); });
+    var corColors = bars.map(function (r) { return _nwmFade(NWM_CORPUS, r.estimated); });
+    var savColors = bars.map(function (r) { return _nwmFade(NWM_SAVINGS, r.estimated); });
     var mktColors = bars.map(function (r) {
       return _nwmFade((r.market || 0) >= 0 ? NWM_UP : NWM_DOWN, r.estimated);
     });
 
     var intKey = document.getElementById("nwm-key-interest");
     if (intKey) intKey.hidden = !anyInterest;
+    var corKey = document.getElementById("nwm-key-corpus");
+    if (corKey) corKey.hidden = !anyCorpus;
+    var savKey = document.getElementById("nwm-key-savings");
+    if (savKey) savKey.hidden = !anySavings;
 
     // onHover alone does not reliably fire on the way out — a quick exit can
     // leave the readout showing a month the cursor is no longer near. Assigned
@@ -16626,6 +16667,12 @@
             borderWidth: 0, borderRadius: 2 }
         ].concat(anyInterest ? [
           { label: "Interest", data: interest, backgroundColor: intColors, stack: "chg",
+            borderWidth: 0, borderRadius: 2 }
+        ] : []).concat(anyCorpus ? [
+          { label: "Investment Corpus", data: corpus, backgroundColor: corColors, stack: "chg",
+            borderWidth: 0, borderRadius: 2 }
+        ] : []).concat(anySavings ? [
+          { label: "Savings Account", data: savings, backgroundColor: savColors, stack: "chg",
             borderWidth: 0, borderRadius: 2 }
         ] : []).concat([
           { label: "Market", data: market, backgroundColor: mktColors, stack: "chg",
@@ -16687,10 +16734,12 @@
     if (!comp.length) return { closing: closing };
     var oldest = comp[comp.length - 1];
     var out = { opening: oldest.total - oldest.delta, closing: closing,
-                invested: 0, interest: 0, market: 0 };
+                invested: 0, interest: 0, corpus: 0, savings: 0, market: 0 };
     comp.forEach(function (r) {
       out.invested += r.contributions || 0;
       out.interest += r.interest || 0;
+      out.corpus += r.corpus || 0;
+      out.savings += r.savings || 0;
       out.market += r.market || 0;
     });
     return out;
@@ -16710,10 +16759,17 @@
     }
     var nums = "";
     if (st) {
+      var cash = function (name, v) {
+        // Only when something moved: an always-zero figure is noise, and these
+        // two are zero for most months of most portfolios.
+        return v ? tot(name, _nwmSigned(v), v < 0 ? "negative" : "mic-hs-pos") : "";
+      };
       nums = tot("Opening", formatCurrency(st.opening)) +
              tot("Closing", formatCurrency(st.closing)) +
              tot("Invested", _nwmSigned(st.invested)) +
              tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+             cash("Investment Corpus", st.corpus) +
+             cash("Savings Account", st.savings) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos");
     }
@@ -16734,7 +16790,8 @@
     if (r.delta == null) { el.innerHTML = _nwmSplitHtml(label, null); return; }
     el.innerHTML = _nwmSplitHtml(label, {
       opening: r.total - r.delta, closing: r.total,
-      invested: r.contributions || 0, interest: r.interest || 0, market: r.market || 0
+      invested: r.contributions || 0, interest: r.interest || 0,
+      corpus: r.corpus || 0, savings: r.savings || 0, market: r.market || 0
     });
   }
 
@@ -16778,11 +16835,11 @@
 
     var noteEl = document.getElementById("nwm-note");
     if (noteEl) {
-      noteEl.hidden = !_nwmParkedShown;
-      noteEl.textContent = _nwmParkedShown
-        ? "Excludes Savings Account and Investment Corpus balances, so these totals sit " +
-          "below the Overview's net worth and moving money between cash and investments " +
-          "does not register as a change."
+      noteEl.hidden = !_nwmCashShown;
+      noteEl.textContent = _nwmCashShown
+        ? "Investment Corpus and Savings Account are counted in the totals, so these " +
+          "figures reconcile with the Overview, but their movements are shown separately " +
+          "rather than as investing."
         : "";
     }
   }
@@ -16812,12 +16869,15 @@
         from = list.length > 1
           ? list.map(function (r) { return String(r.snapshot_date).slice(0, 7); }).sort()[0]
           : null;
-        var parked = from ? _nwmParkedByMonth(pf) : {};
-        _nwmParkedShown = Object.keys(parked).length > 0;
-        _nwmRender(WfSnapshots.buildMonthlyChange(
-          WfSnapshots.subtractByMonth(list, parked),
+        // Parked cash stays IN the totals, so Closing matches the Overview's
+        // net worth. Its movement comes out as its own two segments below.
+        var cash = from ? _nwmCashByMonth(pf) : { corpus: {}, savings: {} };
+        _nwmCashShown = Object.keys(cash.corpus).length > 0 ||
+                        Object.keys(cash.savings).length > 0;
+        _nwmRender(WfSnapshots.buildMonthlyChange(list,
           from ? _nwmContributionsByMonth(pf) : {},
-          from ? _nwmInterestByMonth(from, pf) : {}));
+          from ? _nwmInterestByMonth(from, pf) : {},
+          null, cash));
       })
       .catch(function (e) {
         // A missing table is the expected state until the migration is run, and

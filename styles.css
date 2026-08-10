@@ -4461,3 +4461,5 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
 .nwm-note { margin: 0; padding: 2px 20px 4px; font-size: 0.64rem; font-style: italic; }
+.nwm-swatch-corpus { background: #0EA5E9; }
+.nwm-swatch-savings { background: #F59E0B; }

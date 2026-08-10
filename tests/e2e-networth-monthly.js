@@ -42,6 +42,10 @@ const SHEETS = {
     // WOULD accrue visibly if savings interest were counted as interest — which
     // it must not be, since a typed balance already contains it.
     ["1-Jan-2024", "Snnehal", "SBI", "Savings Two", "Fixed Income", "Savings Account", "Deposit", "500000", "", "12%", ""],
+    // An Investment Corpus balance that moves in a different month from the
+    // savings one, so the two buckets cannot be conflated without a test noticing.
+    ["1-Jan-2024", "Snnehal", "ICICI", "Corpus One", "Fixed Income", "Investment Corpus", "Deposit", "300000", "", "0%", ""],
+    ["5-Jun-2025", "Snnehal", "ICICI", "Corpus One", "Fixed Income", "Investment Corpus", "Deposit", "340000", "", "0%", ""],
     // A term deposit opened well before the window, so it accrues through both
     // months with no principal movement — pure interest, which must not be
     // reported as the market.
@@ -226,14 +230,18 @@ const money = (t) => {
   // the same five slots — the header must not change shape as the cursor moves.
   const julH = await hover("Jul 2025");
   console.log("  hover Jul: " + JSON.stringify(julH));
-  eq(Object.keys(julH).join(","), "Opening,Closing,Invested,Interest,Market loss",
-     "N3 the same five labels, so the header keeps its shape");
+  // Opening and Closing always; the movement terms in between appear only when
+  // they moved, so the row stays readable rather than carrying dead zeros.
+  eq(Object.keys(julH).join(","),
+     "Opening,Closing,Invested,Interest,Savings Account,Market loss",
+     "N3 the movements are named individually between opening and closing");
   // Totals are net of parked cash: Jun's ₹12,00,000 less the ₹7,00,000 held in
   // the two savings accounts, Jul's ₹11,50,000 less ₹7,50,000 after the ₹50,000
   // moved in. That move is why the card excludes cash — it changed nothing.
-  eq(julH.Opening, "₹5,00,000",
-     "N4 opening is the previous month's stored total, net of parked cash");
-  eq(julH.Closing, "₹4,00,000", "N5 closing is this month's, on the same basis");
+  // Totals are the stored ones, cash included, so they reconcile with the
+  // Overview. The cash MOVEMENT is named separately instead.
+  eq(julH.Opening, "₹12,00,000", "N4 opening is the previous month's stored total");
+  eq(julH.Closing, "₹11,50,000", "N5 closing is this month's");
   ok(/^\+₹1,30,000$/.test(julH.Invested),
      "N8 contributions are the fund buy and the new deposit — NOT the ₹50,000 that " +
      "merely moved into savings", julH.Invested);
@@ -244,9 +252,10 @@ const money = (t) => {
      "10k of interest means prices took 2.4L", julH["Market loss"]);
 
   const junH = await hover("Jun 2025");
-  eq(junH.Opening, "₹3,00,000", "N10 an up month, measured from May's close");
-  ok(/^\+₹1,3[0-9],[0-9]{3}$/.test(junH["Market gain"]),
-     "N11 a gaining month is labelled a gain", junH);
+  eq(junH.Opening, "₹10,00,000", "N10 an up month, measured from May's close");
+  ok(/^\+₹9[0-9],[0-9]{3}$/.test(junH["Market gain"]),
+     "N11 a gaining month is labelled a gain, with the corpus move taken out of it",
+     junH);
 
   const scope = () => p.evaluate(() =>
     ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || ""));
@@ -297,7 +306,7 @@ const money = (t) => {
 
   // Leaving the chart restores the period's own totals.
   const back = await hover(null);
-  eq(back.Opening, "₹3,50,000",
+  eq(back.Opening, "₹8,50,000",
      "N17 moving off the chart puts the period's figures back", back);
   // The fixture's newest year is 2025, which is in the past, so it needs no
   // "year to date" qualifier. The current year gets one — asserted below.
@@ -319,9 +328,9 @@ const money = (t) => {
        chart.interaction);
     ok(!chart.tooltipEnabled,
        "B3b with no tooltip — the column's figures go to the header instead");
-    eq(chart.sets.length, 3, "B4 three segments and no category split");
-    eq(chart.sets.map((s) => s.label).join(","), "Invested,Interest,Market",
-       "B5 the three things that move net worth");
+    eq(chart.sets.map((s) => s.label).join(","),
+       "Invested,Interest,Investment Corpus,Savings Account,Market",
+       "B4 a segment per kind of movement, and no category split");
     ok(chart.sets.every((s) => s.stack === chart.sets[0].stack), "B6 in one stack");
 
     // Only months with a change get a bar; May has nothing to compare against.
@@ -329,6 +338,16 @@ const money = (t) => {
        "B7 bars for the year's comparable months, oldest on the left");
     const at = (m) => chart.labels.indexOf(m);
     const seg = (name) => chart.sets.find((s) => s.label === name);
+    // Jun moved the corpus, Jul moved savings — different months, so a build
+    // that lumped the two buckets together would show one segment, not two.
+    const corSeg = seg("Investment Corpus"), savSeg = seg("Savings Account");
+    ok(corSeg && savSeg, "B5 both cash buckets get their own segment",
+       chart.sets.map((s) => s.label));
+    ok(Math.abs(corSeg.data[at("Jun 2025")] - 40000) < 1,
+       "B5b the corpus moved ₹40,000 in June", corSeg.data);
+    ok(Math.abs(savSeg.data[at("Jul 2025")] - 50000) < 1,
+       "B5c and savings ₹50,000 in July, kept apart from it", savSeg.data);
+
     eq(seg("Invested").data[at("Jun 2025")], 50000,
        "B8 the invested segment carries the fund buy");
     eq(seg("Invested").data[at("Jul 2025")], 130000,
@@ -355,11 +374,13 @@ const money = (t) => {
 
     // The invariant that matters: the segments are the change, exactly. If any
     // leg is double-counted or dropped, this is what catches it.
+    const at0 = (name) => (seg(name) ? seg(name).data : []);
     const inv = seg("Invested").data, mkt = seg("Market").data;
-    const deltas = { "May 2025": -50000, "Jun 2025": 200000, "Jul 2025": -100000 };
+    const cor = at0("Investment Corpus"), sav = at0("Savings Account");
+    const deltas = { "May 2025": 150000, "Jun 2025": 200000, "Jul 2025": -50000 };
     Object.keys(deltas).forEach((m) => {
       const i = at(m);
-      const sum = inv[i] + int[i] + mkt[i];
+      const sum = inv[i] + int[i] + (cor[i] || 0) + (sav[i] || 0) + mkt[i];
       ok(Math.abs(sum - deltas[m]) < 1,
          "B11b " + m + ": invested + interest + market equals the month's change",
          { sum, want: deltas[m], inv: inv[i], int: int[i], mkt: mkt[i] });
@@ -392,33 +413,36 @@ const money = (t) => {
   // ended with.
   const stats = await readStats();
   console.log("  stats: " + JSON.stringify(stats));
-  eq(Object.keys(stats).join(","), "Opening,Closing,Invested,Interest,Market loss",
-     "H1 exactly the five figures asked for, and no others");
+  ok(Object.keys(stats).join(",").indexOf("Opening,Closing,Invested,Interest") === 0,
+     "H1 the figures in order, cash movements between interest and the market",
+     Object.keys(stats));
 
   // 2025 on show: May, Jun, Jul. Opening is Dec 2024's close (₹8,50,000), since
   // that is what May was measured against — NOT May's own total.
-  eq(stats.Opening, "₹3,50,000",
+  eq(stats.Opening, "₹8,50,000",
      "H2 opening is the close of the month before the first bar");
-  eq(stats.Closing, "₹4,00,000", "H3 closing is the newest month's stored total");
+  eq(stats.Closing, "₹11,50,000", "H3 closing is the newest month's stored total");
 
-  ok(Math.abs((num(stats.Opening) + num(stats.Invested) + num(stats.Interest) +
-               num(stats["Market loss"])) - num(stats.Closing)) < 1,
-     "H4 and the five reconcile: opening + invested + interest + market = closing",
-     stats);
+  const moved = num(stats.Invested) + num(stats.Interest) +
+                num(stats["Investment Corpus"] || 0) + num(stats["Savings Account"] || 0) +
+                num(stats["Market loss"] ?? stats["Market gain"]);
+  ok(Math.abs((num(stats.Opening) + moved) - num(stats.Closing)) < 1,
+     "H4 and they reconcile: opening plus everything that moved is closing", stats);
 
   // A negative market is labelled as a loss, not a negative gain.
-  ok(/^−/.test(stats["Market loss"]),
-     "H5 the market figure is signed", stats["Market loss"]);
+  ok(/^[+−]/.test(stats["Market loss"] ?? stats["Market gain"]),
+     "H5 the market figure is signed", stats);
 
   // ── Parked cash is out of the card entirely ─────────────────────────────
   // Out of the totals as well as the contributions. Out of one side only, the
   // ₹50,000 moved into savings in July would resurface in Market as a price
   // movement that never happened.
   const julSum = num(julH.Opening) + num(julH.Invested) + num(julH.Interest) +
+                 num(julH["Investment Corpus"] || 0) + num(julH["Savings Account"] || 0) +
                  num(julH["Market loss"]);
   ok(Math.abs(julSum - num(julH.Closing)) < 1,
-     "K1 a hovered month's five figures reconcile on the cash-excluded basis",
-     { julH, julSum });
+     "K1 a hovered month reconciles with cash counted in the totals and named " +
+     "among the movements", { julH, julSum });
   const note = await p.evaluate(() => {
     const el = document.getElementById("nwm-note");
     return { hidden: el.hidden, text: el.textContent };
@@ -520,6 +544,25 @@ const money = (t) => {
      { sn: sn.stats.Closing, tr: tr.stats.Closing, all: household.stats.Closing });
 
   await pickPortfolio("all");
+
+  // ── Parked cash is named, not hidden ────────────────────────────────────
+  // The fixture moves ₹50,000 into savings in July. That money is in net worth,
+  // so it stays in the totals — and it is not investing, so it gets its own
+  // segment rather than inflating Invested or being blamed on the market.
+  const cashSeg = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    const s = c.data.datasets.find((d) => d.label === "Savings Account");
+    return s ? { data: s.data, i: c.data.labels.indexOf("Jul 2025") } : null;
+  });
+  console.log("  savings segment: " + JSON.stringify(cashSeg));
+  ok(cashSeg && Math.abs(cashSeg.data[cashSeg.i] - 50000) < 1,
+     "C1 the savings movement is its own bar segment", cashSeg);
+  ok(/^\+₹1,30,000$/.test(julH.Invested),
+     "C2 and is not counted as investing", julH.Invested);
+  const noteTxt = await p.evaluate(() =>
+    (document.getElementById("nwm-note") || {}).textContent || "");
+  ok(/counted in the totals/.test(noteTxt) && /separately/.test(noteTxt),
+     "C3 the note says they are counted but shown apart", noteTxt);
 
   // ── Year selection ──────────────────────────────────────────────────────
   // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an

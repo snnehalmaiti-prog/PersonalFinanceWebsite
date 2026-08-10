@@ -169,7 +169,7 @@ const SERIES = [
 // exercising the current-month exclusion in August.
 const FUTURE = "2099-01-01";
 const series = (rows) => S.monthEndSeries(rows, FUTURE);
-const chg = (rows, c, i) => S.buildMonthlyChange(rows, c, i, FUTURE);
+const chg = (rows, c, i, cash) => S.buildMonthlyChange(rows, c, i, FUTURE, cash);
 
 // ── Reading back: month-end series ──────────────────────────────────────────
 const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, meta: { source: "live" } }, extra || {});
@@ -323,92 +323,58 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
      "A6 a fall is reported as it is rather than clamped — it would mean the input is wrong");
 }
 
-// ── Excluding parked cash ───────────────────────────────────────────────────
-// Savings and Investment Corpus balances come out of BOTH sides: the totals and
-// the contributions. Out of one side only, the difference would resurface in
-// Market as a price movement that never happened.
+// ── Parked cash as its own two terms ────────────────────────────────────────
+// Investment Corpus and Savings Account stay IN the totals, so the card
+// reconciles with the Overview — but their movement is named rather than left
+// in the residual, where the market would be credited for money that was
+// merely moved.
 {
-  const rows = [R("2026-03-31", 1000000, { fixed_income: 400000, equity: 600000 }),
-                R("2026-04-30", 1100000, { fixed_income: 450000, equity: 650000 })];
-  const parked = { "2026-03": 200000, "2026-04": 250000 };
-  const adj = S.subtractByMonth(rows, parked);
-  eq(adj[0].total, 800000, "K1 the month's parked balance comes off its total");
-  eq(adj[1].total, 850000, "K2 each month by its own balance, not a single figure");
-  eq(adj[0].fixed_income, 200000,
-     "K3 and off fixed income, where the balance was counted");
-  eq(adj[0].equity, 600000, "K4 equity is untouched");
+  const rows = [R("2026-03-31", 1000000), R("2026-04-30", 1100000)];
+  // ₹50,000 moved from a fund into savings: net worth is unchanged in total, the
+  // savings balance rose by 50k, and the fund sale is a negative contribution.
+  const out = chg(rows, { "2026-04": -50000 }, {},
+                  { savings: { "2026-04": 50000 } });
+  eq(out[0].delta, 100000, "K1 the change is the change in net worth, cash included");
+  eq(out[0].savings, 50000, "K2 the savings movement is named");
+  eq(out[0].contributions, -50000, "K3 alongside the sale that funded it");
+  eq(out[0].market, 100000, "K4 leaving the market only what it actually did");
+  ok(out[0].contributions + out[0].interest + out[0].corpus + out[0].savings +
+     out[0].market === out[0].delta,
+     "K5 and the five movement terms sum to the change", out[0]);
+}
+{
+  // Both buckets, kept apart.
+  const rows = [R("2026-03-31", 100), R("2026-04-30", 400)];
+  const out = chg(rows, {}, {}, { corpus: { "2026-04": 120 }, savings: { "2026-04": 80 } });
+  eq(out[0].corpus, 120, "K6 Investment Corpus is its own term");
+  eq(out[0].savings, 80, "K7 and Savings Account another");
+  eq(out[0].market, 100, "K8 with the rest left to the market");
+}
+{
+  // Omitting the argument must leave every earlier answer untouched.
+  const rows = [R("2026-03-31", 100), R("2026-04-30", 150)];
+  const a = chg(rows, { "2026-04": 20 });
+  eq(a[0].corpus, 0, "K9 no cash series, no cash movement");
+  eq(a[0].savings, 0, "K10 either bucket");
+  eq(a[0].market, 30, "K11 and the model collapses to what it was");
+}
+{
+  // A balance that falls is money taken out, not a market loss.
+  const rows = [R("2026-03-31", 1000), R("2026-04-30", 900)];
+  const out = chg(rows, {}, {}, { savings: { "2026-04": -100 } });
+  eq(out[0].savings, -100, "K12 a falling balance is a withdrawal");
+  eq(out[0].market, 0, "K13 and the market is untouched by it");
+}
 
-  // ₹50,000 moved from savings into a fund: net worth is unchanged, and with
-  // cash excluded the card should show a ₹50,000 contribution, not a windfall.
-  const out = chg(adj, { "2026-04": 50000 }, {});
-  eq(out[0].delta, 50000, "K5 the change is of investments only");
-  eq(out[0].contributions, 50000, "K6 matched by the contribution");
-  eq(out[0].market, 0, "K7 leaving the market with nothing it did not do");
-}
+// monthlyDeltas — a running balance yields flows only by difference.
 {
-  const rows = [R("2026-03-31", 1000)];
-  eq(S.subtractByMonth(rows, {})[0].total, 1000, "K8 no parked cash, no adjustment");
-  eq(S.subtractByMonth(rows, null)[0].total, 1000, "K9 nor for a missing map");
-  eq(S.subtractByMonth(rows, { "2026-09": 500 })[0].total, 1000,
-     "K10 and a balance in another month does not touch this one");
-  ok(rows[0].total === 1000, "K11 the input rows are not mutated");
-}
-
-// ── Filtering to one portfolio ──────────────────────────────────────────────
-// A row's share comes from its stored split. Rows with no figure for that
-// portfolio are dropped, not zeroed: "not recorded for this portfolio" and
-// "this portfolio was worth nothing" are different claims.
-{
-  const rows = [
-    R("2026-06-30", 300, { by_portfolio: { A: 200, B: 100 } }),
-    R("2026-07-31", 350, { by_portfolio: { A: 220, B: 130 } }),
-  ];
-  const a = S.forPortfolio(rows, "A");
-  eq(a.length, 2, "F1 both months carry a figure for A");
-  eq(a[0].total, 200, "F2 and the total is that portfolio's share");
-  eq(a[1].total, 220, "F3 month by month");
-  eq(S.forPortfolio(rows, "all").length, 2, "F4 'all' is the household, unchanged");
-  eq(S.forPortfolio(rows, "all")[0].total, 300, "F5 at the household total");
-  eq(S.forPortfolio(rows, "C").length, 0, "F6 a portfolio with no share anywhere yields nothing");
-}
-{
-  // A month recorded before this portfolio existed has no figure for it.
-  const rows = [R("2026-06-30", 300, { by_portfolio: { A: 300 } }),
-                R("2026-07-31", 350, { by_portfolio: { A: 220, B: 130 } })];
-  const b = S.forPortfolio(rows, "B");
-  eq(b.length, 1, "F7 months with no figure for it are dropped, not shown as zero");
-  eq(b[0].snapshot_date, "2026-07-31", "F8 leaving the ones that have it");
-}
-{
-  // Live rows store a category object per portfolio; backfilled rows a plain
-  // total. Both have to read alike, or history and records would disagree.
-  const rows = [R("2026-06-30", 300, { by_portfolio: { A: 200 } }),
-                R("2026-07-31", 350, {
-                  by_portfolio: { A: { equity: 150, fixed_income: 60, commodity: 10 } } })];
-  const a = S.forPortfolio(rows, "A");
-  eq(a[0].total, 200, "F9 a plain total is taken as the total");
-  eq(a[1].total, 220, "F10 and a category object is summed to one");
-}
-{
-  const rows = [R("2026-06-30", 300)];      // no split at all
-  eq(S.forPortfolio(rows, "A").length, 0, "F11 a row with no split has no share to show");
-  eq(S.forPortfolio(null, "A").length, 0, "F12 and null rows do not throw");
-}
-{
-  // planBackfill carries each portfolio's own month ends onto the row.
-  const P2 = (y, m, d, v) => ({ x: new Date(y, m - 1, d), y: v });
-  const all = [P2(2026, 6, 30, 300), P2(2026, 7, 31, 350)];
-  const plan = S.planBackfill(all, [], "2026-08-09", 600,
-    { A: [P2(2026, 6, 30, 200), P2(2026, 7, 31, 220)],
-      B: [P2(2026, 6, 30, 100), P2(2026, 7, 31, 130)] });
-  eq(plan.length, 2, "F13 a row per reconstructed month end");
-  eq(JSON.stringify(plan[0].by_portfolio), JSON.stringify({ A: 200, B: 100 }),
-     "F14 carrying each portfolio's own figure for that date");
-  eq(plan[0].by_portfolio.A + plan[0].by_portfolio.B, plan[0].total,
-     "F15 and the portfolios sum to the household — the property the whole " +
-     "reconstruction stands on");
-  eq(S.planBackfill(all, [], "2026-08-09", 600)[0].by_portfolio, null,
-     "F16 with no per-portfolio series, the split stays null rather than empty");
+  const f = S.monthlyDeltas({ "2026-03": 100000, "2026-04": 150000, "2026-05": 120000 });
+  eq(f["2026-04"], 50000, "K14 a rising balance is money in");
+  eq(f["2026-05"], -30000, "K15 a falling one, money out");
+  eq(f["2026-03"], 100000, "K16 the first month counts in full");
+  eq(Object.keys(S.monthlyDeltas(null)).length, 0, "K17 no balances, no flows");
+  eq(S.monthlyDeltas({ "2026-04": 5, "2026-03": 5 })["2026-04"], 0,
+     "K18 months are ordered before differencing, and no change is no flow");
 }
 
 // ── The current month is not a month end ────────────────────────────────────
