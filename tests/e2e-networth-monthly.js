@@ -156,6 +156,14 @@ const money = (t) => {
         colors: d.backgroundColor })),
       xStacked: !!(c.options.scales.x && c.options.scales.x.stacked),
       yStacked: !!(c.options.scales.y && c.options.scales.y.stacked),
+      interaction: c.options.interaction || null,
+      // With one tooltip per column, afterBody fires once with EVERY segment of
+      // that month in `items`. Emitting the month's lines per segment would
+      // repeat them three times.
+      bodyFromAllSegments: (() => {
+        const items = c.data.datasets.map((d, di) => ({ dataIndex: 0, datasetIndex: di }));
+        return c.options.plugins.tooltip.callbacks.afterBody(items);
+      })(),
       // What a reader actually sees on hover, per bar.
       bodies: c.data.labels.map((_, i) => cb.afterBody([{ dataIndex: i }])),
       segLabels: c.data.datasets.map((d, di) =>
@@ -209,6 +217,15 @@ const money = (t) => {
     eq(chart.type, "bar", "B2 bars, not a line — a second net-worth line would just " +
        "restate the Account Value chart");
     ok(chart.xStacked && chart.yStacked, "B3 stacked on both axes, so a bar's extent is the month's change");
+
+    // Hover behaviour: the whole month, from anywhere in its column.
+    ok(chart.interaction && chart.interaction.mode === "index" &&
+       chart.interaction.intersect === false,
+       "B3a hovering picks the month, not the individual segment — at 150 months a " +
+       "bar is a few pixels wide and intersect made the tooltip unreachable",
+       chart.interaction);
+    eq(chart.bodyFromAllSegments.join(" | "), chart.bodies[0].join(" | "),
+       "B3b and the month's lines are emitted once for the column, not once per segment");
     eq(chart.sets.length, 3, "B4 three segments and no category split");
     eq(chart.sets.map((s) => s.label).join(","), "Invested,Interest,Market",
        "B5 the three things that move net worth");

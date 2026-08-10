@@ -16494,6 +16494,12 @@
         // categories would leave more space than bar. Fills the slot instead.
         barPercentage: bars.length > 36 ? 1 : 0.9,
         categoryPercentage: bars.length > 36 ? 1 : 0.8,
+        // Hover anywhere in a month's column, not only on a segment. With 150
+        // months a bar is a few pixels wide, so requiring the cursor to
+        // intersect one made the tooltip almost unreachable — and a stacked bar
+        // is one month's story, so showing a single segment tells half of it.
+        // Matches the Account Value and Monthly Investment charts.
+        interaction: { mode: "index", intersect: false, axis: "x" },
         scales: {
           x: { stacked: true, grid: { display: false },
                ticks: { font: { size: 10 }, maxRotation: 0, autoSkipPadding: 12 } },
@@ -16510,8 +16516,10 @@
               },
               // The bar's own arithmetic, spelled out: the two parts and what
               // they sum to, plus where the month closed.
+              // One tooltip now covers the whole column, so the per-month lines
+              // must be emitted once — items holds every segment of that month.
               afterBody: function (items) {
-                var r = bars[items[0].dataIndex];
+                var r = bars[items && items[0] ? items[0].dataIndex : -1];
                 if (!r) return "";
                 var out = ["Change: " + _nwmSigned(r.delta),
                            "Closing: " + formatCurrency(r.total)];
