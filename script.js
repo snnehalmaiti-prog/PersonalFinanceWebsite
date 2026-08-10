@@ -16569,8 +16569,7 @@
     if (!r) { _nwmRenderStats(_nwmForYear(_nwmAllRows)); return; }   // cursor left
     if (scopeEl) {
       scopeEl.textContent = _nwmMonthLabel(r.month) +
-        (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "") +
-        (r.estimated ? " · reconstructed" : "");
+        (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
     }
     el.innerHTML = _nwmStatsHtml({
       opening: r.total - r.delta, closing: r.total,

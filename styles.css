@@ -4443,7 +4443,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .nwm-swatch-inv { background: #3B82F6; }
 .nwm-swatch-up { background: #10B981; }
 .nwm-swatch-down { background: #E8623A; }
-.nwm-swatch-est { background: #3B82F6; opacity: 0.35; }
 @media (max-width: 640px) { .nwm-chart-wrap { height: 180px; } }
 .nwm-swatch-int { background: #8B5CF6; }
 

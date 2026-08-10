@@ -233,11 +233,11 @@ const money = (t) => {
   await hover("Jun 2025");
   ok(/Jun 2025/.test(await scope()),
      "N12 the header names the month it is describing");
-  ok(/reconstructed/i.test(await scope()),
-     "N15 and says when that month is measured from a reconstruction");
+  // The reconstruction caveat is no longer written out — the faded bar is what
+  // carries it now (B13). Nothing here should reintroduce the wording.
+  ok(!/reconstruct/i.test(await scope()),
+     "N15 the header does not spell out the reconstruction caveat", await scope());
   await hover("Jul 2025");
-  ok(!/reconstructed/i.test(await scope()),
-     "N16 while a change between two recorded months carries no such caveat");
 
   // Leaving the chart restores the period's own totals.
   const back = await hover(null);
