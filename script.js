@@ -16234,23 +16234,11 @@
       });
     } catch (e) {}
 
-    // Savings Account / Investment Corpus rows are running balances, not
-    // transactions, so they are absent from the aggregation above — while being
-    // fully present in net worth. Without them, moving salary into a savings
-    // account showed up as the market handing you money, every month.
-    // buildMonthlyIdleCashData already forward-fills the balance held at each
-    // month end; the flow is its month-over-month change.
-    try {
-      var idle = buildMonthlyIdleCashData("all");
-      var totals = {};
-      Object.keys((idle && idle.byMonthInstr) || {}).forEach(function (m) {
-        var s = 0, g = idle.byMonthInstr[m];
-        Object.keys(g).forEach(function (k) { s += g[k] || 0; });
-        totals[m] = s;
-      });
-      var parked = WfSnapshots.parkedCashFlows(totals);
-      Object.keys(parked).forEach(function (m) { out[m] = (out[m] || 0) + parked[m]; });
-    } catch (e) {}
+    // Savings Account and Investment Corpus are deliberately NOT added here.
+    // They are taken out of the card altogether — _nwmParkedByMonth removes
+    // their balance from every month's total as well. Adding their flow while
+    // leaving the balance in the total (or the reverse) would leave the
+    // difference to resurface in Market as a price movement that never happened.
     return out;
   }
 
@@ -16270,6 +16258,26 @@
   // interest the account paid, so it is inside the parked-cash flow that
   // _nwmContributionsByMonth adds. Counting it here as well would subtract it
   // from the market twice.
+  // Parked cash held at each month end: Savings Account and Investment Corpus
+  // balances, forward-filled by buildMonthlyIdleCashData.
+  //
+  // Subtracted from every month's total so this card measures net worth
+  // EXCLUDING idle cash. Moving money between a savings account and a fund then
+  // changes nothing here — which is the point, because it changes nothing in
+  // reality either.
+  function _nwmParkedByMonth() {
+    var out = {};
+    try {
+      var idle = buildMonthlyIdleCashData("all");
+      Object.keys((idle && idle.byMonthInstr) || {}).forEach(function (m) {
+        var sum = 0, g = idle.byMonthInstr[m];
+        Object.keys(g).forEach(function (k) { sum += g[k] || 0; });
+        if (sum) out[m] = sum;
+      });
+    } catch (e) {}
+    return out;
+  }
+
   // fromMonth bounds the walk. buildMonthlyChange only ever reads months after
   // the earliest snapshot, so valuing every month back to a deposit opened in
   // 2015 costs two passes over the sheet per month for answers nobody reads —
@@ -16351,6 +16359,7 @@
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null;
   var _nwmAllRows = [];
+  var _nwmParkedShown = false;    // whether anything was actually excluded
   // Always from the FULL set. Passing the year's slice back in would make it the
   // new "all rows" and the picker would lose every other year on the first use.
   function _nwmRerender() { _nwmRender(_nwmAllRows); }
@@ -16617,6 +16626,15 @@
     _nwmDrawChart(rows);
 
     var recorded = rows.filter(function (r) { return !r.backfilled; }).length;
+    var noteEl = document.getElementById("nwm-note");
+    if (noteEl) {
+      noteEl.hidden = !_nwmParkedShown;
+      noteEl.textContent = _nwmParkedShown
+        ? "Excludes Savings Account and Investment Corpus balances, so these totals sit " +
+          "below the Overview's net worth and moving money between cash and investments " +
+          "does not register as a change."
+        : "";
+    }
     if (countEl) {
       countEl.textContent = rows.length + " month" + (rows.length === 1 ? "" : "s") +
         (recorded < rows.length ? " · " + recorded + " recorded" : "");
@@ -16640,7 +16658,10 @@
         var from = list.length > 1
           ? list.map(function (r) { return String(r.snapshot_date).slice(0, 7); }).sort()[0]
           : null;
-        _nwmRender(WfSnapshots.buildMonthlyChange(list,
+        var parked = from ? _nwmParkedByMonth() : {};
+        _nwmParkedShown = Object.keys(parked).length > 0;
+        _nwmRender(WfSnapshots.buildMonthlyChange(
+          WfSnapshots.subtractByMonth(list, parked),
           from ? _nwmContributionsByMonth() : {},
           from ? _nwmInterestByMonth(from) : {}));
       })

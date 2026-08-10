@@ -356,6 +356,37 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
      "A6 a fall is reported as it is rather than clamped — it would mean the input is wrong");
 }
 
+// ── Excluding parked cash ───────────────────────────────────────────────────
+// Savings and Investment Corpus balances come out of BOTH sides: the totals and
+// the contributions. Out of one side only, the difference would resurface in
+// Market as a price movement that never happened.
+{
+  const rows = [R("2026-03-31", 1000000, { fixed_income: 400000, equity: 600000 }),
+                R("2026-04-30", 1100000, { fixed_income: 450000, equity: 650000 })];
+  const parked = { "2026-03": 200000, "2026-04": 250000 };
+  const adj = S.subtractByMonth(rows, parked);
+  eq(adj[0].total, 800000, "K1 the month's parked balance comes off its total");
+  eq(adj[1].total, 850000, "K2 each month by its own balance, not a single figure");
+  eq(adj[0].fixed_income, 200000,
+     "K3 and off fixed income, where the balance was counted");
+  eq(adj[0].equity, 600000, "K4 equity is untouched");
+
+  // ₹50,000 moved from savings into a fund: net worth is unchanged, and with
+  // cash excluded the card should show a ₹50,000 contribution, not a windfall.
+  const out = chg(adj, { "2026-04": 50000 }, {});
+  eq(out[0].delta, 50000, "K5 the change is of investments only");
+  eq(out[0].contributions, 50000, "K6 matched by the contribution");
+  eq(out[0].market, 0, "K7 leaving the market with nothing it did not do");
+}
+{
+  const rows = [R("2026-03-31", 1000)];
+  eq(S.subtractByMonth(rows, {})[0].total, 1000, "K8 no parked cash, no adjustment");
+  eq(S.subtractByMonth(rows, null)[0].total, 1000, "K9 nor for a missing map");
+  eq(S.subtractByMonth(rows, { "2026-09": 500 })[0].total, 1000,
+     "K10 and a balance in another month does not touch this one");
+  ok(rows[0].total === 1000, "K11 the input rows are not mutated");
+}
+
 // ── The current month is not a month end ────────────────────────────────────
 // Its latest snapshot is today. Charting it puts a part-month beside full ones
 // and produces a bar that grows between visits, so it waits until the month

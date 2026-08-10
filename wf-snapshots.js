@@ -331,6 +331,32 @@
     return round2(sum);
   }
 
+  // Restate each month's total net of an amount held in that month.
+  //
+  // Used to take parked cash (Savings Account / Investment Corpus) out of the
+  // card entirely. Taking it out of the contributions leg alone would not do:
+  // Market is the leftover, so every rupee moved into or out of savings would
+  // resurface there as a price movement that never happened. Removing it from
+  // BOTH sides is what keeps the five figures reconciling.
+  //
+  // The parked balance sits inside fixed_income, so that column is reduced with
+  // the total; equity and commodity are untouched.
+  function subtractByMonth(rows, byMonth) {
+    if (!rows || !byMonth) return rows || [];
+    return rows.map(function (r) {
+      var m = String((r && r.snapshot_date) || "").slice(0, 7);
+      var amt = Number(byMonth[m]) || 0;
+      if (!amt) return r;
+      var c = {};
+      for (var k in r) if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k];
+      c.total = round2((Number(r.total) || 0) - amt);
+      if (r.fixed_income != null && r.fixed_income !== "") {
+        c.fixed_income = round2((Number(r.fixed_income) || 0) - amt);
+      }
+      return c;
+    });
+  }
+
   function monthsBetween(a, b) {
     var pa = a.split("-"), pb = b.split("-");
     return (+pb[0] - +pa[0]) * 12 + (+pb[1] - +pa[1]);
@@ -355,6 +381,7 @@
     buildMonthlyChange: buildMonthlyChange,
     parkedCashFlows: parkedCashFlows,
     accruedBetween: accruedBetween,
+    subtractByMonth: subtractByMonth,
     localDateKey: localDateKey,
     monthKey: monthKey,
     isStable: isStable,
