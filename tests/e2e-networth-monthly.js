@@ -350,6 +350,12 @@ const money = (t) => {
   console.log("  all time: " + JSON.stringify(y3.months));
   ok(y3.months.some((m) => /2024/.test(m)) && y3.months.some((m) => /2025/.test(m)),
      "Y8 All time shows every month again", y3.months);
+  // Uncapped: the header counts every month, so the chart must draw every one.
+  // It used to draw the most recent 24 while claiming 150, which both
+  // contradicted the count and put the early years out of reach entirely.
+  const allBars = await p.evaluate(() => (window.__wfNwmChart || {}).data.labels.length);
+  eq(allBars, y3.months.length - 1,
+     "Y8b and charts every one of them, not a recent slice of them");
   ok(!y3.pickerVisible, "Y9 and hides the year picker, which no longer applies");
   ok(!y3.selectOnScreen,
      "Y9b including the select behind it — hiding one and not the other is how a " +
@@ -371,6 +377,45 @@ const money = (t) => {
 
   await p.click("#nwm-alltime");     // back to a single year for what follows
   await p.waitForTimeout(300);
+
+  // ── A long history under All time ───────────────────────────────────────
+  // The five-month fixture above can never reach a cap, so it cannot tell an
+  // uncapped chart from a capped one. This one is deliberately longer than the
+  // 24 bars the chart used to draw: with 150 months of real history the card
+  // counted them all in the header and charted only the most recent two years,
+  // leaving every earlier year unreachable.
+  const LONG = [];
+  for (let y = 2022; y <= 2025; y++) {
+    for (let m = 1; m <= 12; m++) {
+      const eom = new Date(y, m, 0);
+      LONG.push({
+        snapshot_date: y + "-" + String(m).padStart(2, "0") + "-" + String(eom.getDate()).padStart(2, "0"),
+        total: 1000000 + (y - 2022) * 12 * 10000 + m * 10000,
+        meta: { source: "backfill", backfilled: true },
+      });
+    }
+  }
+  snapshotRows = LONG;
+  await load();
+  await p.click("#nwm-alltime");
+  await p.waitForTimeout(600);
+  const long = await p.evaluate(() => ({
+    rows: document.querySelectorAll("#nwm-list .nwm-row").length,
+    bars: (window.__wfNwmChart || {}).data.labels.length,
+    first: ((window.__wfNwmChart || {}).data.labels || [])[0],
+    count: (document.getElementById("nwm-count") || {}).textContent || "",
+  }));
+  console.log("  long history: " + JSON.stringify(long));
+  eq(long.rows, 48, "L1 all 48 months are listed");
+  eq(long.bars, 47, "L2 and all 47 comparable ones are charted — no recent-slice cap");
+  eq(long.first, "Feb 2022",
+     "L3 starting at the oldest, not two years back from the newest");
+  ok(long.count.indexOf("48") === 0,
+     "L4 and the header count agrees with what is drawn rather than contradicting it",
+     long.count);
+  await p.click("#nwm-alltime");
+  await p.waitForTimeout(300);
+  snapshotRows = SNAPSHOTS;
 
   // ── Exactly one snapshot ────────────────────────────────────────────────
   // The state on the day you start recording: a row to show, but nothing to

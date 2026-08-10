@@ -16396,9 +16396,6 @@
   // from the axis in that direction, so the bar's extent is the month's total
   // change and its sign is visible at a glance.
   var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
-  // Bars are capped only when showing every year at once; a single year is 12
-  // months and needs no cap.
-  var NWM_MAX_BARS = 24;
   var __nwmYear = null;          // selected year, as a string
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null, _nwmChartSig = null;
@@ -16489,9 +16486,11 @@
 
     // Oldest first for the x axis, and only months that HAVE a change — the
     // first snapshot has nothing to compare against, so it has no bar.
-    var bars = rows.filter(function (r) { return r.delta != null; });
-    if (__nwmAllTime) bars = bars.slice(0, NWM_MAX_BARS);   // rows are newest first
-    bars = bars.reverse();
+    // Every comparable month, uncapped. "All time" used to draw the most recent
+    // 24 while the header counted all 150, so the card contradicted itself and
+    // the years before the cap were simply unreachable. Chart.js skips x labels
+    // to fit; the bars themselves stay one per month.
+    var bars = rows.filter(function (r) { return r.delta != null; }).reverse();
     if (typeof window.Chart !== "function" || bars.length < 1) {
       wrap.hidden = true;
       if (legend) legend.hidden = true;
@@ -16538,6 +16537,10 @@
       options: {
         responsive: true, maintainAspectRatio: false,
         animation: false,
+        // At 150 months a bar is a few pixels wide, so the default gap between
+        // categories would leave more space than bar. Fills the slot instead.
+        barPercentage: bars.length > 36 ? 1 : 0.9,
+        categoryPercentage: bars.length > 36 ? 1 : 0.8,
         scales: {
           x: { stacked: true, grid: { display: false },
                ticks: { font: { size: 10 }, maxRotation: 0, autoSkipPadding: 12 } },
