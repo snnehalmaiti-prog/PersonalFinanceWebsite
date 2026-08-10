@@ -277,16 +277,15 @@
   // movement for it. Omit the argument and the model collapses to two terms.
   //
   // Returned newest first, which is the order it is read in.
-  // cashByMonth carries the two parked-cash flows, { corpus, savings }, each a
-  // month-keyed map. They are their own terms rather than part of contributions:
-  // money moved into a savings account is not investing, but it IS in net worth,
-  // so it has to be named and subtracted or the market would be credited for it.
-  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey, cashByMonth) {
+  // idleByMonth is the movement in parked cash — Investment Corpus and Savings
+  // Account together. Its own term rather than part of contributions: money
+  // moved into a savings account is not investing, but it IS in net worth, so it
+  // has to be named and subtracted or the market would be credited for it.
+  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey, idleByMonth) {
     var series = monthEndSeries(rows, todayKey);
     var contrib = contribByMonth || {};
     var interest = interestByMonth || {};
-    var corpus = (cashByMonth && cashByMonth.corpus) || {};
-    var savings = (cashByMonth && cashByMonth.savings) || {};
+    var idle = idleByMonth || {};
     var out = series.map(function (row, i) {
       var prev = i > 0 ? series[i - 1] : null;
       var o = {
@@ -294,8 +293,7 @@
         invested: row.invested, equity: row.equity,
         fixed_income: row.fixed_income, commodity: row.commodity,
         by_portfolio: row.by_portfolio, backfilled: row.backfilled,
-        delta: null, contributions: null, interest: null,
-        corpus: null, savings: null, market: null,
+        delta: null, contributions: null, interest: null, idle: null, market: null,
         estimated: false, gapMonths: 0
       };
       if (!prev) return o;
@@ -304,18 +302,16 @@
       // Every month after the previous snapshot up to and including this one.
       // Using only this month's contributions across a gap would book the
       // skipped months' investing as market movement.
-      var c = 0, inc = 0, cor = 0, sav = 0;
+      var c = 0, inc = 0, idl = 0;
       eachMonthAfter(prev.month, row.month).forEach(function (m) {
         c += Number(contrib[m]) || 0;
         inc += Number(interest[m]) || 0;
-        cor += Number(corpus[m]) || 0;
-        sav += Number(savings[m]) || 0;
+        idl += Number(idle[m]) || 0;
       });
       o.contributions = round2(c);
       o.interest = round2(inc);
-      o.corpus = round2(cor);
-      o.savings = round2(sav);
-      o.market = round2(o.delta - c - inc - cor - sav);
+      o.idle = round2(idl);
+      o.market = round2(o.delta - c - inc - idl);
       o.estimated = row.backfilled || prev.backfilled;
       return o;
     });

@@ -4449,10 +4449,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Eyebrow on its own line with the figures beneath it, rather than sharing a
    line: five figures plus the title do not fit on one row at tablet widths and
    the last of them wrapped away on its own. */
-/* This card's split is ONE row, not the three the Cash Flow card reserves for
-   its month line plus investment and withdrawal chips. Left at 60px it held
-   40px of empty space between the title and the figures. */
-#net-worth-monthly-card .mic-hover-split { height: 20px; padding-bottom: 0; }
+/* Three rows, the same shape the Cash Flow card reserves: a month line and two
+   beneath it. The default height already fits, so only the bottom padding is
+   trimmed. */
+#net-worth-monthly-card .mic-hover-split { padding-bottom: 0; }
 /* No bottom padding: this card's title group is a single line while the
    controls beside it are taller, so the header already leaves slack under the
    eyebrow. The Cash Flow card needs its 4px because its title group is two
@@ -4461,5 +4461,4 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
 .nwm-note { margin: 0; padding: 2px 20px 4px; font-size: 0.64rem; font-style: italic; }
-.nwm-swatch-corpus { background: #0EA5E9; }
-.nwm-swatch-savings { background: #F59E0B; }
+.nwm-swatch-idle { background: #F59E0B; }

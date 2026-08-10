@@ -323,46 +323,41 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
      "A6 a fall is reported as it is rather than clamped — it would mean the input is wrong");
 }
 
-// ── Parked cash as its own two terms ────────────────────────────────────────
+// ── Idle cash as its own term ───────────────────────────────────────────────
 // Investment Corpus and Savings Account stay IN the totals, so the card
 // reconciles with the Overview — but their movement is named rather than left
-// in the residual, where the market would be credited for money that was
-// merely moved.
+// in the residual, where the market would be credited for money merely moved.
 {
   const rows = [R("2026-03-31", 1000000), R("2026-04-30", 1100000)];
-  // ₹50,000 moved from a fund into savings: net worth is unchanged in total, the
-  // savings balance rose by 50k, and the fund sale is a negative contribution.
-  const out = chg(rows, { "2026-04": -50000 }, {},
-                  { savings: { "2026-04": 50000 } });
+  // ₹50,000 moved from a fund into savings: net worth is unchanged by the move
+  // itself, the idle balance rose 50k, and the fund sale is a negative
+  // contribution. The market gets neither.
+  const out = chg(rows, { "2026-04": -50000 }, {}, { "2026-04": 50000 });
   eq(out[0].delta, 100000, "K1 the change is the change in net worth, cash included");
-  eq(out[0].savings, 50000, "K2 the savings movement is named");
+  eq(out[0].idle, 50000, "K2 the idle-cash movement is named");
   eq(out[0].contributions, -50000, "K3 alongside the sale that funded it");
   eq(out[0].market, 100000, "K4 leaving the market only what it actually did");
-  ok(out[0].contributions + out[0].interest + out[0].corpus + out[0].savings +
-     out[0].market === out[0].delta,
-     "K5 and the five movement terms sum to the change", out[0]);
+  ok(out[0].contributions + out[0].interest + out[0].idle + out[0].market === out[0].delta,
+     "K5 and the four movement terms sum to the change", out[0]);
 }
 {
-  // Both buckets, kept apart.
   const rows = [R("2026-03-31", 100), R("2026-04-30", 400)];
-  const out = chg(rows, {}, {}, { corpus: { "2026-04": 120 }, savings: { "2026-04": 80 } });
-  eq(out[0].corpus, 120, "K6 Investment Corpus is its own term");
-  eq(out[0].savings, 80, "K7 and Savings Account another");
-  eq(out[0].market, 100, "K8 with the rest left to the market");
+  const out = chg(rows, {}, {}, { "2026-04": 200 });
+  eq(out[0].idle, 200, "K6 corpus and savings arrive as one figure");
+  eq(out[0].market, 100, "K7 with the rest left to the market");
 }
 {
   // Omitting the argument must leave every earlier answer untouched.
   const rows = [R("2026-03-31", 100), R("2026-04-30", 150)];
   const a = chg(rows, { "2026-04": 20 });
-  eq(a[0].corpus, 0, "K9 no cash series, no cash movement");
-  eq(a[0].savings, 0, "K10 either bucket");
+  eq(a[0].idle, 0, "K9 no cash series, no cash movement");
   eq(a[0].market, 30, "K11 and the model collapses to what it was");
 }
 {
   // A balance that falls is money taken out, not a market loss.
   const rows = [R("2026-03-31", 1000), R("2026-04-30", 900)];
-  const out = chg(rows, {}, {}, { savings: { "2026-04": -100 } });
-  eq(out[0].savings, -100, "K12 a falling balance is a withdrawal");
+  const out = chg(rows, {}, {}, { "2026-04": -100 });
+  eq(out[0].idle, -100, "K12 a falling balance is a withdrawal");
   eq(out[0].market, 0, "K13 and the market is untouched by it");
 }
 
