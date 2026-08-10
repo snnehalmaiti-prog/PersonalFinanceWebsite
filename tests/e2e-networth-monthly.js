@@ -137,7 +137,7 @@ const money = (t) => {
     // timeout on the cases that correctly draw nothing.
     await p.waitForFunction(() => !!window.__wfNwmChart ||
       (document.getElementById("nwm-status") && !document.getElementById("nwm-status").hidden) ||
-      ((document.getElementById("nwm-count") || {}).textContent || "").length > 0,
+      ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || "").length > 0,
       null, { timeout: 25000 }).catch(() => {});
     await p.waitForTimeout(1500);
   };
@@ -487,7 +487,6 @@ const money = (t) => {
         .length,
       // The card IS the chart, so "what is on show" is its x axis.
       months: ((window.__wfNwmChart || {}).data || {}).labels || [],
-      count: (document.getElementById("nwm-count") || {}).textContent || "",
     };
   });
 
@@ -534,9 +533,11 @@ const money = (t) => {
     const c = window.__wfNwmChart;
     return c.data.labels.filter((_, i) => c.data.datasets[0].data[i] != null).length;
   });
-  eq(filledAll, parseInt(y3.count, 10) - 1,
-     "Y8b as many bars as months counted, less the first — which has nothing " +
-     "before it to compare against", { bars: filledAll, header: y3.count });
+  // Five snapshots, so four months have one before them to be compared against;
+  // the oldest has nothing behind it.
+  eq(filledAll, SNAPSHOTS.length - 1,
+     "Y8b a bar for every month that has one to compare against, and no more",
+     { bars: filledAll, snapshots: SNAPSHOTS.length });
   ok(!y3.pickerVisible, "Y9 and hides the year picker, which no longer applies");
   ok(!y3.selectOnScreen,
      "Y9b including the select behind it — hiding one and not the other is how a " +
@@ -586,15 +587,11 @@ const money = (t) => {
   const long = await p.evaluate(() => ({
     bars: (window.__wfNwmChart || {}).data.labels.length,
     first: ((window.__wfNwmChart || {}).data.labels || [])[0],
-    count: (document.getElementById("nwm-count") || {}).textContent || "",
   }));
   console.log("  long history: " + JSON.stringify(long));
   eq(long.bars, 47, "L2 all 47 comparable months are charted — no recent-slice cap");
   eq(long.first, "Feb 2022",
      "L3 starting at the oldest, not two years back from the newest");
-  ok(long.count.indexOf("48") === 0,
-     "L4 and the header count agrees with what is drawn rather than contradicting it",
-     long.count);
   await p.click("#nwm-alltime");
   await p.waitForTimeout(300);
   snapshotRows = SNAPSHOTS;
@@ -620,7 +617,6 @@ const money = (t) => {
     return {
       labels: c.data.labels,
       filled: c.data.labels.filter((_, i) => c.data.datasets[0].data[i] != null),
-      count: (document.getElementById("nwm-count") || {}).textContent || "",
     };
   });
   const thisMonth = MON[today.getMonth()] + " " + today.getFullYear();
@@ -632,8 +628,8 @@ const money = (t) => {
      "P1b but carries no bar — it is not a month end", { filled: cur.filled, thisMonth });
   eq(cur.filled[cur.filled.length - 1], prevMonth,
      "P2 the newest bar is the last COMPLETED month");
-  ok(cur.count.indexOf("2 month") === 0,
-     "P3 and it is not counted in the header either", cur.count);
+  eq(cur.filled.length, 1,
+     "P3 leaving one bar — the completed month that has one before it", cur.filled);
   const curScope = await p.evaluate(() =>
     ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || ""));
   console.log("  scope: " + JSON.stringify(curScope));
@@ -654,8 +650,9 @@ const money = (t) => {
     const btn = sel && sel.__wfYpBtn;
     const all = document.getElementById("nwm-alltime");
     return {
-      count: (document.getElementById("nwm-count") || {}).textContent || "",
       chart: !!window.__wfNwmChart,
+      label: (document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || "",
+      figures: document.querySelectorAll("#nwm-split .mic-hs-tot").length,
       selectOnScreen: sel ? getComputedStyle(sel).display !== "none" : false,
       pickerOnScreen: btn ? getComputedStyle(btn).display !== "none" : false,
       allTimeOnScreen: all ? getComputedStyle(all).display !== "none" : false,
@@ -663,8 +660,10 @@ const money = (t) => {
     };
   });
   console.log("  single snapshot: " + JSON.stringify(one));
-  ok(one.count.indexOf("1 month") === 0,
-     "S1 the one snapshot is counted", one.count);
+  // One snapshot, and it is 2025's — but with no comparable month there is no
+  // year to select, so the card falls back to naming the whole span.
+  eq(one.label, "All time", "S1 the header still names the period", one.label);
+  eq(one.figures, 0, "S1b with no figures, since nothing can be compared", one.figures);
   ok(!one.chart,
      "S2 but nothing is charted — with nothing to compare against there is no change to draw",
      one);

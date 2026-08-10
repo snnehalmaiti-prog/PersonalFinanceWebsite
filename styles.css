@@ -4426,7 +4426,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    the Cash Flow card. Carrying both put the card's 16px on top of the header's
    and left a ten-pixel gap this card did not share with its sibling. */
 .nwm-card { padding: 0 !important; overflow: hidden; }
-.nwm-count { font-size: 0.62rem; color: var(--muted); white-space: nowrap; padding-top: 3px; }
 .nwm-status { margin: 0; padding: 0 20px 4px; font-size: 0.72rem; }
 
 

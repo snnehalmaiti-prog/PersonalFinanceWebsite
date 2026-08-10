@@ -12801,14 +12801,17 @@
         var end = new Date(parseInt(last[0], 10), parseInt(last[1], 10) - 1, 1);
         while (cur <= end) {
           monthKeys.push(cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0"));
-          labels.push(MON_LABELS[cur.getMonth()] + " '" + String(cur.getFullYear()).slice(2));
+          // Month AND year, matching NET WORTH · MONTHLY. A bare "Jan" is
+          // ambiguous the moment two cards sit on one screen showing different
+          // periods, and the year selector does not travel with the axis.
+          labels.push(MON_LABELS[cur.getMonth()] + " " + cur.getFullYear());
           cur.setMonth(cur.getMonth() + 1);
         }
       }
     } else {
       for (var mi = 0; mi < 12; mi++) {
         monthKeys.push(yr + "-" + String(mi + 1).padStart(2, "0"));
-        labels.push(MON_LABELS[mi]);
+        labels.push(MON_LABELS[mi] + " " + yr);
       }
     }
 
@@ -13684,14 +13687,14 @@
           var end = new Date(parseInt(last[0], 10), parseInt(last[1], 10) - 1, 1);
           while (cur <= end) {
             monthKeys.push(cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0"));
-            labels.push(MON_LABELS[cur.getMonth()] + " '" + String(cur.getFullYear()).slice(2));
+            labels.push(MON_LABELS[cur.getMonth()] + " " + cur.getFullYear());
             cur.setMonth(cur.getMonth() + 1);
           }
         }
       } else {
         for (var mi = 0; mi < 12; mi++) {
           monthKeys.push(yr + "-" + String(mi + 1).padStart(2, "0"));
-          labels.push(MON_LABELS[mi]);
+          labels.push(MON_LABELS[mi] + " " + yr);
         }
       }
 
@@ -16649,7 +16652,6 @@
 
   function _nwmRender(rows) {
     var statusEl = document.getElementById("nwm-status");
-    var countEl = document.getElementById("nwm-count");
 
     if (!rows.length) {
       if (statusEl) {
@@ -16658,7 +16660,6 @@
           "each day you open the dashboard; the first month-over-month comparison appears " +
           "once there are two months of them.";
       }
-      if (countEl) countEl.textContent = "";
       _nwmRenderStats([]);
       _nwmDrawChart([]);
       return;
@@ -16670,7 +16671,6 @@
     _nwmRenderStats(rows);
     _nwmDrawChart(rows);
 
-    var recorded = rows.filter(function (r) { return !r.backfilled; }).length;
     var noteEl = document.getElementById("nwm-note");
     if (noteEl) {
       noteEl.hidden = !_nwmParkedShown;
@@ -16679,10 +16679,6 @@
           "below the Overview's net worth and moving money between cash and investments " +
           "does not register as a change."
         : "";
-    }
-    if (countEl) {
-      countEl.textContent = rows.length + " month" + (rows.length === 1 ? "" : "s") +
-        (recorded < rows.length ? " · " + recorded + " recorded" : "");
     }
   }
 
