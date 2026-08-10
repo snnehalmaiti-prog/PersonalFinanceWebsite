@@ -4446,3 +4446,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .nwm-swatch-est { background: #3B82F6; opacity: 0.35; }
 @media (max-width: 640px) { .nwm-chart-wrap { height: 180px; } }
 .nwm-swatch-int { background: #8B5CF6; }
+
+/* Header stats, laid out like the Cash Flow card's: eyebrow and figures on one
+   line, each label inline with its value. */
+#net-worth-monthly-card .mic-title-group { flex-direction: row; align-items: center; gap: 18px; flex-wrap: wrap; }
+#net-worth-monthly-card .mic-stats-row { padding: 0; flex-wrap: wrap; }
+#net-worth-monthly-card .mic-stat { flex-direction: row; align-items: baseline; gap: 6px; }
+#net-worth-monthly-card .mic-stat-label { font-size: 0.55rem; }
+#net-worth-monthly-card .mic-stat-value { font-size: 0.72rem; }
+#net-worth-monthly-card .mic-header { padding: 16px 20px 6px; }

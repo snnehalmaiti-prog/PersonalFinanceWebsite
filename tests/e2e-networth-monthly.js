@@ -292,6 +292,43 @@ const money = (t) => {
        seg("Invested").colors);
   }
 
+  // ── The header figures ──────────────────────────────────────────────────
+  // Five numbers for the period on show. Opening is the close of the month
+  // BEFORE the first bar, which is what makes the row reconcile: everything
+  // that happened in the period, applied to what it started with, is what it
+  // ended with.
+  const readStats = () => p.evaluate(() => {
+    const out = {};
+    document.querySelectorAll("#nwm-stats .mic-stat").forEach((el) => {
+      out[(el.querySelector(".mic-stat-label") || {}).textContent] =
+        (el.querySelector(".mic-stat-value") || {}).textContent;
+    });
+    return out;
+  });
+  const stats = await readStats();
+  console.log("  stats: " + JSON.stringify(stats));
+  eq(Object.keys(stats).join(","), "Opening,Closing,Invested,Interest,Market loss",
+     "H1 exactly the five figures asked for, and no others");
+
+  // 2025 on show: May, Jun, Jul. Opening is Dec 2024's close (₹8,50,000), since
+  // that is what May was measured against — NOT May's own total.
+  eq(stats.Opening, "₹8,50,000",
+     "H2 opening is the close of the month before the first bar");
+  eq(stats.Closing, "₹11,50,000", "H3 closing is the newest month's stored total");
+
+  const num = (s) => {
+    const n = Number(String(s).replace(/[^0-9.]/g, ""));
+    return /−/.test(String(s)) ? -n : n;
+  };
+  ok(Math.abs((num(stats.Opening) + num(stats.Invested) + num(stats.Interest) +
+               num(stats["Market loss"])) - num(stats.Closing)) < 1,
+     "H4 and the five reconcile: opening + invested + interest + market = closing",
+     stats);
+
+  // A negative market is labelled as a loss, not a negative gain.
+  ok(/^−/.test(stats["Market loss"]),
+     "H5 the market figure is signed", stats["Market loss"]);
+
   // ── Year selection ──────────────────────────────────────────────────────
   // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an
   // All time toggle. The card opens on a year rather than every month it has.
@@ -308,7 +345,6 @@ const money = (t) => {
       selectOnScreen: sel ? getComputedStyle(sel).display !== "none" : false,
       controlCount: document.querySelectorAll("#nwm-year, #nwm-year + .wf-yp-btn")
         .length,
-      subtitle: (document.getElementById("nwm-subtitle") || {}).textContent || "",
       // The card IS the chart, so "what is on show" is its x axis.
       months: ((window.__wfNwmChart || {}).data || {}).labels || [],
       count: (document.getElementById("nwm-count") || {}).textContent || "",
@@ -328,7 +364,7 @@ const money = (t) => {
      "card shows two year controls side by side", y1);
   ok(y1.months.length === 3 && y1.months.every((m) => /2025/.test(m)),
      "Y4 and the chart shows only that year", y1.months);
-  ok(/2025/.test(y1.subtitle), "Y5 the subtitle names the year on show", y1.subtitle);
+  // (the year on show is named by the picker button itself — Y3)
 
   // Switching year. Driven through the select, which is what the picker sets.
   await p.evaluate(() => {

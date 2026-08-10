@@ -16535,10 +16535,50 @@
     });
   }
 
+  // The five figures for the period on show, in the header. Opening is the total
+  // the period STARTED from — the close of the month before its first bar — so
+  // that opening + invested + interest + market reconciles exactly to closing.
+  // Any other definition would leave the header not adding up.
+  function _nwmPeriodStats(rows) {
+    if (!rows.length) return null;
+    var comp = rows.filter(function (r) { return r.delta != null; });
+    var closing = rows[0].total;                       // rows are newest first
+    if (!comp.length) return { closing: closing };
+    var oldest = comp[comp.length - 1];
+    var out = { opening: oldest.total - oldest.delta, closing: closing,
+                invested: 0, interest: 0, market: 0 };
+    comp.forEach(function (r) {
+      out.invested += r.contributions || 0;
+      out.interest += r.interest || 0;
+      out.market += r.market || 0;
+    });
+    return out;
+  }
+
+  function _nwmStatHtml(label, value, cls) {
+    return '<div class="mic-stat"><span class="mic-stat-label">' + label + '</span>' +
+           '<span class="mic-stat-value ' + (cls || "") + '">' + value + '</span></div>';
+  }
+
+  function _nwmRenderStats(rows) {
+    var el = document.getElementById("nwm-stats");
+    if (!el) return;
+    var st = _nwmPeriodStats(rows);
+    if (!st) { el.innerHTML = ""; return; }
+    // One snapshot: a closing figure and nothing to decompose.
+    if (st.opening == null) { el.innerHTML = _nwmStatHtml("Closing", formatCurrency(st.closing)); return; }
+    el.innerHTML =
+      _nwmStatHtml("Opening", formatCurrency(st.opening)) +
+      _nwmStatHtml("Closing", formatCurrency(st.closing)) +
+      _nwmStatHtml("Invested", _nwmSigned(st.invested)) +
+      _nwmStatHtml("Interest", _nwmSigned(st.interest), st.interest ? "positive" : "") +
+      _nwmStatHtml(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
+                   st.market < 0 ? "negative" : "positive");
+  }
+
   function _nwmRender(rows) {
     var statusEl = document.getElementById("nwm-status");
     var countEl = document.getElementById("nwm-count");
-    var subEl = document.getElementById("nwm-subtitle");
 
     if (!rows.length) {
       if (statusEl) {
@@ -16548,6 +16588,7 @@
           "once there are two months of them.";
       }
       if (countEl) countEl.textContent = "";
+      _nwmRenderStats([]);
       _nwmDrawChart([]);
       return;
     }
@@ -16555,16 +16596,13 @@
     _nwmAllRows = rows;
     _nwmSyncYearControls(rows);
     rows = _nwmForYear(rows);
+    _nwmRenderStats(rows);
     _nwmDrawChart(rows);
 
     var recorded = rows.filter(function (r) { return !r.backfilled; }).length;
     if (countEl) {
       countEl.textContent = rows.length + " month" + (rows.length === 1 ? "" : "s") +
         (recorded < rows.length ? " · " + recorded + " recorded" : "");
-    }
-    if (subEl) {
-      subEl.textContent = (__nwmAllTime || !__nwmYear) ? "RECORDED MONTH ENDS"
-        : "RECORDED MONTH ENDS · " + __nwmYear;
     }
   }
 
