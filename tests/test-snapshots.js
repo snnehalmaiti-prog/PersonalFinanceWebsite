@@ -273,39 +273,6 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
   eq(out[0].contributions, 60, "C23 and pick up every month in it");
 }
 
-// ── Parked cash as a flow ───────────────────────────────────────────────────
-// Savings/Investment Corpus rows are running balances, so they never appear in
-// the buy/sell aggregation — while counting fully towards net worth. Left out,
-// every rupee moved into savings was attributed to the market.
-{
-  const f = S.parkedCashFlows({ "2026-03": 100000, "2026-04": 150000, "2026-05": 120000 });
-  eq(f["2026-04"], 50000, "P1 a rising balance is a contribution of the increase");
-  eq(f["2026-05"], -30000, "P2 and a falling one a withdrawal");
-  eq(f["2026-03"], 100000,
-     "P3 the first month is the whole balance — that money arrived at or before it");
-}
-{
-  const f = S.parkedCashFlows({ "2026-04": 150000, "2026-03": 100000 });
-  eq(f["2026-04"], 50000, "P4 months are ordered before differencing, not taken as given");
-}
-{
-  eq(Object.keys(S.parkedCashFlows(null)).length, 0, "P5 no parked cash, no flows");
-  eq(Object.keys(S.parkedCashFlows({})).length, 0, "P6 nor for an empty map");
-  const f = S.parkedCashFlows({ "2026-03": 100000, "2026-04": 100000 });
-  eq(f["2026-04"], 0, "P7 an unchanged balance is not a contribution");
-}
-{
-  // The whole point, end to end: without the parked-cash leg this month reads
-  // as a ₹50,000 market gain when nothing was earned at all.
-  const rows = [R("2026-03-31", 1000000), R("2026-04-30", 1050000)];
-  const parked = S.parkedCashFlows({ "2026-03": 200000, "2026-04": 250000 });
-  const naive = chg(rows, {});
-  const fixed = chg(rows, parked);
-  eq(naive[0].market, 50000, "P8 (baseline) without it, moving cash into savings looks like a gain");
-  eq(fixed[0].market, 0, "P9 with it, the same month shows no market movement");
-  eq(fixed[0].contributions, 50000, "P10 and the ₹50,000 is recorded as what it was");
-}
-
 // ── Interest as a third term ────────────────────────────────────────────────
 // A fixed deposit compounding at 7% does not care what equities did. Leaving
 // its accrual in the residual credited price movement for it.

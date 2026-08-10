@@ -285,34 +285,6 @@
     return out.reverse();
   }
 
-  // Parked cash (Savings Account / Investment Corpus) as a monthly FLOW.
-  //
-  // Those rows are running balances, not transactions — each one replaces the
-  // last — so they never appear in the buy/sell aggregation that feeds
-  // contributions. But they ARE in net worth. Left out, moving salary into a
-  // savings account looked like the market handing you money, month after month.
-  //
-  // The flow is the month-over-month change in the balance. The first month is
-  // taken as a deposit of its whole balance, which is what it is: the money
-  // arrived at or before that point.
-  //
-  // Caveat that cannot be resolved from this input: a balance you type in
-  // includes interest the account earned, so that interest is counted here as a
-  // contribution. A running balance simply does not say which part was deposited
-  // and which was earned.
-  function parkedCashFlows(byMonthTotal) {
-    var out = {};
-    if (!byMonthTotal) return out;
-    var months = Object.keys(byMonthTotal).sort();
-    var prev = 0;
-    months.forEach(function (m) {
-      var bal = Number(byMonthTotal[m]) || 0;
-      out[m] = round2(bal - prev);
-      prev = bal;
-    });
-    return out;
-  }
-
   // Interest accrued between two valuations of the SAME holdings.
   //
   // Both maps are keyed by holding. Only keys present in both count: a deposit
@@ -379,7 +351,6 @@
   root.WfSnapshots = {
     monthEndSeries: monthEndSeries,
     buildMonthlyChange: buildMonthlyChange,
-    parkedCashFlows: parkedCashFlows,
     accruedBetween: accruedBetween,
     subtractByMonth: subtractByMonth,
     localDateKey: localDateKey,
