@@ -4422,21 +4422,20 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    into what you contributed and what the market did, and a clear difference
    between a row that was RECORDED and one RECONSTRUCTED by the backfill —
    without that distinction the card claims more than it knows. */
-.nwm-card { padding: 16px 20px 14px; }
-.nwm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.nwm-title { margin: 0; font-size: 0.92rem; font-weight: 700; color: var(--text); }
-.nwm-subtitle { margin: 2px 0 0; font-size: 0.6rem; letter-spacing: 0.08em;
-  color: var(--muted); text-transform: uppercase; }
+/* No padding of its own: the header and the split supply theirs, exactly as on
+   the Cash Flow card. Carrying both put the card's 16px on top of the header's
+   and left a ten-pixel gap this card did not share with its sibling. */
+.nwm-card { padding: 0 !important; overflow: hidden; }
 .nwm-count { font-size: 0.62rem; color: var(--muted); white-space: nowrap; padding-top: 3px; }
-.nwm-status { margin: 10px 0 0; font-size: 0.72rem; }
+.nwm-status { margin: 0; padding: 0 20px 4px; font-size: 0.72rem; }
 
 
 
 /* The change, as bars: each month stacked into what you put in and what the
    market did. Deliberately NOT a second net-worth line — that would duplicate
    the Account Value chart, which is drawn from the same history. */
-.nwm-chart-wrap { position: relative; height: 220px; margin: 10px 0 4px; }
-.nwm-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 6px;
+.nwm-chart-wrap { position: relative; height: 220px; margin: 4px 0; padding: 0 8px; }
+.nwm-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; padding: 0 20px;
   font-size: 0.62rem; color: var(--muted); }
 .nwm-key { display: inline-flex; align-items: center; gap: 5px; }
 .nwm-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
@@ -4451,16 +4450,15 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Eyebrow on its own line with the figures beneath it, rather than sharing a
    line: five figures plus the title do not fit on one row at tablet widths and
    the last of them wrapped away on its own. */
-#net-worth-monthly-card .mic-title-group { flex-direction: column; align-items: flex-start; gap: 6px; }
-#net-worth-monthly-card .mic-stats-row { padding: 0; flex-wrap: wrap; }
-#net-worth-monthly-card .mic-stat { flex-direction: row; align-items: baseline; gap: 6px; }
-#net-worth-monthly-card .mic-stat-label { font-size: 0.55rem; }
-#net-worth-monthly-card .mic-stat-value { font-size: 0.72rem; }
-#net-worth-monthly-card .mic-header { padding: 16px 20px 6px; }
+/* This card's split is ONE row, not the three the Cash Flow card reserves for
+   its month line plus investment and withdrawal chips. Left at 60px it held
+   40px of empty space between the title and the figures. */
+#net-worth-monthly-card .mic-hover-split { height: 20px; padding-bottom: 0; }
+/* No bottom padding: this card's title group is a single line while the
+   controls beside it are taller, so the header already leaves slack under the
+   eyebrow. The Cash Flow card needs its 4px because its title group is two
+   lines and fills the row. */
+#net-worth-monthly-card .mic-header { padding: 16px 20px 0; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
-/* Its own line between the title and the figures, naming what they describe:
-   the period at rest, the hovered month while the cursor is over the chart. */
-.nwm-scope { display: block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--text); white-space: nowrap; }
-.nwm-note { margin: 2px 0 6px; font-size: 0.64rem; font-style: italic; }
+.nwm-note { margin: 0; padding: 2px 20px 4px; font-size: 0.64rem; font-style: italic; }

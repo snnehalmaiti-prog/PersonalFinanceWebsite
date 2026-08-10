@@ -256,6 +256,35 @@ const money = (t) => {
      "N16b hovering a month with no snapshot shows no figures", emptyH);
   eq(await scope(), "Feb 2025", "N16c but still names the month");
 
+  // The two ways out, both of which CASH FLOW · MONTHLY handles and this card
+  // did not. onHover can pass no elements while the cursor is still over the
+  // chart, and can fail to fire at all on a quick exit.
+  await hover("Jul 2025");
+  const viaFallback = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    // No elements, but the chart can still identify the column: the readout
+    // must stay on that month rather than snapping back to the period.
+    // Restored afterwards — left stubbed, every later "cursor left" in this
+    // suite resolved through it and the readout stuck on Jun.
+    const real = c.getElementsAtEventForMode;
+    c.getElementsAtEventForMode = () => [{ index: c.data.labels.indexOf("Jun 2025") }];
+    c.options.onHover({}, [], c);
+    const seen = (document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || "";
+    c.getElementsAtEventForMode = real;
+    return seen;
+  });
+  eq(viaFallback, "Jun 2025",
+     "N16d an empty element list is re-queried before giving up on the hover");
+
+  const viaLeave = await p.evaluate(() => {
+    const cv = document.getElementById("nwm-chart");
+    if (typeof cv.onmouseleave !== "function") return "(no handler)";
+    cv.onmouseleave();
+    return (document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || "";
+  });
+  eq(viaLeave, "2025",
+     "N16e and leaving the canvas restores the period, even if onHover never fires");
+
   // Leaving the chart restores the period's own totals.
   const back = await hover(null);
   eq(back.Opening, "₹3,50,000",
@@ -386,6 +415,59 @@ const money = (t) => {
   });
   ok(!note.hidden && /Savings Account/.test(note.text) && /Investment Corpus/.test(note.text),
      "K2 and the card says so, since its totals now sit below the Overview's", note);
+
+  // ── Spacing matches the Cash Flow card ──────────────────────────────────
+  // Measured against that card in the same page rather than against fixed
+  // numbers, so the two cannot drift apart when either is restyled. The gap
+  // under the title was 40px adrift when this card carried its own padding on
+  // top of the header's, and reserved three rows' height for its one row.
+  const spacing = await p.evaluate(() => {
+    const box = (sel) => { const e = document.querySelector(sel); if (!e) return null;
+      const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+      return { top: r.top, bottom: r.bottom, left: r.left, h: Math.round(r.height),
+               gap: cs.columnGap, fs: cs.fontSize }; };
+    const nwmEye = box("#net-worth-monthly-card .mic-eyebrow");
+    const nwmRow = box("#nwm-split .mic-hs-row");
+    const cfEye = box("#monthly-invest-cat-card .mic-eyebrow");
+    const cfRow = box("#mic-hover-split .mic-hs-row");
+    if (!nwmEye || !nwmRow || !cfEye || !cfRow) return null;
+    return {
+      nwmGap: Math.round(nwmRow.top - nwmEye.bottom),
+      cfGap: Math.round(cfRow.top - cfEye.bottom),
+      rowH: [nwmRow.h, cfRow.h], colGap: [nwmRow.gap, cfRow.gap], fs: [nwmRow.fs, cfRow.fs],
+      monthFs: [box("#nwm-split .mic-hs-month").fs, box("#mic-hover-split .mic-hs-month").fs],
+      // Left inset from the card edge. A card carrying its own padding on top of
+      // the header's indents everything twice — invisible in the gap above,
+      // obvious as a text block that does not line up with its neighbour.
+      inset: [
+        Math.round(box("#nwm-split .mic-hs-row").left -
+                   document.getElementById("net-worth-monthly-card").getBoundingClientRect().left),
+        Math.round(box("#mic-hover-split .mic-hs-row").left -
+                   document.getElementById("monthly-invest-cat-card").getBoundingClientRect().left),
+      ],
+      eyebrowInset: [
+        Math.round(box("#net-worth-monthly-card .mic-eyebrow").left -
+                   document.getElementById("net-worth-monthly-card").getBoundingClientRect().left),
+        Math.round(box("#monthly-invest-cat-card .mic-eyebrow").left -
+                   document.getElementById("monthly-invest-cat-card").getBoundingClientRect().left),
+      ],
+    };
+  });
+  console.log("  spacing: " + JSON.stringify(spacing));
+  if (!spacing) {
+    ok(false, "G0 both cards rendered a split row to compare");
+  } else {
+    ok(Math.abs(spacing.nwmGap - spacing.cfGap) <= 2,
+       "G1 the gap between title and figures matches the Cash Flow card", spacing);
+    eq(spacing.rowH[0], spacing.rowH[1], "G2 the row is the same height");
+    eq(spacing.colGap[0], spacing.colGap[1], "G3 with the same spacing between figures");
+    eq(spacing.fs[0], spacing.fs[1], "G4 at the same size");
+    eq(spacing.monthFs[0], spacing.monthFs[1], "G5 and the same label size");
+    eq(spacing.inset[0], spacing.inset[1],
+       "G6 the figures start the same distance in from the card edge", spacing.inset);
+    eq(spacing.eyebrowInset[0], spacing.eyebrowInset[1],
+       "G7 as does the title above them", spacing.eyebrowInset);
+  }
 
   // ── Year selection ──────────────────────────────────────────────────────
   // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an

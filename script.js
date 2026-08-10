@@ -16503,6 +16503,12 @@
     var intKey = document.getElementById("nwm-key-interest");
     if (intKey) intKey.hidden = !anyInterest;
 
+    // onHover alone does not reliably fire on the way out — a quick exit can
+    // leave the readout showing a month the cursor is no longer near. Assigned
+    // rather than added, so redraws replace the handler instead of stacking
+    // copies of it.
+    canvas.onmouseleave = function () { _nwmShowHovered(null); };
+
     _nwmChart = window.__wfNwmChart = new Chart(canvas.getContext ? canvas.getContext("2d") : canvas, {
       type: "bar",
       data: {
@@ -16545,12 +16551,18 @@
           // the very bars being compared. Same treatment the Growth chart uses.
           tooltip: { enabled: false }
         },
-        // Chart.js passes the active elements for the hovered column, and an
-        // empty list when the cursor leaves — the cue to put the period's own
-        // totals back.
-        onHover: function (evt, elements) {
+        // Chart.js passes the active elements for the hovered column. It can
+        // also pass none while the cursor is still over the chart — near the
+        // edges, and over a month with no bar — so the index is re-queried
+        // before concluding the cursor has left. Without that, moving across an
+        // empty month flickered back to the period totals.
+        onHover: function (evt, elements, chart) {
           var i = elements && elements.length ? elements[0].index : -1;
-          _nwmShowHovered(bars[i] || null);
+          if (i < 0 && chart && chart.getElementsAtEventForMode) {
+            var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
+            i = pts && pts.length ? pts[0].index : -1;
+          }
+          _nwmShowHovered(i >= 0 && i < bars.length ? bars[i] : null);
         }
       }
     });
