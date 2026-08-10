@@ -148,7 +148,6 @@ const money = (t) => {
   const readChart = () => p.evaluate(() => {
     const c = window.__wfNwmChart;
     if (!c) return null;
-    const cb = c.options.plugins.tooltip.callbacks;
     return {
       type: c.type,
       labels: c.data.labels,
@@ -157,19 +156,31 @@ const money = (t) => {
       xStacked: !!(c.options.scales.x && c.options.scales.x.stacked),
       yStacked: !!(c.options.scales.y && c.options.scales.y.stacked),
       interaction: c.options.interaction || null,
-      // With one tooltip per column, afterBody fires once with EVERY segment of
-      // that month in `items`. Emitting the month's lines per segment would
-      // repeat them three times.
-      bodyFromAllSegments: (() => {
-        const items = c.data.datasets.map((d, di) => ({ dataIndex: 0, datasetIndex: di }));
-        return c.options.plugins.tooltip.callbacks.afterBody(items);
-      })(),
-      // What a reader actually sees on hover, per bar.
-      bodies: c.data.labels.map((_, i) => cb.afterBody([{ dataIndex: i }])),
-      segLabels: c.data.datasets.map((d, di) =>
-        cb.label({ dataset: d, parsed: { y: d.data[0] } })),
+      tooltipEnabled: !!(c.options.plugins.tooltip && c.options.plugins.tooltip.enabled),
+      hasOnHover: typeof c.options.onHover === "function",
     };
   });
+
+  const readStats = () => p.evaluate(() => {
+    const out = {};
+    document.querySelectorAll("#nwm-stats .mic-stat").forEach((el) => {
+      out[(el.querySelector(".mic-stat-label") || {}).textContent] =
+        (el.querySelector(".mic-stat-value") || {}).textContent;
+    });
+    return out;
+  });
+
+  // Hovering is what surfaces a month's figures now, so the test drives the
+  // handler Chart.js would call and reads the header it updates. Passing an
+  // empty list is the "cursor left the chart" case.
+  const hover = async (monthLabel) => {
+    await p.evaluate((m) => {
+      const c = window.__wfNwmChart;
+      const i = m == null ? -1 : c.data.labels.indexOf(m);
+      c.options.onHover({}, i < 0 ? [] : [{ index: i, datasetIndex: 0 }], c);
+    }, monthLabel);
+    return readStats();
+  };
 
   await load();
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
@@ -183,32 +194,48 @@ const money = (t) => {
   eq(chart.labels.join(","), "May 2025,Jun 2025,Jul 2025",
      "N1 one bar per comparable month in the selected year, oldest on the left");
 
-  // The stored totals reach the reader only through the tooltip now, so that is
-  // where they have to be asserted. A chart of changes that never shows the
-  // level it changed from would be missing half the story.
-  const jul = chart.bodies[chart.labels.indexOf("Jul 2025")].join(" | ");
-  const jun = chart.bodies[chart.labels.indexOf("Jun 2025")].join(" | ");
-  console.log("  jul tooltip: " + jul);
-  ok(/Closing: ₹11,50,000/.test(jul),
-     "N4 the tooltip carries the stored total, not a recomputation", jul);
-  ok(/Closing: ₹12,00,000/.test(jun), "N5 same for the month before", jun);
-  ok(/Change: −₹50,000/.test(jul),
-     "N6 and the change, which is the difference between two snapshots", jul);
-  ok(/Change: \+₹2,00,000/.test(jun), "N10 an up month", jun);
+  // No tooltip at all: the figures go to the header, where they hold still.
+  ok(!chart.tooltipEnabled && chart.hasOnHover,
+     "N2 hovering updates the header rather than opening a tooltip", chart);
 
-  ok(/Interest: \+₹1[0-9],[0-9]{3}/.test(jul),
-     "N9 deposit interest is named rather than credited to the market", jul);
-  ok(/reconstructed/.test(jun),
-     "N15 an attribution measured FROM a reconstruction says so — half of it is derived", jun);
-  ok(!/reconstructed/.test(jul),
-     "N16 while a change between two recorded months carries no such caveat", jul);
+  // Hovering a month replaces the period's five figures with that month's, in
+  // the same five slots — the header must not change shape as the cursor moves.
+  const julH = await hover("Jul 2025");
+  console.log("  hover Jul: " + JSON.stringify(julH));
+  eq(Object.keys(julH).join(","), "Opening,Closing,Invested,Interest,Market loss",
+     "N3 the same five labels, so the header keeps its shape");
+  eq(julH.Opening, "₹12,00,000",
+     "N4 opening is the previous month's stored total, not a recomputation");
+  eq(julH.Closing, "₹11,50,000", "N5 closing is this month's stored total");
+  ok(/^\+₹1,80,000$/.test(julH.Invested),
+     "N8 contributions include the fund buy, the savings rise and the new deposit",
+     julH.Invested);
+  ok(/^\+₹1[0-9],[0-9]{3}$/.test(julH.Interest),
+     "N9 deposit interest is named rather than credited to the market", julH.Interest);
+  ok(/^−₹2,4[0-9],[0-9]{3}$/.test(julH["Market loss"]),
+     "N9c and the market is what is left: down 50k after putting in 1.8L and earning " +
+     "10k of interest means prices took 2.4L", julH["Market loss"]);
 
-  // segLabels are built from each dataset's FIRST bar (May 2025): invested
-  // ₹2,00,000, five months of accrual, and the remainder.
-  ok(/^Invested: \+₹2,00,000$/.test(chart.segLabels[0]) &&
-     /^Interest: \+₹[\d,]+$/.test(chart.segLabels[1]) &&
-     /^Market: −₹[\d,]+$/.test(chart.segLabels[2]),
-     "N7 each segment names itself and its amount on hover", chart.segLabels);
+  const junH = await hover("Jun 2025");
+  eq(junH.Opening, "₹10,00,000", "N10 an up month, measured from May's close");
+  ok(/^\+₹1,3[0-9],[0-9]{3}$/.test(junH["Market gain"]),
+     "N11 a gaining month is labelled a gain", junH);
+
+  const scope = () => p.evaluate(() => (document.getElementById("nwm-scope") || {}).textContent || "");
+  await hover("Jun 2025");
+  ok(/Jun 2025/.test(await scope()),
+     "N12 the header names the month it is describing");
+  ok(/reconstructed/i.test(await scope()),
+     "N15 and says when that month is measured from a reconstruction");
+  await hover("Jul 2025");
+  ok(!/reconstructed/i.test(await scope()),
+     "N16 while a change between two recorded months carries no such caveat");
+
+  // Leaving the chart restores the period's own totals.
+  const back = await hover(null);
+  eq(back.Opening, "₹8,50,000",
+     "N17 moving off the chart puts the period's figures back", back);
+  eq(await scope(), "2025", "N18 and the header names the period again");
 
   // ── The stacked bars ────────────────────────────────────────────────────
   // Read off the Chart config the page actually built, so the bars are asserted
@@ -224,8 +251,8 @@ const money = (t) => {
        "B3a hovering picks the month, not the individual segment — at 150 months a " +
        "bar is a few pixels wide and intersect made the tooltip unreachable",
        chart.interaction);
-    eq(chart.bodyFromAllSegments.join(" | "), chart.bodies[0].join(" | "),
-       "B3b and the month's lines are emitted once for the column, not once per segment");
+    ok(!chart.tooltipEnabled,
+       "B3b with no tooltip — the column's figures go to the header instead");
     eq(chart.sets.length, 3, "B4 three segments and no category split");
     eq(chart.sets.map((s) => s.label).join(","), "Invested,Interest,Market",
        "B5 the three things that move net worth");
@@ -297,14 +324,6 @@ const money = (t) => {
   // BEFORE the first bar, which is what makes the row reconcile: everything
   // that happened in the period, applied to what it started with, is what it
   // ended with.
-  const readStats = () => p.evaluate(() => {
-    const out = {};
-    document.querySelectorAll("#nwm-stats .mic-stat").forEach((el) => {
-      out[(el.querySelector(".mic-stat-label") || {}).textContent] =
-        (el.querySelector(".mic-stat-value") || {}).textContent;
-    });
-    return out;
-  });
   const stats = await readStats();
   console.log("  stats: " + JSON.stringify(stats));
   eq(Object.keys(stats).join(","), "Opening,Closing,Invested,Interest,Market loss",

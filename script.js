@@ -16509,27 +16509,17 @@
         },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: function (c) {
-                return c.dataset.label + ": " + _nwmSigned(c.parsed.y);
-              },
-              // The bar's own arithmetic, spelled out: the two parts and what
-              // they sum to, plus where the month closed.
-              // One tooltip now covers the whole column, so the per-month lines
-              // must be emitted once — items holds every segment of that month.
-              afterBody: function (items) {
-                var r = bars[items && items[0] ? items[0].dataIndex : -1];
-                if (!r) return "";
-                var out = ["Change: " + _nwmSigned(r.delta),
-                           "Closing: " + formatCurrency(r.total)];
-                if (r.interest) out.splice(1, 0, "Interest: " + _nwmSigned(r.interest));
-                if (r.gapMonths > 1) out.push("Covers " + r.gapMonths + " months");
-                if (r.estimated) out.push("Measured from a reconstructed month");
-                return out;
-              }
-            }
-          }
+          // No tooltip: the figures go to the card header instead, which is
+          // steadier to read than a box that follows the cursor and can cover
+          // the very bars being compared. Same treatment the Growth chart uses.
+          tooltip: { enabled: false }
+        },
+        // Chart.js passes the active elements for the hovered column, and an
+        // empty list when the cursor leaves — the cue to put the period's own
+        // totals back.
+        onHover: function (evt, elements) {
+          var i = elements && elements.length ? elements[0].index : -1;
+          _nwmShowHovered(bars[i] || null);
         }
       }
     });
@@ -16560,20 +16550,47 @@
            '<span class="mic-stat-value ' + (cls || "") + '">' + value + '</span></div>';
   }
 
-  function _nwmRenderStats(rows) {
+  // A single month's figures, in the same five slots as the period's. Same
+  // labels, same arithmetic — a month IS a period of one — so the header never
+  // changes shape as the cursor moves across the chart.
+  function _nwmShowHovered(r) {
     var el = document.getElementById("nwm-stats");
+    var scopeEl = document.getElementById("nwm-scope");
     if (!el) return;
-    var st = _nwmPeriodStats(rows);
-    if (!st) { el.innerHTML = ""; return; }
-    // One snapshot: a closing figure and nothing to decompose.
-    if (st.opening == null) { el.innerHTML = _nwmStatHtml("Closing", formatCurrency(st.closing)); return; }
-    el.innerHTML =
-      _nwmStatHtml("Opening", formatCurrency(st.opening)) +
+    if (!r) { _nwmRenderStats(_nwmForYear(_nwmAllRows)); return; }   // cursor left
+    if (scopeEl) {
+      scopeEl.textContent = _nwmMonthLabel(r.month) +
+        (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "") +
+        (r.estimated ? " · reconstructed" : "");
+    }
+    el.innerHTML = _nwmStatsHtml({
+      opening: r.total - r.delta, closing: r.total,
+      invested: r.contributions || 0, interest: r.interest || 0, market: r.market || 0
+    });
+  }
+
+  function _nwmStatsHtml(st) {
+    return _nwmStatHtml("Opening", formatCurrency(st.opening)) +
       _nwmStatHtml("Closing", formatCurrency(st.closing)) +
       _nwmStatHtml("Invested", _nwmSigned(st.invested)) +
       _nwmStatHtml("Interest", _nwmSigned(st.interest), st.interest ? "positive" : "") +
       _nwmStatHtml(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                    st.market < 0 ? "negative" : "positive");
+  }
+
+  // The period's figures, and the label that says which period. Both live here
+  // so that restoring one restores the other — setting the scope in the caller
+  // left the header still naming the hovered month after the cursor had gone.
+  function _nwmRenderStats(rows) {
+    var el = document.getElementById("nwm-stats");
+    var scopeEl = document.getElementById("nwm-scope");
+    if (scopeEl) scopeEl.textContent = __nwmAllTime || !__nwmYear ? "All time" : String(__nwmYear);
+    if (!el) return;
+    var st = _nwmPeriodStats(rows);
+    if (!st) { el.innerHTML = ""; return; }
+    // One snapshot: a closing figure and nothing to decompose.
+    if (st.opening == null) { el.innerHTML = _nwmStatHtml("Closing", formatCurrency(st.closing)); return; }
+    el.innerHTML = _nwmStatsHtml(st);
   }
 
   function _nwmRender(rows) {
