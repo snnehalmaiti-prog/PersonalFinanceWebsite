@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   gh_branch text DEFAULT '',
   expense_templates jsonb,
   recurring_payments jsonb,
+  liabilities jsonb,
   epf_interest_rates jsonb,
   updated_at timestamptz DEFAULT now()
 );
@@ -26,6 +27,10 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS recurring_payments jsonb;
 -- client drops this column and retries if it's missing), so this migration only
 -- enables cross-device sync — the tab works locally without it.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS epf_interest_rates jsonb;
+-- Liability tab: loans and their repayment schedules. Sync is resilient (the
+-- client drops this column and retries if it's missing), so this migration only
+-- enables cross-device sync — the tab works locally without it.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS liabilities jsonb;
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 

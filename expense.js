@@ -1080,17 +1080,21 @@
   // Expense tab's onShow(). Without a guard, two concurrent runs read the same
   // next_due (localStorage is only rewritten at the very end) and insert the
   // SAME installment twice — duplicate expense records.
-  var _recurringRunning = false;
+  var _scheduleRunning = {};
 
-  function processRecurringPayments() {
-    if (_recurringRunning) return Promise.resolve();
+  // Liabilities schedule exactly like recurring payments — same frequency,
+  // instalment counter and idempotency — so they share this processor. The only
+  // difference in the posted record is the label ("liability" vs "recurring"),
+  // which is also what keeps the two dedup queries from seeing each other.
+  function processSchedule(key, tag) {
+    if (_scheduleRunning[key]) return Promise.resolve();
     if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) return Promise.resolve();
     var raw;
-    try { raw = JSON.parse(localStorage.getItem("wf-recurring-payments")) || []; }
+    try { raw = JSON.parse(localStorage.getItem(key)) || []; }
     catch (e) { return Promise.resolve(); }
     if (!raw.length) return Promise.resolve();
 
-    _recurringRunning = true;
+    _scheduleRunning[key] = true;
     var today = todayIso();
     var chain = Promise.resolve();
     var changed = false;
@@ -1150,8 +1154,8 @@
             category_id: row.category_id || null,
             subcategory_id: row.subcategory_id || null,
             payment_method_id: (row.type === "expense") ? (row.payment_method_id || null) : null,
-            note: (item.name || "") + (row.note ? " — " + row.note : "") + " [recurring]",
-            labels: ["recurring", item.id, dueIso]
+            note: (item.name || "") + (row.note ? " — " + row.note : "") + " [" + tag + "]",
+            labels: [tag, item.id, dueIso]
           };
           return WfDb.insert("expense_records", rec).then(function () {
             posted[dueIso] = true;
@@ -1165,16 +1169,21 @@
 
     return chain.then(function () {
       if (changed) {
-        localStorage.setItem("wf-recurring-payments", JSON.stringify(raw));
+        localStorage.setItem(key, JSON.stringify(raw));
         if (window.WfAuth && WfAuth.saveSettingsToCloud) {
           return WfAuth.saveSettingsToCloud().catch(function () {});
         }
       }
     }).then(function () {
-      _recurringRunning = false;
+      _scheduleRunning[key] = false;
     }, function () {
-      _recurringRunning = false;
+      _scheduleRunning[key] = false;
     });
+  }
+
+  function processRecurringPayments() {
+    return processSchedule("wf-recurring-payments", "recurring")
+      .then(function () { return processSchedule("wf-liabilities", "liability"); });
   }
 
   // ── Entry point (called by script.js when the Expense tab is shown) ─────────

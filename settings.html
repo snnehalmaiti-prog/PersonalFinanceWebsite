@@ -420,6 +420,7 @@
           <button type="button" class="exp-nav-item" data-exp-panel="categories">Categories</button>
           <button type="button" class="exp-nav-item" data-exp-panel="template">Template</button>
           <button type="button" class="exp-nav-item" data-exp-panel="recurring">Recurring payments</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="liability">Liability</button>
           <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
         </nav>
 
@@ -482,6 +483,17 @@
             <p class="muted small equity-desc">Scheduled expenses (rent, subscriptions, EMIs). Auto-created on their due date based on frequency.</p>
             <p class="muted small" id="exp-recurring-status">No recurring payments yet.</p>
             <div id="exp-recurring-list" class="exp-list"></div>
+          </div>
+
+          <!-- Liability -->
+          <div class="exp-detail-panel" id="exp-detail-liability" hidden>
+            <div class="exp-detail-header">
+              <h3>Liability</h3>
+              <button type="button" class="btn btn-primary btn-sm" id="exp-add-liability-btn">+ Add Liability</button>
+            </div>
+            <p class="muted small equity-desc">Loans and borrowings (home, car, personal, credit). The instalment is auto-created on its due date, exactly like a recurring payment; the extra fields only describe the debt behind it.</p>
+            <p class="muted small" id="exp-liability-status">No liabilities yet.</p>
+            <div id="exp-liability-list" class="exp-list"></div>
           </div>
 
           <!-- Bulk import -->
@@ -569,6 +581,45 @@
       </div>
     </div>
 
+    <!-- Liability add/edit modal (settings-local) -->
+    <div id="lb-modal-overlay" class="exp-modal-overlay" hidden>
+      <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="lb-modal-title">
+        <div class="exp-modal-header">
+          <h3 id="lb-modal-title">Add Liability</h3>
+          <button type="button" class="exp-modal-close" id="lb-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="exp-modal-body">
+          <label class="exp-field"><span>Name</span><input type="text" id="lb-name" placeholder="e.g. Home loan, Car loan" /></label>
+          <label class="exp-field"><span>Lender</span><input type="text" id="lb-lender" placeholder="e.g. HDFC Bank" /></label>
+          <label class="exp-field"><span>Principal borrowed (optional)</span><input type="number" id="lb-principal" step="0.01" placeholder="Original loan amount" /></label>
+          <label class="exp-field"><span>Interest rate % (optional)</span><input type="number" id="lb-rate" step="0.01" placeholder="Annual rate" /></label>
+          <label class="exp-field"><span>Instalment amount</span><input type="number" id="lb-amount" step="0.01" placeholder="EMI charged each cycle" /></label>
+          <label class="exp-field"><span>Start Date</span><input type="date" id="lb-next-due" /></label>
+          <label class="exp-field"><span>Frequency</span>
+            <select id="lb-frequency">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly" selected>Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </label>
+          <label class="exp-field"><span>Instalments</span><input type="number" id="lb-num-payments" min="1" step="1" placeholder="Leave blank for unlimited" /></label>
+          <label class="exp-field"><span>End date (optional)</span><input type="date" id="lb-end-date" /></label>
+          <label class="exp-field"><span>Account</span><select id="lb-account"></select></label>
+          <label class="exp-field"><span>Category</span><select id="lb-category"></select></label>
+          <label class="exp-field"><span>Sub-category</span><select id="lb-subcategory"></select></label>
+          <label class="exp-field"><span>Payment method</span><select id="lb-payment-method"></select></label>
+          <label class="exp-field"><span>Note</span><input type="text" id="lb-note" placeholder="Optional" /></label>
+          <p class="muted small" id="lb-modal-error" style="color:#dc2626; margin:4px 0 0;"></p>
+        </div>
+        <div class="exp-modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" id="lb-modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="lb-modal-save">Add Liability</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Template add/edit modal (settings-local) -->
     <div id="tpl-modal-overlay" class="exp-modal-overlay" hidden>
       <div class="exp-modal" role="dialog" aria-modal="true" aria-labelledby="tpl-modal-title">
@@ -644,6 +695,13 @@
               WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderRecurringPayments(); });
             } else {
               renderRecurringPayments();
+            }
+          }
+          if (panel === "liability") {
+            if (window.WfAuth && WfAuth.isLoggedIn()) {
+              WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderLiabilities(); });
+            } else {
+              renderLiabilities();
             }
           }
         });
@@ -1103,6 +1161,197 @@
         saveRecurring(items);
         closeRecurringModal();
         renderRecurringPayments();
+      });
+    })();
+
+    // ── Liabilities ───────────────────────────────────────────────────────
+    // A liability is a recurring payment with the debt behind it recorded: the
+    // same schedule, frequency, instalment counter and auto-posting, plus the
+    // lender, principal and rate. It stores `type: "expense"` so the shared
+    // processor in expense.js posts its instalments exactly as it does for a
+    // recurring payment — the only difference in the record is the label.
+    var LIABILITY_KEY = "wf-liabilities";
+    function loadLiabilitiesRaw() { return _wfLoadListRaw(LIABILITY_KEY); }
+    function loadLiabilities() { return loadLiabilitiesRaw().filter(function (r) { return r && !r._deleted; }); }
+    function saveLiabilities(list) { return _wfPersistList(LIABILITY_KEY, list); }
+
+    function renderLiabilities() {
+      var list = document.getElementById("exp-liability-list");
+      var status = document.getElementById("exp-liability-status");
+      if (!list) return;
+      var items = loadLiabilities();
+      if (!items.length) {
+        if (status) { status.hidden = false; status.textContent = "No liabilities yet."; }
+        list.innerHTML = "";
+        return;
+      }
+      if (status) status.hidden = true;
+      var money = function (n) { return "₹" + Number(n).toLocaleString("en-IN"); };
+      list.innerHTML = '<div class="wf-card-grid">' + items.map(function (r) {
+        var row = r.row || {};
+        var st = tplTypeStyle("expense");
+        var amt = row.amount ? money(row.amount) : "—";
+        var freq = row.frequency ? row.frequency.replace(/^./, function (c) { return c.toUpperCase(); }) : "—";
+        var done = row.installments_done || 0;
+        var maxN = row.num_payments || null;
+        var progPct = maxN ? Math.min(100, Math.round((done / maxN) * 100)) : 0;
+        var progLabel = maxN ? (done + " / " + maxN) : (done + " paid");
+        // Outstanding is only honest when the schedule is finite: it is what is
+        // left to pay on the plan, not an amortised principal balance.
+        var remaining = maxN ? Math.max(0, (maxN - done)) * (Number(row.amount) || 0) : null;
+        return '<div class="wf-item-card">' +
+          '<div class="wf-item-card-head">' +
+            '<div class="wf-item-badge" style="background:' + st.bg + ';color:' + st.fg + ';">⚖</div>' +
+            '<div class="wf-item-title-wrap">' +
+              '<div class="wf-item-title">' + esc(r.name) + '</div>' +
+              '<div class="wf-item-sub">' +
+                (row.lender ? '<span class="wf-item-chip" style="background:' + st.bg + ';color:' + st.fg + ';">' + esc(row.lender) + '</span><span class="wf-item-dot">·</span>' : '') +
+                '<span>' + esc(freq) + '</span>' +
+                (row.interest_rate ? '<span class="wf-item-dot">·</span><span>' + esc(row.interest_rate) + '%</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<div class="wf-item-amt">' + amt + '</div>' +
+          '</div>' +
+          '<div class="wf-item-meta-grid">' +
+            '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Next due</span><span class="wf-item-meta-val">' + esc(row.next_due || "—") + '</span></div>' +
+            '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Instalments</span><span class="wf-item-meta-val">' + esc(progLabel) + '</span></div>' +
+            (row.principal ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Principal</span><span class="wf-item-meta-val">' + money(row.principal) + '</span></div>' : '') +
+            (remaining != null ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Left to pay</span><span class="wf-item-meta-val">' + money(remaining) + '</span></div>' : '') +
+            (row.end_date ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Ends</span><span class="wf-item-meta-val">' + esc(row.end_date) + '</span></div>' : '') +
+          '</div>' +
+          (maxN ? '<div class="wf-item-progress"><div class="wf-item-progress-fill" style="width:' + progPct + '%;"></div></div>' : '') +
+          '<div class="wf-item-actions">' +
+            '<button type="button" class="wf-icon-btn" data-lb-edit="' + esc(r.id) + '" title="Edit">✎ Edit</button>' +
+            '<button type="button" class="wf-icon-btn wf-icon-btn-danger" data-lb-del="' + esc(r.id) + '" title="Delete">🗑 Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("") + '</div>';
+      list.querySelectorAll("[data-lb-del]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (!confirm("Delete this liability?")) return;
+          var id = btn.getAttribute("data-lb-del");
+          saveLiabilities(_wfTombstone(loadLiabilitiesRaw(), id));
+          renderLiabilities();
+        });
+      });
+      list.querySelectorAll("[data-lb-edit]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-lb-edit");
+          var r = loadLiabilities().find(function (x) { return x.id === id; });
+          if (r) openLiabilityModal(r);
+        });
+      });
+    }
+    var addLiabilityBtn = document.getElementById("exp-add-liability-btn");
+    if (addLiabilityBtn) addLiabilityBtn.addEventListener("click", function () { openLiabilityModal(null); });
+
+    var lbRefs = { editingId: null };
+
+    function lbFillCategoryDropdowns(selectedCatId, selectedSubId) {
+      var catSel = document.getElementById("lb-category");
+      var subSel = document.getElementById("lb-subcategory");
+      var tops = tplRefs.categories.filter(function (c) { return c.type === "expense" && !c.parent_id; });
+      tplFillSelect(catSel, tops, selectedCatId, "— none —");
+      var subs = selectedCatId ? tplRefs.categories.filter(function (c) { return c.parent_id === selectedCatId; }) : [];
+      tplFillSelect(subSel, subs, selectedSubId, "— none —");
+    }
+
+    function openLiabilityModal(existing) {
+      tplLoadRefs().then(function () {
+        lbRefs.editingId = existing ? existing.id : null;
+        document.getElementById("lb-modal-title").textContent = existing ? "Edit Liability" : "Add Liability";
+        document.getElementById("lb-modal-save").textContent = existing ? "Save" : "Add Liability";
+        document.getElementById("lb-modal-error").textContent = "";
+        var row = (existing && existing.row) || {};
+        document.getElementById("lb-name").value = existing ? (existing.name || "") : "";
+        document.getElementById("lb-lender").value = row.lender || "";
+        document.getElementById("lb-principal").value = row.principal || "";
+        document.getElementById("lb-rate").value = row.interest_rate || "";
+        document.getElementById("lb-amount").value = row.amount || "";
+        document.getElementById("lb-frequency").value = row.frequency || "monthly";
+        document.getElementById("lb-next-due").value = row.next_due || (function () {
+          var d = new Date(), p = function (n) { return String(n).padStart(2, "0"); };
+          return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+        })();
+        document.getElementById("lb-end-date").value = row.end_date || "";
+        document.getElementById("lb-num-payments").value = row.num_payments || "";
+        document.getElementById("lb-note").value = row.note || "";
+        tplRefillAccountSelect("lb-account", "expense", row.account_id || "");
+        tplFillSelect(document.getElementById("lb-payment-method"), tplRefs.paymentMethods, row.payment_method_id || "", "— none —");
+        lbFillCategoryDropdowns(row.category_id || "", row.subcategory_id || "");
+        document.getElementById("lb-modal-overlay").hidden = false;
+      });
+    }
+
+    function closeLiabilityModal() { document.getElementById("lb-modal-overlay").hidden = true; }
+
+    (function wireLbModal() {
+      var catSel = document.getElementById("lb-category");
+      if (catSel) catSel.addEventListener("change", function () {
+        var subs = tplRefs.categories.filter(function (c) { return c.parent_id === catSel.value; });
+        tplFillSelect(document.getElementById("lb-subcategory"), subs, "", "— none —");
+      });
+      document.getElementById("lb-modal-close").addEventListener("click", closeLiabilityModal);
+      document.getElementById("lb-modal-cancel").addEventListener("click", closeLiabilityModal);
+      document.getElementById("lb-modal-overlay").addEventListener("click", function (e) {
+        if (e.target === document.getElementById("lb-modal-overlay")) closeLiabilityModal();
+      });
+      document.getElementById("lb-modal-save").addEventListener("click", function () {
+        var err = document.getElementById("lb-modal-error");
+        var name = document.getElementById("lb-name").value.trim();
+        if (!name) { err.textContent = "Enter a name."; return; }
+        var amtStr = document.getElementById("lb-amount").value;
+        var amt = amtStr === "" ? null : Number(amtStr);
+        if (!amt || amt <= 0) { err.textContent = "Enter an instalment amount."; return; }
+        var nextDue = document.getElementById("lb-next-due").value;
+        if (!nextDue) { err.textContent = "Pick next due date."; return; }
+        var endDate = document.getElementById("lb-end-date").value || null;
+        if (endDate && endDate < nextDue) { err.textContent = "End date can't be before the start date."; return; }
+        var npStr = document.getElementById("lb-num-payments").value;
+        var numPayments = null;
+        if (npStr !== "") {
+          var np = Math.floor(Number(npStr));
+          if (!isFinite(np) || np < 1) { err.textContent = "Instalments must be a whole number of 1 or more."; return; }
+          numPayments = np;
+        }
+        var principalStr = document.getElementById("lb-principal").value;
+        var principal = principalStr === "" ? null : Number(principalStr);
+        if (principal != null && (!isFinite(principal) || principal < 0)) { err.textContent = "Principal must be a positive amount."; return; }
+        var rateStr = document.getElementById("lb-rate").value;
+        var rate = rateStr === "" ? null : Number(rateStr);
+        if (rate != null && (!isFinite(rate) || rate < 0)) { err.textContent = "Interest rate must be a positive number."; return; }
+        var row = {
+          type: "expense",
+          lender: document.getElementById("lb-lender").value.trim(),
+          principal: principal,
+          interest_rate: rate,
+          amount: amt,
+          frequency: document.getElementById("lb-frequency").value,
+          next_due: nextDue,
+          end_date: endDate,
+          num_payments: numPayments,
+          account_id: document.getElementById("lb-account").value || null,
+          category_id: document.getElementById("lb-category").value || null,
+          subcategory_id: document.getElementById("lb-subcategory").value || null,
+          payment_method_id: document.getElementById("lb-payment-method").value || null,
+          note: document.getElementById("lb-note").value || ""
+        };
+        var items = loadLiabilitiesRaw();
+        if (lbRefs.editingId) {
+          items = items.map(function (t) {
+            if (t.id !== lbRefs.editingId) return t;
+            // Same reason as recurring payments: rebuilding the row from the form
+            // would reset the paid counter and let the processor re-post
+            // instalments that have already been charged.
+            row.installments_done = (t.row && t.row.installments_done) || 0;
+            return { id: t.id, name: name, row: row, updated_at: Date.now() };
+          });
+        } else {
+          items.push({ id: "lb-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7), name: name, row: row, updated_at: Date.now() });
+        }
+        saveLiabilities(items);
+        closeLiabilityModal();
+        renderLiabilities();
       });
     })();
   </script>

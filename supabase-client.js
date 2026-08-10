@@ -16,6 +16,7 @@
     "wf-gh-branch",
     "wf-expense-templates",
     "wf-recurring-payments",
+    "wf-liabilities",
     "wf-epf-interest-rates"
   ];
 
@@ -31,6 +32,7 @@
     "wf-gh-branch":              "gh_branch",
     "wf-expense-templates":      "expense_templates",
     "wf-recurring-payments":     "recurring_payments",
+    "wf-liabilities":            "liabilities",
     "wf-epf-interest-rates":     "epf_interest_rates"
   };
 
