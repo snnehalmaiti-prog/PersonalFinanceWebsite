@@ -16429,6 +16429,10 @@
     var yearSel = document.getElementById("nwm-year");
     var allBtn = document.getElementById("nwm-alltime");
     var yearList = _nwmYearList(rows);
+    // No year has a comparable month — one snapshot and nothing to compare it
+    // against — so there is nothing to choose between and both controls go.
+    // The picker button needs no hiding here: it is only ever created below,
+    // when years exist, and the row count never shrinks within a load.
     if (!yearList.length) {
       if (yearSel) yearSel.style.display = "none";
       if (allBtn) allBtn.style.display = "none";
@@ -16443,7 +16447,10 @@
       __nwmYear = yearList.indexOf(thisYear) >= 0 ? thisYear : yearList[yearList.length - 1];
     }
     if (yearSel) {
-      yearSel.style.display = "";
+      // Deliberately does NOT re-show the select. WfYearPicker.attach hides it
+      // and inserts a button in its place; setting display back would put the
+      // native dropdown on screen next to the picker, which is what happened.
+      // It is only ever shown as a fallback, below, when there is no picker.
       var existing = [];
       for (var i = 0; i < yearSel.options.length; i++) existing.push(yearSel.options[i].value);
       if (existing.join(",") !== yearList.join(",")) {
@@ -16456,6 +16463,9 @@
       if (window.WfYearPicker) {
         WfYearPicker.attach(yearSel);
         WfYearPicker.setHidden(yearSel, __nwmAllTime);
+      } else {
+        // No picker on this page — the plain select is the control.
+        yearSel.style.display = __nwmAllTime ? "none" : "";
       }
     }
     if (allBtn) {

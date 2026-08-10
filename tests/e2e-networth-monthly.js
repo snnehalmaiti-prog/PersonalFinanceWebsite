@@ -304,6 +304,11 @@ const money = (t) => {
       options: sel ? Array.from(sel.options).map((o) => o.value) : [],
       pickerLabel: btn ? btn.textContent.trim() : null,
       pickerVisible: btn ? btn.style.display !== "none" : false,
+      // The real question is what is ON SCREEN, so this reads the computed
+      // style rather than the inline one a render might have set.
+      selectOnScreen: sel ? getComputedStyle(sel).display !== "none" : false,
+      controlCount: document.querySelectorAll("#nwm-year, #nwm-year + .wf-yp-btn")
+        .length,
       subtitle: (document.getElementById("nwm-subtitle") || {}).textContent || "",
       months: Array.from(document.querySelectorAll("#nwm-list .nwm-month")).map((e) => e.textContent),
     };
@@ -317,6 +322,9 @@ const money = (t) => {
      "Y2 opens on the current year, or the most recent with data — never an empty chart");
   ok(y1.pickerVisible && y1.pickerLabel === "2025",
      "Y3 through the same decade-grid picker the cash-flow card uses", y1);
+  ok(!y1.selectOnScreen,
+     "Y3b and ONLY through it — the native select it replaces stays hidden, or the " +
+     "card shows two year controls side by side", y1);
   ok(y1.months.every((m) => /2025/.test(m)),
      "Y4 and the list follows the chart rather than disagreeing with it", y1.months);
   ok(/2025/.test(y1.subtitle), "Y5 the subtitle names the year on show", y1.subtitle);
@@ -343,6 +351,9 @@ const money = (t) => {
   ok(y3.months.some((m) => /2024/.test(m)) && y3.months.some((m) => /2025/.test(m)),
      "Y8 All time shows every month again", y3.months);
   ok(!y3.pickerVisible, "Y9 and hides the year picker, which no longer applies");
+  ok(!y3.selectOnScreen,
+     "Y9b including the select behind it — hiding one and not the other is how a " +
+     "stray dropdown appears", y3);
   ok(/^Nov 2024/.test(y3.months[y3.months.length - 1]),
      "Y10 including the very first snapshot, which has no month before it",
      y3.months[y3.months.length - 1]);
@@ -360,6 +371,36 @@ const money = (t) => {
 
   await p.click("#nwm-alltime");     // back to a single year for what follows
   await p.waitForTimeout(300);
+
+  // ── Exactly one snapshot ────────────────────────────────────────────────
+  // The state on the day you start recording: a row to show, but nothing to
+  // compare it against. No year has a comparable month, so both year controls
+  // must go — leaving the picker button behind would offer a choice that
+  // changes nothing, showing a stale year next to a single row.
+  snapshotRows = [SNAPSHOTS[SNAPSHOTS.length - 1]];
+  await load();
+  const one = await p.evaluate(() => {
+    const sel = document.getElementById("nwm-year");
+    const btn = sel && sel.__wfYpBtn;
+    const all = document.getElementById("nwm-alltime");
+    return {
+      rows: document.querySelectorAll("#nwm-list .nwm-row").length,
+      delta: (document.querySelector("#nwm-list .nwm-delta") || {}).textContent || "",
+      selectOnScreen: sel ? getComputedStyle(sel).display !== "none" : false,
+      pickerOnScreen: btn ? getComputedStyle(btn).display !== "none" : false,
+      allTimeOnScreen: all ? getComputedStyle(all).display !== "none" : false,
+      chartHidden: (document.getElementById("nwm-chart-wrap") || {}).hidden,
+    };
+  });
+  console.log("  single snapshot: " + JSON.stringify(one));
+  eq(one.rows, 1, "S1 the one snapshot is shown");
+  eq(one.delta.trim(), "—",
+     "S2 with no change against it, and no attribution invented");
+  ok(!one.selectOnScreen && !one.pickerOnScreen,
+     "S3 no year control, since no year has anything to compare", one);
+  ok(!one.allTimeOnScreen, "S4 nor an All time toggle", one);
+  ok(one.chartHidden, "S5 and no chart — a bar needs two snapshots to have a height", one);
+  snapshotRows = SNAPSHOTS;
 
   // ── Empty state ─────────────────────────────────────────────────────────
   // The state every user is in before the migration is run. It must explain
