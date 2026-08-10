@@ -4460,5 +4460,4 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #net-worth-monthly-card .mic-header { padding: 16px 20px 0; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
-.nwm-note { margin: 0; padding: 2px 20px 4px; font-size: 0.64rem; font-style: italic; }
 .nwm-swatch-idle { background: #F59E0B; }

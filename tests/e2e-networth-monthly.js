@@ -451,21 +451,15 @@ const money = (t) => {
   ok(/^[+−]/.test(stats["Market loss"] ?? stats["Market gain"]),
      "H5 the market figure is signed", stats);
 
-  // ── Parked cash is out of the card entirely ─────────────────────────────
-  // Out of the totals as well as the contributions. Out of one side only, the
-  // ₹50,000 moved into savings in July would resurface in Market as a price
-  // movement that never happened.
+  // ── Parked cash is counted, and named ───────────────────────────────────
+  // Cash is IN the totals and named among the movements. Counted in only one of
+  // those places, the ₹50,000 moved into savings in July would either break the
+  // reconciliation or resurface in Market as a price move that never happened.
   const julSum = num(julH.Opening) + num(julH.Invested) + num(julH.Interest) +
                  num(julH["Idle Cash"] || 0) + num(julH["Market loss"]);
   ok(Math.abs(julSum - num(julH.Closing)) < 1,
      "K1 a hovered month reconciles with cash counted in the totals and named " +
      "among the movements", { julH, julSum });
-  const note = await p.evaluate(() => {
-    const el = document.getElementById("nwm-note");
-    return { hidden: el.hidden, text: el.textContent };
-  });
-  ok(!note.hidden && /Savings Account/.test(note.text) && /Investment Corpus/.test(note.text),
-     "K2 and the card says so, since its totals now sit below the Overview's", note);
 
   // ── Spacing matches the Cash Flow card ──────────────────────────────────
   // Measured against that card in the same page rather than against fixed
@@ -576,11 +570,11 @@ const money = (t) => {
      "C1 the cash movement is its own bar segment", cashSeg);
   ok(/^\+₹1,30,000$/.test(julH.Invested),
      "C2 and is not counted as investing", julH.Invested);
-  const noteTxt = await p.evaluate(() =>
-    (document.getElementById("nwm-note") || {}).textContent || "");
-  ok(/Idle Cash/.test(noteTxt) && /counted in the totals/.test(noteTxt) &&
-     /separately/.test(noteTxt),
-     "C3 the note says it is counted but shown apart", noteTxt);
+  // No explanatory note: the totals reconcile with the Overview, so there is
+  // nothing left for one to explain away. Asserted so a future change does not
+  // quietly reintroduce prose the card no longer needs.
+  const noteEl = await p.evaluate(() => !!document.getElementById("nwm-note"));
+  ok(!noteEl, "C3 and the card carries no note explaining itself");
 
   // ── Year selection ──────────────────────────────────────────────────────
   // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an

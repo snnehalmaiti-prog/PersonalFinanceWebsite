@@ -16493,7 +16493,6 @@
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null;
   var _nwmAllRows = [];
-  var _nwmCashShown = false;      // whether any parked cash moved in the period
   // Always from the FULL set. Passing the year's slice back in would make it the
   // new "all rows" and the picker would lose every other year on the first use.
   function _nwmRerender() { _nwmRender(_nwmAllRows); }
@@ -16828,15 +16827,6 @@
     _nwmRenderStats(rows);
     _nwmDrawChart(rows);
 
-    var noteEl = document.getElementById("nwm-note");
-    if (noteEl) {
-      noteEl.hidden = !_nwmCashShown;
-      noteEl.textContent = _nwmCashShown
-        ? "Idle Cash — Investment Corpus and Savings Account — is counted in the totals, " +
-          "so these figures reconcile with the Overview, but its movement is shown " +
-          "separately rather than as investing."
-        : "";
-    }
   }
 
   function renderNetWorthMonthly() {
@@ -16867,7 +16857,6 @@
         // Parked cash stays IN the totals, so Closing matches the Overview's
         // net worth. Its movement comes out as its own two segments below.
         var cash = from ? _nwmIdleByMonth(pf) : {};
-        _nwmCashShown = Object.keys(cash).length > 0;
         _nwmRender(WfSnapshots.buildMonthlyChange(list,
           from ? _nwmContributionsByMonth(pf) : {},
           from ? _nwmInterestByMonth(from, pf) : {},
