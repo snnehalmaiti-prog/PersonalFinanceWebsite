@@ -4461,3 +4461,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
 .nwm-swatch-idle { background: #F59E0B; }
+
+/* Stock-vs-currency split under a US holding's return. Third line of the P&L
+   cell, smaller and muted so the return itself stays the headline. */
+.mfh-fx-split { display: block; font-size: 0.6rem; font-weight: 600; color: var(--emerald, #1a9e6e);
+  font-variant-numeric: tabular-nums; white-space: nowrap; margin-top: 1px; }
+.mfh-fx-split .mfh-negative { color: #E8623A; }
+@media (max-width: 640px) { .mfh-fx-split { font-size: 0.55rem; } }

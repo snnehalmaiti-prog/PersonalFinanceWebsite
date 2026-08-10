@@ -205,11 +205,58 @@
     return { nav: nav, units: units, baseIndex: base, last: prevNav };
   }
 
+  // Split a US holding's INR gain into what the stock did and what the rupee did.
+  //
+  // An INR return is the product of two moves, not the sum: you bought dollars
+  // at one rate and the shares moved in dollars. Writing the end value two ways
+  //
+  //   current(INR) − cost(INR) = P1·R1 − P0·R0
+  //                            = R0·(P1 − P0)   ← the stock, at the rate you paid
+  //                            + P1·(R1 − R0)   ← the rupee, on what you now hold
+  //
+  // where P is the USD amount and R the USD/INR rate. R0 is the cost-weighted
+  // average rate actually paid across the lots — cost(INR) / cost(USD) — not
+  // today's rate and not any single lot's.
+  //
+  // The cross term (a dollar gain revalued at a changed rate) is assigned to
+  // currency, because R1 is applied to the whole ending position including that
+  // gain. The alternative — giving it to the stock — is equally defensible and
+  // gives different numbers, so the choice is stated rather than left implicit.
+  //
+  // Percentages compound rather than add: (1+stock)(1+fx) − 1 = total.
+  function attributeFxReturn(costUsd, costInr, currentUsd, rateNow) {
+    costUsd = Number(costUsd) || 0;
+    costInr = Number(costInr) || 0;
+    currentUsd = Number(currentUsd) || 0;
+    rateNow = Number(rateNow) || 0;
+    if (!(costUsd > 0) || !(costInr > 0) || !(rateNow > 0)) return null;
+
+    var rateCost = costInr / costUsd;              // weighted average rate paid
+    var currentInr = currentUsd * rateNow;
+    var stockInr = rateCost * (currentUsd - costUsd);
+    var fxInr = currentUsd * (rateNow - rateCost);
+    return {
+      rateCost: rateCost,
+      rateNow: rateNow,
+      costUsd: costUsd,
+      costInr: costInr,
+      currentUsd: currentUsd,
+      currentInr: currentInr,
+      stockInr: stockInr,
+      fxInr: fxInr,
+      totalInr: currentInr - costInr,
+      stockPct: (currentUsd / costUsd - 1) * 100,
+      fxPct: (rateNow / rateCost - 1) * 100,
+      totalPct: (currentInr / costInr - 1) * 100
+    };
+  }
+
   root.WfMath = {
     DAYS_PER_YEAR: DAYS_PER_YEAR,
     calculateXIRR: calculateXIRR,
     fifoRemainingLots: fifoRemainingLots,
     forwardFillOverTimeline: forwardFillOverTimeline,
-    twrNavSeries: twrNavSeries
+    twrNavSeries: twrNavSeries,
+    attributeFxReturn: attributeFxReturn
   };
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this));

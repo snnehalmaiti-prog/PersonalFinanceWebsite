@@ -249,5 +249,45 @@ function currentINR(txns, isUsd, currentPrice, usdToday, rateByDate) {
   ok(currentINR([{ type: "buy", units: 1, price: 5, date: "2024-01-10" }, { type: "sell", units: 1, price: 9, date: "2024-01-10" }], true, 120, 84, rates) === 0, "U5 fully sold → 0 current");
 }
 
+// ── attributeFxReturn: stock vs currency on a US holding ────────────────────
+// An INR return is two moves at once. The decomposition has to sum exactly and
+// the percentages have to compound, or the split is decoration.
+{
+  // $1,000 bought when the rupee was 75; now worth $1,180 with the rate at 84.
+  const a = WfMath.attributeFxReturn(1000, 75000, 1180, 84);
+  ok(Math.abs(a.stockPct - 18) < 1e-9, "FX1 the stock moved 18% in dollars", a.stockPct);
+  ok(Math.abs(a.fxPct - 12) < 1e-9, "FX2 the rupee moved 12% against the rate paid", a.fxPct);
+  ok(Math.abs(a.totalPct - 32.16) < 1e-9,
+     "FX3 and the INR return is the two compounded, not added — 32.16%, not 30%", a.totalPct);
+  ok(Math.abs((a.stockInr + a.fxInr) - a.totalInr) < 1e-6,
+     "FX4 the two amounts sum to the total gain exactly", a);
+  ok(Math.abs(a.rateCost - 75) < 1e-9,
+     "FX5 the reference rate is the one actually paid, not today's", a.rateCost);
+}
+{
+  // Lots bought at different rates: the reference is cost-weighted, so it lands
+  // between them and nearer the larger lot.
+  const a = WfMath.attributeFxReturn(2000, 160000, 2000, 80);
+  ok(Math.abs(a.rateCost - 80) < 1e-9, "FX6 weighted average rate paid", a.rateCost);
+  ok(Math.abs(a.stockInr) < 1e-9, "FX7 a flat stock contributes nothing", a.stockInr);
+  ok(Math.abs(a.fxInr) < 1e-9, "FX8 and an unchanged rate contributes nothing", a.fxInr);
+}
+{
+  // A rupee that strengthens takes away from an INR return.
+  const a = WfMath.attributeFxReturn(1000, 84000, 1100, 80);
+  ok(a.stockPct > 0 && a.fxPct < 0,
+     "FX9 the stock can gain while the currency loses", { s: a.stockPct, f: a.fxPct });
+  ok(a.fxInr < 0 && Math.abs((a.stockInr + a.fxInr) - a.totalInr) < 1e-6,
+     "FX10 and the parts still sum to the whole", a);
+}
+{
+  ok(WfMath.attributeFxReturn(0, 0, 100, 84) === null,
+     "FX11 nothing invested, nothing to attribute");
+  ok(WfMath.attributeFxReturn(1000, 75000, 1180, 0) === null,
+     "FX12 nor without a rate to value it at");
+  ok(WfMath.attributeFxReturn(1000, 0, 1180, 84) === null,
+     "FX13 nor without an INR cost to compare against");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

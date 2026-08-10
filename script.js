@@ -6238,6 +6238,27 @@
       '<span class="mfh-col-num mfh-sortable" data-seh-sort-col="xirr">XIRR' + _sArrow("xirr") + '</span></div>';
     var subInv = 0, subCur = 0, subDay = 0, subInvUSD = 0, subCurUSD = 0;
     function _fmtUsd(v) { return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    // The INR return on a US holding is two moves at once: what the stock did in
+    // dollars, and what the rupee did against them. A holding up 30% in INR can
+    // be 18% stock and 12% currency, and the row cannot say which without this.
+    //
+    // Blank unless all three inputs are present and the position is open — a
+    // closed row's "current" is sale proceeds at the sale-day rate, which this
+    // decomposition (which values everything at today's rate) would misread.
+    function _seFxSplit(costUsd, costInr, curUsd, rate, isOpen) {
+      // The region test is belt-and-braces: India rows carry investedUSD: null,
+      // so attributeFxReturn already declines them. Kept because that is a
+      // property of how the rows are built, not of this function.
+      if (!isOpen || region !== "us") return "";
+      var a = WfMath.attributeFxReturn(costUsd, costInr, curUsd, rate);
+      if (!a) return "";
+      var sgn = function (v) { return (v >= 0 ? "+" : "") + v.toFixed(1) + "%"; };
+      return '<span class="mfh-fx-split" title="Stock ' + sgn(a.stockPct) +
+        ' in USD; rupee ' + sgn(a.fxPct) + ' against the rate you bought at (' +
+        a.rateCost.toFixed(2) + ' to ' + a.rateNow.toFixed(2) + ')">' +
+        '<span class="' + (a.stockPct >= 0 ? "" : "mfh-negative") + '">stock ' + sgn(a.stockPct) + '</span>' +
+        ' &middot; <span class="' + (a.fxPct >= 0 ? "" : "mfh-negative") + '">fx ' + sgn(a.fxPct) + '</span></span>';
+    }
     // Amount cell: INR as the primary value, with the native USD amount beneath it
     // for US rows (mirrors the P&L value/return two-line layout). usd==null → INR only.
     function _seAmtCell(inr, usd) {
@@ -6307,6 +6328,7 @@
         '<div class="mfh-col-num mfh-num-pnl">' +
           '<span class="mfh-num-pnl-value ' + (pnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(pnl) + '>' + (pnl >= 0 ? "+" : "") + formatCurrency(pnl) + '</span>' +
           '<span class="mfh-num-pnl-pct ' + (pnlPct >= 0 ? "" : "mfh-negative") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2) + '%</span>' +
+          _seFxSplit(h.investedUSD, h.investedINR, h.currentUSD, usdInrToday, !regionShowClosed) +
         '</div>' +
         // xirrPct is already computed per holding when the rows are built, with
         // the same method the Mutual Fund list uses: that instrument's own buy and
@@ -6327,7 +6349,7 @@
       _seAmtCell(subCur, (region === "us" ? subCurUSD : null)) +
       '<div class="mfh-col-num mfh-num-primary" style="color:var(--muted);">—</div>' +
       _mfhDayCell(Math.abs(subDay) < 0.01 ? null : subDay, subDayPct) +
-      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span></div>' +
+      '<div class="mfh-col-num mfh-num-pnl"><span class="mfh-num-pnl-value ' + (subPnl >= 0 ? "" : "mfh-negative") + '"' + _crTitle(subPnl) + '>' + (subPnl >= 0 ? "+" : "") + formatCurrency(subPnl) + '</span><span class="mfh-num-pnl-pct ' + (subPct >= 0 ? "" : "mfh-negative") + '">' + (subPct >= 0 ? "+" : "") + subPct.toFixed(2) + '%</span>' + _seFxSplit(subInvUSD, subInv, subCurUSD, usdInrToday, !regionShowClosed) + '</div>' +
       // Region XIRR is left blank, as the Mutual Fund subtotal does: adding up
       // per-holding rates is meaningless, and a true region rate needs the
       // combined cash flows rather than an average of percentages.
