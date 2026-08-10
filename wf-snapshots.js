@@ -158,17 +158,43 @@
   // Only `total` is filled: the Account Value series is a single line and has no
   // category split, so writing zeros for equity/fixed_income/commodity would
   // invent a portfolio that was 100% nothing.
-  function planBackfill(points, existingDates, todayKey, limit) {
+  // byPortfolioPoints, when given, maps a portfolio name to its own series over
+  // the same dates. Each month end then carries { name: total } so the card can
+  // be filtered by portfolio across reconstructed history too — without it, a
+  // portfolio selection would show nothing until months were recorded live.
+  //
+  // Only totals, not the category split: the Account Value series is a single
+  // line per portfolio and has no split to record.
+  function planBackfill(points, existingDates, todayKey, limit, byPortfolioPoints) {
     var have = {};
     (existingDates || []).forEach(function (d) { have[d] = true; });
     var rows = monthEndPoints(points, todayKey).filter(function (r) { return !have[r.snapshot_date]; });
     if (limit != null && rows.length > limit) rows = rows.slice(-limit);
+
+    // Each portfolio's own month ends, keyed by date, so a row can look up its
+    // own date rather than relying on the two series lining up by index.
+    var byName = {};
+    Object.keys(byPortfolioPoints || {}).forEach(function (name) {
+      var m = {};
+      monthEndPoints(byPortfolioPoints[name], todayKey).forEach(function (r) {
+        m[r.snapshot_date] = r.total;
+      });
+      byName[name] = m;
+    });
+    var names = Object.keys(byName);
+
     return rows.map(function (r) {
+      var split = null;
+      names.forEach(function (name) {
+        var v = byName[name][r.snapshot_date];
+        if (v == null) return;
+        (split = split || {})[name] = v;
+      });
       return {
         snapshot_date: r.snapshot_date,
         total: r.total,
         invested: null, equity: null, fixed_income: null, commodity: null,
-        by_portfolio: null,
+        by_portfolio: split,
         meta: { source: "backfill", backfilled: true }
       };
     });
@@ -329,6 +355,35 @@
     });
   }
 
+  // Restate each row as one portfolio's share, from its stored by_portfolio
+  // split. Rows without a figure for that portfolio are dropped rather than
+  // shown as zero — "not recorded for this portfolio" and "this portfolio was
+  // worth nothing" are different claims.
+  //
+  // The category columns go: the split stores totals only, and carrying the
+  // household's equity/fixed_income onto one person's row would be wrong.
+  function forPortfolio(rows, name) {
+    if (!rows || !name || name === "all") return rows || [];
+    var out = [];
+    rows.forEach(function (r) {
+      var bp = r && r.by_portfolio;
+      if (!bp) return;
+      var v = bp[name];
+      // Live rows store a category object per portfolio; backfilled rows store
+      // a plain total. Both are accepted, so history and records read alike.
+      if (v && typeof v === "object") {
+        v = (Number(v.equity) || 0) + (Number(v.fixed_income) || 0) + (Number(v.commodity) || 0);
+      }
+      if (v == null || !isFinite(Number(v))) return;
+      out.push({
+        snapshot_date: r.snapshot_date, total: round2(Number(v)),
+        invested: null, equity: null, fixed_income: null, commodity: null,
+        by_portfolio: null, meta: r.meta
+      });
+    });
+    return out;
+  }
+
   function monthsBetween(a, b) {
     var pa = a.split("-"), pb = b.split("-");
     return (+pb[0] - +pa[0]) * 12 + (+pb[1] - +pa[1]);
@@ -353,6 +408,7 @@
     buildMonthlyChange: buildMonthlyChange,
     accruedBetween: accruedBetween,
     subtractByMonth: subtractByMonth,
+    forPortfolio: forPortfolio,
     localDateKey: localDateKey,
     monthKey: monthKey,
     isStable: isStable,

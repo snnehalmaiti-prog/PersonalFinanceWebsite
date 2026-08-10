@@ -574,6 +574,14 @@
     renderMonthlyInvestmentByCategory();
     renderProfitByCategoryCard();
     renderStockEtfHoldingsTable();
+    // Net Worth · Monthly reads one portfolio's share out of each snapshot's
+    // stored split, so it has to be re-read for the new selection like the rest.
+    //
+    // Guarded on SNAP_TABLE, not on the function: declarations hoist, so the
+    // function exists here, but selectPortfolio also runs during script.js's own
+    // top-level execution (populatePortfolioSelect) — when the `var`s below are
+    // still undefined and the read would ask the database for table "undefined".
+    if (typeof SNAP_TABLE === "string") renderNetWorthMonthly();
     // Nudge the Benchmark Comparison + Rolling Returns cards to recompute for
     // the new portfolio (they refresh on the next wf-overview-flows-ready).
     document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
@@ -9166,6 +9174,34 @@
 
   var lastUnitEventsDiagnostic = null;
 
+  // Cumulative Stocks/ETF units per ticker, oldest first, for one portfolio.
+  //
+  // The instrument name and region ride along with the events: Growth-of-₹100's
+  // contributions must be drawn from exactly the rows this series values, and US
+  // rows need their FX conversion.
+  function buildSeUnitEventsByTicker(seRows, portfolio, mappingTable) {
+    var out = {};
+    if (!seRows || !seRows.length || !mappingTable || !Object.keys(mappingTable).length) return out;
+    var txns = groupUnitTransactionsByInstrument(seRows, portfolio);
+    if (!txns) return out;
+    Object.keys(txns).forEach(function (instrument) {
+      var mapping = mappingTable[normalizeText(instrument)];
+      if (!mapping) return;
+      var sorted = txns[instrument].filter(function (t) { return !!t.date; })
+        .sort(function (a, b) { return a.date - b.date; });
+      if (!sorted.length) return;
+      var running = 0;
+      var events = sorted.map(function (txn) {
+        running += txn.type === "buy" ? txn.units : -txn.units;
+        return { date: txn.date, cumulativeUnits: Math.max(0, running) };
+      });
+      events.instrument = instrument;
+      events.region = mapping.region;
+      out[mapping.ticker] = events;
+    });
+    return out;
+  }
+
   function buildInstrumentUnitEvents(portfolioFilter) {
     var rows = getSheetRows("equity");
     var events = {};
@@ -9475,31 +9511,11 @@
       // Build SE unit events keyed by ticker for chart contribution
       var seRows = getSheetRows("stocksetf");
       var seMappingTable = buildStockMappingTable();
-      var seUnitEventsByTicker = {}; // { ticker: [{date, cumulativeUnits, region}] }
-      if (seRows && seRows.length && Object.keys(seMappingTable).length) {
-        var seTxns = groupUnitTransactionsByInstrument(seRows, selectedPortfolio);
-        if (seTxns) {
-          Object.keys(seTxns).forEach(function (instrument) {
-            var mapping = seMappingTable[normalizeText(instrument)];
-            if (!mapping) return;
-            var ticker = mapping.ticker;
-            var region = mapping.region;
-            var sorted = seTxns[instrument].filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
-            if (!sorted.length) return;
-            var running = 0;
-            var events = sorted.map(function (txn) {
-              running += txn.type === "buy" ? txn.units : -txn.units;
-              return { date: txn.date, cumulativeUnits: Math.max(0, running) };
-            });
-            // The instrument name and region ride along with the events: the
-            // Growth-of-₹100 contributions must be drawn from exactly the rows
-            // this series values, and US rows need their FX conversion.
-            events.instrument = instrument;
-            events.region = region;
-            seUnitEventsByTicker[ticker] = events;
-          });
-        }
-      }
+      // { ticker: [{date, cumulativeUnits}] }. Extracted so the snapshot backfill
+      // can build the same events for a different portfolio without a second
+      // implementation that could drift from this one.
+      var seUnitEventsByTicker =
+        buildSeUnitEventsByTicker(seRows, selectedPortfolio, seMappingTable);
       var hasAnySE = Object.keys(seUnitEventsByTicker).length > 0;
 
       var currentGoldPricePromise = hasAnyCommodity
@@ -9815,6 +9831,23 @@
         // whichever order that happens.
         if (selectedPortfolio === "all") {
           _snapAccountValuePoints = pointsAll;
+          // Everything a per-portfolio series needs that does NOT depend on the
+          // portfolio: the timeline, and the prices along it. Unit counts are
+          // the only portfolio-specific input, and those come straight from the
+          // sheets. Stashing these lets the backfill reconstruct one person's
+          // history without re-running this render — which cannot be re-run for
+          // another portfolio anyway, since it reads the selection from
+          // localStorage and carries a generation guard.
+          _snapValueInputs = {
+            timeline: timeline,
+            navAtByName: navAtByName,
+            goldPriceSeriesAt: goldPriceSeriesAt,
+            currentGoldPrice: currentGoldPrice,
+            usdInrHistMap: usdInrHistMap,
+            usdInrToday: usdInrToday,
+            stockHistoryAll: stockHistoryAll,
+            allPrices: allPrices
+          };
           _snapBackfillSoon();
         }
 
@@ -16033,6 +16066,70 @@
   // bake a permanent false dip into history. The rules live in wf-snapshots.js
   // (pure, unit-tested); everything here is plumbing to feed them.
   var _snapAccountValuePoints = null;   // set by the Account Value render, "all" only
+  var _snapValueInputs = null;          // its portfolio-independent inputs, for replay
+
+  // One portfolio's Account Value series, rebuilt from the stashed prices and
+  // that portfolio's own unit counts.
+  //
+  // Deliberately a replay of the chart's arithmetic rather than a second way of
+  // valuing a portfolio: same timeline, same NAVs, same historical prices, same
+  // USD/INR rates. Only the holdings differ. The property that matters is that
+  // the portfolios sum to the household — asserted in the tests, because a
+  // second valuation path that drifts from the first is worse than none.
+  function _snapSeriesForPortfolio(portfolio) {
+    var v = _snapValueInputs;
+    if (!v || !v.timeline || !v.timeline.length) return null;
+    var _ff = WfMath.forwardFillOverTimeline;
+    var timeline = v.timeline;
+
+    var unitEvents = buildInstrumentUnitEvents(portfolio) || {};
+    var names = Object.keys(unitEvents).filter(function (n) { return !!v.navAtByName[n]; });
+    var mfUnits = names.map(function (n) { return _ff(unitEvents[n], timeline, "cumulativeUnits"); });
+    var mfNav = names.map(function (n) { return v.navAtByName[n]; });
+
+    var seRows = getSheetRows("stocksetf");
+    var seByTicker = buildSeUnitEventsByTicker(seRows, portfolio, buildStockMappingTable());
+    var seMeta = Object.keys(seByTicker).map(function (ticker) {
+      var hist = v.stockHistoryAll[ticker] || null;
+      var live = v.allPrices[ticker] || null;
+      return {
+        units: _ff(seByTicker[ticker], timeline, "cumulativeUnits"),
+        histPrices: hist ? hist.prices : null,
+        livePrice: live ? live.price : null,
+        isUsd: hist ? hist.currency === "USD" : !!(live && live.currency === "USD")
+      };
+    });
+
+    var fdRows = getSheetRows("fd");
+    var fiEx = isFixedIncomeExcluded();
+    var epfAt = _ff(fiEx ? [] : buildEpfValueEvents(portfolio), timeline, "cumulativeValue");
+    var fdAt = _ff(fiEx || !fdRows ? []
+      : buildFdValueEvents(portfolio, isSavingsInvestmentExcluded(), true),
+      timeline, "cumulativeValue");
+    var gramsAt = _ff((!fiEx && fdRows) ? buildCommodityGramEvents(fdRows, portfolio) : [],
+      timeline, "cumulativeGrams");
+
+    return timeline.map(function (date, i) {
+      var grams = gramsAt[i] || 0;
+      var total = (epfAt[i] || 0) + (fdAt[i] || 0) +
+                  (grams > 0 ? grams * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0) : 0);
+      for (var mi = 0; mi < names.length; mi++) {
+        var u = mfUnits[mi][i] || 0, nav = mfNav[mi][i];
+        if (u > UNITS_EPSILON && nav) total += u * nav;
+      }
+      var dateStr = formatDateISO(date);
+      for (var si = 0; si < seMeta.length; si++) {
+        var m = seMeta[si];
+        var units = m.units[i] || 0;
+        if (!(units > UNITS_EPSILON)) continue;
+        var price = m.histPrices ? lookupIndexPrice(m.histPrices, dateStr) : null;
+        if (!price) price = m.livePrice;
+        if (!price) continue;
+        total += units * (m.isUsd ? price * (v.usdInrHistMap[dateStr] || v.usdInrToday) : price);
+      }
+      return { x: date, y: total };
+    });
+  }
   var _snapDone = false;                // at most one write attempt per load
   var SNAP_TABLE = "net_worth_snapshots";
   var SNAP_LAST_KEY = "wf-snapshot-last";
@@ -16148,7 +16245,15 @@
     var points = _snapAccountValuePoints;
     return WfDb.select(SNAP_TABLE, "select=snapshot_date").then(function (rows) {
       var have = (rows || []).map(function (r) { return String(r.snapshot_date).slice(0, 10); });
-      var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600);
+      // Each portfolio's own series, replayed from the same prices, so the card
+      // can be filtered across reconstructed months and not only recorded ones.
+      var byPortfolio = {};
+      collectPortfolioNamesFromSheets(["equity", "stocksetf", "fd", "fixedincome"])
+        .forEach(function (name) {
+          var series = _snapSeriesForPortfolio(name);
+          if (series && series.length) byPortfolio[name] = series;
+        });
+      var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600, byPortfolio);
       dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
           " already stored, " + plan.length + " to write");
       if (!plan.length) return 0;
@@ -16220,10 +16325,10 @@
   // the same builder the Cash Flow card uses. Passed "all" explicitly — the
   // snapshots are whole net worth, so attributing their change with one
   // portfolio's flows would blame the market for the other portfolio's investing.
-  function _nwmContributionsByMonth() {
+  function _nwmContributionsByMonth(portfolio) {
     var out = {};
     try {
-      var d = buildMonthlyInvestCatData("all");
+      var d = buildMonthlyInvestCatData(portfolio || "all");
       if (!d) return out;
       Object.keys(d.byMonthGrp || {}).forEach(function (m) {
         var s = 0, g = d.byMonthGrp[m];
@@ -16268,10 +16373,10 @@
   // EXCLUDING idle cash. Moving money between a savings account and a fund then
   // changes nothing here — which is the point, because it changes nothing in
   // reality either.
-  function _nwmParkedByMonth() {
+  function _nwmParkedByMonth(portfolio) {
     var out = {};
     try {
-      var idle = buildMonthlyIdleCashData("all");
+      var idle = buildMonthlyIdleCashData(portfolio || "all");
       Object.keys((idle && idle.byMonthInstr) || {}).forEach(function (m) {
         var sum = 0, g = idle.byMonthInstr[m];
         Object.keys(g).forEach(function (k) { sum += g[k] || 0; });
@@ -16286,13 +16391,13 @@
   // 2015 costs two passes over the sheet per month for answers nobody reads —
   // and page-load work is not free: two suites that compare figures rendered
   // moments apart started drifting by a rupee when this ran unbounded.
-  function _nwmInterestByMonth(fromMonth) {
+  function _nwmInterestByMonth(fromMonth, portfolio) {
     var out = {};
     var rows = getSheetRows("fd");
     if (!rows || rows.length < 2) return out;
     var earliest = null, today = new Date();
     try {
-      var hs = buildFdHoldingsList(rows, "all", _nwmIsAccruing) || [];
+      var hs = buildFdHoldingsList(rows, portfolio || "all", _nwmIsAccruing) || [];
       hs.forEach(function (h) { if (h.startDate && (!earliest || h.startDate < earliest)) earliest = h.startDate; });
     } catch (e) { return out; }
     if (!earliest) return out;
@@ -16301,7 +16406,7 @@
     // merged; merging them would let one maturing hide another's accrual.
     function valuedAt(d) {
       var m = {};
-      var list = buildFdHoldingsList(rows, "all", _nwmIsAccruing, d) || [];
+      var list = buildFdHoldingsList(rows, portfolio || "all", _nwmIsAccruing, d) || [];
       list.forEach(function (h) {
         // Defensive: buildFdHoldingsList currently values a not-yet-opened
         // deposit at its principal, so such a row appears in BOTH valuations and
@@ -16699,12 +16804,20 @@
         var from = list.length > 1
           ? list.map(function (r) { return String(r.snapshot_date).slice(0, 7); }).sort()[0]
           : null;
-        var parked = from ? _nwmParkedByMonth() : {};
+        // The card follows the Overview's portfolio selector, like every other
+        // card. One portfolio's share comes from the stored split; parked cash
+        // and the flows are computed for that same portfolio below.
+        var pf = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+        list = WfSnapshots.forPortfolio(list, pf);
+        from = list.length > 1
+          ? list.map(function (r) { return String(r.snapshot_date).slice(0, 7); }).sort()[0]
+          : null;
+        var parked = from ? _nwmParkedByMonth(pf) : {};
         _nwmParkedShown = Object.keys(parked).length > 0;
         _nwmRender(WfSnapshots.buildMonthlyChange(
           WfSnapshots.subtractByMonth(list, parked),
-          from ? _nwmContributionsByMonth() : {},
-          from ? _nwmInterestByMonth(from) : {}));
+          from ? _nwmContributionsByMonth(pf) : {},
+          from ? _nwmInterestByMonth(from, pf) : {}));
       })
       .catch(function (e) {
         // A missing table is the expected state until the migration is run, and
@@ -16718,6 +16831,10 @@
         dbg("[Snapshot] read failed:", e && e.message);
       });
   }
+
+  // Exposed so the portfolio selector can re-read the card, the same way
+  // renderMonthlyCashFlow is.
+  window.renderNetWorthMonthly = renderNetWorthMonthly;
 
   // Debounced off the load-completion events, rather than waiting for a fixed
   // set of them: wf-se-xirr-ready never fires for a portfolio holding no stocks,

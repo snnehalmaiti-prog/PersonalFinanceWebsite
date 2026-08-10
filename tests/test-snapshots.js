@@ -354,6 +354,63 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
   ok(rows[0].total === 1000, "K11 the input rows are not mutated");
 }
 
+// ── Filtering to one portfolio ──────────────────────────────────────────────
+// A row's share comes from its stored split. Rows with no figure for that
+// portfolio are dropped, not zeroed: "not recorded for this portfolio" and
+// "this portfolio was worth nothing" are different claims.
+{
+  const rows = [
+    R("2026-06-30", 300, { by_portfolio: { A: 200, B: 100 } }),
+    R("2026-07-31", 350, { by_portfolio: { A: 220, B: 130 } }),
+  ];
+  const a = S.forPortfolio(rows, "A");
+  eq(a.length, 2, "F1 both months carry a figure for A");
+  eq(a[0].total, 200, "F2 and the total is that portfolio's share");
+  eq(a[1].total, 220, "F3 month by month");
+  eq(S.forPortfolio(rows, "all").length, 2, "F4 'all' is the household, unchanged");
+  eq(S.forPortfolio(rows, "all")[0].total, 300, "F5 at the household total");
+  eq(S.forPortfolio(rows, "C").length, 0, "F6 a portfolio with no share anywhere yields nothing");
+}
+{
+  // A month recorded before this portfolio existed has no figure for it.
+  const rows = [R("2026-06-30", 300, { by_portfolio: { A: 300 } }),
+                R("2026-07-31", 350, { by_portfolio: { A: 220, B: 130 } })];
+  const b = S.forPortfolio(rows, "B");
+  eq(b.length, 1, "F7 months with no figure for it are dropped, not shown as zero");
+  eq(b[0].snapshot_date, "2026-07-31", "F8 leaving the ones that have it");
+}
+{
+  // Live rows store a category object per portfolio; backfilled rows a plain
+  // total. Both have to read alike, or history and records would disagree.
+  const rows = [R("2026-06-30", 300, { by_portfolio: { A: 200 } }),
+                R("2026-07-31", 350, {
+                  by_portfolio: { A: { equity: 150, fixed_income: 60, commodity: 10 } } })];
+  const a = S.forPortfolio(rows, "A");
+  eq(a[0].total, 200, "F9 a plain total is taken as the total");
+  eq(a[1].total, 220, "F10 and a category object is summed to one");
+}
+{
+  const rows = [R("2026-06-30", 300)];      // no split at all
+  eq(S.forPortfolio(rows, "A").length, 0, "F11 a row with no split has no share to show");
+  eq(S.forPortfolio(null, "A").length, 0, "F12 and null rows do not throw");
+}
+{
+  // planBackfill carries each portfolio's own month ends onto the row.
+  const P2 = (y, m, d, v) => ({ x: new Date(y, m - 1, d), y: v });
+  const all = [P2(2026, 6, 30, 300), P2(2026, 7, 31, 350)];
+  const plan = S.planBackfill(all, [], "2026-08-09", 600,
+    { A: [P2(2026, 6, 30, 200), P2(2026, 7, 31, 220)],
+      B: [P2(2026, 6, 30, 100), P2(2026, 7, 31, 130)] });
+  eq(plan.length, 2, "F13 a row per reconstructed month end");
+  eq(JSON.stringify(plan[0].by_portfolio), JSON.stringify({ A: 200, B: 100 }),
+     "F14 carrying each portfolio's own figure for that date");
+  eq(plan[0].by_portfolio.A + plan[0].by_portfolio.B, plan[0].total,
+     "F15 and the portfolios sum to the household — the property the whole " +
+     "reconstruction stands on");
+  eq(S.planBackfill(all, [], "2026-08-09", 600)[0].by_portfolio, null,
+     "F16 with no per-portfolio series, the split stays null rather than empty");
+}
+
 // ── The current month is not a month end ────────────────────────────────────
 // Its latest snapshot is today. Charting it puts a part-month beside full ones
 // and produces a bar that grows between visits, so it waits until the month

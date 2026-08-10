@@ -57,14 +57,24 @@ const SHEETS = {
 const SNAPSHOTS = [
   // Two years, so the year picker has something to choose between. The 2024
   // rows are what a wrong filter drops or a broken one leaks.
-  { snapshot_date: "2024-11-30", total: 800000, meta: { source: "backfill", backfilled: true } },
-  { snapshot_date: "2024-12-31", total: 850000, meta: { source: "backfill", backfilled: true } },
-  { snapshot_date: "2025-05-31", total: 1000000, meta: { source: "backfill", backfilled: true } },
+  // Backfilled rows carry a plain total per portfolio; the live ones below carry
+  // a category object. Both shapes are read, and both sum to the household.
+  { snapshot_date: "2024-11-30", total: 800000,
+    by_portfolio: { Snnehal: 500000, Trisha: 300000 },
+    meta: { source: "backfill", backfilled: true } },
+  { snapshot_date: "2024-12-31", total: 850000,
+    by_portfolio: { Snnehal: 530000, Trisha: 320000 },
+    meta: { source: "backfill", backfilled: true } },
+  { snapshot_date: "2025-05-31", total: 1000000,
+    by_portfolio: { Snnehal: 620000, Trisha: 380000 },
+    meta: { source: "backfill", backfilled: true } },
   { snapshot_date: "2025-06-30", total: 1200000, equity: 900000, fixed_income: 300000, commodity: 0,
-    by_portfolio: { Snnehal: { equity: 900000, fixed_income: 300000, commodity: 0 } },
+    by_portfolio: { Snnehal: { equity: 700000, fixed_income: 200000, commodity: 0 },
+                    Trisha: { equity: 200000, fixed_income: 100000, commodity: 0 } },
     meta: { source: "live" } },
   { snapshot_date: "2025-07-31", total: 1150000, equity: 850000, fixed_income: 300000, commodity: 0,
-    by_portfolio: { Snnehal: { equity: 850000, fixed_income: 300000, commodity: 0 } },
+    by_portfolio: { Snnehal: { equity: 650000, fixed_income: 200000, commodity: 0 },
+                    Trisha: { equity: 200000, fixed_income: 100000, commodity: 0 } },
     meta: { source: "live" } },
 ];
 
@@ -468,6 +478,48 @@ const money = (t) => {
     eq(spacing.eyebrowInset[0], spacing.eyebrowInset[1],
        "G7 as does the title above them", spacing.eyebrowInset);
   }
+
+  // ── The portfolio selector ──────────────────────────────────────────────
+  // The card follows the Overview's selector like every other card. One
+  // portfolio's share comes from the stored split — including on reconstructed
+  // months, which is why the backfill records one.
+  const pickPortfolio = async (name) => {
+    await p.evaluate((n) => { localStorage.setItem("wf-selected-portfolio", n); }, name);
+    await p.evaluate(() => window.renderNetWorthMonthly && window.renderNetWorthMonthly());
+    await p.waitForTimeout(1200);
+    return p.evaluate(() => {
+      const c = window.__wfNwmChart;
+      const tot = {};
+      document.querySelectorAll("#nwm-split .mic-hs-tot").forEach((el) => {
+        tot[(el.querySelector(".mic-hs-tot-label") || {}).textContent] =
+          (el.querySelector("b") || {}).textContent;
+      });
+      return { labels: c ? c.data.labels : [], stats: tot };
+    });
+  };
+
+  const household = await pickPortfolio("all");
+  const sn = await pickPortfolio("Snnehal");
+  const tr = await pickPortfolio("Trisha");
+  console.log("  by portfolio: " + JSON.stringify({ all: household.stats.Closing,
+    Snnehal: sn.stats.Closing, Trisha: tr.stats.Closing }));
+
+  ok(sn.labels.length > 0, "Q1 a portfolio selection still draws a chart", sn.labels);
+  const n = (s) => Number(String(s || "").replace(/[^0-9.]/g, ""));
+  ok(n(sn.stats.Closing) > 0 && n(tr.stats.Closing) > 0,
+     "Q2 each portfolio has its own closing figure", { sn: sn.stats, tr: tr.stats });
+  ok(n(sn.stats.Closing) < n(household.stats.Closing),
+     "Q3 and it is smaller than the household's", { sn: sn.stats.Closing, all: household.stats.Closing });
+
+  // The property the whole reconstruction stands on. Jul 2025's split is
+  // 650k+200k for one and 200k+100k for the other, against a household total of
+  // 1,150,000 — less the parked cash, which comes off every one of them.
+  ok(Math.abs((n(sn.stats.Closing) + n(tr.stats.Closing)) - n(household.stats.Closing)) <= 2,
+     "Q4 the portfolios sum to the household — if they do not, one of the two " +
+     "valuation paths has drifted from the other",
+     { sn: sn.stats.Closing, tr: tr.stats.Closing, all: household.stats.Closing });
+
+  await pickPortfolio("all");
 
   // ── Year selection ──────────────────────────────────────────────────────
   // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an
