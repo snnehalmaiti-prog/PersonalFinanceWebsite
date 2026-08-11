@@ -39,6 +39,30 @@ const ACCOUNTS = [
   { id: "acc-joint", name: "Joint", contributing_account: false, sort_order: 3 },
 ];
 
+// The Account Value chart needs a priced holding to have a timeline at all, so
+// the liability-line block below runs on a fixture with a fund in it. The
+// earlier blocks keep the savings-only sheets, where every figure is a round
+// number that can be checked by hand.
+const SHEETS_MF = Object.assign({}, SHEETS, {
+  "wf-equity-data": [TXN, ["1-Jan-2024", "Snnehal", "Aurora Fund", "Buy", "100", "10"],
+    // Trisha needs a priced holding too: renderValueChart does not redraw for a
+    // portfolio that has none, and would leave the previous one's chart up.
+    ["1-Jan-2024", "Trisha", "Aurora Fund", "Buy", "50", "10"]],
+  "wf-mfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Scheme Code", "ISIN"],
+    ["Aurora Fund", "Equity", "Flexi Cap", "100001", "INFA"]],
+});
+const monthlyNav = () => {
+  const out = [];
+  const now = new Date();
+  for (let i = 30; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 15);
+    if (d < new Date(2024, 0, 1)) continue;
+    out.push({ date: String(d.getDate()).padStart(2, "0") + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" + d.getFullYear(), nav: String(10 + i * 0.05) });
+  }
+  return out;
+};
+
 let pass = 0, fail = 0;
 function ok(cond, name, detail) {
   if (cond) { pass++; console.log("  PASS  " + name); }
@@ -77,10 +101,11 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   });
   await p.route("**://fonts.googleapis.com/**", (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
   await p.route("**://cdn.jsdelivr.net/**", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: "" }));
-  await p.route("**://api.mfapi.in/**", (r) => r.fulfill(j({ data: [] })));
-  await p.route("**/mf_history.json*", (r) => r.fulfill(j({ mf_history: {} })));
-  await p.route("**/amfi_isin_map.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(), data: {} })));
-  await p.route("**/amfi_nav.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(), data: {} })));
+  await p.route("**://api.mfapi.in/**", (r) => r.fulfill(j({ data: monthlyNav() })));
+  await p.route("**/mf_history.json*", (r) => r.fulfill(j({ mf_history: { "100001": monthlyNav() } })));
+  await p.route("**/amfi_isin_map.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(), data: { INFA: "100001" } })));
+  await p.route("**/amfi_nav.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(),
+    data: { "100001": { date: "01-Aug-2026", nav: "12.5" } } })));
   await p.route("**/stock_prices.json*", (r) => r.fulfill(j({ prices: { __USD_INR__: { price: 84 } }, usd_inr_history: {}, index_history: {} })));
   await p.route("**/stock_history.json*", (r) => r.fulfill(j({ stock_history: {} })));
 
@@ -95,7 +120,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
     window.Chart.register = function () {}; window.Chart.defaults = { font: {} };
   });
 
-  const boot = async (liabilities) => {
+  const boot = async (liabilities, sheetSet) => {
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "domcontentloaded" });
     await p.evaluate(([s, l]) => {
       localStorage.clear();
@@ -104,7 +129,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
       localStorage.setItem("wf-selected-portfolio", "all");
       for (const k in s) localStorage.setItem(k, JSON.stringify(s[k]));
       if (l) localStorage.setItem("wf-liabilities", JSON.stringify(l));
-    }, [SHEETS, liabilities || null]);
+    }, [sheetSet || SHEETS, liabilities || null]);
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
     await p.waitForFunction(
       () => { const e = document.getElementById("overview-total-current-value");
@@ -343,6 +368,96 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   ok(num(reloaded.liability) <= expectedOwed,
      "E6 a later load does not resurrect the instalments already paid",
      { then: expectedOwed, now: reloaded.liability });
+
+  // ── The liability-adjusted line on the Account Value chart ──────────────
+  // A second, dashed line: the same assets seen after the debt, starting at the
+  // first instalment and never reaching back before it. It follows the
+  // portfolio selector on the same attribution as the Overview figure, so the
+  // chart and the card cannot disagree about the same selection.
+  const chart = () => p.evaluate(() => {
+    const c = window.__wfPortfolioValueChart;
+    if (!c) return null;
+    const ds = c.data.datasets || [];
+    const net = ds[1] ? ds[1].data : null;
+    const nonNull = net ? net.filter((d) => d && d.y != null) : [];
+    return {
+      count: ds.length,
+      label: ds[1] ? ds[1].label : null,
+      dashed: ds[1] ? !!ds[1].borderDash : false,
+      spanGaps: ds[1] ? ds[1].spanGaps : null,
+      leadingNulls: net ? net.findIndex((d) => d && d.y != null) : -1,
+      total: net ? net.length : 0,
+      firstNet: nonNull.length ? nonNull[0].y : null,
+      lastNet: nonNull.length ? nonNull[nonNull.length - 1].y : null,
+      lastAsset: ds[0] && ds[0].data.length ? ds[0].data[ds[0].data.length - 1].y : null,
+      // What the two lines imply is owed at each point. A debt being paid down
+      // never grows — the net line itself can fall, because assets do.
+      owedFalls: (() => {
+        const a = ds[0] ? ds[0].data : [];
+        const owed = [];
+        (net || []).forEach((d, i) => {
+          if (d && d.y != null && a[i] && a[i].y != null) owed.push(a[i].y - d.y);
+        });
+        return owed.every((v, i) => i === 0 || v <= owed[i - 1] + 0.5);
+      })(),
+      legendShown: !(document.getElementById("pvc-net-legend") || {}).hidden,
+      legendValue: (document.getElementById("pvc-net-value") || {}).textContent,
+    };
+  });
+
+  await boot(null, SHEETS_MF);
+  const noLine = await chart();
+  ok(noLine && noLine.count === 1,
+     "V1 with no liabilities the chart has one line, as before", noLine);
+  ok(noLine && !noLine.legendShown, "V2 and no second legend entry", noLine);
+
+  // Ten monthly instalments of ₹20,000 from 1 Jan 2026; four recorded, so the
+  // schedule started four months before next_due.
+  const LOAN = [{ id: "lb-8", name: "Car loan", row: {
+    type: "expense", amount: 20000, frequency: "monthly", next_due: "2026-05-01",
+    num_payments: 10, installments_done: 4, account_id: "acc-sn" } }];
+  await boot(LOAN, SHEETS_MF);
+  const withLine = await chart();
+  console.log("  net line: " + JSON.stringify(withLine));
+  ok(withLine && withLine.count === 2, "V3 a liability adds a second line", withLine);
+  ok(withLine && withLine.label === "Net of liabilities", "V4 named for what it is", withLine);
+  ok(withLine && withLine.dashed && withLine.spanGaps === false,
+     "V5 dashed, and not spanning its own gaps — absent before the debt, not " +
+     "stretched back to the start of the chart", withLine);
+  ok(withLine && withLine.leadingNulls > 0,
+     "V6 it begins after the chart does, at the first instalment", withLine);
+  ok(withLine && withLine.owedFalls,
+     "V7 and the gap between the two lines only ever narrows — a debt being " +
+     "paid down cannot grow, even where the assets above it fall", withLine);
+  if (withLine && withLine.count === 2) {
+  ok(withLine.lastNet === withLine.lastAsset - 120000,
+     "V8 its last point is the assets less the ₹1,20,000 still owed",
+     { net: withLine.lastNet, asset: withLine.lastAsset });
+
+  // The point of the whole thing: the line's end meets the Overview's Current.
+  const withLineStats = await read();
+  ok(num(withLineStats.current) === Math.round(withLine.lastNet),
+     "V9 which is exactly the Current figure on the card beside it — the gap " +
+     "between chart and card is what this line exists to close",
+     { card: withLineStats.current, line: withLine.lastNet });
+  ok(withLine.legendShown && num(withLine.legendValue) === Math.round(withLine.lastNet),
+     "V10 and the legend reports the same number", withLine);
+
+  // Portfolio selection drives it, exactly as it drives the figure.
+  await pick("Trisha");
+  const trLine = await chart();
+  ok(trLine && trLine.count === 1,
+     "V11 a portfolio carrying none of the debt gets no second line", trLine);
+  ok(trLine && !trLine.legendShown, "V12 nor its legend entry", trLine);
+
+  await pick("Snnehal");
+  const snLine = await chart();
+  const snStats = await read();
+  ok(snLine && snLine.count === 2, "V13 the one that carries it gets the line back", snLine);
+  ok(snLine && num(snStats.current) === Math.round(snLine.lastNet),
+     "V14 still meeting its own Current figure, for that portfolio",
+     { card: snStats.current, line: snLine.lastNet });
+  } else { ok(false, "V8-V14 skipped: no second line to measure", withLine); }
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 

@@ -3747,6 +3747,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .avc-eyebrow { white-space: nowrap; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .avc-legend-line { width: 22px; height: 0; border-top: 2.5px solid var(--emerald, #10B981); border-radius: 999px; flex-shrink: 0; }
 .avc-legend-line.avc-legend-index { border-top-style: dashed; border-top-color: #94A3B8; }
+/* The liability-adjusted line: dashed, and amber rather than a second green,
+   so it does not read as a second holding. */
+.avc-legend-line.avc-legend-net { border-top-style: dashed; border-top-color: #F59E0B; }
 .avc-legend-name { color: var(--text); }
 .avc-legend-sep { color: var(--muted); }
 .avc-legend-value { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700; }

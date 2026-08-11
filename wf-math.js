@@ -370,6 +370,113 @@
     return out;
   }
 
+  // The date of a liability's FIRST instalment. next_due walks forward as
+  // instalments are posted, so the start has to be walked back the same number
+  // of periods to recover it. (A schedule clamped by a short month — Jan 31 to
+  // Feb 28 — comes back as the 28th; the count of instalments is unaffected,
+  // which is what the series is built from.)
+  function liabilityStartDate(row) {
+    if (!row || !row.next_due) return null;
+    var iso = String(row.next_due).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+    var back = Math.max(0, Math.floor(Number(row.installments_done) || 0));
+    if (!back) return iso;
+    return stepDue(iso, row.frequency, -back);
+  }
+
+  // `k` periods from an ISO date, forward or back. Month steps clamp to the last
+  // valid day of the target month, as the processor that posts them does.
+  function stepDue(iso, frequency, k) {
+    var d = new Date(String(iso).slice(0, 10) + "T00:00:00");
+    if (isNaN(d.getTime())) return null;
+    var freq = frequency || "monthly";
+    var monthStep = { monthly: 1, quarterly: 3, yearly: 12 }[freq];
+    if (monthStep) {
+      var day = d.getDate();
+      var y = d.getFullYear(), m = d.getMonth() + monthStep * k;
+      var lastDay = new Date(y, m + 1, 0).getDate();
+      d = new Date(y, m, Math.min(day, lastDay));
+    } else {
+      d.setDate(d.getDate() + (freq === "weekly" ? 7 : 1) * k);
+    }
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
+  }
+
+  // How many instalments the plan has in total.
+  function liabilityTotalCount(row) {
+    if (!row) return null;
+    if (row.num_payments != null && row.num_payments !== "") {
+      var n = Math.floor(Number(row.num_payments));
+      if (isFinite(n) && n >= 0) return n;
+    }
+    var start = liabilityStartDate(row);
+    if (start && row.end_date) return countDuesThrough(start, row.end_date, row.frequency);
+    return null;
+  }
+
+  // What was still owed on a given date.
+  //
+  // An instalment counts as paid from its due date, which is the same rule the
+  // processor posts by — so at today's date this returns exactly what
+  // liabilityRemaining does, and the line meets the Overview's figure rather
+  // than landing near it. Capped by the instalments actually recorded, so a
+  // schedule that is behind does not get credit for payments never made.
+  //
+  // null before the first instalment: the debt did not exist yet, and drawing a
+  // flat line back through history would claim it did.
+  function liabilityOutstandingAt(row, iso) {
+    var start = liabilityStartDate(row);
+    var total = liabilityTotalCount(row);
+    if (!start || total == null) return null;
+    var date = String(iso).slice(0, 10);
+    if (date < start) return null;
+    var amt = Number(row.amount) || 0;
+    var scheduled = countDuesThrough(start, date, row.frequency);
+    if (scheduled == null) return null;
+    var recorded = Math.max(0, Math.floor(Number(row.installments_done) || 0));
+    var paid = Math.min(recorded, scheduled);
+    return Math.max(0, total - paid) * amt;
+  }
+
+  // The liability line for a portfolio, over a timeline.
+  //
+  // Same attribution as the Overview figure — a personal account's liability is
+  // that person's, a joint one is divided by its split — so the line and the
+  // card cannot tell different stories about the same selection. Entries are
+  // null until the earliest liability the selection carries began, which is
+  // what keeps the line from starting before the debt did.
+  function liabilityOwedSeries(liabilities, accounts, portfolio, isoDates) {
+    var dates = isoDates || [];
+    var out = new Array(dates.length);
+    for (var z = 0; z < dates.length; z++) out[z] = null;
+    if (!dates.length) return { start: null, values: out, any: false };
+
+    var any = false, start = null;
+    (liabilities || []).forEach(function (item) {
+      if (!item || item._deleted) return;
+      var row = item.row || {};
+      if (liabilityTotalCount(row) == null) return;          // open-ended
+      // Its share of THIS selection, expressed as a fraction of the whole
+      // liability, so the same schedule can be scaled per portfolio.
+      var whole = liabilityDeductions([item], accounts);
+      if (!(whole.total > 0)) return;
+      var mine = liabilityForPortfolio(whole, portfolio);
+      if (!(mine > 0)) return;
+      var frac = mine / whole.total;
+
+      var began = liabilityStartDate(row);
+      if (began && (start == null || began < start)) start = began;
+      for (var i = 0; i < dates.length; i++) {
+        var owed = liabilityOutstandingAt(row, dates[i]);
+        if (owed == null) continue;
+        any = true;
+        out[i] = (out[i] || 0) + owed * frac;
+      }
+    });
+    return { start: start, values: out, any: any };
+  }
+
   // One portfolio's share, matched to a contributing account by name — the only
   // link between the two, which live in different tables. "all" is the whole
   // household, including anything that could not be attributed to a name.
@@ -386,6 +493,10 @@
     liabilityRemaining: liabilityRemaining,
     liabilityDeductions: liabilityDeductions,
     liabilityForPortfolio: liabilityForPortfolio,
+    liabilityStartDate: liabilityStartDate,
+    liabilityTotalCount: liabilityTotalCount,
+    liabilityOutstandingAt: liabilityOutstandingAt,
+    liabilityOwedSeries: liabilityOwedSeries,
     calculateXIRR: calculateXIRR,
     fifoRemainingLots: fifoRemainingLots,
     forwardFillOverTimeline: forwardFillOverTimeline,

@@ -407,5 +407,81 @@ const L = (row) => ({ id: "lb-" + Math.random(), name: "loan", row: row });
      "LB40 the household total survives having no account list to name people with");
 }
 
+// ── The liability line on the Account Value chart ───────────────────────────
+// A declining staircase from the first instalment forward, drawn per portfolio
+// on the same attribution as the Overview figure. Two properties carry it: it
+// does not exist before the debt did, and at today it equals what the card says
+// is owed — a line that lands near the figure beside it is worse than none.
+{
+  // Ten monthly instalments of ₹1,000 from 1 Jan 2026; three recorded.
+  const loan = { amount: 1000, frequency: "monthly", next_due: "2026-04-01",
+    num_payments: 10, installments_done: 3, account_id: "sn" };
+
+  eq(WfMath.liabilityStartDate(loan), "2026-01-01",
+     "LS1 the start is recovered by walking next_due back one period per instalment paid");
+  eq(WfMath.liabilityStartDate({ next_due: "2026-04-01", frequency: "monthly" }), "2026-04-01",
+     "LS2 an untouched schedule starts where it says it does");
+  eq(WfMath.liabilityStartDate({ next_due: "2027-01-01", frequency: "quarterly", installments_done: 4 }),
+     "2026-01-01", "LS3 quarterly steps back three months at a time");
+  eq(WfMath.liabilityTotalCount(loan), 10, "LS4 the plan is ten instalments long");
+  eq(WfMath.liabilityTotalCount({ next_due: "2026-01-01", end_date: "2026-06-01", frequency: "monthly" }),
+     6, "LS5 or as many as fit before the end date");
+
+  eq(WfMath.liabilityOutstandingAt(loan, "2025-12-31"), null,
+     "LS6 nothing is owed before the loan existed — the line does not reach back");
+  eq(WfMath.liabilityOutstandingAt(loan, "2026-01-01"), 9000,
+     "LS7 on the first due date one instalment has been paid, as the processor posts it that day");
+  eq(WfMath.liabilityOutstandingAt(loan, "2026-02-15"), 8000,
+     "LS8 and a month later, two");
+  eq(WfMath.liabilityOutstandingAt(loan, "2026-04-01"), 7000,
+     "LS9 capped by what was actually recorded — three paid, not four, on a schedule that is behind");
+  eq(WfMath.liabilityOutstandingAt(loan, "2027-06-01"), 7000,
+     "LS10 and it stays there rather than paying itself off on paper");
+  // The property that matters: the line meets the card.
+  eq(WfMath.liabilityOutstandingAt(loan, "2026-04-01"), WfMath.liabilityRemaining(loan),
+     "LS11 at today the line equals what the Overview says is owed");
+}
+{
+  const dates = ["2025-12-01", "2026-01-01", "2026-02-01", "2026-03-01"];
+  const items = [{ id: "a", row: { amount: 1000, frequency: "monthly", next_due: "2026-03-01",
+    num_payments: 10, installments_done: 2, account_id: "sn" } }];
+  const s = WfMath.liabilityOwedSeries(items, ACCTS, "all", dates);
+  eq(s.start, "2026-01-01", "LS12 the series knows when the debt began");
+  eq(s.values[0], null, "LS13 and is empty before it");
+  eq(s.values[1], 9000, "LS14 then steps down one instalment per period");
+  eq(s.values[2], 8000, "LS15 monotonically");
+  eq(s.values[3], 8000, "LS16 pausing where the payments actually stopped");
+  ok(s.any, "LS17 and reports that it has something to draw");
+
+  // Portfolio selection: the line is one person's share, not the household's.
+  const joint = [{ id: "b", row: { amount: 1000, frequency: "monthly", next_due: "2026-03-01",
+    num_payments: 10, installments_done: 2, account_id: "jt",
+    contribution_split: { sn: 70, tr: 30 } } }];
+  eq(WfMath.liabilityOwedSeries(joint, ACCTS, "all", dates).values[1], 9000,
+     "LS18 the household carries the whole schedule");
+  eq(WfMath.liabilityOwedSeries(joint, ACCTS, "Snnehal", dates).values[1], 6300,
+     "LS19 a portfolio carries its share of it, at every point");
+  eq(WfMath.liabilityOwedSeries(joint, ACCTS, "Trisha", dates).values[2], 2400,
+     "LS20 including as the staircase descends");
+  const none = WfMath.liabilityOwedSeries(joint, ACCTS, "Nobody", dates);
+  ok(!none.any && none.values.every((v) => v === null),
+     "LS21 a portfolio carrying none of it gets no line at all", none);
+
+  // Two liabilities that began at different times add up, and the line starts
+  // at the earlier of them.
+  const two = WfMath.liabilityOwedSeries([items[0],
+    { id: "c", row: { amount: 500, frequency: "monthly", next_due: "2026-02-01",
+      num_payments: 4, installments_done: 0, account_id: "sn" } }], ACCTS, "all", dates);
+  eq(two.start, "2026-01-01", "LS22 the line begins with the earliest debt");
+  eq(two.values[1], 9000, "LS23 carrying only the one that had begun");
+  eq(two.values[2], 8000 + 2000, "LS24 and both once the second starts");
+
+  eq(WfMath.liabilityOwedSeries([{ id: "d", row: { amount: 1000, frequency: "monthly",
+    next_due: "2026-02-01", account_id: "sn" } }], ACCTS, "all", dates).any, false,
+     "LS25 an open-ended liability draws nothing — its size is not known");
+  eq(WfMath.liabilityOwedSeries(items, ACCTS, "all", []).any, false,
+     "LS26 and an empty timeline draws nothing");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

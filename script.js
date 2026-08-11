@@ -9892,8 +9892,29 @@
           }
         })();
 
+        // A second line, assets less what was owed on each date, drawn from the
+        // first instalment of the earliest liability this selection carries.
+        // Same attribution as the Overview's figure, so the two cannot disagree
+        // about the same selection — and the last point of the two series is
+        // exactly the gap between the chart's tail and the Current stat.
+        var netPoints = null;
+        try {
+          var _liabs = JSON.parse(localStorage.getItem("wf-liabilities") || "[]");
+          if (_liabs.length && window.WfMath && WfMath.liabilityOwedSeries) {
+            var owedSeries = WfMath.liabilityOwedSeries(
+              _liabs, (window.dashExpState && dashExpState.accounts) || [],
+              selectedPortfolio, pointsAll.map(function (p) { return formatDateISO(p.x); }));
+            if (owedSeries.any) {
+              netPoints = pointsAll.map(function (p, i) {
+                var owed = owedSeries.values[i];
+                return owed == null ? { x: p.x, y: null } : { x: p.x, y: p.y - owed };
+              });
+            }
+          }
+        } catch (e) { netPoints = null; }
+
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
-        try { _renderPortfolioValueChart(pointsAll); } catch (e) {}
+        try { _renderPortfolioValueChart(pointsAll, netPoints); } catch (e) {}
 
         // Keep the series the snapshot backfill reconstructs history from. Only
         // the unfiltered one: a backfill built from a single portfolio's line
@@ -10342,7 +10363,7 @@
       statusEl.textContent = "Couldn't render the chart: " + (err && err.message ? err.message : err);
     });
 
-    function _renderPortfolioValueChart(points) {
+    function _renderPortfolioValueChart(points, netPoints) {
       var canvas2 = document.getElementById("portfolio-value-chart");
       if (!canvas2 || typeof Chart === "undefined") return;
       if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.destroy();
@@ -10355,6 +10376,27 @@
       var lastVal = points.length ? points[points.length - 1].y : 0;
       var lastEl = document.getElementById("pvc-current-value");
       if (lastEl) lastEl.textContent = "₹" + Math.round(lastVal).toLocaleString("en-IN");
+
+      // The net line's own legend entry, and its readout. It tracks whatever the
+      // green line is reporting — hover, zoom or the full range — so the two
+      // figures always describe the same moment.
+      var netLegendEl = document.getElementById("pvc-net-legend");
+      var netValEl = document.getElementById("pvc-net-value");
+      if (netLegendEl) netLegendEl.hidden = !netPoints;
+      function netAtIndex(idx) {
+        if (!netPoints) return null;
+        // Back to the newest point that has a value: the line is absent before
+        // the debt began, and reporting a blank there would look like an error.
+        for (var i = Math.min(idx, netPoints.length - 1); i >= 0; i--) {
+          if (netPoints[i] && netPoints[i].y != null) return netPoints[i].y;
+        }
+        return null;
+      }
+      function showNet(v) {
+        if (!netValEl || !netPoints) return;
+        netValEl.textContent = (v == null) ? "—" : "₹" + Math.round(v).toLocaleString("en-IN");
+      }
+      showNet(netAtIndex(netPoints ? netPoints.length - 1 : 0));
 
       // The readout follows whatever window is on screen. Zoomed out it is the
       // current value; zoomed in — by wheel, pinch, drag, or a range pill — it is
@@ -10382,6 +10424,7 @@
         var endPt = pvcValueAt(hi) || points[points.length - 1];
         var startPt = pvcValueAt(lo);
         if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
+        showNet(netAtIndex(points.indexOf(endPt)));
         // The period line under the title already names the window, so the legend
         // label stays a plain noun rather than repeating the month.
         if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
@@ -10428,6 +10471,7 @@
         if (idx < 0 || !points[idx]) { updatePvcReadout(); return; }
         var pt = points[idx];
         if (lastEl) lastEl.textContent = "₹" + Math.round(pt.y).toLocaleString("en-IN");
+        showNet(netAtIndex(idx));
         if (nameEl) nameEl.textContent = "Value";
         var per = document.getElementById("pvc-period");
         if (per) per.textContent = _pvcDayFmt.format(pt.x).toUpperCase();
@@ -10452,7 +10496,22 @@
             borderWidth: 2,
             pointRadius: 0,
             tension: 0.12
-          }]
+          }].concat(netPoints ? [{
+            // Dashed and unfilled: it is the same assets seen after the debt,
+            // not a second quantity to read areas off. spanGaps stays false so
+            // the nulls before the first instalment leave the line absent rather
+            // than reaching back to the start of the chart.
+            label: "Net of liabilities",
+            data: netPoints,
+            borderColor: "#F59E0B",
+            borderDash: [5, 4],
+            backgroundColor: "transparent",
+            fill: false,
+            borderWidth: 2,
+            pointRadius: 0,
+            spanGaps: false,
+            tension: 0.12
+          }] : [])
         },
         options: {
           responsive: true, maintainAspectRatio: false,
