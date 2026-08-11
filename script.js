@@ -9629,6 +9629,302 @@
   // "SINCE <year>" when the zoom is reset without recomputing the series.
   var _avcInceptionYear = null;
   var _avcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
+  // Assets less what was owed on each date, for the second line on the Account
+  // Value chart. Same attribution as the Overview's figure, so the chart and the
+  // card cannot disagree about the same selection. Returns null when this
+  // selection carries no liability, which is what leaves the chart with one line.
+  function _netOfLiabilityPoints(points, portfolio) {
+    try {
+      var liabs = JSON.parse(localStorage.getItem("wf-liabilities") || "[]");
+      if (!liabs.length || !window.WfMath || !WfMath.liabilityOwedSeries) return null;
+      var owed = WfMath.liabilityOwedSeries(
+        liabs, (window.dashExpState && dashExpState.accounts) || [], portfolio,
+        points.map(function (p) { return formatDateISO(p.x); }));
+      if (!owed.any) return null;
+      return points.map(function (p, i) {
+        var o = owed.values[i];
+        return o == null ? { x: p.x, y: null } : { x: p.x, y: p.y - o };
+      });
+    } catch (e) { return null; }
+  }
+
+  // The Account Value chart for a portfolio with no equity, no stocks and no
+  // commodity — only EPF/PF, savings or deposits. Monthly points from the first
+  // fixed-income event to today, valued by the same three terms the main path
+  // adds on top of its equity line.
+  //
+  // When there is nothing at all to draw, the chart is destroyed and its readout
+  // blanked. Leaving it alone was the bug: the canvas kept whichever portfolio
+  // was selected before, and syncAccountValueTail patched that stale line's last
+  // point to the new portfolio's total, so it read as a plausible chart of the
+  // wrong person.
+  function _renderFixedIncomeOnlyValueChart(portfolio) {
+    var lastEl = document.getElementById("pvc-current-value");
+    function clear() {
+      if (window.__wfPortfolioValueChart) {
+        try { window.__wfPortfolioValueChart.destroy(); } catch (e) {}
+        window.__wfPortfolioValueChart = null;
+      }
+      if (lastEl) lastEl.textContent = "₹—";
+      var netLegend = document.getElementById("pvc-net-legend");
+      if (netLegend) netLegend.hidden = true;
+    }
+    if (isFixedIncomeExcluded()) { clear(); return; }
+
+    var epfEvents = buildEpfValueEvents(portfolio) || [];
+    // includeFd=true here only to learn WHEN the deposits start; their values
+    // come from buildFdAccrualAt below, as everywhere else.
+    var fdDated = buildFdValueEvents(portfolio, isSavingsInvestmentExcluded(), true) || [];
+    if (!epfEvents.length && !fdDated.length) { clear(); return; }
+
+    var first = null;
+    epfEvents.concat(fdDated).forEach(function (e) {
+      if (e && e.date && (first === null || e.date < first)) first = e.date;
+    });
+    if (!first) { clear(); return; }
+
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var timeline = [];
+    var cursor = new Date(first.getFullYear(), first.getMonth(), 1);
+    for (var guard = 0; guard < 1200 && cursor <= today; guard++) {
+      timeline.push(new Date(cursor));
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    timeline.push(today);
+    if (timeline.length < 2) { clear(); return; }
+
+    var _ff = WfMath.forwardFillOverTimeline;
+    var epfAt = _ff(epfEvents, timeline, "cumulativeValue");
+    var fdAt = _ff(buildFdValueEvents(portfolio, isSavingsInvestmentExcluded(), false) || [],
+      timeline, "cumulativeValue");
+    var accrAt = buildFdAccrualAt(timeline, portfolio);
+    var points = timeline.map(function (d, i) {
+      return { x: d, y: (epfAt[i] || 0) + (fdAt[i] || 0) + (accrAt[i] || 0) };
+    });
+    if (!points.some(function (p) { return p.y > 0; })) { clear(); return; }
+
+    // Same tail snap the main path does, so this chart ends on the Overview's
+    // figure rather than a beat behind it.
+    var overviewTotal = (typeof getOverviewCurrentTotal === "function") ? getOverviewCurrentTotal() : null;
+    if (overviewTotal > 0 && (localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") === portfolio) {
+      points[points.length - 1] = { x: points[points.length - 1].x, y: overviewTotal };
+    }
+    try {
+      _renderPortfolioValueChart(points, _netOfLiabilityPoints(points, portfolio));
+    } catch (e) { clear(); }
+  }
+
+  // The Account Value chart itself. At module scope rather than inside
+  // renderValueChart's promise chain, so the fixed-income-only path can draw
+  // with it too — while it was nested, that path could not reach it and the
+  // canvas kept whichever portfolio was drawn last.
+  function _renderPortfolioValueChart(points, netPoints) {
+    var canvas2 = document.getElementById("portfolio-value-chart");
+    if (!canvas2 || typeof Chart === "undefined") return;
+    if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.destroy();
+    var wrap = canvas2.parentNode;
+    if (wrap) { wrap.innerHTML = ""; canvas2 = document.createElement("canvas"); canvas2.id = "portfolio-value-chart"; canvas2.height = 320; wrap.appendChild(canvas2); }
+    var ctx2 = canvas2.getContext("2d");
+    var grad = ctx2.createLinearGradient(0, 0, 0, canvas2.clientHeight || 320);
+    grad.addColorStop(0, "rgba(16,185,129,0.28)");
+    grad.addColorStop(1, "rgba(16,185,129,0)");
+    var lastVal = points.length ? points[points.length - 1].y : 0;
+    var lastEl = document.getElementById("pvc-current-value");
+    if (lastEl) lastEl.textContent = "₹" + Math.round(lastVal).toLocaleString("en-IN");
+
+    // The net line's own legend entry, and its readout. It tracks whatever the
+    // green line is reporting — hover, zoom or the full range — so the two
+    // figures always describe the same moment.
+    var netLegendEl = document.getElementById("pvc-net-legend");
+    var netValEl = document.getElementById("pvc-net-value");
+    if (netLegendEl) netLegendEl.hidden = !netPoints;
+    function netAtIndex(idx) {
+      if (!netPoints) return null;
+      // Back to the newest point that has a value: the line is absent before
+      // the debt began, and reporting a blank there would look like an error.
+      for (var i = Math.min(idx, netPoints.length - 1); i >= 0; i--) {
+        if (netPoints[i] && netPoints[i].y != null) return netPoints[i].y;
+      }
+      return null;
+    }
+    function showNet(v) {
+      if (!netValEl || !netPoints) return;
+      netValEl.textContent = (v == null) ? "—" : "₹" + Math.round(v).toLocaleString("en-IN");
+    }
+    showNet(netAtIndex(netPoints ? netPoints.length - 1 : 0));
+
+    // The readout follows whatever window is on screen. Zoomed out it is the
+    // current value; zoomed in — by wheel, pinch, drag, or a range pill — it is
+    // the value at the right edge of the view plus the change across it, so
+    // "what was I worth at the end of last month, and how did that month go" is
+    // answerable by looking rather than by reading tooltips.
+    var nameEl = document.getElementById("pvc-legend-name");
+    var changeEl = document.getElementById("pvc-range-change");
+    var _pvcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
+    function pvcValueAt(t) {
+      // Last point at or before t — the value actually held then, not interpolated.
+      var hit = null;
+      for (var i = 0; i < points.length; i++) {
+        if (points[i].x.getTime() <= t) hit = points[i]; else break;
+      }
+      return hit;
+    }
+    function updatePvcReadout() {
+      var chart = window.__wfPortfolioValueChart;
+      if (!chart || !points.length) return;
+      var sc = chart.scales && chart.scales.x;
+      var lo = sc && isFinite(sc.min) ? sc.min : pvcXMin;
+      var hi = sc && isFinite(sc.max) ? sc.max : pvcXMax;
+      var full = lo <= pvcXMin + 1 && hi >= pvcXMax - 1;
+      var endPt = pvcValueAt(hi) || points[points.length - 1];
+      var startPt = pvcValueAt(lo);
+      if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
+      showNet(netAtIndex(points.indexOf(endPt)));
+      // The period line under the title already names the window, so the legend
+      // label stays a plain noun rather than repeating the month.
+      if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
+      var pvcPeriodEl = document.getElementById("pvc-period");
+      if (pvcPeriodEl) {
+        // The year the visible window opens in — taken from the first plotted
+        // point inside it, not from the bound, so it names a year the chart is
+        // actually showing data for.
+        var firstVis = null;
+        for (var fj = 0; fj < points.length; fj++) {
+          if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
+        }
+        pvcPeriodEl.textContent = full
+          ? "OVER TIME"
+          : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
+             " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase());
+      }
+      if (!changeEl) return;
+      // A change needs two points to be a change. Zoomed to the full range there
+      // is nothing to compare against, and the earliest point has no "before".
+      if (full || !startPt || startPt === endPt || !(startPt.y > 0)) {
+        changeEl.hidden = true;
+        return;
+      }
+      var delta = endPt.y - startPt.y;
+      var pct = (delta / startPt.y) * 100;
+      changeEl.hidden = false;
+      changeEl.className = "avc-legend-change " + (delta >= 0 ? "pvc-up" : "pvc-down");
+      changeEl.textContent = (delta >= 0 ? "+" : "−") + "₹" +
+        Math.round(Math.abs(delta)).toLocaleString("en-IN") +
+        " (" + (delta >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2) + "%)";
+    }
+    // Hover readout. The value and the date it belongs to go into the card
+    // header, replacing the floating tooltip: the figures stay in one place, so
+    // comparing two dates is a matter of moving the pointer rather than
+    // remembering what the last box said. Leaving the chart restores whatever
+    // the zoom window was reporting.
+    var _pvcDayFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    var _pvcHoverIdx = -1;
+    function pvcHover(els) {
+      var idx = els && els.length ? els[0].index : -1;
+      if (idx === _pvcHoverIdx) return;   // Chart.js fires onHover on every move
+      _pvcHoverIdx = idx;
+      if (idx < 0 || !points[idx]) { updatePvcReadout(); return; }
+      var pt = points[idx];
+      if (lastEl) lastEl.textContent = "₹" + Math.round(pt.y).toLocaleString("en-IN");
+      showNet(netAtIndex(idx));
+      if (nameEl) nameEl.textContent = "Value";
+      var per = document.getElementById("pvc-period");
+      if (per) per.textContent = _pvcDayFmt.format(pt.x).toUpperCase();
+      if (changeEl) changeEl.hidden = true;
+    }
+    if (canvas2) {
+      canvas2.onmouseleave = function () { _pvcHoverIdx = -1; updatePvcReadout(); };
+    }
+
+    // Zoom/pan bounds = the plotted data range so zoom-out can't reveal empty space.
+    var pvcXMin = points.length ? points[0].x.getTime() : undefined;
+    var pvcXMax = points.length ? points[points.length - 1].x.getTime() : undefined;
+    window.__wfPortfolioValueChart = new Chart(ctx2, {
+      type: "line",
+      data: {
+        datasets: [{
+          label: "Current Value",
+          data: points,
+          borderColor: "#10B981",
+          backgroundColor: grad,
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.12
+        }].concat(netPoints ? [{
+          // Dashed and unfilled: it is the same assets seen after the debt,
+          // not a second quantity to read areas off. spanGaps stays false so
+          // the nulls before the first instalment leave the line absent rather
+          // than reaching back to the start of the chart.
+          label: "Net of liabilities",
+          data: netPoints,
+          borderColor: "#F59E0B",
+          borderDash: [5, 4],
+          backgroundColor: "transparent",
+          fill: false,
+          borderWidth: 2,
+          pointRadius: 0,
+          spanGaps: false,
+          tension: 0.12
+        }] : [])
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        // Hovering anywhere over the plot picks the nearest point along x, so
+        // the readout responds to being near the line rather than only to
+        // landing on a 0px-radius point.
+        interaction: { intersect: false, mode: "index", axis: "x" },
+        onHover: function (evt, els, chart) { pvcHover(els); },
+        plugins: {
+          legend: { display: false },
+          // Off. The figures go in the card header instead — the same place
+          // CASH FLOW · MONTHLY keeps its stats row — so reading the chart
+          // never means chasing a floating box across it.
+          tooltip: { enabled: false },
+          zoom: {
+            limits: { x: { min: pvcXMin, max: pvcXMax } },
+            // Off — see wireChartXDrag; two pan implementations would double up.
+            pan: { enabled: false, mode: "x" },
+            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
+                    drag: { enabled: false }, onZoomComplete: updatePvcReadout }
+          }
+        },
+        scales: {
+          x: {
+            type: "time",
+            // minUnit "day", not "month": zoomed into a single month the axis has
+            // to be able to label days, or the view the range pills open is
+            // unreadable — one tick for the whole window.
+            time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
+            grid: { display: false }
+          },
+          y: {
+            ticks: {
+              callback: function (v) {
+                if (v >= 1e7) return "₹" + (v / 1e7).toFixed(1) + "Cr";
+                if (v >= 1e5) return "₹" + (v / 1e5).toFixed(1) + "L";
+                if (v >= 1e3) return "₹" + (v / 1e3).toFixed(0) + "K";
+                return "₹" + v;
+              }
+            },
+            grid: { color: "rgba(0,0,0,0.05)" }
+          }
+        }
+      }
+    });
+    wireChartXDrag(canvas2, function () { return window.__wfPortfolioValueChart; },
+      pvcXMin, pvcXMax, updatePvcReadout);
+
+    // Double-click to reset the zoom back to the full range.
+    canvas2.ondblclick = function () {
+      if (!window.__wfPortfolioValueChart) return;
+      resetChartXWindow(window.__wfPortfolioValueChart, pvcXMin, pvcXMax);
+      updatePvcReadout();
+    };
+
+    updatePvcReadout();
+  }
+
   function renderValueChart() {
     var _vcMyGen = ++_vcGen;
     function _superseded() { return _vcMyGen !== _vcGen; }
@@ -9726,6 +10022,14 @@
           window.__wfValueChart.destroy();
           window.__wfValueChart = null;
         }
+        // Growth-of-₹100 needs equity to compare against an equity index, and
+        // this branch is where it gives up. The Account Value chart does not:
+        // a portfolio holding nothing but a savings balance and a deposit still
+        // has an account value, and drawing it is the difference between an
+        // honest FI-only line and the PREVIOUS portfolio's chart left on screen
+        // with only its tail patched — which is what happened before, because
+        // this branch returned without touching that chart at all.
+        _renderFixedIncomeOnlyValueChart(selectedPortfolio);
         statusEl.hidden = false;
         statusEl.textContent = skipped
           ? "No Instrument Name in your Equity sheet could be resolved to a Scheme Code via the Mutual Fund Mapping sheet and AMFI."
@@ -9993,29 +10297,10 @@
           }
         })();
 
-        // A second line, assets less what was owed on each date, drawn from the
-        // first instalment of the earliest liability this selection carries.
-        // Same attribution as the Overview's figure, so the two cannot disagree
-        // about the same selection — and the last point of the two series is
-        // exactly the gap between the chart's tail and the Current stat.
-        var netPoints = null;
-        try {
-          var _liabs = JSON.parse(localStorage.getItem("wf-liabilities") || "[]");
-          if (_liabs.length && window.WfMath && WfMath.liabilityOwedSeries) {
-            var owedSeries = WfMath.liabilityOwedSeries(
-              _liabs, (window.dashExpState && dashExpState.accounts) || [],
-              selectedPortfolio, pointsAll.map(function (p) { return formatDateISO(p.x); }));
-            if (owedSeries.any) {
-              netPoints = pointsAll.map(function (p, i) {
-                var owed = owedSeries.values[i];
-                return owed == null ? { x: p.x, y: null } : { x: p.x, y: p.y - owed };
-              });
-            }
-          }
-        } catch (e) { netPoints = null; }
-
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
-        try { _renderPortfolioValueChart(pointsAll, netPoints); } catch (e) {}
+        try {
+          _renderPortfolioValueChart(pointsAll, _netOfLiabilityPoints(pointsAll, selectedPortfolio));
+        } catch (e) {}
 
         // Keep the series the snapshot backfill reconstructs history from. Only
         // the unfiltered one: a backfill built from a single portfolio's line
@@ -10464,212 +10749,6 @@
       statusEl.textContent = "Couldn't render the chart: " + (err && err.message ? err.message : err);
     });
 
-    function _renderPortfolioValueChart(points, netPoints) {
-      var canvas2 = document.getElementById("portfolio-value-chart");
-      if (!canvas2 || typeof Chart === "undefined") return;
-      if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.destroy();
-      var wrap = canvas2.parentNode;
-      if (wrap) { wrap.innerHTML = ""; canvas2 = document.createElement("canvas"); canvas2.id = "portfolio-value-chart"; canvas2.height = 320; wrap.appendChild(canvas2); }
-      var ctx2 = canvas2.getContext("2d");
-      var grad = ctx2.createLinearGradient(0, 0, 0, canvas2.clientHeight || 320);
-      grad.addColorStop(0, "rgba(16,185,129,0.28)");
-      grad.addColorStop(1, "rgba(16,185,129,0)");
-      var lastVal = points.length ? points[points.length - 1].y : 0;
-      var lastEl = document.getElementById("pvc-current-value");
-      if (lastEl) lastEl.textContent = "₹" + Math.round(lastVal).toLocaleString("en-IN");
-
-      // The net line's own legend entry, and its readout. It tracks whatever the
-      // green line is reporting — hover, zoom or the full range — so the two
-      // figures always describe the same moment.
-      var netLegendEl = document.getElementById("pvc-net-legend");
-      var netValEl = document.getElementById("pvc-net-value");
-      if (netLegendEl) netLegendEl.hidden = !netPoints;
-      function netAtIndex(idx) {
-        if (!netPoints) return null;
-        // Back to the newest point that has a value: the line is absent before
-        // the debt began, and reporting a blank there would look like an error.
-        for (var i = Math.min(idx, netPoints.length - 1); i >= 0; i--) {
-          if (netPoints[i] && netPoints[i].y != null) return netPoints[i].y;
-        }
-        return null;
-      }
-      function showNet(v) {
-        if (!netValEl || !netPoints) return;
-        netValEl.textContent = (v == null) ? "—" : "₹" + Math.round(v).toLocaleString("en-IN");
-      }
-      showNet(netAtIndex(netPoints ? netPoints.length - 1 : 0));
-
-      // The readout follows whatever window is on screen. Zoomed out it is the
-      // current value; zoomed in — by wheel, pinch, drag, or a range pill — it is
-      // the value at the right edge of the view plus the change across it, so
-      // "what was I worth at the end of last month, and how did that month go" is
-      // answerable by looking rather than by reading tooltips.
-      var nameEl = document.getElementById("pvc-legend-name");
-      var changeEl = document.getElementById("pvc-range-change");
-      var _pvcMonthFmt = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
-      function pvcValueAt(t) {
-        // Last point at or before t — the value actually held then, not interpolated.
-        var hit = null;
-        for (var i = 0; i < points.length; i++) {
-          if (points[i].x.getTime() <= t) hit = points[i]; else break;
-        }
-        return hit;
-      }
-      function updatePvcReadout() {
-        var chart = window.__wfPortfolioValueChart;
-        if (!chart || !points.length) return;
-        var sc = chart.scales && chart.scales.x;
-        var lo = sc && isFinite(sc.min) ? sc.min : pvcXMin;
-        var hi = sc && isFinite(sc.max) ? sc.max : pvcXMax;
-        var full = lo <= pvcXMin + 1 && hi >= pvcXMax - 1;
-        var endPt = pvcValueAt(hi) || points[points.length - 1];
-        var startPt = pvcValueAt(lo);
-        if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
-        showNet(netAtIndex(points.indexOf(endPt)));
-        // The period line under the title already names the window, so the legend
-        // label stays a plain noun rather than repeating the month.
-        if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
-        var pvcPeriodEl = document.getElementById("pvc-period");
-        if (pvcPeriodEl) {
-          // The year the visible window opens in — taken from the first plotted
-          // point inside it, not from the bound, so it names a year the chart is
-          // actually showing data for.
-          var firstVis = null;
-          for (var fj = 0; fj < points.length; fj++) {
-            if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
-          }
-          pvcPeriodEl.textContent = full
-            ? "OVER TIME"
-            : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
-               " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase());
-        }
-        if (!changeEl) return;
-        // A change needs two points to be a change. Zoomed to the full range there
-        // is nothing to compare against, and the earliest point has no "before".
-        if (full || !startPt || startPt === endPt || !(startPt.y > 0)) {
-          changeEl.hidden = true;
-          return;
-        }
-        var delta = endPt.y - startPt.y;
-        var pct = (delta / startPt.y) * 100;
-        changeEl.hidden = false;
-        changeEl.className = "avc-legend-change " + (delta >= 0 ? "pvc-up" : "pvc-down");
-        changeEl.textContent = (delta >= 0 ? "+" : "−") + "₹" +
-          Math.round(Math.abs(delta)).toLocaleString("en-IN") +
-          " (" + (delta >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2) + "%)";
-      }
-      // Hover readout. The value and the date it belongs to go into the card
-      // header, replacing the floating tooltip: the figures stay in one place, so
-      // comparing two dates is a matter of moving the pointer rather than
-      // remembering what the last box said. Leaving the chart restores whatever
-      // the zoom window was reporting.
-      var _pvcDayFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
-      var _pvcHoverIdx = -1;
-      function pvcHover(els) {
-        var idx = els && els.length ? els[0].index : -1;
-        if (idx === _pvcHoverIdx) return;   // Chart.js fires onHover on every move
-        _pvcHoverIdx = idx;
-        if (idx < 0 || !points[idx]) { updatePvcReadout(); return; }
-        var pt = points[idx];
-        if (lastEl) lastEl.textContent = "₹" + Math.round(pt.y).toLocaleString("en-IN");
-        showNet(netAtIndex(idx));
-        if (nameEl) nameEl.textContent = "Value";
-        var per = document.getElementById("pvc-period");
-        if (per) per.textContent = _pvcDayFmt.format(pt.x).toUpperCase();
-        if (changeEl) changeEl.hidden = true;
-      }
-      if (canvas2) {
-        canvas2.onmouseleave = function () { _pvcHoverIdx = -1; updatePvcReadout(); };
-      }
-
-      // Zoom/pan bounds = the plotted data range so zoom-out can't reveal empty space.
-      var pvcXMin = points.length ? points[0].x.getTime() : undefined;
-      var pvcXMax = points.length ? points[points.length - 1].x.getTime() : undefined;
-      window.__wfPortfolioValueChart = new Chart(ctx2, {
-        type: "line",
-        data: {
-          datasets: [{
-            label: "Current Value",
-            data: points,
-            borderColor: "#10B981",
-            backgroundColor: grad,
-            fill: true,
-            borderWidth: 2,
-            pointRadius: 0,
-            tension: 0.12
-          }].concat(netPoints ? [{
-            // Dashed and unfilled: it is the same assets seen after the debt,
-            // not a second quantity to read areas off. spanGaps stays false so
-            // the nulls before the first instalment leave the line absent rather
-            // than reaching back to the start of the chart.
-            label: "Net of liabilities",
-            data: netPoints,
-            borderColor: "#F59E0B",
-            borderDash: [5, 4],
-            backgroundColor: "transparent",
-            fill: false,
-            borderWidth: 2,
-            pointRadius: 0,
-            spanGaps: false,
-            tension: 0.12
-          }] : [])
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          // Hovering anywhere over the plot picks the nearest point along x, so
-          // the readout responds to being near the line rather than only to
-          // landing on a 0px-radius point.
-          interaction: { intersect: false, mode: "index", axis: "x" },
-          onHover: function (evt, els, chart) { pvcHover(els); },
-          plugins: {
-            legend: { display: false },
-            // Off. The figures go in the card header instead — the same place
-            // CASH FLOW · MONTHLY keeps its stats row — so reading the chart
-            // never means chasing a floating box across it.
-            tooltip: { enabled: false },
-            zoom: {
-              limits: { x: { min: pvcXMin, max: pvcXMax } },
-              // Off — see wireChartXDrag; two pan implementations would double up.
-              pan: { enabled: false, mode: "x" },
-              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x",
-                      drag: { enabled: false }, onZoomComplete: updatePvcReadout }
-            }
-          },
-          scales: {
-            x: {
-              type: "time",
-              // minUnit "day", not "month": zoomed into a single month the axis has
-              // to be able to label days, or the view the range pills open is
-              // unreadable — one tick for the whole window.
-              time: { minUnit: "day", displayFormats: { year: "yyyy", month: "MMM yy", day: "d MMM" } },
-              grid: { display: false }
-            },
-            y: {
-              ticks: {
-                callback: function (v) {
-                  if (v >= 1e7) return "₹" + (v / 1e7).toFixed(1) + "Cr";
-                  if (v >= 1e5) return "₹" + (v / 1e5).toFixed(1) + "L";
-                  if (v >= 1e3) return "₹" + (v / 1e3).toFixed(0) + "K";
-                  return "₹" + v;
-                }
-              },
-              grid: { color: "rgba(0,0,0,0.05)" }
-            }
-          }
-        }
-      });
-      wireChartXDrag(canvas2, function () { return window.__wfPortfolioValueChart; },
-        pvcXMin, pvcXMax, updatePvcReadout);
-
-      // Double-click to reset the zoom back to the full range.
-      canvas2.ondblclick = function () {
-        if (!window.__wfPortfolioValueChart) return;
-        resetChartXWindow(window.__wfPortfolioValueChart, pvcXMin, pvcXMax);
-        updatePvcReadout();
-      };
-
-      updatePvcReadout();
-    }
 
     if (resetBtn && !resetBtn.dataset.bound) {
       resetBtn.dataset.bound = "1";

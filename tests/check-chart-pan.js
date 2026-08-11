@@ -89,8 +89,17 @@ check(blocksAt(SRC, "limits: {").filter((b) => /x:\s*\{\s*min:/.test(b)).length 
 // The two charts sit side by side, so their time axes must be specified the same
 // way. A custom ticks callback on one of them relabelled every tick itself and the
 // pair disagreed about what a date looks like.
-const xBlocks = blocksAt(SRC, 'x: {\n                type: "time"')
-  .concat(blocksAt(SRC, 'x: {\n              type: "time"'));
+// Found by which chart they belong to, not by indentation. This used to match
+// the exact leading whitespace of each block, so hoisting a chart renderer out
+// of a callback made the guard stop seeing one of the two charts it exists to
+// compare — and pass, having checked one axis against itself.
+const xBlocks = ["window.__wfValueChart = new Chart(", "window.__wfPortfolioValueChart = new Chart("]
+  .map((marker) => {
+    const chart = blocksAt(SRC, marker)[0];
+    if (!chart) return null;
+    return (blocksAt(chart, "x: {").filter((b) => /type:\s*"time"/.test(b)))[0] || null;
+  })
+  .filter(Boolean);
 check(xBlocks.length === 2, "expected both value charts to declare a time x axis, found " + xBlocks.length);
 check(xBlocks.every((b) => !/ticks:\s*\{/.test(b)),
   "neither time axis may carry its own ticks block — the shared displayFormats is " +
