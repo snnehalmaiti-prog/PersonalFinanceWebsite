@@ -1176,14 +1176,32 @@
       }
     }).then(function () {
       _scheduleRunning[key] = false;
+      return changed;
     }, function () {
       _scheduleRunning[key] = false;
+      return false;
     });
   }
 
   function processRecurringPayments() {
     return processSchedule("wf-recurring-payments", "recurring")
-      .then(function () { return processSchedule("wf-liabilities", "liability"); });
+      .then(function (a) {
+        return processSchedule("wf-liabilities", "liability")
+          .then(function (b) { return a || b; });
+      })
+      .then(function (changed) {
+        // Recording an instalment as an expense is what pays a liability down:
+        // the counter advances here, so what is left to pay is a month smaller
+        // and the Overview's Current figure a month larger. Today this file only
+        // runs on the settings page, where there is no such card — hence the
+        // element check rather than a bare function check, so this stays inert
+        // there and starts working the day the processor runs beside the card.
+        if (changed && window.refreshOverviewStats &&
+            document.getElementById("overview-total-current-value")) {
+          try { refreshOverviewStats(); } catch (e) {}
+        }
+        return changed;
+      });
   }
 
   // ── Entry point (called by script.js when the Expense tab is shown) ─────────

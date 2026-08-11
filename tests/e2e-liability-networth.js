@@ -53,6 +53,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
 
   const snapPosts = [];
+  const posted = [];   // expense_records the schedule processor inserts
   const j = (body) => ({ status: 200, contentType: "application/json",
     headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
   await p.route("**://*.supabase.co/**", (r) => {
@@ -63,6 +64,13 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
       (Array.isArray(body) ? body : [body]).forEach((row) => row && snapPosts.push(row));
       return r.fulfill({ status: 201, contentType: "application/json",
         headers: { "access-control-allow-origin": "*" }, body: "[]" });
+    }
+    if (/expense_records/.test(url) && req.method() === "POST") {
+      let body = null;
+      try { body = JSON.parse(req.postData() || "null"); } catch (e) {}
+      (Array.isArray(body) ? body : [body]).forEach((row) => row && posted.push(row));
+      return r.fulfill({ status: 201, contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" }, body: JSON.stringify([body]) });
     }
     if (/expense_accounts/.test(url)) return r.fulfill(j(ACCOUNTS));
     return r.fulfill(j([]));
@@ -263,6 +271,78 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   ok(cBack.liabilityShown && num(cBack.liability) === 160000,
      "C9 and it comes back when the household is selected again",
      { shown: cBack.liabilityShown, v: cBack.liability });
+
+  // ── Paying an instalment pays the liability down ────────────────────────
+  // Recording an EMI as an expense is what actually reduces the debt: one
+  // fewer instalment left to pay, so what is owed falls by the instalment and
+  // Current rises by the same amount. The schedule processor posts the record
+  // on this very load, so both figures have to move without a reload.
+  posted.length = 0;
+  await boot([{ id: "lb-7", name: "Car loan", row: {
+    type: "expense", amount: 20000, frequency: "monthly",
+    // Instalments already behind: the processor will post them.
+    next_due: "2026-07-01", num_payments: 10, installments_done: 0,
+    account_id: "acc-sn", category_id: null, payment_method_id: null } }]);
+  const beforePay = await read();
+  ok(num(beforePay.liability) === 200000,
+     "E0 ten instalments of ₹20,000 are owed before any is paid", beforePay.liability);
+
+  // The schedule processor lives on the settings page — that is where an
+  // instalment actually becomes an expense record. Same origin, so the
+  // dashboard reads the advanced counter back out of localStorage.
+  await p.goto(`http://127.0.0.1:${PORT}/settings.html?nosw=1`, { waitUntil: "load" });
+  await p.waitForFunction(() => {
+    try {
+      const l = JSON.parse(localStorage.getItem("wf-liabilities") || "[]")[0];
+      return l && l.row && (l.row.installments_done || 0) > 0;
+    } catch (e) { return false; }
+  }, null, { timeout: 20000 }).catch(() => {});
+  await p.waitForTimeout(1500);
+
+  await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
+  await p.waitForFunction(
+    () => { const e = document.getElementById("overview-total-current-value");
+      return e && e.textContent && e.textContent !== "—"; }, null, { timeout: 25000 }).catch(() => {});
+  await p.waitForTimeout(3000);
+  const afterPay = await read();
+  const doneCount = await p.evaluate(() =>
+    (JSON.parse(localStorage.getItem("wf-liabilities") || "[]")[0].row.installments_done) || 0);
+  console.log("  after paying: " + JSON.stringify({ posted: posted.length, done: doneCount,
+    liability: afterPay.liability, current: afterPay.current }));
+
+  ok(posted.length > 0 && posted.every((r) => r.labels && r.labels[0] === "liability"),
+     "E1 the due instalments were recorded as expenses",
+     posted.map((r) => ({ d: r.txn_date, a: r.amount })));
+  ok(doneCount === posted.length,
+     "E2 and the liability's paid counter advanced once per instalment recorded",
+     { done: doneCount, posted: posted.length });
+
+  const expectedOwed = (10 - doneCount) * 20000;
+  ok(num(afterPay.liability) === expectedOwed,
+     "E3 so what is owed has fallen by an instalment for each one paid",
+     { shown: afterPay.liability, want: expectedOwed });
+  ok(num(afterPay.liability) < num(beforePay.liability),
+     "E3b which is less than was owed before the instalments were recorded",
+     { before: beforePay.liability, after: afterPay.liability });
+  ok(num(afterPay.current) === 1000000 - expectedOwed,
+     "E4 and Current has risen by exactly that much",
+     { shown: afterPay.current, want: 1000000 - expectedOwed });
+  ok(num(afterPay.current) - num(beforePay.current) ===
+     num(beforePay.liability) - num(afterPay.liability),
+     "E4b rupee for rupee: what came off the debt went onto the value",
+     { curBefore: beforePay.current, curAfter: afterPay.current,
+       owedBefore: beforePay.liability, owedAfter: afterPay.liability });
+  ok(num(afterPay.current) + num(afterPay.liability) === 1000000,
+     "E5 the two still account for the whole of the assets between them",
+     { cur: afterPay.current, owed: afterPay.liability });
+
+  // And it is durable: the reduced figure is what a later load reads.
+  await p.reload({ waitUntil: "load" });
+  await p.waitForTimeout(4000);
+  const reloaded = await read();
+  ok(num(reloaded.liability) <= expectedOwed,
+     "E6 a later load does not resurrect the instalments already paid",
+     { then: expectedOwed, now: reloaded.liability });
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
