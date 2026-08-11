@@ -558,10 +558,8 @@
     }
   }
 
-  function selectPortfolio(value, label) {
+  function selectPortfolio(value) {
     localStorage.setItem(SELECTED_PORTFOLIO_KEY, value);
-    var portfolioLabel = document.getElementById("portfolio-label");
-    if (portfolioLabel) portfolioLabel.textContent = label;
     // The Overview selector filters ONLY the Overview tab. Refresh the Overview
     // surfaces: cards (updateDashboardStats), Account Value / Growth chart,
     // Portfolio & Category splits, and the Stocks/ETF overview totals (which
@@ -7160,36 +7158,19 @@
     refreshBtn.classList.add(getSheetRows(prefix) ? "status-connected" : "status-disconnected");
   }
 
+  // Renders the Overview's portfolio pills through the same helper the holdings
+  // cards use, so the two controls cannot drift apart. Availability is always
+  // true here: the names come from the sheets, and unlike a holdings table the
+  // Overview has something to show for every one of them.
   function populatePortfolioSelect() {
-    var menu = document.getElementById("portfolio-menu");
-    if (!menu) return;
+    var box = document.getElementById("portfolio-pills");
+    if (!box) return;
     var names = collectPortfolioNamesFromSheets(["equity", "stocksetf", "fixedincome", "fd"]);
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     if (selected !== "all" && names.indexOf(selected) === -1) selected = "all";
-
-    menu.innerHTML = "";
-    var allItems = [{ value: "all", label: "All Portfolios" }].concat(
-      names.map(function (name) { return { value: name, label: name }; })
-    );
-
-    allItems.forEach(function (item) {
-      var li = document.createElement("li");
-      li.setAttribute("role", "option");
-      li.dataset.value = item.value;
-      li.textContent = item.label;
-      var isSelected = item.value === selected;
-      li.className = "portfolio-option" + (isSelected ? " selected" : "");
-      li.setAttribute("aria-selected", String(isSelected));
-      li.addEventListener("click", function () {
-        selectPortfolio(item.value, item.label);
-        populatePortfolioSelect();
-        closePortfolioMenu();
-      });
-      menu.appendChild(li);
-    });
-
-    var selectedItem = allItems.filter(function (item) { return item.value === selected; })[0];
-    if (selectedItem) selectPortfolio(selectedItem.value, selectedItem.label);
+    selected = _renderPortfolioPills(box, "data-ov-portfolio", names, selected,
+                                     function () { return true; });
+    selectPortfolio(selected);
   }
 
   function addPortfolioNames(names) {
@@ -7202,21 +7183,7 @@
     populatePortfolioSelect();
   }
 
-  var portfolioToggle = document.getElementById("portfolio-toggle");
-  var portfolioMenu = document.getElementById("portfolio-menu");
-
-  function closePortfolioMenu() {
-    if (!portfolioMenu) return;
-    portfolioMenu.classList.remove("open");
-    portfolioToggle.setAttribute("aria-expanded", "false");
-  }
-
-  function openPortfolioMenu() {
-    if (!portfolioMenu) return;
-    portfolioMenu.hidden = false;
-    portfolioMenu.classList.add("open");
-    portfolioToggle.setAttribute("aria-expanded", "true");
-  }
+  var portfolioPills = document.getElementById("portfolio-pills");
 
   var exclusionsToggle = document.getElementById("exclusions-toggle");
   var exclusionsMenu = document.getElementById("exclusions-menu");
@@ -7577,26 +7544,20 @@
     });
   }
 
-  if (portfolioToggle && portfolioMenu) {
+  if (portfolioPills) {
     populatePortfolioSelect();
 
-    portfolioToggle.addEventListener("click", function (e) {
-      e.stopPropagation();
-      if (!portfolioMenu.classList.contains("open")) openPortfolioMenu();
-      else closePortfolioMenu();
-    });
-
-    document.addEventListener("click", function (e) {
-      if (portfolioMenu.classList.contains("open") && !portfolioMenu.contains(e.target) && e.target !== portfolioToggle) {
-        closePortfolioMenu();
-      }
-    });
-
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && portfolioMenu.classList.contains("open")) {
-        closePortfolioMenu();
-        portfolioToggle.focus();
-      }
+    // Delegated: the pills are re-rendered whenever the portfolio list changes,
+    // so a listener bound to the buttons themselves would be thrown away with
+    // them. Re-rendering after the selection is what repaints the active pill.
+    portfolioPills.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-ov-portfolio]");
+      if (!btn || btn.disabled) return;
+      // Store, then re-render: populatePortfolioSelect reads the stored value,
+      // repaints the pills and applies the selection. Calling selectPortfolio
+      // here as well would refresh every Overview surface twice per press.
+      localStorage.setItem(SELECTED_PORTFOLIO_KEY, btn.getAttribute("data-ov-portfolio"));
+      populatePortfolioSelect();
     });
   }
 

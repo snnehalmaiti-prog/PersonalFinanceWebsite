@@ -150,8 +150,8 @@ const READ = () => {
     // Through the real control: renderValueChart is not exposed on window, and
     // selectPortfolio does more than write the key.
     const r = await change("portfolio Alpha", () => {
-      const opt = [...document.querySelectorAll(".portfolio-option")]
-        .find((e) => (e.textContent || "").trim() === "Alpha");
+      const opt = [...document.querySelectorAll("#portfolio-pills [data-ov-portfolio]")]
+        .find((e) => e.getAttribute("data-ov-portfolio") === "Alpha");
       if (opt) opt.click();
     });
     ok(r.after.builds > r.before.builds,
@@ -165,8 +165,8 @@ const READ = () => {
   // that only the portfolio name in the key can catch.
   {
     const r = await change("portfolio Beta", () => {
-      const opt = [...document.querySelectorAll(".portfolio-option")]
-        .find((e) => (e.textContent || "").trim() === "Beta");
+      const opt = [...document.querySelectorAll("#portfolio-pills [data-ov-portfolio]")]
+        .find((e) => e.getAttribute("data-ov-portfolio") === "Beta");
       if (opt) opt.click();
     });
     ok(r.after.accountLast !== r.before.accountLast,

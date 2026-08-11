@@ -110,8 +110,8 @@ const monthlyNav = () => {
   const pick = async (name) => {
     await p.evaluate((n) => {
       const opt = Array.prototype.slice.call(
-        document.querySelectorAll("#portfolio-menu .portfolio-option"))
-        .find((e) => (e.textContent || "").trim() === n);
+        document.querySelectorAll("#portfolio-pills [data-ov-portfolio]"))
+        .find((e) => e.getAttribute("data-ov-portfolio") === n);
       if (opt) opt.click();
     }, name);
     await p.waitForTimeout(3500);

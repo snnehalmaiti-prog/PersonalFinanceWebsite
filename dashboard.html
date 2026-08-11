@@ -124,15 +124,12 @@
         <div class="overview-top-row">
           <div class="overview-header-left">
             <span class="overview-title-label">OVERVIEW &middot; NET WORTH</span>
-            <div class="portfolio-dropdown" style="margin-left:12px;">
-              <button type="button" id="portfolio-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">
-                <span id="portfolio-label">All Portfolios</span>
-                <svg class="portfolio-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-              </button>
-              <ul id="portfolio-menu" class="portfolio-menu" role="listbox" aria-label="Select portfolio" hidden>
-                <li role="option" aria-selected="true" data-value="all" class="portfolio-option selected">All Portfolios</li>
-              </ul>
-            </div>
+            <!-- Segmented pills, the same control the holdings cards use for the
+                 same job. Every portfolio is on screen and one press away, and
+                 which one is active is readable without opening anything.
+                 Populated by populatePortfolioSelect(). -->
+            <div class="mfh-portfolio-toggle" id="portfolio-pills" role="group"
+                 aria-label="Select portfolio"></div>
           </div>
           <div class="portfolio-dropdown exclusions-dropdown">
             <button type="button" id="exclusions-toggle" class="portfolio-toggle" aria-haspopup="listbox" aria-expanded="false">

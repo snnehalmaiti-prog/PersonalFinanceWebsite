@@ -162,11 +162,9 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   // the app can actually be in — and would make the arithmetic below meaningless.
   const pick = async (name) => {
     await p.evaluate((n) => {
-      // Scoped to the portfolio menu: the exclusions and benchmark dropdowns
-      // reuse the same class.
       const opt = Array.prototype.slice.call(
-        document.querySelectorAll("#portfolio-menu .portfolio-option"))
-        .find((e) => (e.textContent || "").trim() === n);
+        document.querySelectorAll("#portfolio-pills [data-ov-portfolio]"))
+        .find((e) => e.getAttribute("data-ov-portfolio") === n);
       if (opt) opt.click();
     }, name);
     await p.waitForTimeout(2500);
@@ -335,7 +333,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   await boot([{ id: "lb-6", name: "Car loan", row: {
     type: "expense", amount: 20000, frequency: "monthly", next_due: "2026-09-01",
     num_payments: 10, installments_done: 2, account_id: "acc-sn" } }]);
-  const cBack = await pick("All Portfolios");
+  const cBack = await pick("all");
   ok(cBack.liabilityShown && num(cBack.liability) === 160000,
      "C9 and it comes back when the household is selected again",
      { shown: cBack.liabilityShown, v: cBack.liability });

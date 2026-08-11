@@ -600,9 +600,9 @@ const money = (t) => {
     // CASH FLOW's is meaningless if only one of them re-rendered.
     const clicked = await p.evaluate((n) => {
       const opt = Array.prototype.slice.call(
-        document.querySelectorAll("#portfolio-menu .portfolio-option"))
-        .find((e) => (e.textContent || "").trim().toLowerCase() ===
-          (n === "all" ? "all portfolios" : n.toLowerCase()));
+        document.querySelectorAll("#portfolio-pills [data-ov-portfolio]"))
+        .find((e) => (e.getAttribute("data-ov-portfolio") || "").toLowerCase() ===
+          n.toLowerCase());
       if (!opt) return false;
       opt.click();
       return true;
