@@ -53,7 +53,6 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   transition: background 0.3s var(--ease), color 0.3s var(--ease);
-  overflow-x: hidden;
 }
 
 h1, h2, h3, h4 {
@@ -2389,8 +2388,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .user-menu-item:hover { background: rgba(0,0,0,0.05); }
 
-/* Prevent horizontal overflow on any child breaking the page */
-body, html { overflow-x: hidden; }
+/* Prevent horizontal overflow on any child breaking the page.
+   On <html> ONLY. overflow-x on <body> computes its overflow-y to auto, which
+   makes <body> a scroll container — and a position:sticky header inside it then
+   sticks to <body> rather than to the viewport, so it scrolled away with the
+   page. <html> clips the horizontal axis just as well without owning the
+   header's stickiness. */
+html { overflow-x: hidden; }
 main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .benchmark-card, .equity-card, .value-chart-card { max-width: 100%; box-sizing: border-box; }
 .benchmark-header { flex-wrap: wrap; }
@@ -3676,6 +3680,27 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   border: 1px solid var(--border, rgba(0,0,0,0.14));
   padding: 2px 8px;
   margin: -2px 0 -2px 2px;
+}
+
+/* One edge treatment across the Overview.
+   The three split cards were drawn with a dashed border and every other card on
+   the tab with a solid one, so a card's edge said nothing about the card — it
+   only recorded which batch it was built in. The dashed edge wins because it is
+   the one the tab is named by, and because these are read as a set stacked down
+   one column, where a single solid card among dashed ones reads as a mistake.
+
+   Scoped to #panel-overview: all of these classes happen to be Overview-only
+   today, but .value-chart-card and .benchmark-card are generic enough to be
+   reused on another tab, and this is a decision about the Overview, not about
+   every card that shares a class name with one.
+
+   Radius is deliberately left alone. The cards differ (12 / 14 / 16px) and that
+   is a separate question from the stroke, which is what reads as inconsistent. */
+#panel-overview .overview-header-bar,
+#panel-overview .benchmark-card,
+#panel-overview .avc-card,
+#panel-overview .value-chart-card {
+  border: 1.5px dashed var(--border);
 }
 
 /* Investment Split card (dashed border, segmented bar, portfolio list) */
