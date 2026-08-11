@@ -16270,8 +16270,14 @@
     }
     _snapBackfillStarted = true;
     var points = _snapAccountValuePoints;
-    return WfDb.select(SNAP_TABLE, "select=snapshot_date").then(function (rows) {
-      var have = (rows || []).map(function (r) { return String(r.snapshot_date).slice(0, 10); });
+    // The existing rows in full, not just their dates: a row written before the
+    // card could filter carries no by_portfolio, and repairing it means writing
+    // back everything it already records alongside the split.
+    return WfDb.select(SNAP_TABLE,
+        "select=snapshot_date,total,invested,equity,fixed_income,commodity,by_portfolio,meta")
+      .then(function (rows) {
+      var existing = rows || [];
+      var have = existing.map(function (r) { return String(r.snapshot_date).slice(0, 10); });
       // Each portfolio's own series, replayed from the same prices, so the card
       // can be filtered across reconstructed months and not only recorded ones.
       var byPortfolio = {};
@@ -16281,8 +16287,13 @@
           if (series && series.length) byPortfolio[name] = series;
         });
       var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600, byPortfolio);
+      // Rows already stored from before the split existed. Without this the
+      // portfolio selector does nothing for every month of history, since
+      // planBackfill will never look at a date it already has.
+      var repairs = WfSnapshots.planSplitBackfill(existing, WfSnapshots.localDateKey(), byPortfolio, 600);
+      plan = plan.concat(repairs);
       dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
-          " already stored, " + plan.length + " to write");
+          " already stored, " + plan.length + " to write (" + repairs.length + " split repairs)");
       if (!plan.length) return 0;
       return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
         dbg("[Snapshot] backfilled " + plan.length + " month ends");

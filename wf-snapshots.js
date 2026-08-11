@@ -200,6 +200,67 @@
     });
   }
 
+  // Rows that already exist but carry no by_portfolio split.
+  //
+  // planBackfill only writes dates it does not already have, so history written
+  // before the card could filter stays split-less forever. forPortfolio drops
+  // those rows, and a portfolio selection empties the card — the filter looks
+  // broken while working exactly as written. This plans the repair: the same
+  // reconstruction planBackfill would have used, patched into the rows that
+  // predate it.
+  //
+  // What it will not do is restate a row. Everything the row already records is
+  // carried forward unchanged — the upsert replaces the whole row, and a
+  // recorded total is a record, not something a reconstruction may overwrite.
+  // Rows whose date the reconstruction cannot reach are left alone rather than
+  // given a partial split.
+  function planSplitBackfill(rows, todayKey, byPortfolioPoints, limit) {
+    var byName = {};
+    Object.keys(byPortfolioPoints || {}).forEach(function (name) {
+      var m = {};
+      monthEndPoints(byPortfolioPoints[name], todayKey).forEach(function (r) {
+        m[r.snapshot_date] = r.total;
+      });
+      byName[name] = m;
+    });
+    var names = Object.keys(byName);
+    if (!names.length) return [];
+
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (!r || !r.snapshot_date) return;
+      if (r.by_portfolio && Object.keys(r.by_portfolio).length) return;
+      var date = String(r.snapshot_date).slice(0, 10);
+      var split = null;
+      names.forEach(function (name) {
+        var v = byName[name][date];
+        if (v == null) return;
+        (split = split || {})[name] = v;
+      });
+      if (!split) return;
+      var meta = {};
+      if (r.meta && typeof r.meta === "object") {
+        Object.keys(r.meta).forEach(function (k) { meta[k] = r.meta[k]; });
+      }
+      // Says where the split came from, because it did not come from the same
+      // place as the total: the total is what the row recorded, the split is a
+      // reconstruction from today's sheets and may not add up to it exactly.
+      meta.split_source = "backfill";
+      out.push({
+        snapshot_date: date,
+        total: r.total,
+        invested: r.invested == null ? null : r.invested,
+        equity: r.equity == null ? null : r.equity,
+        fixed_income: r.fixed_income == null ? null : r.fixed_income,
+        commodity: r.commodity == null ? null : r.commodity,
+        by_portfolio: split,
+        meta: meta
+      });
+    });
+    if (limit != null && out.length > limit) out = out.slice(-limit);
+    return out;
+  }
+
   // ── Reading snapshots back ────────────────────────────────────────────────
 
   // One row per COMPLETED calendar month: the latest snapshot in it, oldest
@@ -442,7 +503,8 @@
     isStable: isStable,
     evaluateWrite: evaluateWrite,
     monthEndPoints: monthEndPoints,
-    planBackfill: planBackfill
+    planBackfill: planBackfill,
+    planSplitBackfill: planSplitBackfill
   };
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this));
 

@@ -154,6 +154,58 @@ const SERIES = [
   eq(capped.length, 2, "B14 the limit caps the batch");
   eq(capped[1].snapshot_date, "2026-07-31", "B15 keeping the most RECENT months, not the oldest");
 }
+// ── Repairing rows written before the split existed ─────────────────────────
+// planBackfill writes only dates it does not already have, so every month
+// recorded before the card could filter by portfolio keeps a null by_portfolio
+// forever — and forPortfolio drops exactly those rows, so the selector empties
+// the card. This is the repair pass: same reconstruction, aimed at the rows
+// that already exist.
+{
+  const SN = [P(2026, 5, 30, 90), P(2026, 6, 30, 100), P(2026, 7, 31, 110)];
+  const TR = [P(2026, 5, 30, 60), P(2026, 6, 30, 70), P(2026, 7, 31, 80)];
+  const splits = { Snnehal: SN, Trisha: TR };
+  const stored = [
+    { snapshot_date: "2026-05-30", total: 150, by_portfolio: null, meta: { source: "backfill" } },
+    { snapshot_date: "2026-06-30", total: 170, by_portfolio: null, meta: { source: "backfill" } },
+    { snapshot_date: "2026-07-31", total: 190, by_portfolio: { Snnehal: 110, Trisha: 80 },
+      meta: { source: "backfill" } },
+  ];
+  const fix = S.planSplitBackfill(stored, "2026-08-09", splits);
+  eq(fix.length, 2, "N1 only the rows missing a split are rewritten");
+  ok(!fix.some((r) => r.snapshot_date === "2026-07-31"),
+     "N2 a row that already carries one is left alone — the repair is not a rewrite of history");
+  eq(fix[0].by_portfolio.Snnehal, 90, "N3 each portfolio's own value for that date");
+  eq(fix[0].by_portfolio.Trisha, 60, "N4 for every portfolio, not just the first");
+  eq(fix[1].by_portfolio.Snnehal, 100,
+     "N5 looked up by date rather than by position, so a portfolio with a shorter history cannot shift the rest");
+  eq(fix[0].total, 150,
+     "N6 the recorded total is carried through untouched — it is a record, and the split is only being filled in");
+  eq(fix[0].meta.source, "backfill", "N7 the row's own meta survives");
+  eq(fix[0].meta.split_source, "backfill",
+     "N8 and says the split is a reconstruction, which the total may not be");
+
+  // A live row records a real total; its split can still be filled in, but
+  // nothing else about it may change.
+  const live = [{ snapshot_date: "2026-06-30", total: 175, invested: 120, equity: 60,
+    fixed_income: 115, commodity: 0, by_portfolio: null, meta: { source: "live" } }];
+  const lf = S.planSplitBackfill(live, "2026-08-09", splits);
+  eq(lf.length, 1, "N9 a live row missing its split is repaired too");
+  eq(lf[0].total, 175, "N10 keeping the total it recorded, not the reconstruction's");
+  eq(lf[0].equity, 60, "N11 and its category columns");
+  eq(lf[0].invested, 120, "N12 and what it recorded as invested");
+  eq(lf[0].meta.source, "live", "N13 it is still a live record");
+
+  eq(S.planSplitBackfill(stored, "2026-08-09", {}).length, 0,
+     "N14 with no per-portfolio series there is nothing to patch in, and no row is touched");
+  eq(S.planSplitBackfill(null, "2026-08-09", splits).length, 0, "N15 no rows, no work");
+  eq(S.planSplitBackfill([{ snapshot_date: "2020-01-31", total: 5, by_portfolio: null }],
+     "2026-08-09", splits).length, 0,
+     "N16 a date the reconstruction cannot reach is skipped rather than given an empty split");
+  eq(S.planSplitBackfill(stored, "2026-08-09", splits, 1).length, 1, "N17 the limit caps the batch");
+  eq(S.planSplitBackfill(stored, "2026-08-09", splits, 1)[0].snapshot_date, "2026-06-30",
+     "N18 keeping the most recent, as the backfill does");
+}
+
 {
   // Zero/negative points would otherwise record a net worth of nothing on days
   // the series simply has no data for.
