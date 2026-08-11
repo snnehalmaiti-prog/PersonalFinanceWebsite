@@ -607,6 +607,14 @@
           <label class="exp-field"><span>Instalments</span><input type="number" id="lb-num-payments" min="1" step="1" placeholder="Leave blank for unlimited" /></label>
           <label class="exp-field"><span>End date (optional)</span><input type="date" id="lb-end-date" /></label>
           <label class="exp-field"><span>Account</span><select id="lb-account"></select></label>
+          <!-- Shown only when the instalment is paid from a joint account: it is
+               funded by the contributing accounts, so who is carrying how much of
+               the debt has to be stated. -->
+          <div class="exp-field" id="lb-split" style="display:none;">
+            <span>Contributing account split</span>
+            <div id="lb-split-rows" style="display:flex; flex-direction:column; gap:8px;"></div>
+            <p id="lb-split-error" style="color:#dc2626; font-size:0.78rem; margin:6px 0 0; display:none;">Percentages must add up to 100%</p>
+          </div>
           <label class="exp-field"><span>Category</span><select id="lb-category"></select></label>
           <label class="exp-field"><span>Sub-category</span><select id="lb-subcategory"></select></label>
           <label class="exp-field"><span>Payment method</span><select id="lb-payment-method"></select></label>
@@ -1186,7 +1194,19 @@
         return;
       }
       if (status) status.hidden = true;
+      // Account names for the split line. Loading them re-renders rather than
+      // blocking, so the card appears immediately either way.
+      if (typeof tplLoadRefs === "function" && !tplRefs.loaded) {
+        tplLoadRefs().then(function () { renderLiabilities(); });
+      }
       var money = function (n) { return "₹" + Number(n).toLocaleString("en-IN"); };
+      var splitLine = function (split) {
+        if (!split) return "";
+        return Object.keys(split).map(function (id) {
+          var a = (tplRefs.accounts || []).find(function (x) { return x.id === id; });
+          return esc((a && a.name) || "—") + " " + Number(split[id]) + "%";
+        }).join(" · ");
+      };
       list.innerHTML = '<div class="wf-card-grid">' + items.map(function (r) {
         var row = r.row || {};
         var st = tplTypeStyle("expense");
@@ -1218,6 +1238,7 @@
             (row.principal ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Principal</span><span class="wf-item-meta-val">' + money(row.principal) + '</span></div>' : '') +
             (remaining != null ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Left to pay</span><span class="wf-item-meta-val">' + money(remaining) + '</span></div>' : '') +
             (row.end_date ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Ends</span><span class="wf-item-meta-val">' + esc(row.end_date) + '</span></div>' : '') +
+            (row.contribution_split ? '<div class="wf-item-meta-cell"><span class="wf-item-meta-label">Split</span><span class="wf-item-meta-val">' + splitLine(row.contribution_split) + '</span></div>' : '') +
           '</div>' +
           (maxN ? '<div class="wf-item-progress"><div class="wf-item-progress-fill" style="width:' + progPct + '%;"></div></div>' : '') +
           '<div class="wf-item-actions">' +
@@ -1256,6 +1277,93 @@
       tplFillSelect(subSel, subs, selectedSubId, "— none —");
     }
 
+    // ── Contributing account split ────────────────────────────────────────
+    // A joint account is not funded directly — the contributing (personal)
+    // accounts pay into it. So an instalment charged to one needs to say whose
+    // debt it is, in what proportion. Same shape as the Add Record modal's
+    // budget split on the dashboard: the first row is editable and the rest
+    // follow from it, which keeps the total at 100 without asking the user to
+    // do the arithmetic.
+    function lbUpdateSplitVisibility(existingSplit) {
+      var wrap = document.getElementById("lb-split");
+      var rowsEl = document.getElementById("lb-split-rows");
+      var errEl = document.getElementById("lb-split-error");
+      if (!wrap || !rowsEl) return;
+      if (errEl) errEl.style.display = "none";
+      var acctId = (document.getElementById("lb-account") || {}).value || "";
+      var acct = (tplRefs.accounts || []).find(function (a) { return a.id === acctId; });
+      // No account chosen is not a joint account — asking for a split before the
+      // question arises would be noise.
+      var isJoint = !!acct && !acct.contributing_account;
+      wrap.style.display = isJoint ? "" : "none";
+      if (!isJoint) { rowsEl.innerHTML = ""; return; }
+
+      var contribs = (tplRefs.accounts || []).filter(function (a) { return a.contributing_account; });
+      if (!contribs.length) {
+        rowsEl.innerHTML = '<p class="muted small" style="margin:0;">No contributing accounts yet — ' +
+          'mark one under Accounts to split this instalment.</p>';
+        return;
+      }
+      // Rebuilt only when the set of accounts changes, so re-opening the panel
+      // does not discard a split the user has just typed.
+      var builtIds = Array.prototype.slice.call(rowsEl.querySelectorAll("[data-lb-split-id]"))
+        .map(function (i) { return i.getAttribute("data-lb-split-id"); }).join(",");
+      var wantIds = contribs.map(function (a) { return a.id; }).join(",");
+      if (builtIds === wantIds && !existingSplit) return;
+
+      // An equal split that actually sums to 100: the editable row takes
+      // floor(100/n) and the remainder is shared across the rest, the last row
+      // absorbing the rounding.
+      var n = contribs.length;
+      var editablePct = Math.floor(100 / n);
+      var autoCount = n - 1;
+      var autoRemaining = 100 - editablePct;
+      var perOther = autoCount ? Math.round(autoRemaining / autoCount) : 0;
+      function defaultForIndex(i) {
+        if (i === 0) return editablePct;
+        if (i === n - 1) return autoRemaining - perOther * (autoCount - 1);
+        return perOther;
+      }
+      rowsEl.innerHTML = contribs.map(function (a, i) {
+        var val = (existingSplit && existingSplit[a.id] !== undefined)
+          ? existingSplit[a.id] : defaultForIndex(i);
+        var row = '<div style="display:flex; align-items:center; gap:8px;">' +
+          '<span style="flex:1; font-size:0.875rem;">' + esc(a.name) + '</span>';
+        row += (i === 0)
+          ? '<input type="number" inputmode="numeric" data-lb-split-id="' + esc(a.id) + '" min="0" max="100" value="' + val + '" ' +
+            'style="width:70px; padding:5px 8px; border:1px solid var(--border,#d1d5db); border-radius:7px; text-align:right; font-size:0.875rem;" />'
+          : '<span data-lb-split-id="' + esc(a.id) + '" data-lb-split-auto="1" ' +
+            'style="width:70px; padding:5px 8px; font-size:0.875rem; text-align:right; color:var(--muted,#6b7280); font-variant-numeric:tabular-nums;">' + val + '</span>';
+        return row + '<span style="font-size:0.875rem; color:var(--muted,#6b7280);">%</span></div>';
+      }).join("");
+
+      var first = rowsEl.querySelector("input[data-lb-split-id]");
+      if (first) first.addEventListener("input", function () {
+        var v = Math.min(100, Math.max(0, Number(first.value) || 0));
+        var autos = rowsEl.querySelectorAll("[data-lb-split-auto]");
+        var left = 100 - v;
+        var each = autos.length ? Math.round(left / autos.length) : 0;
+        autos.forEach(function (sp, i) {
+          sp.textContent = (i === autos.length - 1) ? left - each * (autos.length - 1) : each;
+        });
+      });
+    }
+
+    function lbGetSplit() {
+      var rowsEl = document.getElementById("lb-split-rows");
+      if (!rowsEl) return null;
+      var split = {}, total = 0;
+      rowsEl.querySelectorAll("input[data-lb-split-id]").forEach(function (inp) {
+        var v = Number(inp.value) || 0;
+        split[inp.getAttribute("data-lb-split-id")] = v; total += v;
+      });
+      rowsEl.querySelectorAll("[data-lb-split-auto]").forEach(function (sp) {
+        var v = Number(sp.textContent) || 0;
+        split[sp.getAttribute("data-lb-split-id")] = v; total += v;
+      });
+      return Object.keys(split).length ? { split: split, total: total } : null;
+    }
+
     function openLiabilityModal(existing) {
       tplLoadRefs().then(function () {
         lbRefs.editingId = existing ? existing.id : null;
@@ -1279,6 +1387,13 @@
         tplRefillAccountSelect("lb-account", "expense", row.account_id || "");
         tplFillSelect(document.getElementById("lb-payment-method"), tplRefs.paymentMethods, row.payment_method_id || "", "— none —");
         lbFillCategoryDropdowns(row.category_id || "", row.subcategory_id || "");
+        // Cleared first so the rows are always rebuilt for THIS liability. The
+        // rebuild guard exists for the account dropdown — leaving it in charge
+        // here would show the previously-opened liability's percentages on one
+        // that has none of its own.
+        var lbSplitRows = document.getElementById("lb-split-rows");
+        if (lbSplitRows) lbSplitRows.innerHTML = "";
+        lbUpdateSplitVisibility(row.contribution_split || null);
         document.getElementById("lb-modal-overlay").hidden = false;
       });
     }
@@ -1286,6 +1401,8 @@
     function closeLiabilityModal() { document.getElementById("lb-modal-overlay").hidden = true; }
 
     (function wireLbModal() {
+      var acctSel = document.getElementById("lb-account");
+      if (acctSel) acctSel.addEventListener("change", function () { lbUpdateSplitVisibility(); });
       var catSel = document.getElementById("lb-category");
       if (catSel) catSel.addEventListener("change", function () {
         var subs = tplRefs.categories.filter(function (c) { return c.parent_id === catSel.value; });
@@ -1320,6 +1437,21 @@
         var rateStr = document.getElementById("lb-rate").value;
         var rate = rateStr === "" ? null : Number(rateStr);
         if (rate != null && (!isFinite(rate) || rate < 0)) { err.textContent = "Interest rate must be a positive number."; return; }
+        // Only when the split is on screen — a liability paid from a personal
+        // account has nothing to divide.
+        var splitData = null;
+        var splitWrap = document.getElementById("lb-split");
+        var splitErrEl = document.getElementById("lb-split-error");
+        if (splitErrEl) splitErrEl.style.display = "none";
+        if (splitWrap && splitWrap.style.display !== "none") {
+          var s = lbGetSplit();
+          if (s && s.total !== 100) {
+            if (splitErrEl) splitErrEl.style.display = "";
+            err.textContent = "Contributing account percentages must add up to 100%.";
+            return;
+          }
+          if (s) splitData = s.split;
+        }
         var row = {
           type: "expense",
           lender: document.getElementById("lb-lender").value.trim(),
@@ -1334,6 +1466,7 @@
           category_id: document.getElementById("lb-category").value || null,
           subcategory_id: document.getElementById("lb-subcategory").value || null,
           payment_method_id: document.getElementById("lb-payment-method").value || null,
+          contribution_split: splitData,
           note: document.getElementById("lb-note").value || ""
         };
         var items = loadLiabilitiesRaw();

@@ -27,7 +27,18 @@ function ok(cond, name, detail) {
 
   const j = (body) => ({ status: 200, contentType: "application/json",
     headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
-  await p.route("**://*.supabase.co/**", (r) => r.fulfill(j([])));
+  // Two personal accounts that fund a shared one. The split only has a question
+  // to answer when the instalment is charged to the shared account.
+  const ACCOUNTS = [
+    { id: "acc-sn", name: "Snnehal", contributing_account: true, sort_order: 1 },
+    { id: "acc-tr", name: "Trisha", contributing_account: true, sort_order: 2 },
+    { id: "acc-joint", name: "Joint", contributing_account: false, sort_order: 3 },
+  ];
+  await p.route("**://*.supabase.co/**", (r) => {
+    const url = r.request().url();
+    if (/expense_accounts/.test(url)) return r.fulfill(j(ACCOUNTS));
+    return r.fulfill(j([]));
+  });
   await p.route("**://fonts.googleapis.com/**", (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
   await p.route("**://cdn.sheetjs.com/**", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: "" }));
   await p.route("**://cdn.jsdelivr.net/**", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: "" }));
@@ -133,6 +144,118 @@ function ok(cond, name, detail) {
      "L19 deleting writes a tombstone, not a silent local removal", afterDel);
   ok((await p.textContent("#exp-liability-status")).includes("No liabilities yet"),
      "L20 and the tombstoned row is not rendered");
+
+  // ── The contributing account split ──────────────────────────────────────
+  // A joint account is not funded directly: the personal accounts pay into it.
+  // So an instalment charged to one has to say whose debt it is. On a personal
+  // account there is nothing to divide, and asking would be noise.
+  await p.click("#exp-add-liability-btn");
+  await p.waitForTimeout(500);
+  const splitShown = () => p.isVisible("#lb-split");
+
+  ok(!(await splitShown()),
+     "P1 with no account chosen the split stays out of the way");
+
+  await p.selectOption("#lb-account", "acc-sn");
+  await p.waitForTimeout(200);
+  ok(!(await splitShown()),
+     "P2 a personal account needs no split — the money is already one person's");
+
+  await p.selectOption("#lb-account", "acc-joint");
+  await p.waitForTimeout(300);
+  ok(await splitShown(),
+     "P3 a joint account does: it is funded by the contributing accounts");
+
+  const rows = await p.evaluate(() => Array.prototype.map.call(
+    document.querySelectorAll("#lb-split-rows > div"),
+    (d) => ({
+      name: (d.querySelector("span") || {}).textContent,
+      val: (d.querySelector("input[data-lb-split-id]") || d.querySelector("[data-lb-split-auto]") || {}).value
+        || (d.querySelector("[data-lb-split-auto]") || {}).textContent,
+      editable: !!d.querySelector("input[data-lb-split-id]"),
+    })));
+  console.log("  split rows: " + JSON.stringify(rows));
+  ok(rows.length === 2, "P4 one row per contributing account, and only those", rows);
+  ok(rows.every((r) => /Joint/.test(r.name) === false),
+     "P5 the joint account itself is not one of its own contributors", rows);
+  ok(rows[0].editable && !rows[1].editable,
+     "P6 the first row is editable and the rest follow from it", rows);
+  ok(Number(rows[0].val) + Number(rows[1].val) === 100,
+     "P7 defaulting to an even split that already adds to 100", rows);
+
+  // Typing in the first row must move the others, or the total drifts off 100
+  // and the save is refused for something the user never touched.
+  await p.fill("#lb-split-rows input[data-lb-split-id]", "70");
+  await p.dispatchEvent("#lb-split-rows input[data-lb-split-id]", "input");
+  await p.waitForTimeout(200);
+  const auto = await p.textContent("#lb-split-rows [data-lb-split-auto]");
+  ok(Number(auto) === 30, "P8 raising one share lowers the other to match", auto);
+
+  // A total that isn't 100 is refused rather than silently stored.
+  await p.evaluate(() => {
+    const sp = document.querySelector("#lb-split-rows [data-lb-split-auto]");
+    if (sp) sp.textContent = "80";
+  });
+  await p.fill("#lb-name", "Joint home loan");
+  await p.fill("#lb-amount", "60000");
+  await p.fill("#lb-next-due", "2026-09-01");
+  await p.click("#lb-modal-save");
+  await p.waitForTimeout(300);
+  ok(await p.isVisible("#lb-modal-overlay"),
+     "P9 a split that does not add to 100 is refused, not saved");
+  ok(/add up to 100/.test(await p.textContent("#lb-modal-error")),
+     "P10 and says so", await p.textContent("#lb-modal-error"));
+
+  await p.dispatchEvent("#lb-split-rows input[data-lb-split-id]", "input");
+  await p.waitForTimeout(200);
+  await p.click("#lb-modal-save");
+  await p.waitForTimeout(400);
+  ok(!(await p.isVisible("#lb-modal-overlay")), "P11 a valid one saves");
+
+  const savedSplit = await p.evaluate(() =>
+    (JSON.parse(localStorage.getItem("wf-liabilities") || "[]")
+      .filter((l) => !l._deleted)[0] || {}).row);
+  ok(savedSplit && savedSplit.contribution_split &&
+     savedSplit.contribution_split["acc-sn"] === 70 &&
+     savedSplit.contribution_split["acc-tr"] === 30,
+     "P12 the split is stored on the liability, keyed by account",
+     savedSplit && savedSplit.contribution_split);
+
+  const cardText = await p.evaluate(() => {
+    const el = document.querySelector("#exp-liability-list .wf-item-card");
+    return el ? el.textContent.replace(/\s+/g, " ").trim() : null;
+  });
+  ok(/Snnehal 70% · Trisha 30%/.test(cardText || ""),
+     "P13 and shown on the card, so it is visible without opening the modal", cardText);
+
+  // Re-opening must show what was saved, not a fresh even split.
+  await p.click("[data-lb-edit]");
+  await p.waitForTimeout(500);
+  ok(await splitShown(), "P14 editing a joint-account liability shows the split again");
+  ok(await p.inputValue("#lb-split-rows input[data-lb-split-id]") === "70",
+     "P15 populated from what was saved, not reset to an even split",
+     await p.inputValue("#lb-split-rows input[data-lb-split-id]"));
+  // Moving off the joint account withdraws the question entirely.
+  await p.selectOption("#lb-account", "acc-tr");
+  await p.waitForTimeout(200);
+  ok(!(await splitShown()),
+     "P17 switching to a personal account hides it again");
+  await p.click("#lb-modal-cancel");
+  await p.waitForTimeout(200);
+
+  // A second liability on the same joint account, with no split of its own.
+  // Its modal must not inherit the first one's percentages — the rows are
+  // rebuilt per liability, not per set of accounts.
+  await p.click("#exp-add-liability-btn");
+  await p.waitForTimeout(400);
+  await p.selectOption("#lb-account", "acc-joint");
+  await p.waitForTimeout(300);
+  ok(await p.inputValue("#lb-split-rows input[data-lb-split-id]") === "50",
+     "P16 a different liability on the same account starts from an even split, " +
+     "not the last one's numbers",
+     await p.inputValue("#lb-split-rows input[data-lb-split-id]"));
+  await p.click("#lb-modal-cancel");
+  await p.waitForTimeout(200);
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
