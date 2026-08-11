@@ -17213,7 +17213,11 @@
   function _nwmShowHovered(r) {
     var el = document.getElementById("nwm-split");
     if (!el) return;
-    if (!r) { _nwmRenderStats(_nwmForYear(_nwmAllRows)); return; }   // cursor left
+    // Cursor left, or a month with nothing of its own to report: both go back to
+    // describing the period. An empty month used to keep its name in the header
+    // with the figures blank, which spent the whole block on saying nothing —
+    // CASH FLOW · MONTHLY falls back to the period in the same situation.
+    if (!r || r.delta == null) { _nwmRenderStats(_nwmForYear(_nwmAllRows)); return; }
     // With a selection on, the period's totals stay put and only the line
     // beneath them follows the cursor.
     if (__nwmSeriesFilters.length) {
@@ -17222,9 +17226,6 @@
     }
     var label = _nwmMonthLabel(r.month) +
       (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
-    // A month with no snapshot keeps its place on the axis and its name here,
-    // but has no figures — the treatment CASH FLOW gives an empty month.
-    if (r.delta == null) { el.innerHTML = _nwmSplitHtml(label, null); return; }
     el.innerHTML = _nwmSplitHtml(label, {
       opening: r.total - r.delta, closing: r.total,
       invested: r.contributions || 0, interest: r.interest || 0,

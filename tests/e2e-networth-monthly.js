@@ -305,12 +305,26 @@ const money = (t) => {
      "N15 the header does not spell out the reconstruction caveat", await scope());
   await hover("Jul 2025");
 
-  // A slot with no snapshot: named, but with nothing claimed about it. Showing
-  // zeros there would say the month didn't move, which is not what is known.
+  // A slot with no snapshot has nothing of its own to report, so the header goes
+  // back to describing the period — what CASH FLOW · MONTHLY does when a hovered
+  // month has no chips. Naming the empty month with the figures left blank, as
+  // this card used to, spent the whole block on saying nothing.
+  // Read at rest, which means leaving the chart first — the line above hovered
+  // Jul, and a baseline taken there is Jul's figures, not the period's.
+  await p.evaluate(() => {
+    const cv = document.getElementById("nwm-chart");
+    if (cv && typeof cv.onmouseleave === "function") cv.onmouseleave();
+  });
+  await p.waitForTimeout(300);
+  const periodBefore = await readStats();
   const emptyH = await hover("Feb 2025");
-  eq(Object.keys(emptyH).length, 0,
-     "N16b hovering a month with no snapshot shows no figures", emptyH);
-  eq(await scope(), "Feb 2025", "N16c but still names the month");
+  ok(Object.keys(emptyH).length > 0,
+     "N16b hovering a month with no snapshot falls back to the period's figures " +
+     "rather than emptying the header", emptyH);
+  eq(JSON.stringify(emptyH), JSON.stringify(periodBefore),
+     "N16b2 exactly the figures shown at rest", { hovered: emptyH, rest: periodBefore });
+  ok(/Year to date|^20\d\d$|All time/.test(await scope()),
+     "N16c and the label names the period, not the empty month", await scope());
 
   // The two ways out, both of which CASH FLOW · MONTHLY handles and this card
   // did not. onHover can pass no elements while the cursor is still over the
