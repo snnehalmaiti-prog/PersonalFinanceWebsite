@@ -4243,10 +4243,19 @@
         unitsHeld += units;
         flows.push({ date: cf.date, amount: cf.amount }); // outflow
       } else {
-        // sell: redeem proportional units
+        // Sell: redeem what this position actually holds, and take in what those
+        // units are worth — not what the portfolio's own sale realised.
+        //
+        // The two differ whenever the holding outgrew the index, which is the
+        // normal case for a winner: ₹10L of a ten-bagger is worth far more than
+        // the entire index position bought with the ₹1L that started it. Booking
+        // the portfolio's ₹10L against an index position worth ₹1.5L credits the
+        // simulation money it never had — and once it has sold out, the flows it
+        // reports are the portfolio's own, so the benchmark reads back the
+        // portfolio's return and the comparison says nothing.
         var sellUnits = Math.min(unitsHeld, cf.amount / price);
         unitsHeld = Math.max(0, unitsHeld - sellUnits);
-        flows.push({ date: cf.date, amount: cf.amount }); // inflow
+        flows.push({ date: cf.date, amount: sellUnits * price }); // inflow
       }
     });
 
