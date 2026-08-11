@@ -2851,6 +2851,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .invest-panel[hidden], .invest-panel[hidden] * { display: none !important; }
 
 /* Account × Payment Method spend pivot table */
+/* A figure that opens the records behind it should look like it does. */
+.exp-matrix-drill { cursor: pointer; }
+.exp-matrix-drill:hover { background: var(--bg); text-decoration: underline; }
+.exp-matrix-drill:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
 .exp-matrix-wrap { display: flex; }
 /* Charts tab: two cards side-by-side on desktop; stacked vertically on mobile. */
 .exp-charts-carousel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }

@@ -1591,29 +1591,51 @@
         box.innerHTML = tiles;
         box.querySelectorAll(".acc-card[data-acct-id]").forEach(function (tile) {
           tile.addEventListener("click", function () {
-            var acctId = tile.dataset.acctId;
-            // Switch to Records sub-tab
-            document.querySelectorAll("[data-dash-exp-subtab]").forEach(function (b) {
-              var k = b.getAttribute("data-dash-exp-subtab");
-              b.classList.toggle("active", k === "records");
-              b.setAttribute("aria-selected", k === "records" ? "true" : "false");
-              var p = document.getElementById("dash-exp-subpanel-" + k);
-              if (p) p.hidden = k !== "records";
-            });
-            // Set account filter
-            var acctSel = document.getElementById("rec-filter-account");
-            if (acctSel) acctSel.value = acctId;
-            // Set period to current month
-            var now = new Date();
-            recPeriod.kind = "month";
-            recPeriod.year = now.getFullYear();
-            recPeriod.month = now.getMonth();
-            renderDashRecords();
-            // Scroll to top of records panel
-            var recPanel = document.getElementById("dash-exp-subpanel-records");
-            if (recPanel) recPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+            drillToRecords({ accountId: tile.dataset.acctId });
           });
         });
+      }
+
+      // The one way into the records list from a figure elsewhere on the page.
+      //
+      // The account tiles had this inline; the spend matrix needs the same thing
+      // with a payment method and its own month, and two copies of "switch tab,
+      // set filters, re-render, scroll" would drift the moment either changed.
+      //
+      // Every filter is set explicitly, including the ones the caller did not
+      // ask for: these are multi-selects that keep whatever was chosen before,
+      // so a drill that only added its own filter would land on the intersection
+      // with a previous one and show fewer rows than the number that was clicked
+      // — or none at all.
+      function drillToRecords(opts) {
+        opts = opts || {};
+        document.querySelectorAll("[data-dash-exp-subtab]").forEach(function (b) {
+          var k = b.getAttribute("data-dash-exp-subtab");
+          b.classList.toggle("active", k === "records");
+          b.setAttribute("aria-selected", k === "records" ? "true" : "false");
+          var p = document.getElementById("dash-exp-subpanel-" + k);
+          if (p) p.hidden = k !== "records";
+        });
+        function setSel(id, val) {
+          var sel = document.getElementById(id);
+          if (!sel) return;
+          Array.prototype.forEach.call(sel.options, function (o) {
+            o.selected = !!val && o.value === val;
+          });
+        }
+        setSel("rec-filter-account", opts.accountId || "");
+        setSel("rec-filter-payment", opts.paymentMethodId || "");
+        setSel("rec-filter-type", opts.type || "");
+        // The period the figure was showing, not today's. The matrix has its own
+        // month and year pickers, so landing on the current month would list a
+        // different set of records from the one whose total was clicked.
+        var now = new Date();
+        recPeriod.kind = "month";
+        recPeriod.year = opts.year != null ? opts.year : now.getFullYear();
+        recPeriod.month = opts.month != null ? opts.month : now.getMonth();
+        renderDashRecords();
+        var recPanel = document.getElementById("dash-exp-subpanel-records");
+        if (recPanel) recPanel.scrollIntoView({ behavior: "smooth", block: "start" });
       }
 
       var dashExpState = { accounts: [], categories: [], paymentMethods: [], records: [], recType: "expense" };
@@ -2055,21 +2077,33 @@
           html += "<tr><td class='exp-matrix-label'>" + dot + pmLabel + "</td>";
           usedAcIds.forEach(function (acId) {
             var val = (pivot[pmId] && pivot[pmId][acId]) || 0;
-            html += "<td class='num" + (val ? "" : " exp-matrix-zero") + "'>" + (val ? fmtMoney(val) : "—") + "</td>";
+            // A figure that stands for records opens them. A dash stands for
+            // none, so it is left inert rather than opening an empty list.
+            html += "<td class='num" + (val ? " exp-matrix-drill" : " exp-matrix-zero") + "'" +
+              (val ? " role='button' tabindex='0' title='Show these transactions'" +
+                     " data-drill-ac='" + esc(acId) + "' data-drill-pm='" + esc(pmId) + "'" : "") +
+              ">" + (val ? fmtMoney(val) : "—") + "</td>";
           });
-          html += "<td class='num exp-matrix-total'>" + fmtMoney(rowTotal) + "</td></tr>";
+          html += "<td class='num exp-matrix-total exp-matrix-drill' role='button' tabindex='0'" +
+            " title='Show these transactions' data-drill-pm='" + esc(pmId) + "'>" +
+            fmtMoney(rowTotal) + "</td></tr>";
         });
 
         // Column totals row
         html += "<tr class='exp-matrix-footer'><td>TOTAL</td>";
         usedAcIds.forEach(function (acId) {
           var v = acctTotals[acId] || 0;
-          html += "<td class='num" + (v === grand ? " exp-matrix-grand" : "") + "'>" + fmtMoney(v) + "</td>";
+          html += "<td class='num exp-matrix-drill" + (v === grand ? " exp-matrix-grand" : "") + "'" +
+            " role='button' tabindex='0' title='Show these transactions'" +
+            " data-drill-ac='" + esc(acId) + "'>" + fmtMoney(v) + "</td>";
         });
-        html += "<td class='num exp-matrix-grand'>" + fmtMoney(grand) + "</td></tr>";
+        html += "<td class='num exp-matrix-grand exp-matrix-drill' role='button' tabindex='0'" +
+          " title='Show every transaction behind this total' data-drill-all='1'>" +
+          fmtMoney(grand) + "</td></tr>";
         html += "</tbody></table>";
 
         wrap.innerHTML = html;
+        _wireMatrixDrill(wrap, yr, mo);
 
         // Mobile: by-payment-method expandable list (expand → accounts).
         if (listEl) {
@@ -2081,7 +2115,12 @@
               var val = (pivot[pmId] && pivot[pmId][acId]) || 0;
               if (!val) return "";
               var ac = accounts.find(function (a) { return a.id === acId; });
-              return '<div class="exp-pm-sub"><span class="exp-pm-sub-name">' + esc(ac ? ac.name : acId) + '</span><span class="exp-pm-sub-amt">' + fmtMoney(val) + '</span></div>';
+              // Below the table's breakpoint this list IS the matrix, so its
+              // figures have to open the same records the cells would.
+              return '<div class="exp-pm-sub exp-matrix-drill" role="button" tabindex="0"' +
+                ' data-drill-ac="' + esc(acId) + '" data-drill-pm="' + esc(pmId) + '">' +
+                '<span class="exp-pm-sub-name">' + esc(ac ? ac.name : acId) + '</span>' +
+                '<span class="exp-pm-sub-amt">' + fmtMoney(val) + '</span></div>';
             }).join("");
             return '<div class="exp-pm-group">' +
               '<button type="button" class="exp-pm-row" data-pm-toggle>' +
@@ -2104,7 +2143,32 @@
               if (caret) caret.textContent = open ? "▾" : "▴";
             });
           });
+          _wireMatrixDrill(listEl, yr, mo);
         }
+      }
+
+      // Every figure in the spend breakdown opens the records behind it, filtered
+      // to exactly what that figure counted: a cell to its account and payment
+      // method, a row or column total to the one thing it holds fixed, the grand
+      // total to the month alone. The type is pinned to expense because the
+      // matrix counts expenses only — without that the list would show income
+      // and budget rows the clicked figure never included.
+      function _wireMatrixDrill(root, year, month) {
+        if (!root) return;
+        root.querySelectorAll("[data-drill-ac],[data-drill-pm],[data-drill-all]").forEach(function (cell) {
+          function go() {
+            drillToRecords({
+              accountId: cell.getAttribute("data-drill-ac") || "",
+              paymentMethodId: cell.getAttribute("data-drill-pm") || "",
+              type: "expense",
+              year: year, month: month
+            });
+          }
+          cell.addEventListener("click", go);
+          cell.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+          });
+        });
       }
 
       // ── Payment to Joint Account calculator ───────────────────────────────
