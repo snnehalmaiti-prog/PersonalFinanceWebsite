@@ -740,6 +740,22 @@ const money = (t) => {
   ok(cardGap != null && cardGap > 0,
      "GAP2 while still being two cards rather than one", cardGap);
 
+  // The same trap, anywhere on the page: a row that spaces itself from what is
+  // above it, holding cards that each add their own 22px on top. That is what
+  // opened the 38px gap this pair used to have, and a new row of chart cards
+  // would reintroduce it silently.
+  const doubled = await p.evaluate(() =>
+    Array.from(document.querySelectorAll(".value-chart-card"))
+      .map((c) => {
+        const par = c.parentElement;
+        return { card: c.id || "?", parent: par.id || String(par.className).split(" ")[0],
+          cardMt: getComputedStyle(c).marginTop, parentMt: getComputedStyle(par).marginTop };
+      })
+      .filter((x) => x.cardMt !== "0px" && x.parentMt !== "0px"));
+  ok(doubled.length === 0,
+     "GAP3 and no card on the page stacks its own top margin on a row that " +
+     "already has one", doubled);
+
   // ── The selectable legend ───────────────────────────────────────────────
   // Same contract as CASH FLOW · MONTHLY's: clicking picks a series out rather
   // than hiding one, several can be picked at once, the rest dim, and "Show all"

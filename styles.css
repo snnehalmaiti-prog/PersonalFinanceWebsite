@@ -3439,11 +3439,16 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* ── Monthly Investment redesign (mic = monthly invest card) ── */
 .mic-card { padding: 0 !important; overflow: hidden; }
-/* The row already spaces itself from the card above it. .value-chart-card adds
-   another 22px on top of that, so the gap between NET WORTH · MONTHLY and
-   CASH FLOW · MONTHLY came out at 38px — noticeably wider than the rhythm
-   everything else on the page is set to. The row owns the spacing. */
-#monthly-invest-row > .value-chart-card { margin-top: 0; }
+/* A row that spaces itself from what is above it owns that spacing entirely.
+   .value-chart-card carries its own 22px top margin, so a card inside such a
+   row stacked the two and opened a 38px gap — noticeably wider than the 16px
+   rhythm the rest of the page is set to.
+
+   Both rows here are the flex rows on the Overview: the Cash Flow row under
+   NET WORTH · MONTHLY, and the income/expense row under the split cards. A new
+   row of chart cards belongs in this list. */
+#monthly-invest-row > .value-chart-card,
+#overview-cashflow-row > .value-chart-card { margin-top: 0; }
 .mic-header {
   display: flex;
   align-items: center;
