@@ -130,7 +130,12 @@ function listen() {
       failed++;
       // Only the failing lines, not the whole transcript — a browser suite prints
       // hundreds of PASS lines and they bury the one that matters.
-      const lines = out.split("\n").filter((l) => /FAIL|Error|error:/.test(l));
+      //
+      // DIAG is in the list because suites print it to say what was actually on
+      // the page when an assertion could not tell two causes apart. Filtering it
+      // out threw away the one line written for the failure being read, which is
+      // how a CI-only failure here cost a round trip to reproduce.
+      const lines = out.split("\n").filter((l) => /FAIL|DIAG|Error|error:/.test(l));
       process.stdout.write((lines.length ? lines : out.split("\n").slice(-25)).join("\n").replace(/^/gm, "        ") + "\n");
     }
     summary.push({ name: s, ok });

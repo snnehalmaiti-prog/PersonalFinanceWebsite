@@ -101,19 +101,42 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
   await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
   await p.waitForTimeout(Number(process.env.WAIT || 10000));
 
-  // Wait for rows to exist rather than trusting the fixed timeout above. The
-  // card's total renders before its rows do, so on a slower machine the read
-  // found a correct total and an empty list — which scores as ₹0 for a category
-  // and looks exactly like the double-count bug this suite exists to catch.
-  // A genuinely missing row still fails here, just after the wait instead of
-  // during it.
-  const rowsReady = (listId) =>
-    p.waitForFunction((id) => document.querySelectorAll("#" + id + " .isc-row").length > 0,
-                      listId, { timeout: 20000 })
-     .catch(() => { console.log("  (timed out waiting for #" + listId + " rows)"); });
+  // Wait for the card to SETTLE rather than trusting the fixed timeout above.
+  // The total renders before the rows do, so a slower machine read a correct
+  // total against a partly-built list — one category present, another still at
+  // ₹0 — which looks exactly like the double-count bug this suite exists to
+  // catch. Waiting for "at least one row" was not enough: it accepts the list
+  // mid-render, which is how this failed in CI while passing locally.
+  //
+  // "Rows add up to the total" is not enough either: the card re-renders as each
+  // data source lands — the ETF price first, then gold, then the NAV — and it is
+  // self-consistent at every one of those intermediate stages. It shows ₹27,000
+  // over a single Commodity row long before the ₹82,000 answer exists.
+  //
+  // So the predicate is quiescence: the list and total stop changing. That is
+  // the only signal here that means "every source has landed", and it bakes in
+  // no expected value, so it cannot paper over a wrong figure — a card that
+  // settles on the wrong number still fails the assertions below.
+  const rowsReady = async (listId, totalId) => {
+    const read = () => p.evaluate(([lid, tid]) => {
+      const l = document.getElementById(lid), t = document.getElementById(tid);
+      return (l ? l.textContent.replace(/\s+/g, " ").trim() : "") +
+             " | " + (t ? t.textContent.trim() : "");
+    }, [listId, totalId]);
+    let prev = null, stable = 0;
+    for (let i = 0; i < 70; i++) {                       // ~35s ceiling
+      const cur = await read();
+      // A figure has to be on screen: an empty card is trivially unchanging.
+      if (cur === prev && /\d/.test(cur)) { if (++stable >= 2) return; }
+      else stable = 0;
+      prev = cur;
+      await p.waitForTimeout(500);
+    }
+    console.log("  (timed out waiting for #" + listId + " to settle; last: " + prev + ")");
+  };
 
   const money = (t) => Number(String(t || "").replace(/[^0-9.]/g, "")) || 0;
-  await rowsReady("iscat-list");
+  await rowsReady("iscat-list", "iscat-total-value");
   const split = await p.evaluate(() => {
     const out = { total: (document.getElementById("iscat-total-value") || {}).textContent, rows: {} };
     document.querySelectorAll("#iscat-list .isc-row").forEach((r) => {
@@ -154,7 +177,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
   await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
   await p.waitForTimeout(Number(process.env.WAIT || 10000));
 
-  await rowsReady("isc-list");
+  await rowsReady("isc-list", "isc-total-value");
   const region = await p.evaluate(() => {
     const out = { total: (document.getElementById("isc-total-value") || {}).textContent, rows: {} };
     document.querySelectorAll("#isc-list .isc-row").forEach((r) => {
