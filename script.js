@@ -16831,8 +16831,9 @@
   // Both parts can be negative (a withdrawal, a losing month) and stack away
   // from the axis in that direction, so the bar's extent is the month's total
   // change and its sign is visible at a glance.
-  var NWM_INV = "#3B82F6", NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
-  var NWM_IDLE = "#F59E0B";
+  // Invested and idle cash are no longer charted here — they are CASH FLOW ·
+  // MONTHLY's subject — so only these three have segments.
+  var NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
   var __nwmYear = null;          // selected year, as a string
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null;
@@ -16916,6 +16917,62 @@
     return yearList;
   }
 
+  // Which series the reader has picked out. Empty means all of them — the same
+  // contract CASH FLOW · MONTHLY's legend uses, so the two cards behave alike:
+  // clicking adds to a selection rather than hiding one thing, several can be on
+  // at once, and "Show all" clears rather than making the reader click each one
+  // back on.
+  var __nwmSeriesFilters = [];
+  var __nwmChartRows = [];
+  function _nwmSeriesOn(key) {
+    return !__nwmSeriesFilters.length || __nwmSeriesFilters.indexOf(key) !== -1;
+  }
+
+  function _nwmRenderLegend(legend, series) {
+    if (!legend) return;
+    // A selection that names a series this period does not contain would leave
+    // the chart empty with no way back except a key that is no longer there.
+    __nwmSeriesFilters = __nwmSeriesFilters.filter(function (k) {
+      return series.some(function (s) { return s.key === k; });
+    });
+    var anySelected = __nwmSeriesFilters.length > 0;
+    legend.innerHTML = series.map(function (s) {
+      var on = _nwmSeriesOn(s.key);
+      return '<div class="mic-legend-item mic-legend-clickable' + (on ? '' : ' mic-legend-dimmed') + '"' +
+        ' role="button" tabindex="0"' +
+        ' aria-pressed="' + (anySelected && on ? "true" : "false") + '"' +
+        ' title="' + (on && anySelected ? "Click to remove from the selection" : "Click to add to the selection") + '"' +
+        ' data-nwm-series="' + escapeHtml(s.key) + '">' +
+        '<div class="mic-legend-bar" style="background:' + s.swatch + '"></div>' +
+        escapeHtml(s.key) + '</div>';
+    }).join("") +
+    (anySelected
+      ? '<div class="mic-legend-item mic-legend-clickable mic-legend-clear" role="button" tabindex="0"' +
+        ' data-nwm-series-clear="1" title="Show all series">Show all</div>'
+      : "");
+
+    Array.prototype.forEach.call(legend.querySelectorAll("[data-nwm-series]"), function (item) {
+      function toggle() {
+        var key = item.getAttribute("data-nwm-series");
+        var at = __nwmSeriesFilters.indexOf(key);
+        if (at === -1) __nwmSeriesFilters.push(key);
+        else __nwmSeriesFilters.splice(at, 1);
+        _nwmDrawChart(__nwmChartRows);
+      }
+      item.addEventListener("click", toggle);
+      item.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+    });
+    Array.prototype.forEach.call(legend.querySelectorAll("[data-nwm-series-clear]"), function (item) {
+      function clearAll() { __nwmSeriesFilters = []; _nwmDrawChart(__nwmChartRows); }
+      item.addEventListener("click", clearAll);
+      item.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clearAll(); }
+      });
+    });
+  }
+
   function _nwmDrawChart(rows) {
     var wrap = document.getElementById("nwm-chart-wrap");
     var legend = document.getElementById("nwm-chart-legend");
@@ -16961,31 +17018,45 @@
     if (legend) legend.hidden = false;
 
     var labels = bars.map(function (r) { return _nwmMonthLabel(r.month); });
-    var invested = bars.map(function (r) { return r.delta == null ? null : r.contributions; });
+    // What the card charts is what only IT can say: the interest earned and what
+    // the market did. Contributions and idle-cash movements are CASH FLOW ·
+    // MONTHLY's subject, drawn there against their own axis — carrying them here
+    // too made the bars a second, worse telling of that card's story, and buried
+    // the two terms this one exists for. Both still appear in the figures above,
+    // because the change does not reconcile without them.
     var interest = bars.map(function (r) { return r.delta == null ? null : (r.interest || 0); });
-    var idle = bars.map(function (r) { return r.delta == null ? null : (r.idle || 0); });
-    var market = bars.map(function (r) { return r.delta == null ? null : r.market; });
+    // Gain and loss are separate series so each can be turned off on its own.
+    // One series with per-bar colours cannot be: Chart.js toggles a dataset, not
+    // a bar, so hiding "loss" would take the gaining months with it.
+    var gain = bars.map(function (r) {
+      return r.delta == null || !((r.market || 0) > 0) ? null : r.market;
+    });
+    var loss = bars.map(function (r) {
+      return r.delta == null || !((r.market || 0) < 0) ? null : r.market;
+    });
     // Nothing accrues interest — no deposits, no provident fund — so the segment
     // is dropped rather than drawn as a permanent zero-height sliver in the
     // legend.
     var nonZero = function (arr) {
       return arr.some(function (v) { return v != null && Math.abs(v) > 0.005; });
     };
-    var anyInterest = nonZero(interest), anyIdle = nonZero(idle);
+    var anyInterest = nonZero(interest), anyGain = nonZero(gain), anyLoss = nonZero(loss);
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
-    var invColors = bars.map(function (r) { return _nwmFade(NWM_INV, r.estimated); });
     var intColors = bars.map(function (r) { return _nwmFade(NWM_INT, r.estimated); });
-    var idleColors = bars.map(function (r) { return _nwmFade(NWM_IDLE, r.estimated); });
-    var mktColors = bars.map(function (r) {
-      return _nwmFade((r.market || 0) >= 0 ? NWM_UP : NWM_DOWN, r.estimated);
-    });
+    var gainColors = bars.map(function (r) { return _nwmFade(NWM_UP, r.estimated); });
+    var lossColors = bars.map(function (r) { return _nwmFade(NWM_DOWN, r.estimated); });
 
-    var intKey = document.getElementById("nwm-key-interest");
-    if (intKey) intKey.hidden = !anyInterest;
-    var idleKey = document.getElementById("nwm-key-idle");
-    if (idleKey) idleKey.hidden = !anyIdle;
+    // The rows the legend redraws from. Kept here rather than threaded through
+    // the click handler, so a toggle redraws exactly what is on screen.
+    __nwmChartRows = rows;
+    var series = [
+      { key: "Interest", present: anyInterest, data: interest, colors: intColors, swatch: NWM_INT },
+      { key: "Market gain", present: anyGain, data: gain, colors: gainColors, swatch: NWM_UP },
+      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, swatch: NWM_DOWN }
+    ].filter(function (s) { return s.present; });
+    _nwmRenderLegend(legend, series);
 
     // onHover alone does not reliably fire on the way out — a quick exit can
     // leave the readout showing a month the cursor is no longer near. Assigned
@@ -16997,19 +17068,11 @@
       type: "bar",
       data: {
         labels: labels,
-        datasets: [
-          { label: "Invested", data: invested, backgroundColor: invColors, stack: "chg",
-            borderWidth: 0, borderRadius: 2 }
-        ].concat(anyInterest ? [
-          { label: "Interest", data: interest, backgroundColor: intColors, stack: "chg",
-            borderWidth: 0, borderRadius: 2 }
-        ] : []).concat(anyIdle ? [
-          { label: "Idle Cash", data: idle, backgroundColor: idleColors, stack: "chg",
-            borderWidth: 0, borderRadius: 2 }
-        ] : []).concat([
-          { label: "Market", data: market, backgroundColor: mktColors, stack: "chg",
-            borderWidth: 0, borderRadius: 2 }
-        ])
+        datasets: series.filter(function (s) { return _nwmSeriesOn(s.key); })
+          .map(function (s) {
+            return { label: s.key, data: s.data, backgroundColor: s.colors, stack: "chg",
+                     borderWidth: 0, borderRadius: 2 };
+          })
       },
       options: {
         responsive: true, maintainAspectRatio: false,

@@ -329,8 +329,13 @@ const money = (t) => {
     ok(!chart.tooltipEnabled,
        "B3b with no tooltip — the column's figures go to the header instead");
     eq(chart.sets.map((s) => s.label).join(","),
-       "Invested,Interest,Idle Cash,Market",
-       "B4 a segment per kind of movement, and no category split");
+       "Interest,Market gain,Market loss",
+       "B4 a segment for what only this card can say — what the deposits earned " +
+       "and what the market did");
+    ok(!chart.sets.some((s) => /Invested|Idle/.test(s.label)),
+       "B5 and nothing for contributions or idle cash: those are CASH FLOW · " +
+       "MONTHLY's subject, drawn there against their own axis",
+       chart.sets.map((s) => s.label));
     ok(chart.sets.every((s) => s.stack === chart.sets[0].stack), "B6 in one stack");
 
     // Only months with a change get a bar; May has nothing to compare against.
@@ -338,20 +343,17 @@ const money = (t) => {
        "B7 bars for the year's comparable months, oldest on the left");
     const at = (m) => chart.labels.indexOf(m);
     const seg = (name) => chart.sets.find((s) => s.label === name);
-    // The fixture moves the corpus ₹40,000 in June and savings ₹50,000 in July.
-    // Both land in one Idle Cash segment, in their own months.
-    const idleSeg = seg("Idle Cash");
-    ok(idleSeg, "B5 the two cash buckets share one segment",
-       chart.sets.map((s) => s.label));
-    ok(Math.abs(idleSeg.data[at("Jun 2025")] - 40000) < 1,
-       "B5b carrying June's corpus movement", idleSeg.data);
-    ok(Math.abs(idleSeg.data[at("Jul 2025")] - 50000) < 1,
-       "B5c and July's savings movement", idleSeg.data);
 
-    eq(seg("Invested").data[at("Jun 2025")], 50000,
-       "B8 the invested segment carries the fund buy");
-    eq(seg("Invested").data[at("Jul 2025")], 130000,
-       "B9 and in Jul the buy and the new deposit's principal — not the savings move");
+    // Gain and loss are separate series, so a month appears in exactly one of
+    // them. One series with two colours could not be toggled a half at a time.
+    const gain = seg("Market gain").data, loss = seg("Market loss").data;
+    ok(gain[at("Jun 2025")] > 0 && gain[at("Jul 2025")] == null,
+       "B8 a gaining month is carried by the gain series alone", gain);
+    ok(loss[at("Jul 2025")] < 0 && loss[at("Jun 2025")] == null,
+       "B9 and a losing month by the loss series alone", loss);
+    ok(chart.labels.every((_, i) => !(gain[i] != null && loss[i] != null)),
+       "B9b never both — a month that appeared in each would be counted twice",
+       { gain, loss });
 
     // The ₹10L deposit at 8% accrues roughly ₹10,300 a month. Bounded rather
     // than pinned: the accrual runs to "now", so an exact figure would drift
@@ -372,38 +374,31 @@ const money = (t) => {
        "B11a-gap May spans five months with no snapshot, so it carries five months of accrual",
        int[at("May 2025")]);
 
-    // The invariant that matters: the segments are the change, exactly. If any
-    // leg is double-counted or dropped, this is what catches it.
-    const at0 = (name) => (seg(name) ? seg(name).data : []);
-    const inv = seg("Invested").data, mkt = seg("Market").data;
-    const idl = at0("Idle Cash");
-    const deltas = { "May 2025": 150000, "Jun 2025": 200000, "Jul 2025": -50000 };
-    Object.keys(deltas).forEach((m) => {
-      const i = at(m);
-      const sum = inv[i] + int[i] + (idl[i] || 0) + mkt[i];
-      ok(Math.abs(sum - deltas[m]) < 1,
-         "B11b " + m + ": invested + interest + market equals the month's change",
-         { sum, want: deltas[m], inv: inv[i], int: int[i], mkt: mkt[i] });
-    });
-    ok(mkt[at("Jun 2025")] > 0 && mkt[at("Jul 2025")] < 0,
-       "B11c the market leg keeps its sign — a gaining month and a losing one", mkt);
+    // The bars no longer sum to the month's change — contributions and idle cash
+    // are deliberately absent — so the invariant moves to the header, which does
+    // still have to reconcile (H4c). What must hold here is that the two market
+    // series and the interest are the SAME figures the header names.
+    const mktOf = (i) => (gain[i] != null ? gain[i] : (loss[i] != null ? loss[i] : 0));
+    ok(mktOf(at("Jun 2025")) > 0 && mktOf(at("Jul 2025")) < 0,
+       "B11c the market keeps its sign — a gaining month and a losing one",
+       { jun: mktOf(at("Jun 2025")), jul: mktOf(at("Jul 2025")) });
 
     // A losing month must not be drawn in the gaining colour. Asserted against
     // the specific hues, not merely "the two differ" — Jun is faded and Jul is
     // not, so a difference exists even when both are green.
     const UP = "16,185,129";   // #10B981
-    ok(String(seg("Market").colors[at("Jun 2025")]).includes(UP),
-       "B12 the gaining month is drawn in the gain colour", seg("Market").colors[at("Jun 2025")]);
-    ok(String(seg("Market").colors[at("Jul 2025")]).toUpperCase() === "#E8623A",
-       "B12b and the losing month in the loss colour", seg("Market").colors[at("Jul 2025")]);
-    ok(!String(seg("Market").colors[at("Jul 2025")]).includes(UP),
-       "B12c specifically, a loss is never drawn as a gain", seg("Market").colors);
+    ok(String(seg("Market gain").colors[at("Jun 2025")]).includes(UP),
+       "B12 the gaining month is drawn in the gain colour", seg("Market gain").colors[at("Jun 2025")]);
+    ok(String(seg("Market loss").colors[at("Jul 2025")]).toUpperCase() === "#E8623A",
+       "B12b and the losing month in the loss colour", seg("Market loss").colors[at("Jul 2025")]);
+    ok(!String(seg("Market loss").colors[at("Jul 2025")]).includes(UP),
+       "B12c specifically, a loss is never drawn as a gain", seg("Market loss").colors);
     // Jun is measured from May, a reconstruction, so it is faded; Jul is measured
     // from Jun and both are records, so it is solid.
-    ok(/rgba/.test(String(seg("Invested").colors[at("Jun 2025")])) &&
-       !/rgba/.test(String(seg("Invested").colors[at("Jul 2025")])),
+    ok(/rgba/.test(String(seg("Interest").colors[at("Jun 2025")])) &&
+       !/rgba/.test(String(seg("Interest").colors[at("Jul 2025")])),
        "B13 a month measured from a reconstruction is faded, while a fully recorded one is solid",
-       seg("Invested").colors);
+       seg("Interest").colors);
   }
 
   // ── The header's three lines ────────────────────────────────────────────
@@ -611,16 +606,15 @@ const money = (t) => {
 
   // ── Parked cash is named, not hidden ────────────────────────────────────
   // The fixture moves ₹50,000 into savings in July. That money is in net worth,
-  // so it stays in the totals — and it is not investing, so it gets its own
-  // segment rather than inflating Invested or being blamed on the market.
-  const cashSeg = await p.evaluate(() => {
-    const c = window.__wfNwmChart;
-    const s = c.data.datasets.find((d) => d.label === "Idle Cash");
-    return s ? { data: s.data, i: c.data.labels.indexOf("Jul 2025") } : null;
-  });
-  console.log("  idle cash segment: " + JSON.stringify(cashSeg));
-  ok(cashSeg && Math.abs(cashSeg.data[cashSeg.i] - 50000) < 1,
-     "C1 the cash movement is its own bar segment", cashSeg);
+  // so it stays in the totals — and it is not investing, so it is named on its
+  // own rather than inflating Invested or being blamed on the market. It is not
+  // charted: CASH FLOW · MONTHLY draws cash movements, and drawing them here too
+  // told that card's story worse and buried this one's.
+  ok(/^\+₹50,000$/.test(julH["Idle Cash"]),
+     "C1 the cash movement is named in its own figure", julH["Idle Cash"]);
+  ok(!(await p.evaluate(() => (window.__wfNwmChart.data.datasets || [])
+        .some((d) => /Idle|Invested/.test(d.label)))),
+     "C1b and is not a bar here, where it would be a second telling of CASH FLOW");
   ok(/^\+₹1,30,000$/.test(julH.Invested),
      "C2 and is not counted as investing", julH.Invested);
   // No explanatory note: the totals reconcile with the Overview, so there is
@@ -628,6 +622,93 @@ const money = (t) => {
   // quietly reintroduce prose the card no longer needs.
   const noteEl = await p.evaluate(() => !!document.getElementById("nwm-note"));
   ok(!noteEl, "C3 and the card carries no note explaining itself");
+
+  // ── The gap to the card below ───────────────────────────────────────────
+  // .value-chart-card carries a 22px top margin and the row it sits in adds
+  // another 16px, so the two stacked and the pair sat 38px apart — wider than
+  // anything else on the page. The row owns the spacing now.
+  const cardGap = await p.evaluate(() => {
+    const a = document.getElementById("net-worth-monthly-card");
+    const b2 = document.getElementById("monthly-invest-cat-card");
+    if (!a || !b2) return null;
+    return Math.round(b2.getBoundingClientRect().top - a.getBoundingClientRect().bottom);
+  });
+  console.log("  gap to Cash Flow: " + cardGap + "px");
+  ok(cardGap != null && cardGap <= 20,
+     "GAP1 the two charts sit close enough to read as a pair, not two screens",
+     cardGap);
+  ok(cardGap != null && cardGap > 0,
+     "GAP2 while still being two cards rather than one", cardGap);
+
+  // ── The selectable legend ───────────────────────────────────────────────
+  // Same contract as CASH FLOW · MONTHLY's: clicking picks a series out rather
+  // than hiding one, several can be picked at once, the rest dim, and "Show all"
+  // clears — otherwise picking one means clicking the others off again.
+  const legend = () => p.evaluate(() => {
+    const el = document.getElementById("nwm-chart-legend");
+    return {
+      keys: Array.from(el.querySelectorAll("[data-nwm-series]"))
+        .map((e) => e.textContent.trim()),
+      dimmed: Array.from(el.querySelectorAll("[data-nwm-series]"))
+        .filter((e) => e.classList.contains("mic-legend-dimmed"))
+        .map((e) => e.textContent.trim()),
+      clickable: Array.from(el.querySelectorAll("[data-nwm-series]"))
+        .every((e) => e.classList.contains("mic-legend-clickable") &&
+                      e.getAttribute("role") === "button"),
+      showAll: !!el.querySelector("[data-nwm-series-clear]"),
+      drawn: (window.__wfNwmChart.data.datasets || []).map((d) => d.label),
+    };
+  });
+  const clickKey = async (name) => {
+    await p.evaluate((n) => {
+      const el = Array.from(document.querySelectorAll("[data-nwm-series]"))
+        .find((e) => e.textContent.trim() === n);
+      if (el) el.click();
+    }, name);
+    await p.waitForTimeout(400);
+    return legend();
+  };
+
+  const l0 = await legend();
+  console.log("  legend: " + JSON.stringify(l0));
+  eq(l0.keys.join(","), "Interest,Market gain,Market loss",
+     "LG1 a key per series the period actually contains");
+  eq(l0.drawn.join(","), "Interest,Market gain,Market loss",
+     "LG2 all of them drawn until something is picked");
+  ok(l0.clickable, "LG3 each key is a button, reachable by keyboard as well as pointer");
+  ok(!l0.showAll, "LG4 with no 'Show all' until there is a selection to clear");
+  ok(l0.dimmed.length === 0, "LG5 and nothing dimmed", l0.dimmed);
+
+  const l1 = await clickKey("Market loss");
+  console.log("  after picking Market loss: " + JSON.stringify(l1));
+  eq(l1.drawn.join(","), "Market loss", "LG6 picking one series draws only it");
+  eq(l1.dimmed.sort().join(","), "Interest,Market gain",
+     "LG7 and dims the ones left out", l1.dimmed);
+  ok(l1.showAll, "LG8 'Show all' appears once a selection exists");
+
+  const l2 = await clickKey("Interest");
+  eq(l2.drawn.sort().join(","), "Interest,Market loss",
+     "LG9 a second click adds to the selection rather than replacing it", l2.drawn);
+
+  const l3 = await clickKey("Interest");
+  eq(l3.drawn.join(","), "Market loss",
+     "LG10 and clicking a picked series again removes it", l3.drawn);
+
+  await p.evaluate(() => {
+    const el = document.querySelector("[data-nwm-series-clear]");
+    if (el) el.click();
+  });
+  await p.waitForTimeout(400);
+  const l4 = await legend();
+  eq(l4.drawn.join(","), "Interest,Market gain,Market loss",
+     "LG11 'Show all' brings every series back", l4.drawn);
+  ok(!l4.showAll && l4.dimmed.length === 0,
+     "LG12 and takes itself away again, with nothing left dimmed", l4);
+
+  // Left showing everything: the selection is sticky across redraws, so a block
+  // that ends mid-selection changes what every later assertion is looking at.
+  const l5 = await legend();
+  eq(l5.drawn.length, 3, "LG13 the card is left with every series showing", l5.drawn);
 
   // ── Year selection ──────────────────────────────────────────────────────
   // Same control as Income & Expenses · MONTHLY: a decade-grid picker plus an

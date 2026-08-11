@@ -354,13 +354,9 @@
         <div class="nwm-chart-wrap" id="nwm-chart-wrap" hidden>
           <canvas id="nwm-chart" height="220"></canvas>
         </div>
-        <div class="nwm-chart-legend" id="nwm-chart-legend" hidden>
-          <span class="nwm-key"><i class="nwm-swatch nwm-swatch-inv"></i>Invested</span>
-          <span class="nwm-key" id="nwm-key-interest" hidden><i class="nwm-swatch nwm-swatch-int"></i>Interest</span>
-          <span class="nwm-key" id="nwm-key-idle" hidden><i class="nwm-swatch nwm-swatch-idle"></i>Idle Cash</span>
-          <span class="nwm-key"><i class="nwm-swatch nwm-swatch-up"></i>Market gain</span>
-          <span class="nwm-key"><i class="nwm-swatch nwm-swatch-down"></i>Market loss</span>
-        </div>
+        <!-- Rendered by _nwmDrawChart: which keys exist depends on what the
+             period actually contains, and each one is clickable. -->
+        <div class="nwm-chart-legend mic-legend" id="nwm-chart-legend" hidden></div>
       </div>
 
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->

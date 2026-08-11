@@ -3435,6 +3435,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 
 /* ── Monthly Investment redesign (mic = monthly invest card) ── */
 .mic-card { padding: 0 !important; overflow: hidden; }
+/* The row already spaces itself from the card above it. .value-chart-card adds
+   another 22px on top of that, so the gap between NET WORTH · MONTHLY and
+   CASH FLOW · MONTHLY came out at 38px — noticeably wider than the rhythm
+   everything else on the page is set to. The row owns the spacing. */
+#monthly-invest-row > .value-chart-card { margin-top: 0; }
 .mic-header {
   display: flex;
   align-items: center;
@@ -4444,7 +4449,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   font-size: 0.62rem; color: var(--muted); }
 .nwm-key { display: inline-flex; align-items: center; gap: 5px; }
 .nwm-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-.nwm-swatch-inv { background: #3B82F6; }
 .nwm-swatch-up { background: #10B981; }
 .nwm-swatch-down { background: #E8623A; }
 @media (max-width: 640px) { .nwm-chart-wrap { height: 180px; } }
@@ -4466,7 +4470,6 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #net-worth-monthly-card .mic-header { padding: 16px 20px 0; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
-.nwm-swatch-idle { background: #F59E0B; }
 
 /* Stock-vs-currency split under a US holding's return. Third line of the P&L
    cell, smaller and muted so the return itself stays the headline. */
