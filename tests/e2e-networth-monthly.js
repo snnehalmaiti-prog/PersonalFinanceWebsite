@@ -53,7 +53,21 @@ const SHEETS = {
     // And one opened DURING the window. Its ₹1,00,000 principal is a
     // contribution; counting it as interest because it appeared between two
     // valuations is the mistake the open-date filter exists to prevent.
-    ["10-Jul-2025", "Snnehal", "ICICI", "Deposit Two", "Fixed Income", "Fixed Deposit", "Deposit", "100000", "1-Jul-2030", "8%", ""]],
+    ["10-Jul-2025", "Snnehal", "ICICI", "Deposit Two", "Fixed Income", "Fixed Deposit", "Deposit", "100000", "1-Jul-2030", "8%", ""],
+    // Provident fund, opened long before the window and never added to, so its
+    // whole movement is interest. It used to contribute nothing to the Interest
+    // figure — buildFdHoldingsList values PF at par whatever the date, so both
+    // ends of the comparison agreed and its growth surfaced as a market gain.
+    ["1-Apr-2020", "Snnehal", "", "EPF Account", "Fixed Income", "Provident Fund", "Deposit", "1200000", "", "", ""],
+    // A second provident fund that IS added to inside the window. Its ₹50,000
+    // June contribution is money in, counted by the contributions leg — so the
+    // interest leg must difference what the account EARNED, not what it is
+    // worth. Differencing worth would book that ₹50,000 twice and take it out of
+    // the market residual twice over, which is more than the interest ceiling
+    // below allows. Kept small enough that June stays a gaining month: the
+    // fixture needs one of each sign.
+    ["1-Apr-2020", "Snnehal", "", "EPF Two", "Fixed Income", "Provident Fund", "Deposit", "400000", "", "", ""],
+    ["12-Jun-2025", "Snnehal", "", "EPF Two", "Fixed Income", "Provident Fund", "Deposit", "50000", "", "", ""]],
   "wf-fixedincome-data": [["Transaction Date", "Portfolio Name", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Amount"]],
 };
 
@@ -143,7 +157,11 @@ const money = (t) => {
     await p.evaluate((s) => { localStorage.clear();
       localStorage.setItem("wf-sb-session", JSON.stringify({ access_token: "x",
         expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: "u1", email: "a@b.c" } }));
-      for (const k in s) localStorage.setItem(k, JSON.stringify(s[k])); }, SHEETS);
+      for (const k in s) localStorage.setItem(k, JSON.stringify(s[k]));
+    // Settings → EPF Interest. PF accrual is a function of these rates, so a
+    // fixture without them measures a fund that pays nothing.
+    localStorage.setItem("wf-epf-interest-rates", JSON.stringify(
+      [2020, 2021, 2022, 2023, 2024, 2025].map((y) => ({ year: y, rate: 8.25 })))); }, SHEETS);
     errs.length = 0;
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
     // Any of the three end states: a chart, the explanatory status, or a count
@@ -228,6 +246,8 @@ const money = (t) => {
 
   // Hovering a month replaces the period's five figures with that month's, in
   // the same five slots — the header must not change shape as the cursor moves.
+  // Rupee figures as numbers, for arithmetic rather than pattern-matching.
+  const rupees = (x) => Number(String(x || "").replace(/[^0-9.]/g, ""));
   const julH = await hover("Jul 2025");
   console.log("  hover Jul: " + JSON.stringify(julH));
   // Opening and Closing always; the movement terms in between appear only when
@@ -245,17 +265,34 @@ const money = (t) => {
   ok(/^\+₹1,30,000$/.test(julH.Invested),
      "N8 contributions are the fund buy and the new deposit — NOT the ₹50,000 that " +
      "merely moved into savings", julH.Invested);
-  ok(/^\+₹1[0-9],[0-9]{3}$/.test(julH.Interest),
-     "N9 deposit interest is named rather than credited to the market", julH.Interest);
-  ok(/^−₹2,4[0-9],[0-9]{3}$/.test(julH["Market loss"]),
-     "N9c and the market is what is left: down 50k after putting in 1.8L and earning " +
-     "10k of interest means prices took 2.4L", julH["Market loss"]);
+  // The ₹10L deposit at 8% accrues ~₹10,300 a month and the two provident funds
+  // at 8.25% about ₹16,500 between them. Bounded
+  // rather than pinned: both accrue to "now", so an exact figure would drift
+  // with the date the suite runs.
+  const julInt = rupees(julH.Interest);
+  ok(julInt > 20000 && julInt < 40000,
+     "N9 the deposit's AND the provident fund's interest are named rather than " +
+     "credited to the market", julH.Interest);
+  // Whatever the interest comes to, the market is exactly what is left of the
+  // month's change once the other three terms are taken out. Derived from the
+  // figures on screen rather than hardcoded, so it cannot go stale the next time
+  // a term is measured better.
+  const julMkt = -rupees(julH["Market loss"]);
+  const julWant = -50000 - 130000 - julInt - 50000;
+  ok(Math.abs(julMkt - julWant) < 1,
+     "N9c and the market is what is left: down 50k after putting in 1.8L, moving " +
+     "50k into savings and earning that interest",
+     { shown: julH["Market loss"], want: julWant });
 
   const junH = await hover("Jun 2025");
   eq(junH.Opening, "₹10,00,000", "N10 an up month, measured from May's close");
-  ok(/^\+₹9[0-9],[0-9]{3}$/.test(junH["Market gain"]),
-     "N11 a gaining month is labelled a gain, with the corpus move taken out of it",
-     junH);
+  const junMkt = rupees(junH["Market gain"]);
+  // Jun: the ₹50,000 fund buy plus the ₹50,000 paid into the second provident
+  // fund, the ₹40,000 corpus move, and the interest — the market is the rest.
+  const junWant = 200000 - 100000 - rupees(junH.Interest) - 40000;
+  ok(junMkt > 0 && Math.abs(junMkt - junWant) < 1,
+     "N11 a gaining month is labelled a gain, with the corpus move and the " +
+     "interest taken out of it", { shown: junH["Market gain"], want: junWant });
 
   const scope = () => p.evaluate(() =>
     ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || ""));
@@ -367,9 +404,30 @@ const money = (t) => {
     // snapshot between Dec 2024 and it), so its accrual is five months' worth —
     // correct, and a reason not to bound every bar the same way.
     ["Jun 2025", "Jul 2025"].forEach((m) => {
-      ok(int[at(m)] > 8000 && int[at(m)] < 12000,
-         "B11a " + m + ": the deposit's accrual is measured, and only the deposits'", int[at(m)]);
+      // The ₹10L deposit at 8% is ~₹10,300 and the PF ~₹8,250, so a single
+      // month lands near ₹18,500. The ceiling is what does the work: the two
+      // savings accounts pay 12% here, and if their interest were counted as
+      // well (it is already inside the parked-cash flow) the figure would clear
+      // it by a wide margin.
+      // ~10,300 from the deposit and ~16,500 from the two provident funds. The
+      // ceiling does the work twice over: the savings accounts pay 12% here and
+      // would clear it if their interest were counted (it is already inside the
+      // parked-cash flow), and so would the ₹50,000 PF contribution if the
+      // interest leg differenced the accounts' worth instead of their earnings.
+      ok(int[at(m)] > 20000 && int[at(m)] < 40000,
+         "B11a " + m + ": the deposit and both provident funds are measured, and " +
+         "only what they EARNED — not the savings accounts, not the PF top-up",
+         int[at(m)]);
     });
+    // The provident funds pay 8.25% on ₹16,00,000 between them. Before PF was
+    // accrued the deposit alone put each single-month bar near ₹10,300; the
+    // floor below is what separates "the PF is counted" from "it is not".
+    ["Jun 2025", "Jul 2025"].forEach((m) => {
+      ok(int[at(m)] > 20000,
+         "B11a-pf " + m + ": the provident funds' interest is counted too, not " +
+         "left to surface as a market gain", int[at(m)]);
+    });
+
     ok(int[at("May 2025")] > 4 * 8000,
        "B11a-gap May spans five months with no snapshot, so it carries five months of accrual",
        int[at("May 2025")]);

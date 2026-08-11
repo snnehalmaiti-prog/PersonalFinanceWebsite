@@ -2812,7 +2812,11 @@
   }
 
   // Builds holdings from the FD sheet (all Fixed Income sub-categories).
-  function buildFdFixedIncomeHoldingsList(fdRows, portfolioFilter) {
+  // asOf values the accounts as at a past date instead of now. Provident fund
+  // is the only holding here whose worth is a function of the clock rather than
+  // of a price, so measuring what it earned between two months means asking for
+  // both of them — see _nwmInterestByMonth.
+  function buildFdFixedIncomeHoldingsList(fdRows, portfolioFilter, asOf) {
     var header = fdRows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
     var bankIdx = header.indexOf("bank");
@@ -2827,7 +2831,7 @@
     var rateIdx = header.indexOf("rate of return");
     if (portfolioIdx === -1 || instrumentIdx === -1 || amountIdx === -1 || dateIdx === -1) return null;
 
-    var today = new Date();
+    var today = asOf || new Date();
     var holdings = [];
     var latestCorpusByKey = {};
     var providentFundByKey = {};
@@ -16692,10 +16696,10 @@
     } catch (e) {}
 
     // Savings Account and Investment Corpus are deliberately NOT added here.
-    // They are taken out of the card altogether — _nwmParkedByMonth removes
-    // their balance from every month's total as well. Adding their flow while
-    // leaving the balance in the total (or the reverse) would leave the
-    // difference to resurface in Market as a price movement that never happened.
+    // Their balances stay inside every month's total, so the card reconciles
+    // with the Overview, and their movement is named separately as Idle Cash by
+    // _nwmIdleByMonth. Counting that flow here as well would subtract it from
+    // the market residual twice.
     return out;
   }
 
@@ -16742,19 +16746,6 @@
     } catch (e) { return {}; }
   }
 
-  function _nwmParkedByMonth(portfolio) {
-    var out = {};
-    try {
-      var idle = buildMonthlyIdleCashData(portfolio || "all");
-      Object.keys((idle && idle.byMonthInstr) || {}).forEach(function (m) {
-        var sum = 0, g = idle.byMonthInstr[m];
-        Object.keys(g).forEach(function (k) { sum += g[k] || 0; });
-        if (sum) out[m] = sum;
-      });
-    } catch (e) {}
-    return out;
-  }
-
   // fromMonth bounds the walk. buildMonthlyChange only ever reads months after
   // the earliest snapshot, so valuing every month back to a deposit opened in
   // 2015 costs two passes over the sheet per month for answers nobody reads —
@@ -16773,18 +16764,36 @@
 
     // Key by identity + start date so two deposits at the same bank are not
     // merged; merging them would let one maturing hide another's accrual.
+    // Interest EARNED to date per holding, not the holding's value.
+    //
+    // For a deposit the two differ by a constant, so differencing either gives
+    // the same accrual. For provident fund they do not: its value rises by both
+    // the month's contribution and the month's interest, and the contribution is
+    // already counted by _nwmContributionsByMonth. Differencing value would book
+    // it twice — once as money in, once as interest — and take it out of the
+    // market residual twice over.
     function valuedAt(d) {
       var m = {};
-      var list = buildFdHoldingsList(rows, portfolio || "all", _nwmIsAccruing, d) || [];
-      list.forEach(function (h) {
+      // Term deposits: compounded quarterly at their own rate.
+      (buildFdHoldingsList(rows, portfolio || "all", _fiIsTermDeposit, d) || []).forEach(function (h) {
         // Defensive: buildFdHoldingsList currently values a not-yet-opened
         // deposit at its principal, so such a row appears in BOTH valuations and
         // the matched-keys rule already keeps its principal out of interest.
         // This keeps that true if it ever starts omitting them instead.
         if (!h.startDate || h.startDate > d) return;
-        var k = normalizeText(h.portfolio) + "|" + normalizeText(h.bank) + "|" +
+        var k = "fd|" + normalizeText(h.portfolio) + "|" + normalizeText(h.bank) + "|" +
                 normalizeText(h.instrument) + "|" + formatDateISO(h.startDate);
-        m[k] = (m[k] || 0) + (h.current || 0);
+        m[k] = (m[k] || 0) + ((h.current || 0) - (h.invested || 0));
+      });
+      // Provident fund: monthly on the running balance at the configured EPF
+      // rate, credited at each financial year end. buildFdHoldingsList values
+      // these at par whatever the date, which is why they used to contribute
+      // nothing here and their growth surfaced as a market gain instead.
+      (buildFdFixedIncomeHoldingsList(rows, portfolio || "all", d) || []).forEach(function (h) {
+        if (!isProvidentFundSub(normalizeText(h.subCategory || ""))) return;
+        var k = "pf|" + normalizeText(h.portfolio) + "|" + normalizeText(h.instrument) + "|" +
+                normalizeText(h.subCategory);
+        m[k] = (m[k] || 0) + ((h.current || 0) - (h.invested || 0));
       });
       return m;
     }
