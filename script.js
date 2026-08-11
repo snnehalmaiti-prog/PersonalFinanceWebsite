@@ -16586,10 +16586,25 @@
       // Rows already stored from before the split existed. Without this the
       // portfolio selector does nothing for every month of history, since
       // planBackfill will never look at a date it already has.
+      // Reconstructions already stored, re-reconstructed by today's valuation.
+      // Without this a month end written months ago keeps whatever the app
+      // believed then, and reads lower than the same month on the chart beside
+      // it. Live rows are left alone — they are records, not derivations.
+      var refreshed = WfSnapshots.planRefreshBackfill(existing, points, WfSnapshots.localDateKey(), byPortfolio, 600);
       var repairs = WfSnapshots.planSplitBackfill(existing, WfSnapshots.localDateKey(), byPortfolio, 600);
-      plan = plan.concat(repairs);
+      // Both planners can reach the same reconstructed date. Two rows with the
+      // same key in one upsert is not a near-miss — PostgREST rejects the whole
+      // batch ("cannot affect row a second time") — so the plan is deduped, the
+      // refresh winning because it carries the newer total as well as the split.
+      var seenDate = {};
+      plan = plan.concat(refreshed).concat(repairs).filter(function (row) {
+        if (seenDate[row.snapshot_date]) return false;
+        seenDate[row.snapshot_date] = true;
+        return true;
+      });
       dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
-          " already stored, " + plan.length + " to write (" + repairs.length + " split repairs)");
+          " already stored, " + plan.length + " to write (" + refreshed.length +
+          " re-reconstructed, " + repairs.length + " split repairs)");
       if (!plan.length) return 0;
       return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
         dbg("[Snapshot] backfilled " + plan.length + " month ends");

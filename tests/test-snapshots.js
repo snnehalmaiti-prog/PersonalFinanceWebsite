@@ -206,6 +206,81 @@ const SERIES = [
      "N18 keeping the most recent, as the backfill does");
 }
 
+// ── Re-reconstructing rows the valuation has moved past ─────────────────────
+// A backfilled row is a derivation. When the app learns to value something it
+// was ignoring — accrued interest on a deposit, say — every stored
+// reconstruction keeps asserting the old figure, and planBackfill will not
+// revisit a date it already has. A live row is a record and must survive the
+// same pass untouched.
+{
+  const SERIES2 = [
+    P(2026, 5, 30, 150), P(2026, 6, 30, 170), P(2026, 7, 31, 190),
+    P(2026, 8, 9, 220),   // current month, never a month end
+  ];
+  const SPLITS = {
+    Snnehal: [P(2026, 5, 30, 90), P(2026, 6, 30, 100), P(2026, 7, 31, 110)],
+    Trisha: [P(2026, 5, 30, 60), P(2026, 6, 30, 70), P(2026, 7, 31, 80)],
+  };
+  const stored = [
+    // Written before the valuation improved: too low, by the interest it missed.
+    { snapshot_date: "2026-06-30", total: 165, by_portfolio: { Snnehal: 97, Trisha: 68 },
+      meta: { source: "backfill", backfilled: true } },
+    // Already right — must not be rewritten just for being a reconstruction.
+    { snapshot_date: "2026-07-31", total: 190, by_portfolio: { Snnehal: 110, Trisha: 80 },
+      meta: { source: "backfill", backfilled: true } },
+    // A record of a day the dashboard was open. Lower than the reconstruction,
+    // and it stays that way.
+    { snapshot_date: "2026-05-30", total: 140, invested: 100, equity: 60,
+      by_portfolio: { Snnehal: 80, Trisha: 60 }, meta: { source: "live" } },
+  ];
+  const plan = S.planRefreshBackfill(stored, SERIES2, "2026-08-09", SPLITS);
+
+  eq(plan.length, 1, "RB1 only the reconstruction that would now say something different");
+  eq(plan[0].snapshot_date, "2026-06-30", "RB2 specifically the stale one");
+  eq(plan[0].total, 170, "RB3 rewritten to what the series says that month end was worth");
+  eq(plan[0].by_portfolio.Snnehal, 100, "RB4 with the split re-derived too");
+  eq(plan[0].meta.source, "backfill", "RB5 and still flagged as a reconstruction");
+  ok(!plan.some((r) => r.snapshot_date === "2026-05-30"),
+     "RB6 the live row is untouched — a record is not rewritten because a " +
+     "derivation of the same day now disagrees with it", plan);
+  ok(!plan.some((r) => r.snapshot_date === "2026-07-31"),
+     "RB7 nor is a reconstruction that already matches", plan);
+
+  // A reconstruction whose split never arrived is refreshed even when its total
+  // is right — otherwise the portfolio filter stays blank for that month.
+  const noSplit = S.planRefreshBackfill(
+    [{ snapshot_date: "2026-07-31", total: 190, by_portfolio: null,
+       meta: { source: "backfill" } }], SERIES2, "2026-08-09", SPLITS);
+  eq(noSplit.length, 1, "RB8 a right-but-splitless reconstruction is still refreshed");
+  eq(noSplit[0].by_portfolio.Trisha, 80, "RB9 to gain the split it was missing");
+
+  // Sub-rupee drift must not rewrite the whole table on every load.
+  const noise = S.planRefreshBackfill(
+    [{ snapshot_date: "2026-06-30", total: 170.004, by_portfolio: { Snnehal: 100, Trisha: 70 },
+       meta: { source: "backfill" } }], SERIES2, "2026-08-09", SPLITS);
+  eq(noise.length, 0, "RB10 floating-point noise is not a reason to rewrite a row");
+
+  // A date the series no longer reaches says nothing about that month.
+  const orphan = S.planRefreshBackfill(
+    [{ snapshot_date: "2019-03-31", total: 5, meta: { source: "backfill" } }],
+    SERIES2, "2026-08-09", SPLITS);
+  eq(orphan.length, 0,
+     "RB11 a month the series no longer covers is left alone rather than blanked");
+
+  eq(S.planRefreshBackfill(stored, [], "2026-08-09", SPLITS).length, 0,
+     "RB12 with no series there is nothing to re-reconstruct from");
+  eq(S.planRefreshBackfill(null, SERIES2, "2026-08-09", SPLITS).length, 0, "RB13 no rows, no work");
+  eq(S.planRefreshBackfill(stored, SERIES2, "2026-08-09", SPLITS, 0).length, 0,
+     "RB14 the limit caps the batch");
+
+  // The current month is not a month end, so a row dated inside it is not
+  // something this pass has an opinion about.
+  const thisMonth = S.planRefreshBackfill(
+    [{ snapshot_date: "2026-08-09", total: 1, meta: { source: "backfill" } }],
+    SERIES2, "2026-08-09", SPLITS);
+  eq(thisMonth.length, 0, "RB15 and the month in progress is left out of it");
+}
+
 {
   // Zero/negative points would otherwise record a net worth of nothing on days
   // the series simply has no data for.

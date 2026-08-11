@@ -169,7 +169,7 @@
     var have = {};
     (existingDates || []).forEach(function (d) { have[d] = true; });
     var rows = monthEndPoints(points, todayKey).filter(function (r) { return !have[r.snapshot_date]; });
-    if (limit != null && rows.length > limit) rows = rows.slice(-limit);
+    if (limit != null && rows.length > limit) rows = rows.slice(rows.length - limit);
 
     // Each portfolio's own month ends, keyed by date, so a row can look up its
     // own date rather than relying on the two series lining up by index.
@@ -257,7 +257,75 @@
         meta: meta
       });
     });
-    if (limit != null && out.length > limit) out = out.slice(-limit);
+    if (limit != null && out.length > limit) out = out.slice(out.length - limit);
+    return out;
+  }
+
+  // Reconstructed rows, re-reconstructed.
+  //
+  // A backfilled row is a derivation, not a record: it was computed from the
+  // sheets as they stood, by the valuation the app had at the time. When that
+  // valuation improves — the day fixed deposits started carrying their accrued
+  // interest, say — every stored reconstruction is left asserting something the
+  // app no longer believes, and planBackfill will not revisit a date it already
+  // has. A month end recorded months ago then reads lower than the same month
+  // end on the chart beside it, with nothing to explain the gap.
+  //
+  // Live rows are never touched, and that is the point of the source check.
+  // Those ARE records — what the portfolio was worth on a day the dashboard was
+  // open — and no later improvement in how the past is reconstructed may
+  // overwrite one. The whole reason the snapshot table exists is that a
+  // derivation can be rewritten and a record cannot.
+  function planRefreshBackfill(rows, points, todayKey, byPortfolioPoints, limit) {
+    var fresh = {};
+    monthEndPoints(points, todayKey).forEach(function (r) { fresh[r.snapshot_date] = r.total; });
+    if (!Object.keys(fresh).length) return [];
+
+    var byName = {};
+    Object.keys(byPortfolioPoints || {}).forEach(function (name) {
+      var m = {};
+      monthEndPoints(byPortfolioPoints[name], todayKey).forEach(function (r) {
+        m[r.snapshot_date] = r.total;
+      });
+      byName[name] = m;
+    });
+    var names = Object.keys(byName);
+
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (!r || !r.snapshot_date) return;
+      var meta = r.meta;
+      var reconstructed = !!(meta && (meta.backfilled || meta.source === "backfill"));
+      if (!reconstructed) return;
+      var date = String(r.snapshot_date).slice(0, 10);
+      // A date the series no longer reaches says nothing about what that month
+      // was worth — the row stays as it is rather than being blanked.
+      var total = fresh[date];
+      if (total == null) return;
+
+      var split = null;
+      names.forEach(function (name) {
+        var v = byName[name][date];
+        if (v == null) return;
+        (split = split || {})[name] = v;
+      });
+
+      // Rewritten only when it would actually say something different. Rupee
+      // tolerance, so floating-point noise does not rewrite the whole table on
+      // every load.
+      var totalMoved = Math.abs(Number(r.total) - total) >= 1;
+      var splitMissing = !!split && !(r.by_portfolio && Object.keys(r.by_portfolio).length);
+      if (!totalMoved && !splitMissing) return;
+
+      out.push({
+        snapshot_date: date,
+        total: round2(total),
+        invested: null, equity: null, fixed_income: null, commodity: null,
+        by_portfolio: split || r.by_portfolio || null,
+        meta: { source: "backfill", backfilled: true }
+      });
+    });
+    if (limit != null && out.length > limit) out = out.slice(out.length - limit);
     return out;
   }
 
@@ -504,7 +572,8 @@
     evaluateWrite: evaluateWrite,
     monthEndPoints: monthEndPoints,
     planBackfill: planBackfill,
-    planSplitBackfill: planSplitBackfill
+    planSplitBackfill: planSplitBackfill,
+    planRefreshBackfill: planRefreshBackfill
   };
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this));
 

@@ -234,6 +234,47 @@ const monthlyNav = () => {
   ok(table.every((r) => r.total != null && Number(r.total) > 0),
      "S12 and every row still carries the total it was written with");
 
+  // ── A reconstruction the valuation has moved past ───────────────────────
+  // The July row this fixture ends up with is a derivation: computed from the
+  // sheets by the valuation the app had when it was written. Age one row the way
+  // an improvement to that valuation ages every stored reconstruction — it now
+  // says something the app no longer believes — and the next load must correct
+  // it. A recorded row given the same treatment must survive untouched, because
+  // that one is evidence and this one is arithmetic.
+  const victim = table.filter((r) => r.meta && r.meta.source === "backfill")
+    .sort((a, x) => (a.snapshot_date < x.snapshot_date ? -1 : 1))[2];
+  const trueTotal = Number(victim.total);
+  const stale = Math.round(trueTotal * 0.9);
+  victim.total = stale;
+
+  // And a RECORDED month end that disagrees with today's reconstruction by the
+  // same margin. It has to sit on a month-end date to be a real test: on any
+  // other day the reconstruction has nothing to say about it and leaving it
+  // alone would prove nothing about the source check.
+  const guardian = table.filter((r) => r.meta && r.meta.source === "backfill")
+    .sort((a, x) => (a.snapshot_date < x.snapshot_date ? -1 : 1))[4];
+  const liveDate = guardian.snapshot_date;
+  const liveTotal = Math.round(Number(guardian.total) * 0.8);
+  guardian.total = liveTotal;
+  guardian.meta = { source: "live" };
+
+  await load();
+
+  const fixed = table.find((r) => r.snapshot_date === victim.snapshot_date);
+  const live = table.find((r) => r.snapshot_date === liveDate);
+  console.log("  refreshed: " + JSON.stringify({ was: stale, now: fixed && fixed.total,
+    want: trueTotal, live: live && live.total }));
+  ok(fixed && Math.abs(Number(fixed.total) - trueTotal) < 1,
+     "S13 a stale reconstruction is re-reconstructed on the next load, rather " +
+     "than keeping a figure the chart beside it no longer agrees with",
+     { was: stale, now: fixed && fixed.total, want: trueTotal });
+  ok(live && Number(live.total) === liveTotal,
+     "S14 while a recorded row is left exactly as it was — a record is not " +
+     "corrected by a derivation of the same day",
+     { was: liveTotal, now: live && live.total });
+  ok(live && live.meta && live.meta.source === "live",
+     "S15 and is still a record afterwards", live && live.meta);
+
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   await b.close();
