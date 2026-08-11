@@ -3444,9 +3444,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    row stacked the two and opened a 38px gap — noticeably wider than the 16px
    rhythm the rest of the page is set to.
 
-   Both rows here are the flex rows on the Overview: the Cash Flow row under
-   NET WORTH · MONTHLY, and the income/expense row under the split cards. A new
-   row of chart cards belongs in this list. */
+   Both rows here are the flex rows on the Overview that hold chart cards: the
+   income/expense row and the Cash Flow row, both under NET WORTH · MONTHLY. A
+   new row of chart cards belongs in this list. */
 #monthly-invest-row > .value-chart-card,
 #overview-cashflow-row > .value-chart-card { margin-top: 0; }
 .mic-header {
@@ -3620,8 +3620,8 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 #monthly-invest-cat-card .mic-controls,
 #net-worth-monthly-card .mic-controls { gap: 6px; }
 /* Let the three split/profit cards stretch to fill the row so the last card's
-   right edge lines up with the full-width chart above them. */
-#monthly-invest-row .isc-card { flex: 1 1 300px; max-width: none; }
+   right edge lines up with the full-width charts above them. */
+#overview-splits-row .isc-card { flex: 1 1 300px; max-width: none; }
 .mic-stats-row {
   display: flex;
   gap: 20px;
@@ -4217,10 +4217,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   .ov-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: background 0.2s, width 0.2s; }
   .ov-dot.active { background: var(--emerald); width: 22px; border-radius: 4px; }
 
-  /* --- Portfolio Split sits directly after the charts (before Cash Flow) --- */
+  /* The splits stack under the charts. They sit there in the document now, so
+     the order override this rule used to carry — pulling Portfolio Split up
+     past the Cash Flow card — is gone with it. */
+  #overview-splits-row,
   #monthly-invest-row { display: flex; flex-direction: column; gap: 16px; }
-  #monthly-invest-row #investment-split-card { order: -1; }
-  #monthly-invest-row .isc-card,
+  #overview-splits-row .isc-card,
   #monthly-invest-row .mic-card { width: 100%; max-width: none; flex: none; }
 
   /* Overview monthly cash-flow cards are not shown on the mobile Overview.
