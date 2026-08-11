@@ -681,6 +681,48 @@ const money = (t) => {
   const noteEl = await p.evaluate(() => !!document.getElementById("nwm-note"));
   ok(!noteEl, "C3 and the card carries no note explaining itself");
 
+  // ── The controls match the card below ───────────────────────────────────
+  // Cash Flow scopes its controls smaller than the .mic-dropdown-btn default,
+  // and Net Worth was not in that rule — so its pills came out 27px tall
+  // against Cash Flow's 20px. Two cards stacked with the same two controls at
+  // different sizes read as two designs, not one page.
+  const ctlSizes = await p.evaluate(() => {
+    const m = (id) => {
+      const e = document.getElementById(id);
+      if (!e) return null;
+      const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+      return { h: Math.round(r.height), fs: cs.fontSize, pad: cs.padding };
+    };
+    const gap = (sel) => {
+      const e = document.querySelector(sel);
+      return e ? getComputedStyle(e).gap : null;
+    };
+    return { nwm: m("nwm-alltime"), cf: m("monthly-invest-cat-alltime"),
+      // The year <select> is hidden and a custom picker button stands in for it,
+      // so measuring the select compares two zero-height elements and proves
+      // nothing. __wfYpBtn is what is actually on screen.
+      nwmYear: (() => { const sel = document.getElementById("nwm-year");
+        const btn = sel && sel.__wfYpBtn; if (!btn) return null;
+        const r = btn.getBoundingClientRect(), cs = getComputedStyle(btn);
+        return { h: Math.round(r.height), fs: cs.fontSize, pad: cs.padding }; })(),
+      cfYear: (() => { const sel = document.getElementById("monthly-invest-cat-year");
+        const btn = sel && sel.__wfYpBtn; if (!btn) return null;
+        const r = btn.getBoundingClientRect(), cs = getComputedStyle(btn);
+        return { h: Math.round(r.height), fs: cs.fontSize, pad: cs.padding }; })(),
+      nwmGap: gap("#net-worth-monthly-card .mic-controls"),
+      cfGap: gap("#monthly-invest-cat-card .mic-controls") };
+  });
+  console.log("  controls: " + JSON.stringify(ctlSizes));
+  ok(ctlSizes.nwm && ctlSizes.cf && ctlSizes.nwm.h === ctlSizes.cf.h,
+     "CTL1 the All time pill is the same height as Cash Flow's", ctlSizes);
+  eq(ctlSizes.nwm.fs, ctlSizes.cf.fs, "CTL2 at the same text size");
+  eq(ctlSizes.nwm.pad, ctlSizes.cf.pad, "CTL3 with the same padding");
+  ok(ctlSizes.nwmYear && ctlSizes.cfYear && ctlSizes.nwmYear.h > 0 &&
+     ctlSizes.nwmYear.h === ctlSizes.cfYear.h,
+     "CTL4 and so is the year picker beside it — the button on screen, not the " +
+     "hidden select behind it", ctlSizes);
+  eq(ctlSizes.nwmGap, ctlSizes.cfGap, "CTL5 spaced apart the same way");
+
   // ── The gap to the card below ───────────────────────────────────────────
   // .value-chart-card carries a 22px top margin and the row it sits in adds
   // another 16px, so the two stacked and the pair sat 38px apart — wider than

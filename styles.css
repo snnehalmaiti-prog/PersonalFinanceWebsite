@@ -3600,11 +3600,20 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* Compact controls on the Cash Flow card. It carries five of them — three modes
    plus the range and year — so at the default size they dominate the header.
    Scoped rather than global: the other cards using these classes have fewer
-   controls and are not crowded. */
-#monthly-invest-cat-card .mic-toggle-group { padding: 1px; }
-#monthly-invest-cat-card .mic-toggle-btn { padding: 3px 10px; font-size: 0.7rem; }
-#monthly-invest-cat-card .mic-dropdown-btn { padding: 3px 9px; font-size: 0.7rem; gap: 3px; }
-#monthly-invest-cat-card .mic-controls { gap: 6px; }
+   controls and are not crowded.
+
+   Net Worth · Monthly is in the list because it sits directly above Cash Flow
+   and carries the same two controls. At the default size its pills came out
+   27px tall against Cash Flow's 20px, which reads as two different designs
+   stacked rather than one card and its neighbour. */
+#monthly-invest-cat-card .mic-toggle-group,
+#net-worth-monthly-card .mic-toggle-group { padding: 1px; }
+#monthly-invest-cat-card .mic-toggle-btn,
+#net-worth-monthly-card .mic-toggle-btn { padding: 3px 10px; font-size: 0.7rem; }
+#monthly-invest-cat-card .mic-dropdown-btn,
+#net-worth-monthly-card .mic-dropdown-btn { padding: 3px 9px; font-size: 0.7rem; gap: 3px; }
+#monthly-invest-cat-card .mic-controls,
+#net-worth-monthly-card .mic-controls { gap: 6px; }
 /* Let the three split/profit cards stretch to fill the row so the last card's
    right edge lines up with the full-width chart above them. */
 #monthly-invest-row .isc-card { flex: 1 1 300px; max-width: none; }
@@ -4467,11 +4476,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
    beneath it. The default height already fits, so only the bottom padding is
    trimmed. */
 #net-worth-monthly-card .mic-hover-split { padding-bottom: 0; }
-/* No bottom padding: this card's title group is a single line while the
-   controls beside it are taller, so the header already leaves slack under the
-   eyebrow. The Cash Flow card needs its 4px because its title group is two
-   lines and fills the row. */
-#net-worth-monthly-card .mic-header { padding: 16px 20px 0; }
+/* This card's title group is a single line, so nothing but the controls gives
+   its header height. That used to be slack enough on its own — the controls
+   were taller here than on Cash Flow. Now that they match, the header lost 3px
+   and pulled the figures up under the title, so the padding puts it back and
+   the two cards' title-to-figures spacing still agrees. */
+#net-worth-monthly-card .mic-header { padding: 16px 20px 3px; }
 /* Names what the figures beside it describe: the period at rest, the hovered
    month while the cursor is over the chart. */
 
