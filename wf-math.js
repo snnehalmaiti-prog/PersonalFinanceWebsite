@@ -334,11 +334,16 @@
     var byId = {};
     (accounts || []).forEach(function (a) { if (a && a.id) byId[a.id] = a; });
     var key = function (s) { return String(s == null ? "" : s).trim().toLowerCase(); };
-    var out = { total: 0, byName: {}, unattributed: 0, openEnded: 0 };
+    // `items` keeps each liability's own contribution, so a figure made of
+    // several loans can say which ones — a total with no names is a number the
+    // reader has to go and reconstruct from the settings page.
+    var out = { total: 0, byName: {}, unattributed: 0, openEnded: 0, items: [] };
+    var cur = null;
     var add = function (name, amt) {
       var k = key(name);
-      if (!k) { out.unattributed += amt; return; }
+      if (!k) { out.unattributed += amt; if (cur) cur.unattributed += amt; return; }
       out.byName[k] = (out.byName[k] || 0) + amt;
+      if (cur) cur.byName[k] = (cur.byName[k] || 0) + amt;
     };
 
     (liabilities || []).forEach(function (item) {
@@ -350,22 +355,30 @@
       if (owed == null) { out.openEnded++; return; }
       if (!(owed > 0)) return;
       out.total += owed;
+      cur = { name: item.name || "Liability", total: owed, byName: {}, unattributed: 0 };
+      out.items.push(cur);
 
       var acct = row.account_id ? byId[row.account_id] : null;
-      if (acct && acct.contributing_account) { add(acct.name, owed); return; }
+      if (acct && acct.contributing_account) { add(acct.name, owed); cur = null; return; }
 
       var split = row.contribution_split;
-      if (!split || !Object.keys(split).length) { out.unattributed += owed; return; }
+      if (!split || !Object.keys(split).length) {
+        out.unattributed += owed; cur.unattributed += owed; cur = null; return;
+      }
       var pctTotal = Object.keys(split).reduce(function (s, id) { return s + (Number(split[id]) || 0); }, 0);
-      if (!(pctTotal > 0)) { out.unattributed += owed; return; }
+      if (!(pctTotal > 0)) {
+        out.unattributed += owed; cur.unattributed += owed; cur = null; return;
+      }
       Object.keys(split).forEach(function (id) {
         var pct = Number(split[id]) || 0;
         if (!pct) return;
         var share = owed * (pct / pctTotal);
         var a = byId[id];
         if (a && a.name) add(a.name, share);
-        else out.unattributed += share;   // the account is gone; the debt is not
+        // The account is gone; the debt is not.
+        else { out.unattributed += share; cur.unattributed += share; }
       });
+      cur = null;
     });
     return out;
   }
@@ -496,12 +509,27 @@
     return deductions.byName[pf.toLowerCase()] || 0;
   }
 
+  // Which loans make up one selection's figure, largest first. Only the ones it
+  // actually carries: a portfolio is not shown a debt that is not its own, and
+  // the shares here sum to what liabilityForPortfolio returns for it.
+  function liabilityBreakdown(deductions, portfolio) {
+    if (!deductions || !deductions.items) return [];
+    var pf = String(portfolio == null ? "all" : portfolio).trim().toLowerCase();
+    var all = !pf || pf === "all";
+    return deductions.items.map(function (it) {
+      var amt = all ? it.total : (it.byName[pf] || 0);
+      return { name: it.name, amount: amt };
+    }).filter(function (r) { return r.amount > 0; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+  }
+
   root.WfMath = {
     DAYS_PER_YEAR: DAYS_PER_YEAR,
     liabilityRemainingCount: liabilityRemainingCount,
     liabilityRemaining: liabilityRemaining,
     liabilityDeductions: liabilityDeductions,
     liabilityForPortfolio: liabilityForPortfolio,
+    liabilityBreakdown: liabilityBreakdown,
     liabilityStartDate: liabilityStartDate,
     liabilityTotalCount: liabilityTotalCount,
     liabilityOutstandingAt: liabilityOutstandingAt,

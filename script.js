@@ -2251,12 +2251,6 @@
     return WfMath.liabilityDeductions(list, accounts);
   }
 
-  function _ovLiabilityDeduction() {
-    var d = _ovLiabilities();
-    if (!d) return 0;
-    return WfMath.liabilityForPortfolio(d, _ovCurrentPortfolio()) || 0;
-  }
-
   function refreshOverviewStats() {
     var overviewInvestedEl = document.getElementById("overview-total-investment");
     var overviewCurrentEl = document.getElementById("overview-total-current-value");
@@ -2268,12 +2262,29 @@
     var totalCurrent = agg.current;
     var totalRealized = agg.realized;
     setMoneyText(overviewInvestedEl, formatCurrency(totalInvested), totalInvested);
-    var owed = _ovLiabilityDeduction();
+    // Read once: the figure, the cell's tooltip and the deduction below are
+    // three views of the same thing and must not disagree.
+    var _ded = _ovLiabilities();
+    var owed = _ded ? (WfMath.liabilityForPortfolio(_ded, _ovCurrentPortfolio()) || 0) : 0;
     // The Liability cell exists only while the CURRENT selection carries one.
     // Snnehal's loan is not Trisha's, so it is absent from her view entirely
     // rather than shown as zero — and present under All, which owes it.
     var liabilityEl = document.getElementById("overview-total-liability");
-    if (liabilityEl) setMoneyText(liabilityEl, formatCurrency(owed), owed);
+    if (liabilityEl) {
+      setMoneyText(liabilityEl, formatCurrency(owed), owed);
+      // Hovering names the loans behind the figure, and what each contributes to
+      // THIS selection — a lone total leaves the reader to reconstruct it from
+      // the settings page.
+      var parts = (owed > 0 && window.WfMath && WfMath.liabilityBreakdown)
+        ? WfMath.liabilityBreakdown(_ded, _ovCurrentPortfolio()) : [];
+      if (parts.length) {
+        liabilityEl.setAttribute("title", parts.map(function (r) {
+          return r.name + " " + formatCurrency(r.amount);
+        }).join("\n"));
+      } else {
+        liabilityEl.removeAttribute("title");
+      }
+    }
     document.querySelectorAll(".overview-stat-liability").forEach(function (el) {
       el.hidden = !(owed > 0);
     });

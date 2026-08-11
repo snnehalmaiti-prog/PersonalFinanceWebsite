@@ -147,6 +147,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
       pnl: (document.getElementById("overview-unrealized-return") || {}).textContent,
       tail: (document.getElementById("pvc-current-value") || {}).textContent,
       liability: (document.getElementById("overview-total-liability") || {}).textContent,
+      liabilityTitle: (document.getElementById("overview-total-liability") || {}).title || null,
       liabilityShown: Array.prototype.every.call(
         document.querySelectorAll(".overview-stat-liability"), (e) => !e.hidden) &&
         document.querySelectorAll(".overview-stat-liability").length > 0,
@@ -292,6 +293,48 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   ok(cTr.labels.indexOf("Liability") === -1,
      "C8 the row closes up around it rather than leaving a gap", cTr.labels);
 
+  // Hovering the cell names the loans behind the figure. A lone total leaves
+  // the reader to work out which debts it is made of from the settings page.
+  ok(/Car loan/.test(cAll.liabilityTitle || ""),
+     "C10 hovering the cell names the liability behind the figure", cAll.liabilityTitle);
+  ok(/1,60,000/.test(cAll.liabilityTitle || ""),
+     "C11 with what it contributes", cAll.liabilityTitle);
+  ok(!cTr.liabilityTitle,
+     "C12 and a portfolio carrying none of it is told nothing", cTr.liabilityTitle);
+
+  // Two loans, one of them shared: the tooltip must name both and show each at
+  // the share THIS selection carries, not at its full size.
+  await boot([
+    { id: "lb-a", name: "Car loan", row: { type: "expense", amount: 20000,
+      frequency: "monthly", next_due: "2026-09-01", num_payments: 10,
+      installments_done: 2, account_id: "acc-sn" } },
+    { id: "lb-b", name: "Home loan", row: { type: "expense", amount: 10000,
+      frequency: "monthly", next_due: "2026-09-01", num_payments: 10,
+      installments_done: 0, account_id: "acc-joint",
+      contribution_split: { "acc-sn": 70, "acc-tr": 30 } } },
+  ]);
+  const twoAll = await read();
+  console.log("  tooltip (all): " + JSON.stringify(twoAll.liabilityTitle));
+  ok(/Car loan/.test(twoAll.liabilityTitle || "") && /Home loan/.test(twoAll.liabilityTitle || ""),
+     "C13 both loans are named", twoAll.liabilityTitle);
+  ok((twoAll.liabilityTitle || "").indexOf("\n") > 0,
+     "C14 one per line, not run together", twoAll.liabilityTitle);
+  ok(/Car loan ₹1,60,000/.test(twoAll.liabilityTitle || ""),
+     "C15 the household sees each at its full size", twoAll.liabilityTitle);
+
+  const twoTr = await pick("Trisha");
+  console.log("  tooltip (Trisha): " + JSON.stringify(twoTr.liabilityTitle));
+  ok(!/Car loan/.test(twoTr.liabilityTitle || ""),
+     "C16 a portfolio is not shown a debt that is not its own", twoTr.liabilityTitle);
+  ok(/Home loan ₹30,000/.test(twoTr.liabilityTitle || ""),
+     "C17 and sees the shared one at its own 30% share, not its full ₹1,00,000",
+     twoTr.liabilityTitle);
+  ok(num(twoTr.liability) === 30000,
+     "C18 which is the whole of the figure the tooltip is explaining", twoTr.liability);
+
+  await boot([{ id: "lb-6", name: "Car loan", row: {
+    type: "expense", amount: 20000, frequency: "monthly", next_due: "2026-09-01",
+    num_payments: 10, installments_done: 2, account_id: "acc-sn" } }]);
   const cBack = await pick("All Portfolios");
   ok(cBack.liabilityShown && num(cBack.liability) === 160000,
      "C9 and it comes back when the household is selected again",

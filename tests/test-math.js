@@ -402,6 +402,31 @@ const L = (row) => ({ id: "lb-" + Math.random(), name: "loan", row: row });
   eq(WfMath.liabilityForPortfolio(d, "Nobody"), 0,
      "LB37 a portfolio matching no contributing account owes nothing");
   eq(WfMath.liabilityForPortfolio(null, "all"), 0, "LB38 no liabilities, no deduction");
+
+  // Which loans the figure is made of, for whichever selection is showing.
+  const many = WfMath.liabilityDeductions([
+    { id: "1", name: "Car loan", row: { amount: 1000, num_payments: 10, account_id: "sn" } },
+    { id: "2", name: "Home loan", row: { amount: 1000, num_payments: 100, account_id: "jt",
+      contribution_split: { sn: 70, tr: 30 } } },
+    { id: "3", name: "Trisha's card", row: { amount: 500, num_payments: 4, account_id: "tr" } },
+  ], ACCTS);
+  const bAll = WfMath.liabilityBreakdown(many, "all");
+  eq(bAll.length, 3, "LB41 the household's figure names every loan behind it");
+  eq(bAll[0].name, "Home loan", "LB42 largest first — the one that moves the number most");
+  eq(bAll[0].amount, 100000, "LB43 at its full size for the household");
+  const bSn = WfMath.liabilityBreakdown(many, "Snnehal");
+  eq(bSn.length, 2, "LB44 a portfolio names only the loans it carries");
+  ok(!bSn.some((r) => /Trisha/.test(r.name)),
+     "LB45 not the other person's — a debt that is not yours is not shown to you", bSn);
+  eq(bSn[0].amount, 70000, "LB46 and at its share, not its full size");
+  eq(bSn.reduce((s, r) => s + r.amount, 0), WfMath.liabilityForPortfolio(many, "Snnehal"),
+     "LB47 the parts add up to the figure they explain");
+  eq(WfMath.liabilityBreakdown(many, "Nobody").length, 0,
+     "LB48 a portfolio carrying none of it has nothing to name");
+  eq(WfMath.liabilityBreakdown(null, "all").length, 0, "LB49 and neither has no data");
+  eq(WfMath.liabilityBreakdown(WfMath.liabilityDeductions(
+    [{ id: "x", row: { amount: 100, num_payments: 2, account_id: "sn" } }], ACCTS), "all")[0].name,
+     "Liability", "LB50 an unnamed liability still gets a label rather than a blank line");
   eq(WfMath.liabilityDeductions(null, ACCTS).total, 0, "LB39 nor from an empty list");
   eq(WfMath.liabilityDeductions([L({ amount: 100, num_payments: 2, account_id: "sn" })], null).total, 200,
      "LB40 the household total survives having no account list to name people with");
