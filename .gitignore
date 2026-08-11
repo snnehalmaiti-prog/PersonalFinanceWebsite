@@ -1,0 +1,4 @@
+# Playwright, installed locally so the browser suites can run. The site itself
+# is static — no package.json, no build step — so nothing here belongs in the
+# repository; tests/_launch.js finds the browser through PLAYWRIGHT_BROWSERS_PATH.
+node_modules/
