@@ -3602,23 +3602,28 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 .mic-year-sel { padding-right: 10px; }
 /* Compact selectors on the Realized Profit card */
 #profit-cat-card .mic-dropdown-btn { padding: 3px 8px; font-size: 0.68rem; gap: 3px; }
-/* Compact controls on the Cash Flow card. It carries five of them — three modes
-   plus the range and year — so at the default size they dominate the header.
-   Scoped rather than global: the other cards using these classes have fewer
-   controls and are not crowded.
+/* Compact controls, now on all four of the Overview's monthly chart cards. It
+   started as a fix for Cash Flow alone, which carries five controls — three
+   modes plus the range and year — and at the default size let them dominate the
+   header. The three cards below it run down the same column, and every one of
+   them was 27px against Cash Flow's 20px: adjacent cards at two different sizes
+   read as two designs stacked rather than one column of cards.
 
-   Net Worth · Monthly is in the list because it sits directly above Cash Flow
-   and carries the same two controls. At the default size its pills came out
-   27px tall against Cash Flow's 20px, which reads as two different designs
-   stacked rather than one card and its neighbour. */
+   Still scoped rather than global. Cards elsewhere use these classes at the full
+   size, and Realized Profit is smaller again (see above) because it shares its
+   row with two cards that have no controls at all. */
 #monthly-invest-cat-card .mic-toggle-group,
 #net-worth-monthly-card .mic-toggle-group { padding: 1px; }
 #monthly-invest-cat-card .mic-toggle-btn,
 #net-worth-monthly-card .mic-toggle-btn { padding: 3px 10px; font-size: 0.7rem; }
 #monthly-invest-cat-card .mic-dropdown-btn,
-#net-worth-monthly-card .mic-dropdown-btn { padding: 3px 9px; font-size: 0.7rem; gap: 3px; }
+#net-worth-monthly-card .mic-dropdown-btn,
+#monthly-cashflow-card .mic-dropdown-btn,
+#expense-pie-card .mic-dropdown-btn { padding: 3px 9px; font-size: 0.7rem; gap: 3px; }
 #monthly-invest-cat-card .mic-controls,
-#net-worth-monthly-card .mic-controls { gap: 6px; }
+#net-worth-monthly-card .mic-controls,
+#monthly-cashflow-card .mic-controls,
+#expense-pie-card .mic-controls { gap: 6px; }
 /* Let the three split/profit cards stretch to fill the row so the last card's
    right edge lines up with the full-width charts above them. */
 #overview-splits-row .isc-card { flex: 1 1 300px; max-width: none; }
