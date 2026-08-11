@@ -157,6 +157,14 @@
             <span class="overview-stat-label">Invested</span>
             <span class="overview-stat-value" id="overview-total-investment">—</span>
           </div>
+          <!-- Only present once there is a liability the current portfolio
+               selection actually carries; both halves are hidden together so no
+               stray divider is left behind. -->
+          <div class="overview-stat-divider overview-stat-liability" hidden></div>
+          <div class="overview-stat-inline overview-stat-liability" hidden>
+            <span class="overview-stat-label">Liability</span>
+            <span class="overview-stat-value" id="overview-total-liability">—</span>
+          </div>
           <div class="overview-stat-divider"></div>
           <div class="overview-stat-inline">
             <span class="overview-stat-label">Current</span>

@@ -4106,14 +4106,17 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   }
   .overview-stat-value { font-size: 1.05rem; }
   /* Current is shown in the hero, so drop it here. XIRR stays.
-     Order: Invested, Unrealized P&L, Return %, Day Change, Realized P&L, XIRR. */
+     Order: Invested, Liability, Unrealized P&L, Return %, Day Change,
+     Realized P&L, XIRR. Liability is usually absent, and the grid closes up
+     around it when it is. */
   .overview-stat-inline:has(#overview-total-current-value) { display: none; }
   .overview-stat-inline:has(#overview-total-investment) { order: 1; }
-  .overview-stat-inline:has(#overview-unrealized-return) { order: 2; }
-  .overview-stat-inline:has(#overview-return-pct) { order: 3; }
-  .overview-stat-inline:has(#overview-day-change) { order: 4; }
-  .overview-stat-inline:has(#overview-realized-return) { order: 5; }
-  .overview-stat-inline:has(#overview-xirr) { order: 6; }
+  .overview-stat-inline:has(#overview-total-liability) { order: 2; }
+  .overview-stat-inline:has(#overview-unrealized-return) { order: 3; }
+  .overview-stat-inline:has(#overview-return-pct) { order: 4; }
+  .overview-stat-inline:has(#overview-day-change) { order: 5; }
+  .overview-stat-inline:has(#overview-realized-return) { order: 6; }
+  .overview-stat-inline:has(#overview-xirr) { order: 7; }
 
   /* --- Benchmark card: title+dropdown / pills / XIRR|CAGR / 2×2 metrics --- */
   .benchmark-header { flex-direction: column; align-items: stretch; gap: 14px; position: relative; }

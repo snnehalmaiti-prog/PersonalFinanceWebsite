@@ -2269,6 +2269,14 @@
     var totalRealized = agg.realized;
     setMoneyText(overviewInvestedEl, formatCurrency(totalInvested), totalInvested);
     var owed = _ovLiabilityDeduction();
+    // The Liability cell exists only while the CURRENT selection carries one.
+    // Snnehal's loan is not Trisha's, so it is absent from her view entirely
+    // rather than shown as zero — and present under All, which owes it.
+    var liabilityEl = document.getElementById("overview-total-liability");
+    if (liabilityEl) setMoneyText(liabilityEl, formatCurrency(owed), owed);
+    document.querySelectorAll(".overview-stat-liability").forEach(function (el) {
+      el.hidden = !(owed > 0);
+    });
     var shownCurrent = totalCurrent - owed;
     setMoneyText(overviewCurrentEl, formatCurrency(shownCurrent), shownCurrent);
     if (overviewCurrentEl) {

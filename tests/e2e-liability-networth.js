@@ -113,6 +113,14 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
       invested: (document.getElementById("overview-total-investment") || {}).textContent,
       pnl: (document.getElementById("overview-unrealized-return") || {}).textContent,
       tail: (document.getElementById("pvc-current-value") || {}).textContent,
+      liability: (document.getElementById("overview-total-liability") || {}).textContent,
+      liabilityShown: Array.prototype.every.call(
+        document.querySelectorAll(".overview-stat-liability"), (e) => !e.hidden) &&
+        document.querySelectorAll(".overview-stat-liability").length > 0,
+      // Where the cell sits: the labels of the stats actually on screen.
+      labels: Array.prototype.filter.call(
+        document.querySelectorAll(".overview-stat-inline"), (e) => !e.hidden)
+        .map((e) => ((e.querySelector(".overview-stat-label") || {}).textContent || "").trim()),
     };
   });
   // Through the real control. Writing the key alone would move the deduction
@@ -120,7 +128,10 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   // the app can actually be in — and would make the arithmetic below meaningless.
   const pick = async (name) => {
     await p.evaluate((n) => {
-      const opt = Array.prototype.slice.call(document.querySelectorAll(".portfolio-option"))
+      // Scoped to the portfolio menu: the exclusions and benchmark dropdowns
+      // reuse the same class.
+      const opt = Array.prototype.slice.call(
+        document.querySelectorAll("#portfolio-menu .portfolio-option"))
         .find((e) => (e.textContent || "").trim() === n);
       if (opt) opt.click();
     }, name);
@@ -215,6 +226,43 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
     type: "expense", amount: 99999, num_payments: 99, account_id: "acc-sn" } }]);
   const del = await read();
   ok(num(del.current) === 1000000, "N18 a tombstoned liability is not owed", del.current);
+
+  // ── The Liability cell ──────────────────────────────────────────────────
+  // It exists only where there is a liability to name. Snnehal's loan is not
+  // Trisha's, so her card does not carry the cell at all — not a zero, which
+  // would read as a debt she has finished paying.
+  ok(!base.liabilityShown,
+     "C1 with no liabilities there is no Liability cell", base.labels);
+  ok(base.labels.indexOf("Liability") === -1,
+     "C2 specifically, it is absent from the row rather than blank", base.labels);
+
+  await boot([{ id: "lb-6", name: "Car loan", row: {
+    type: "expense", amount: 20000, frequency: "monthly", next_due: "2026-09-01",
+    num_payments: 10, installments_done: 2, account_id: "acc-sn" } }]);
+  const cAll = await read();
+  console.log("  cell (all): " + JSON.stringify({ labels: cAll.labels, v: cAll.liability }));
+  ok(cAll.liabilityShown, "C3 adding one brings the cell out", cAll.labels);
+  ok(num(cAll.liability) === 160000,
+     "C4 showing what is owed, not what Current was reduced to", cAll.liability);
+  ok(cAll.labels.indexOf("Liability") === cAll.labels.indexOf("Invested") + 1,
+     "C5 immediately after Invested", cAll.labels);
+
+  const cSn = await pick("Snnehal");
+  ok(cSn.liabilityShown && num(cSn.liability) === 160000,
+     "C6 the portfolio that carries the loan shows it",
+     { shown: cSn.liabilityShown, v: cSn.liability });
+
+  const cTr = await pick("Trisha");
+  ok(!cTr.liabilityShown,
+     "C7 and a portfolio that carries none of it does not show the cell at all",
+     { shown: cTr.liabilityShown, labels: cTr.labels });
+  ok(cTr.labels.indexOf("Liability") === -1,
+     "C8 the row closes up around it rather than leaving a gap", cTr.labels);
+
+  const cBack = await pick("All Portfolios");
+  ok(cBack.liabilityShown && num(cBack.liability) === 160000,
+     "C9 and it comes back when the household is selected again",
+     { shown: cBack.liabilityShown, v: cBack.liability });
 
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
