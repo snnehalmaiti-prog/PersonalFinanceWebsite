@@ -233,8 +233,8 @@ const money = (t) => {
   // Opening and Closing always; the movement terms in between appear only when
   // they moved, so the row stays readable rather than carrying dead zeros.
   eq(Object.keys(julH).join(","),
-     "Opening,Closing,Invested,Interest,Idle Cash,Market loss",
-     "N3 the movements are named between opening and closing");
+     "Opening,Closing,Change,Invested,Market loss,Interest,Idle Cash",
+     "N3 where the month stood and how far it moved, then what accounts for the move");
   // Totals are net of parked cash: Jun's ₹12,00,000 less the ₹7,00,000 held in
   // the two savings accounts, Jul's ₹11,50,000 less ₹7,50,000 after the ₹50,000
   // moved in. That move is why the card excludes cash — it changed nothing.
@@ -418,12 +418,14 @@ const money = (t) => {
   eq(lines.length, 3, "L1 three rows: the period, then two lines of figures");
   ok(lines[0].month.length > 0 && lines[0].labels.length === 0,
      "L2 the period is named on its own line, above the figures", lines[0]);
-  eq(lines[1].labels.join(","), "Opening,Closing,Invested",
-     "L3 where the period stood, and what went in, on the first figure line");
-  ok(lines[2].labels.indexOf("Interest") === 0 &&
-     /^Market (gain|loss)$/.test(lines[2].labels[lines[2].labels.length - 1]),
-     "L4 and what happened to it on the second, ending with the market",
+  eq(lines[1].labels.join(","), "Opening,Closing,Change",
+     "L3 where the period stood and how far it moved, on the first figure line");
+  ok(lines[2].labels.indexOf("Invested") === 0 &&
+     /^Market (gain|loss)$/.test(lines[2].labels[1]),
+     "L4 and what accounts for that move on the second, investing first",
      lines[2].labels);
+  ok(lines[2].labels.indexOf("Interest") > 1,
+     "L4b with the smaller terms after it", lines[2].labels);
 
   // ── The header figures ──────────────────────────────────────────────────
   // Five numbers for the period on show. Opening is the close of the month
@@ -432,8 +434,8 @@ const money = (t) => {
   // ended with.
   const stats = await readStats();
   console.log("  stats: " + JSON.stringify(stats));
-  ok(Object.keys(stats).join(",").indexOf("Opening,Closing,Invested,Interest") === 0,
-     "H1 the figures in order, cash movements between interest and the market",
+  ok(Object.keys(stats).join(",").indexOf("Opening,Closing,Change,Invested") === 0,
+     "H1 the figures in order: the period, its movement, then the movement explained",
      Object.keys(stats));
 
   // 2025 on show: May, Jun, Jul. Opening is Dec 2024's close (₹8,50,000), since
@@ -446,6 +448,13 @@ const money = (t) => {
                 num(stats["Market loss"] ?? stats["Market gain"]);
   ok(Math.abs((num(stats.Opening) + moved) - num(stats.Closing)) < 1,
      "H4 and they reconcile: opening plus everything that moved is closing", stats);
+  // Change is the headline of the second line, so it has to be both: the
+  // distance between the two figures beside it, and the sum of the four below.
+  ok(Math.abs(num(stats.Change) - (num(stats.Closing) - num(stats.Opening))) < 1,
+     "H4b Change is exactly closing less opening", stats);
+  ok(Math.abs(num(stats.Change) - moved) < 1,
+     "H4c and the four terms under it add up to it — the second line explains the first",
+     stats);
 
   // A negative market is labelled as a loss, not a negative gain.
   ok(/^[+−]/.test(stats["Market loss"] ?? stats["Market gain"]),

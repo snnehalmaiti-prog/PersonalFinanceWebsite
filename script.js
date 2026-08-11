@@ -17080,16 +17080,20 @@
         // two are zero for most months of most portfolios.
         return v ? tot(name, _nwmSigned(v), v < 0 ? "negative" : "mic-hs-pos") : "";
       };
-      // Where the period stood, and what you put in, on the first line; what
-      // happened to it on the second. Seven figures on one row ran off the edge
-      // of the card at anything narrower than a desktop.
+      // Where the period stood and how far it moved on the first line; what
+      // accounts for that move on the second. Change is the sum of the four
+      // terms below it, so the two lines read as a figure and its explanation
+      // rather than as seven unrelated numbers — which is also why they are not
+      // on one row: at anything narrower than a desktop that ran off the card.
+      var change = st.closing - st.opening;
       lead = tot("Opening", formatCurrency(st.opening)) +
              tot("Closing", formatCurrency(st.closing)) +
-             tot("Invested", _nwmSigned(st.invested));
-      rest = tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
-             cash("Idle Cash", st.idle) +
+             tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
+      rest = tot("Invested", _nwmSigned(st.invested)) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
-                 st.market < 0 ? "negative" : "mic-hs-pos");
+                 st.market < 0 ? "negative" : "mic-hs-pos") +
+             tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+             cash("Idle Cash", st.idle);
     }
     // Three rows, always — the label, then the two figure lines. Rendered even
     // when empty so that hovering never changes the block's height and slides
