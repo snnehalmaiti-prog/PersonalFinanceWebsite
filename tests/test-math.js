@@ -447,7 +447,10 @@ const L = (row) => ({ id: "lb-" + Math.random(), name: "loan", row: row });
     num_payments: 10, installments_done: 2, account_id: "sn" } }];
   const s = WfMath.liabilityOwedSeries(items, ACCTS, "all", dates);
   eq(s.start, "2026-01-01", "LS12 the series knows when the debt began");
-  eq(s.values[0], null, "LS13 and is empty before it");
+  // Nothing owed at the last point before the loan: the line meets the asset
+  // line there and drops away from it, so taking the debt on is visible as an
+  // event rather than the line simply appearing partway down the chart.
+  eq(s.values[0], 0, "LS13 with nothing owed at the point before it began");
   eq(s.values[1], 9000, "LS14 then steps down one instalment per period");
   eq(s.values[2], 8000, "LS15 monotonically");
   eq(s.values[3], 8000, "LS16 pausing where the payments actually stopped");
@@ -475,12 +478,24 @@ const L = (row) => ({ id: "lb-" + Math.random(), name: "loan", row: row });
   eq(two.start, "2026-01-01", "LS22 the line begins with the earliest debt");
   eq(two.values[1], 9000, "LS23 carrying only the one that had begun");
   eq(two.values[2], 8000 + 2000, "LS24 and both once the second starts");
+  eq(two.values[0], 0,
+     "LS25 a second liability starting later does not blank the anchor of the first");
+
+  // A liability that began before the chart has no room for an anchor, and must
+  // still draw from the first point rather than being dropped.
+  // Six paid, so it started in September — before the chart's first point.
+  const early = WfMath.liabilityOwedSeries([{ id: "e", row: { amount: 1000,
+    frequency: "monthly", next_due: "2026-03-01", num_payments: 10,
+    installments_done: 6, account_id: "sn" } }], ACCTS, "all", dates);
+  eq(early.values[0], 6000,
+     "LS26 a debt older than the chart is drawn from its first point, with no " +
+     "anchor to drop from — there is no before to show");
 
   eq(WfMath.liabilityOwedSeries([{ id: "d", row: { amount: 1000, frequency: "monthly",
     next_due: "2026-02-01", account_id: "sn" } }], ACCTS, "all", dates).any, false,
-     "LS25 an open-ended liability draws nothing — its size is not known");
+     "LS27 an open-ended liability draws nothing — its size is not known");
   eq(WfMath.liabilityOwedSeries(items, ACCTS, "all", []).any, false,
-     "LS26 and an empty timeline draws nothing");
+     "LS28 and an empty timeline draws nothing");
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");

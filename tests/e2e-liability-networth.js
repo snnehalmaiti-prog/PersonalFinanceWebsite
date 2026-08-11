@@ -386,6 +386,26 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
       dashed: ds[1] ? !!ds[1].borderDash : false,
       spanGaps: ds[1] ? ds[1].spanGaps : null,
       leadingNulls: net ? net.findIndex((d) => d && d.y != null) : -1,
+      // Where the net line starts, and what the asset line reads there: the two
+      // must coincide, and the very next point must be lower by the debt.
+      joinIdx: net ? net.findIndex((d) => d && d.y != null) : -1,
+      joinsAtStart: (() => {
+        if (!net || !ds[0]) return false;
+        const k = net.findIndex((d) => d && d.y != null);
+        if (k < 0 || !ds[0].data[k]) return false;
+        return Math.abs(net[k].y - ds[0].data[k].y) < 1;
+      })(),
+      assetAtJoin: (() => {
+        if (!net || !ds[0]) return null;
+        const k = net.findIndex((d) => d && d.y != null);
+        return k >= 0 && ds[0].data[k] ? ds[0].data[k].y : null;
+      })(),
+      dropAtStart: (() => {
+        if (!net || !ds[0]) return 0;
+        const k = net.findIndex((d) => d && d.y != null);
+        if (k < 0 || !net[k + 1] || net[k + 1].y == null) return 0;
+        return net[k].y - net[k + 1].y;
+      })(),
       total: net ? net.length : 0,
       firstNet: nonNull.length ? nonNull[0].y : null,
       lastNet: nonNull.length ? nonNull[nonNull.length - 1].y : null,
@@ -394,10 +414,13 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
       // never grows — the net line itself can fall, because assets do.
       owedFalls: (() => {
         const a = ds[0] ? ds[0].data : [];
-        const owed = [];
+        let owed = [];
         (net || []).forEach((d, i) => {
           if (d && d.y != null && a[i] && a[i].y != null) owed.push(a[i].y - d.y);
         });
+        // The anchor is a zero, and the step off it is the drop the line exists
+        // to show. Monotonicity is a claim about the debt once it exists.
+        while (owed.length && owed[0] === 0) owed = owed.slice(1);
         return owed.every((v, i) => i === 0 || v <= owed[i - 1] + 0.5);
       })(),
       legendShown: !(document.getElementById("pvc-net-legend") || {}).hidden,
@@ -426,6 +449,15 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
      "stretched back to the start of the chart", withLine);
   ok(withLine && withLine.leadingNulls > 0,
      "V6 it begins after the chart does, at the first instalment", withLine);
+  // The drop is the point. The line starts ON the asset line, where nothing was
+  // owed yet, then falls away by the size of the debt — so taking the loan on
+  // reads as an event rather than as a line appearing partway down the chart.
+  ok(withLine && withLine.joinsAtStart,
+     "V6a starting on the asset line, where nothing was owed yet",
+     { at: withLine.joinIdx, net: withLine.firstNet, asset: withLine.assetAtJoin });
+  ok(withLine && withLine.dropAtStart > 100000,
+     "V6b and dropping away from it by the whole debt at the first instalment",
+     { drop: withLine.dropAtStart });
   ok(withLine && withLine.owedFalls,
      "V7 and the gap between the two lines only ever narrows — a debt being " +
      "paid down cannot grow, even where the assets above it fall", withLine);

@@ -467,6 +467,15 @@
 
       var began = liabilityStartDate(row);
       if (began && (start == null || began < start)) start = began;
+      // One point of nothing-owed immediately before the first instalment, so
+      // the line leaves the asset line and drops rather than appearing out of
+      // nowhere partway down the chart. Without it the debt's arrival is the
+      // one thing the line cannot show.
+      var anchor = -1;
+      for (var a = 0; a < dates.length; a++) {
+        if (began && dates[a] < began) anchor = a; else break;
+      }
+      if (anchor >= 0) { out[anchor] = out[anchor] || 0; any = true; }
       for (var i = 0; i < dates.length; i++) {
         var owed = liabilityOutstandingAt(row, dates[i]);
         if (owed == null) continue;
