@@ -16976,6 +16976,10 @@
         if (at === -1) __nwmSeriesFilters.push(key);
         else __nwmSeriesFilters.splice(at, 1);
         _nwmDrawChart(__nwmChartRows);
+        // The figures above answer a different question once a series is
+        // picked, so they are repainted with the chart rather than waiting for
+        // the next hover.
+        _nwmRenderStats(__nwmViewRows);
       }
       item.addEventListener("click", toggle);
       item.addEventListener("keydown", function (e) {
@@ -16983,7 +16987,11 @@
       });
     });
     Array.prototype.forEach.call(legend.querySelectorAll("[data-nwm-series-clear]"), function (item) {
-      function clearAll() { __nwmSeriesFilters = []; _nwmDrawChart(__nwmChartRows); }
+      function clearAll() {
+        __nwmSeriesFilters = [];
+        _nwmDrawChart(__nwmChartRows);
+        _nwmRenderStats(__nwmViewRows);
+      }
       item.addEventListener("click", clearAll);
       item.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clearAll(); }
@@ -17206,6 +17214,12 @@
     var el = document.getElementById("nwm-split");
     if (!el) return;
     if (!r) { _nwmRenderStats(_nwmForYear(_nwmAllRows)); return; }   // cursor left
+    // With a selection on, the period's totals stay put and only the line
+    // beneath them follows the cursor.
+    if (__nwmSeriesFilters.length) {
+      el.innerHTML = _nwmSelectionHtml(__nwmViewRows, r);
+      return;
+    }
     var label = _nwmMonthLabel(r.month) +
       (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
     // A month with no snapshot keeps its place on the axis and its name here,
@@ -17227,9 +17241,80 @@
     return y === String(new Date().getFullYear()) ? y + " · Year to date" : y;
   }
 
+  // What each legend key is worth in a month. Market is one quantity split by
+  // sign across two keys, so a gaining month contributes nothing to "Market
+  // loss" and vice versa — the same rule the two chart series are built on.
+  function _nwmSeriesValue(key, r) {
+    if (!r || r.delta == null) return null;
+    if (key === "Interest") return r.interest || 0;
+    var mkt = r.market || 0;
+    if (key === "Market gain") return mkt > 0 ? mkt : 0;
+    if (key === "Market loss") return mkt < 0 ? mkt : 0;
+    return null;
+  }
+
+  // The header while a legend selection is active.
+  //
+  // Picking a series narrows the question from "what happened to my net worth"
+  // to "what did this one thing do", so the figures narrow with it: the period's
+  // total for each selected series on the first line — with a combined total
+  // once there is more than one to combine — and the hovered month's figures on
+  // the second, beneath rather than instead of them. Both readings are on screen
+  // at once, which is the point: a month means little without the period it
+  // sits in.
+  function _nwmSelectionHtml(rows, hovered) {
+    function tot(name, value, cls) {
+      return '<span class="mic-hs-tot"><span class="mic-hs-tot-label">' + name + '</span>' +
+             '<b' + (cls ? ' class="' + cls + '"' : '') + '>' + value + '</b></span>';
+    }
+    var keys = __nwmSeriesFilters.slice();
+    var comp = (rows || []).filter(function (r) { return r.delta != null; });
+    var sums = {}, combined = 0;
+    keys.forEach(function (k) {
+      var s = 0;
+      comp.forEach(function (r) { s += _nwmSeriesValue(k, r) || 0; });
+      sums[k] = s;
+      combined += s;
+    });
+    var lead = keys.map(function (k) {
+      return tot(k, _nwmSigned(sums[k]), sums[k] < 0 ? "negative" : "mic-hs-pos");
+    }).join("");
+    // A total of one number is that number said twice.
+    if (keys.length > 1) {
+      lead += tot("Total", _nwmSigned(combined), combined < 0 ? "negative" : "mic-hs-pos");
+    }
+
+    var rest = "";
+    if (hovered) {
+      var month = _nwmMonthLabel(hovered.month) +
+        (hovered.gapMonths > 1 ? " · covers " + hovered.gapMonths + " months" : "");
+      rest = '<span class="mic-hs-month">' + escapeHtml(month) + '</span>';
+      if (hovered.delta != null) {
+        rest += keys.map(function (k) {
+          var v = _nwmSeriesValue(k, hovered) || 0;
+          return tot(k, _nwmSigned(v), v < 0 ? "negative" : "mic-hs-pos");
+        }).join("");
+      }
+    }
+
+    return '<div class="mic-hs-row"><span class="mic-hs-month">' +
+             escapeHtml(_nwmScopeLabel()) + '</span></div>' +
+           '<div class="mic-hs-row">' + lead + '</div>' +
+           '<div class="mic-hs-row">' + rest + '</div>';
+  }
+
+  // The rows currently on screen, so hovering can total the same period the
+  // resting figures describe without recomputing which year is in view.
+  var __nwmViewRows = [];
+
   function _nwmRenderStats(rows) {
     var el = document.getElementById("nwm-split");
     if (!el) return;
+    __nwmViewRows = rows || [];
+    if (__nwmSeriesFilters.length) {
+      el.innerHTML = _nwmSelectionHtml(rows, null);
+      return;
+    }
     var st = _nwmPeriodStats(rows);
     // One snapshot, or none: a label, and no decomposition to show.
     el.innerHTML = _nwmSplitHtml(_nwmScopeLabel(), st && st.opening != null ? st : null);

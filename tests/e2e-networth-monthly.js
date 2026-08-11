@@ -805,6 +805,78 @@ const money = (t) => {
   ok(!l4.showAll && l4.dimmed.length === 0,
      "LG12 and takes itself away again, with nothing left dimmed", l4);
 
+  // ── What the figures say while a series is picked ───────────────────────
+  // Picking a series narrows the question, so the figures narrow with it: the
+  // period's total for that series on the first line, and the hovered month's
+  // on the second — beneath the period rather than replacing it, so a month is
+  // always read against the period it sits in.
+  const splitLines = () => p.evaluate(() =>
+    Array.from(document.querySelectorAll("#nwm-split .mic-hs-row")).map((r) => ({
+      month: (r.querySelector(".mic-hs-month") || {}).textContent || "",
+      labels: Array.from(r.querySelectorAll(".mic-hs-tot-label")).map((e) => e.textContent),
+      values: Array.from(r.querySelectorAll("b")).map((e) => e.textContent),
+    })));
+
+  await clickKey("Interest");
+  const selOne = await splitLines();
+  console.log("  one series: " + JSON.stringify(selOne));
+  eq(selOne[1].labels.join(","), "Interest",
+     "SEL1 one series picked, one figure — the period's total for it", selOne[1]);
+  ok(!/Opening|Closing|Change/.test(JSON.stringify(selOne)),
+     "SEL2 and not the whole-net-worth figures, which are no longer the question",
+     selOne);
+  ok(selOne[1].labels.indexOf("Total") === -1,
+     "SEL3 with no 'Total' beside it: a total of one number is that number twice",
+     selOne[1].labels);
+  eq(selOne[2].labels.length, 0,
+     "SEL4 the second line is empty until the cursor is over a month", selOne[2]);
+
+  // The period total has to be the sum of the months, not one of them.
+  const monthsShown = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    const d = (c.data.datasets.find((s) => s.label === "Interest") || {}).data || [];
+    return d.filter((v) => v != null && v !== 0);
+  });
+  const sumOfMonths = monthsShown.reduce((a, b) => a + b, 0);
+  ok(Math.abs(rupees(selOne[1].values[0]) - Math.round(sumOfMonths)) <= 2,
+     "SEL5 and it is the months added up, not a single month or the whole year's",
+     { shown: selOne[1].values[0], sum: sumOfMonths, months: monthsShown.length });
+
+  const hoveredSel = await hover("Jul 2025");
+  const selHover = await splitLines();
+  console.log("  hovered: " + JSON.stringify(selHover));
+  ok(/Jul 2025/.test(selHover[2].month),
+     "SEL6 hovering names the month on the second line", selHover[2]);
+  eq(selHover[2].labels.join(","), "Interest",
+     "SEL7 with that month's figure for the picked series", selHover[2]);
+  eq(selHover[1].labels.join(","), "Interest",
+     "SEL8 while the period's total stays put above it", selHover[1]);
+  ok(rupees(selHover[1].values[0]) > rupees(selHover[2].values[0]),
+     "SEL9 and is larger, being every month rather than one",
+     { period: selHover[1].values[0], month: selHover[2].values[0] });
+
+  // Two picked: each on its own, plus what they come to together.
+  await clickKey("Market loss");
+  const selBoth = await splitLines();
+  console.log("  two series: " + JSON.stringify(selBoth[1]));
+  eq(selBoth[1].labels.join(","), "Interest,Market loss,Total",
+     "SEL10 two series picked: each one's total, and the total of the two",
+     selBoth[1]);
+  const [a, b2, t] = selBoth[1].values.map((v) => Number(String(v).replace(/[^0-9.]/g, "")) *
+    (/−/.test(v) ? -1 : 1));
+  ok(Math.abs((a + b2) - t) < 2,
+     "SEL11 and the total is the two added, not something else", { a, b2, t });
+
+  await p.evaluate(() => {
+    const el = document.querySelector("[data-nwm-series-clear]");
+    if (el) el.click();
+  });
+  await p.waitForTimeout(400);
+  const cleared = await splitLines();
+  ok(/Opening/.test(JSON.stringify(cleared)) && /Closing/.test(JSON.stringify(cleared)),
+     "SEL12 clearing the selection brings the whole-net-worth figures back",
+     cleared[1]);
+
   // Left showing everything: the selection is sticky across redraws, so a block
   // that ends mid-selection changes what every later assertion is looking at.
   const l5 = await legend();
