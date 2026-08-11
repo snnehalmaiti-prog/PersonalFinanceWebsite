@@ -185,16 +185,17 @@ const monthlyNav = () => {
      "S8 which is smaller than the household's",
      { sn: sn.stats.Closing, all: all.stats.Closing });
   // The property the reconstruction stands on: a month's portfolios add up to
-  // that month's household total. Checked against the stored rows, because the
-  // card's Closing figure is the newest month end — and that one row is the
-  // series' final point, which renderValueChart snaps to the Overview's current
-  // total. The Overview values FDs with accrued interest; the chart series does
-  // not, so that row's total is on a different footing from its split and would
-  // fail a reconciliation that means nothing here.
-  const reconstructed = table
+  // that month's household total.
+  //
+  // Exact for every month but the newest. That one is the series' final point,
+  // which renderValueChart snaps to the Overview's current total — a figure
+  // computed by a different path from the chart's own arithmetic, so the two
+  // can differ slightly at the tail. The size of that difference is checked
+  // separately below, because it is the thing FD accrual was fixed to shrink.
+  const allReconstructed = table
     .filter((r) => r.meta && r.meta.source === "backfill" && r.by_portfolio)
-    .sort((a, x) => (a.snapshot_date < x.snapshot_date ? -1 : 1))
-    .slice(0, -1);
+    .sort((a, x) => (a.snapshot_date < x.snapshot_date ? -1 : 1));
+  const reconstructed = allReconstructed.slice(0, -1);
   const offBy = reconstructed
     .map((r) => ({ date: r.snapshot_date, total: Number(r.total),
       sum: Object.keys(r.by_portfolio).reduce((s, k) => s + Number(r.by_portfolio[k]), 0) }))
@@ -203,6 +204,21 @@ const monthlyNav = () => {
      "S9 and in every repaired month the portfolios sum to the household — if " +
      "they do not, the reconstruction has drifted from the series it patches",
      { checked: reconstructed.length, off: offBy.slice(0, 3) });
+
+  // The newest month, where the chart's arithmetic meets the Overview's total.
+  // The fixture holds two FDs opened in 2020 and 2021, so before the chart
+  // valued deposits with their accrued interest this row was out by ~34% — the
+  // entire interest earned since. What is left is the small residue of two
+  // valuation paths meeting, not a missing term.
+  const tail = allReconstructed[allReconstructed.length - 1];
+  const tailSum = Object.keys(tail.by_portfolio)
+    .reduce((s2, k) => s2 + Number(tail.by_portfolio[k]), 0);
+  const tailGapPct = Math.abs(Number(tail.total) - tailSum) / Number(tail.total) * 100;
+  console.log("  tail gap: " + tailGapPct.toFixed(2) + "%");
+  ok(tailGapPct < 1,
+     "S9b and the newest month is within 1% of reconciling, where it used to be " +
+     "out by every rupee of interest the deposits had ever earned",
+     { date: tail.snapshot_date, total: tail.total, sum: tailSum, pct: tailGapPct });
 
   // The repair has to be durable — the next load must not have to redo it.
   const repaired = table.filter((r) => r.by_portfolio && Object.keys(r.by_portfolio).length);

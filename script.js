@@ -9464,6 +9464,95 @@
     return events;
   }
 
+  // Fixed Deposits over a timeline, valued as they actually grow.
+  //
+  // buildFdValueEvents holds an FD at its principal from purchase to maturity —
+  // a step, not a curve. A chart drawn from that understates an FD-heavy
+  // portfolio for years and then jumps at the final point, where the tail is
+  // snapped to the Overview's accrual-inclusive total. It is also why a
+  // reconstructed per-portfolio history cannot reconcile with the household's
+  // last month.
+  //
+  // Each FD is valued here by exactly the rule the Overview uses — principal
+  // compounded quarterly at its own rate, the quarter in progress pro-rated —
+  // so the line and the card cannot drift. Matured FDs contribute nothing,
+  // matching both the Overview (their interest is booked as realized) and the
+  // step model this replaces.
+  //
+  // Returns a value per timeline index; the caller adds it alongside the EPF/
+  // savings series, having asked buildFdValueEvents to leave FDs out.
+  function buildFdAccrualAt(timeline, portfolioFilter) {
+    var out = new Array((timeline && timeline.length) || 0);
+    for (var z = 0; z < out.length; z++) out[z] = 0;
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length || !out.length) return out;
+
+    var header = rows[0].map(normalizeText);
+    var portfolioIdx = header.indexOf("portfolio name");
+    var categoryIdx = header.indexOf("instrument category");
+    var subCategoryIdx = header.indexOf("instrument sub category");
+    var amountIdx = header.indexOf("invested amount");
+    var dateIdx = header.indexOf("transaction date");
+    var rateIdx = header.indexOf("rate of return");
+    var maturityIdx = header.indexOf("maturity date/sell date");
+    if (maturityIdx === -1) maturityIdx = header.indexOf("maturity date");
+    if (portfolioIdx === -1 || subCategoryIdx === -1 || amountIdx === -1 || dateIdx === -1) return out;
+
+    // Parsed once, then valued per date: parsing per timeline point would turn a
+    // few thousand cheap Math.pow calls into a few thousand sheet scans.
+    var fds = [];
+    rows.slice(1).forEach(function (row) {
+      var portfolio = (row[portfolioIdx] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
+      if (categoryIdx !== -1 && normalizeText(row[categoryIdx]) !== "fixed income") return;
+      if (!_fiIsTermDeposit(normalizeText(row[subCategoryIdx]))) return;
+      var start = parseFlexibleDate(row[dateIdx]);
+      if (!start) return;
+      var principal = parseNumber(row[amountIdx]);
+      if (!(principal > 0)) return;
+      fds.push({
+        start: start,
+        maturity: maturityIdx !== -1 ? parseFlexibleDate(row[maturityIdx]) : null,
+        rate: rateIdx !== -1 ? parsePercentRate(row[rateIdx]) : 0,
+        principal: principal
+      });
+    });
+    if (!fds.length) return out;
+
+    // The quarter boundary is carried forward along the timeline rather than
+    // recounted at each date. elapsedQuartersFractional counts whole quarters by
+    // walking from the deposit date, so calling it per point would be
+    // O(dates × quarters) — on a decade of daily points and a handful of
+    // deposits, hundreds of thousands of Date allocations on every render, which
+    // is enough to change what else finishes before the first paint. The
+    // arithmetic is identical; only the bookkeeping differs.
+    for (var f = 0; f < fds.length; f++) {
+      var fd = fds[f];
+      var q = 0;
+      var qStart = fd.start;
+      var qEnd = _addMonthsClamped(fd.start, 3);
+      var prev = null;
+      for (var i = 0; i < timeline.length; i++) {
+        var d = timeline[i];
+        // The walk assumes ascending dates; a timeline that ever steps back is
+        // restarted rather than quietly reported against a stale boundary.
+        if (prev !== null && d < prev) { q = 0; qStart = fd.start; qEnd = _addMonthsClamped(fd.start, 3); }
+        prev = d;
+        if (d < fd.start) continue;
+        // At and after maturity the money has left the FD, exactly as the step
+        // model had it — the interest is realized, not still growing here.
+        if (fd.maturity && d >= fd.maturity) continue;
+        while (qEnd <= d) { q++; qStart = qEnd; qEnd = _addMonthsClamped(fd.start, (q + 1) * 3); }
+        var span = qEnd - qStart;
+        var frac = span > 0 ? (d - qStart) / span : 0;
+        var elapsed = q + (frac > 0 ? frac : 0);
+        out[i] += (elapsed > 0 && fd.rate)
+          ? fd.principal * Math.pow(1 + fd.rate / 4, elapsed) : fd.principal;
+      }
+    }
+    return out;
+  }
+
   // Builds stepped commodity (gold) gram events at each buy/sell date.
   // Value = cumulativeGrams × currentGoldPrice, so the chart shows market value at today's price.
   function buildCommodityGramEvents(fdRows, portfolioFilter) {
@@ -9581,12 +9670,12 @@
       // FI excluded → drop the whole FD series. Savings/Investment excluded →
       // drop only Investment Corpus + Savings Account (parked cash), keep PF,
       // matching the Overview cards.
-      // includeFd=true: the Account Value chart shows total FI worth, so it needs
-      // Fixed Deposits too (the XIRR opening-mark caller values FDs separately and
-      // intentionally omits them here to avoid double-counting).
+      // includeFd=false: Fixed Deposits come from buildFdAccrualAt instead, which
+      // values them as they grow rather than holding them at principal. Asking
+      // for them here as well would count each one twice.
       var fdValueEventsAll = isFixedIncomeExcluded()
         ? []
-        : buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded(), true);
+        : buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded(), false);
 
       // Build commodity gram events and fetch monthly gold price history for chart
       var fdRowsForChart = getSheetRows("fd");
@@ -9877,8 +9966,9 @@
         // reflects total portfolio worth respecting the exclusion toggles.
         var epfAllAt = _ff(epfEventsAll, timeline, "cumulativeValue");
         var fdAllAt = _ff(fdValueEventsAll, timeline, "cumulativeValue");
+        var fdAccrAt = isFixedIncomeExcluded() ? [] : buildFdAccrualAt(timeline, selectedPortfolio);
         var pointsAll = points.map(function (p, i) {
-          var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0);
+          var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0) + (fdAccrAt[i] || 0);
           return { x: p.x, y: p.y + extra };
         });
 
@@ -16253,15 +16343,19 @@
     var fdRows = getSheetRows("fd");
     var fiEx = isFixedIncomeExcluded();
     var epfAt = _ff(fiEx ? [] : buildEpfValueEvents(portfolio), timeline, "cumulativeValue");
+    // includeFd=false plus the accrual series, the same split the chart uses —
+    // this replay has to stay arithmetically identical to it, or one portfolio's
+    // reconstructed history stops summing to the household's.
     var fdAt = _ff(fiEx || !fdRows ? []
-      : buildFdValueEvents(portfolio, isSavingsInvestmentExcluded(), true),
+      : buildFdValueEvents(portfolio, isSavingsInvestmentExcluded(), false),
       timeline, "cumulativeValue");
+    var fdAccrAt = (fiEx || !fdRows) ? [] : buildFdAccrualAt(timeline, portfolio);
     var gramsAt = _ff((!fiEx && fdRows) ? buildCommodityGramEvents(fdRows, portfolio) : [],
       timeline, "cumulativeGrams");
 
     return timeline.map(function (date, i) {
       var grams = gramsAt[i] || 0;
-      var total = (epfAt[i] || 0) + (fdAt[i] || 0) +
+      var total = (epfAt[i] || 0) + (fdAt[i] || 0) + (fdAccrAt[i] || 0) +
                   (grams > 0 ? grams * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0) : 0);
       for (var mi = 0; mi < names.length; mi++) {
         var u = mfUnits[mi][i] || 0, nav = mfNav[mi][i];
