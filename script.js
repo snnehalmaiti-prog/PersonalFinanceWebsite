@@ -16983,6 +16983,14 @@
       return;
     }
     card.hidden = false;
+    // The selection is named in the title, exactly as CASH FLOW · MONTHLY names
+    // it — the card's figures are one portfolio's, and the eyebrow is where that
+    // is said. Set before the read, so the name is right even while it loads.
+    var nwmPortNameEl = document.getElementById("nwm-portfolio-name");
+    if (nwmPortNameEl) {
+      var nwmPort = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+      nwmPortNameEl.textContent = nwmPort === "all" ? "" : " · " + nwmPort;
+    }
     WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
       .then(function (rows) {
         var list = rows || [];

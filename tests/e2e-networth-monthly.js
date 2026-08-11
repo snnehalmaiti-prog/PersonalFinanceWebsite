@@ -519,9 +519,23 @@ const money = (t) => {
   // portfolio's share comes from the stored split — including on reconstructed
   // months, which is why the backfill records one.
   const pickPortfolio = async (name) => {
-    await p.evaluate((n) => { localStorage.setItem("wf-selected-portfolio", n); }, name);
-    await p.evaluate(() => window.renderNetWorthMonthly && window.renderNetWorthMonthly());
-    await p.waitForTimeout(1200);
+    // Through the real control where the menu offers it, so every card that
+    // follows the selector is refreshed — comparing this card's title against
+    // CASH FLOW's is meaningless if only one of them re-rendered.
+    const clicked = await p.evaluate((n) => {
+      const opt = Array.prototype.slice.call(
+        document.querySelectorAll("#portfolio-menu .portfolio-option"))
+        .find((e) => (e.textContent || "").trim().toLowerCase() ===
+          (n === "all" ? "all portfolios" : n.toLowerCase()));
+      if (!opt) return false;
+      opt.click();
+      return true;
+    }, name);
+    if (!clicked) {
+      await p.evaluate((n) => { localStorage.setItem("wf-selected-portfolio", n); }, name);
+      await p.evaluate(() => window.renderNetWorthMonthly && window.renderNetWorthMonthly());
+    }
+    await p.waitForTimeout(1800);
     return p.evaluate(() => {
       const c = window.__wfNwmChart;
       const tot = {};
@@ -529,7 +543,16 @@ const money = (t) => {
         tot[(el.querySelector(".mic-hs-tot-label") || {}).textContent] =
           (el.querySelector("b") || {}).textContent;
       });
-      return { labels: c ? c.data.labels : [], stats: tot };
+      const eyebrow = (el) => {
+        const e = el && el.querySelector(".mic-eyebrow");
+        return e ? e.textContent.replace(/\s+/g, " ").trim() : null;
+      };
+      return { labels: c ? c.data.labels : [], stats: tot,
+        // The card names the selection in its title, and must name it the way
+        // CASH FLOW · MONTHLY does — same markup, same separator, same casing.
+        eyebrow: eyebrow(document.getElementById("net-worth-monthly-card")),
+        cashflowEyebrow: eyebrow(document.getElementById("monthly-invest-cat-card")),
+        named: (document.getElementById("nwm-portfolio-name") || {}).textContent };
     });
   };
 
@@ -554,7 +577,28 @@ const money = (t) => {
      "valuation paths has drifted from the other",
      { sn: sn.stats.Closing, tr: tr.stats.Closing, all: household.stats.Closing });
 
-  await pickPortfolio("all");
+  // ── The card names the selection ────────────────────────────────────────
+  // Same treatment CASH FLOW · MONTHLY gives it: the portfolio appended to the
+  // eyebrow, so a card showing one person's figures says whose they are.
+  ok(/NET WORTH . MONTHLY . Snnehal$/.test(sn.eyebrow || ""),
+     "R1 a portfolio selection is named in the title", sn.eyebrow);
+  ok(/Trisha$/.test(tr.eyebrow || ""), "R2 the other one too", tr.eyebrow);
+  ok(/NET WORTH . MONTHLY$/.test(household.eyebrow || ""),
+     "R3 and the household is not — 'All' would be noise on every load",
+     household.eyebrow);
+  ok(sn.named === " \u00b7 Snnehal",
+     "R4 appended with the same separator, not baked into the title", sn.named);
+  // The two cards sit one above the other, so a difference in how they name the
+  // same selection is visible at a glance.
+  ok(sn.cashflowEyebrow && sn.eyebrow &&
+     sn.cashflowEyebrow.replace(/^CASH FLOW/, "") === sn.eyebrow.replace(/^NET WORTH/, ""),
+     "R5 named identically to CASH FLOW · MONTHLY, which sits right below it",
+     { nwm: sn.eyebrow, cf: sn.cashflowEyebrow });
+
+  const backToAll = await pickPortfolio("all");
+  ok(/NET WORTH . MONTHLY$/.test(backToAll.eyebrow || ""),
+     "R6 and the name is dropped again on returning to the household",
+     backToAll.eyebrow);
 
   // ── Parked cash is named, not hidden ────────────────────────────────────
   // The fixture moves ₹50,000 into savings in July. That money is in net worth,
