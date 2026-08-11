@@ -289,5 +289,123 @@ function currentINR(txns, isUsd, currentPrice, usdToday, rateByDate) {
      "FX13 nor without an INR cost to compare against");
 }
 
+// ── Liabilities against the Overview's Current figure ───────────────────────
+// What is left to pay, and whose it is. A liability paid from a personal
+// account is that person's in full; one paid from a joint account is nobody's
+// until the split says otherwise.
+const eq = (a, b, name) => ok(a === b, name, { got: a, want: b });
+const ACCTS = [
+  { id: "sn", name: "Snnehal", contributing_account: true },
+  { id: "tr", name: "Trisha", contributing_account: true },
+  { id: "jt", name: "Joint", contributing_account: false },
+];
+const L = (row) => ({ id: "lb-" + Math.random(), name: "loan", row: row });
+
+{
+  eq(WfMath.liabilityRemaining({ amount: 45000, num_payments: 240, installments_done: 40 }),
+     200 * 45000, "LB1 what is left to pay is the unpaid instalments, at their amount");
+  eq(WfMath.liabilityRemaining({ amount: 45000, num_payments: 240, installments_done: 240 }), 0,
+     "LB2 a loan paid off owes nothing");
+  eq(WfMath.liabilityRemaining({ amount: 45000, num_payments: 240, installments_done: 900 }), 0,
+     "LB3 and cannot go negative if the counter overruns");
+  eq(WfMath.liabilityRemaining({ amount: 45000 }), null,
+     "LB4 an open-ended schedule owes an unknown amount, not zero");
+  eq(WfMath.liabilityRemaining({ amount: 0, num_payments: 10 }), 0,
+     "LB5 no instalment amount, nothing owed");
+
+  // Counted off the end date when there is no instalment count.
+  eq(WfMath.liabilityRemainingCount({ next_due: "2026-09-01", end_date: "2027-08-01", frequency: "monthly" }),
+     12, "LB6 twelve monthly dues from September through the following August");
+  eq(WfMath.liabilityRemainingCount({ next_due: "2026-09-01", end_date: "2026-09-01", frequency: "monthly" }),
+     1, "LB7 an end date on the due date still owes that instalment");
+  eq(WfMath.liabilityRemainingCount({ next_due: "2026-09-02", end_date: "2026-09-01", frequency: "monthly" }),
+     0, "LB8 an end date already past owes nothing");
+  eq(WfMath.liabilityRemainingCount({ next_due: "2026-01-31", end_date: "2026-04-30", frequency: "monthly" }),
+     4, "LB9 a month-end schedule clamps through February rather than skipping a month");
+  eq(WfMath.liabilityRemainingCount({ next_due: "2026-09-01", end_date: "2027-09-01", frequency: "quarterly" }),
+     5, "LB10 quarterly steps three months at a time");
+  eq(WfMath.liabilityRemainingCount({ next_due: "2026-09-01", end_date: "2026-09-29", frequency: "weekly" }),
+     5, "LB11 and weekly, seven days");
+  eq(WfMath.liabilityRemainingCount({ num_payments: 6, installments_done: 2, end_date: "2027-01-01",
+     next_due: "2026-09-01", frequency: "monthly" }), 4,
+     "LB12 an explicit instalment count wins over the end date");
+}
+
+{
+  // A personal account: the whole debt is that person's.
+  const d = WfMath.liabilityDeductions(
+    [L({ amount: 10000, num_payments: 10, installments_done: 0, account_id: "sn" })], ACCTS);
+  eq(d.total, 100000, "LB13 the household owes the whole of it");
+  eq(d.byName["snnehal"], 100000, "LB14 and so does the person who pays it");
+  eq(d.byName["trisha"], undefined, "LB15 the other person owes none of it");
+  eq(d.unattributed, 0, "LB16 nothing is left unassigned");
+}
+{
+  // A joint account: split, or nobody's.
+  const split = WfMath.liabilityDeductions(
+    [L({ amount: 10000, num_payments: 10, account_id: "jt",
+         contribution_split: { sn: 70, tr: 30 } })], ACCTS);
+  eq(split.total, 100000, "LB17 the household still owes the whole of it");
+  eq(split.byName["snnehal"], 70000, "LB18 divided by the split");
+  eq(split.byName["trisha"], 30000, "LB19 across both contributors");
+  eq(split.unattributed, 0, "LB20 with nothing left over");
+
+  const none = WfMath.liabilityDeductions(
+    [L({ amount: 10000, num_payments: 10, account_id: "jt" })], ACCTS);
+  eq(none.total, 100000, "LB21 a joint liability with no split still counts against the household");
+  eq(Object.keys(none.byName).length, 0,
+     "LB22 but is nobody's in particular — it is not silently handed to one person");
+  eq(none.unattributed, 100000, "LB23 and says so, rather than losing the difference");
+
+  // An account that has since been deleted takes its share with it — into the
+  // unattributed bucket, never out of the total.
+  const gone = WfMath.liabilityDeductions(
+    [L({ amount: 10000, num_payments: 10, account_id: "jt",
+         contribution_split: { sn: 50, ghost: 50 } })], ACCTS);
+  eq(gone.total, 100000, "LB24 a share naming a deleted account does not shrink the debt");
+  eq(gone.byName["snnehal"], 50000, "LB25 the share that still resolves is assigned");
+  eq(gone.unattributed, 50000, "LB26 and the orphaned one is reported, not dropped");
+}
+{
+  // Percentages that do not add to 100 are normalised rather than trusted: the
+  // household total is the truth, and the split only divides it.
+  const odd = WfMath.liabilityDeductions(
+    [L({ amount: 1000, num_payments: 10, account_id: "jt",
+         contribution_split: { sn: 30, tr: 30 } })], ACCTS);
+  eq(odd.total, 10000, "LB27 the debt is what it is");
+  eq(odd.byName["snnehal"] + odd.byName["trisha"], 10000,
+     "LB28 and a split that does not sum to 100 still divides all of it, not 60% of it");
+}
+{
+  const many = WfMath.liabilityDeductions([
+    L({ amount: 10000, num_payments: 10, account_id: "sn" }),
+    L({ amount: 5000, num_payments: 4, account_id: "jt", contribution_split: { sn: 50, tr: 50 } }),
+    L({ amount: 1000, account_id: "sn" }),                       // open-ended
+    { _deleted: true, row: { amount: 99999, num_payments: 99, account_id: "sn" } },
+  ], ACCTS);
+  eq(many.total, 120000, "LB29 liabilities accumulate");
+  eq(many.byName["snnehal"], 110000, "LB30 per person, across both kinds");
+  eq(many.byName["trisha"], 10000, "LB31 and the joint share reaches the other one");
+  eq(many.openEnded, 1,
+     "LB32 the open-ended one moves no figure but is counted, so it can be surfaced");
+  ok(many.total === 120000,
+     "LB33 a deleted liability is not owed — a tombstone is not a debt", many);
+}
+{
+  const d = WfMath.liabilityDeductions(
+    [L({ amount: 10000, num_payments: 10, account_id: "jt", contribution_split: { sn: 70, tr: 30 } })],
+    ACCTS);
+  eq(WfMath.liabilityForPortfolio(d, "all"), 100000, "LB34 the household sees all of it");
+  eq(WfMath.liabilityForPortfolio(d, "Snnehal"), 70000, "LB35 a portfolio sees its own share");
+  eq(WfMath.liabilityForPortfolio(d, "snnehal "), 70000,
+     "LB36 matched on name without being fussy about case or spacing");
+  eq(WfMath.liabilityForPortfolio(d, "Nobody"), 0,
+     "LB37 a portfolio matching no contributing account owes nothing");
+  eq(WfMath.liabilityForPortfolio(null, "all"), 0, "LB38 no liabilities, no deduction");
+  eq(WfMath.liabilityDeductions(null, ACCTS).total, 0, "LB39 nor from an empty list");
+  eq(WfMath.liabilityDeductions([L({ amount: 100, num_payments: 2, account_id: "sn" })], null).total, 200,
+     "LB40 the household total survives having no account list to name people with");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

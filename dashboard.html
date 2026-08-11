@@ -1754,6 +1754,10 @@
         dashExpState.categories = snap.categories || [];
         dashExpState.paymentMethods = snap.paymentMethods || [];
         dashExpState.records = snap.records || [];
+        // The Overview's Current figure nets off liabilities, and works out
+        // whose debt is whose from these accounts. It paints before they land,
+        // so it is asked to repaint once they have.
+        if (window.refreshOverviewStats) { try { refreshOverviewStats(); } catch (e) {} }
       }
 
       function fetchExpenseFromNetwork() {

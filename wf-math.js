@@ -251,8 +251,141 @@
     };
   }
 
+  // ── Liabilities ───────────────────────────────────────────────────────────
+  //
+  // What a liability still owes, measured as what is LEFT TO PAY on its plan:
+  // the instalments not yet posted, each at its instalment amount. That is not
+  // the amortised principal — it includes the interest inside every instalment
+  // still to come — and it is deliberately so: it answers "how much money still
+  // has to leave this account", which is the question the Overview's Current
+  // figure is being netted against.
+  //
+  // A schedule with neither an instalment count nor an end date is open-ended:
+  // there is no last payment to count back from, so it owes an unknown amount
+  // and is reported as null rather than as zero. A caller that treated null as
+  // zero would quietly claim an open-ended loan costs nothing.
+  function liabilityRemainingCount(row) {
+    if (!row) return null;
+    var done = Number(row.installments_done) || 0;
+    if (row.num_payments != null && row.num_payments !== "") {
+      var n = Math.floor(Number(row.num_payments));
+      if (isFinite(n) && n >= 0) return Math.max(0, n - done);
+    }
+    if (row.end_date && row.next_due) return countDuesThrough(row.next_due, row.end_date, row.frequency);
+    return null;
+  }
+
+  // Instalments falling in [from, through] at the given frequency. Month steps
+  // clamp to the last valid day of the target month, matching the processor
+  // that actually posts them — otherwise a 31st-of-the-month schedule would be
+  // counted on a different calendar from the one it is paid on.
+  function countDuesThrough(fromIso, throughIso, frequency) {
+    var from = String(fromIso).slice(0, 10), through = String(throughIso).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(through)) return null;
+    if (through < from) return 0;
+    var start = new Date(from + "T00:00:00");
+    var day = start.getDate();
+    var freq = frequency || "monthly";
+    var monthStep = { monthly: 1, quarterly: 3, yearly: 12 }[freq];
+    var count = 0, cur = new Date(start.getTime());
+    for (var guard = 0; guard < 5000; guard++) {
+      var iso = cur.getFullYear() + "-" +
+        String(cur.getMonth() + 1).padStart(2, "0") + "-" +
+        String(cur.getDate()).padStart(2, "0");
+      if (iso > through) break;
+      count++;
+      if (monthStep) {
+        // Stepped from the START each time, not from the previous date: a
+        // schedule clamped to Feb 28 must jump back to the 31st in March, not
+        // stay on the 28th for the rest of its life.
+        var y = start.getFullYear(), m = start.getMonth() + monthStep * count;
+        var lastDay = new Date(y, m + 1, 0).getDate();
+        cur = new Date(y, m, Math.min(day, lastDay));
+      } else if (freq === "weekly") {
+        cur = new Date(cur.getTime()); cur.setDate(cur.getDate() + 7);
+      } else {
+        cur = new Date(cur.getTime()); cur.setDate(cur.getDate() + 1);
+      }
+    }
+    return count;
+  }
+
+  function liabilityRemaining(row) {
+    var n = liabilityRemainingCount(row);
+    if (n == null) return null;
+    var amt = Number(row && row.amount) || 0;
+    if (!(amt > 0)) return 0;
+    return n * amt;
+  }
+
+  // How much debt each person carries, and the household total.
+  //
+  // A liability paid from a contributing (personal) account is that person's in
+  // full. One paid from a joint account is not anybody's until the split says so
+  // — the joint account is funded by the contributing accounts, and the split is
+  // the record of in what proportion.
+  //
+  // `total` always counts the whole liability, whether or not it could be
+  // attributed. `unattributed` is the part that reached no name: a joint-account
+  // liability with no split, or a split naming an account that no longer exists.
+  // Keeping it visible is the point — it is the difference between the household
+  // figure and the sum of the individual ones.
+  function liabilityDeductions(liabilities, accounts) {
+    var byId = {};
+    (accounts || []).forEach(function (a) { if (a && a.id) byId[a.id] = a; });
+    var key = function (s) { return String(s == null ? "" : s).trim().toLowerCase(); };
+    var out = { total: 0, byName: {}, unattributed: 0, openEnded: 0 };
+    var add = function (name, amt) {
+      var k = key(name);
+      if (!k) { out.unattributed += amt; return; }
+      out.byName[k] = (out.byName[k] || 0) + amt;
+    };
+
+    (liabilities || []).forEach(function (item) {
+      if (!item || item._deleted) return;
+      var row = item.row || {};
+      var owed = liabilityRemaining(row);
+      // Open-ended: counted as a liability that exists but whose size is not
+      // known, so it moves no figure and is reported for the caller to surface.
+      if (owed == null) { out.openEnded++; return; }
+      if (!(owed > 0)) return;
+      out.total += owed;
+
+      var acct = row.account_id ? byId[row.account_id] : null;
+      if (acct && acct.contributing_account) { add(acct.name, owed); return; }
+
+      var split = row.contribution_split;
+      if (!split || !Object.keys(split).length) { out.unattributed += owed; return; }
+      var pctTotal = Object.keys(split).reduce(function (s, id) { return s + (Number(split[id]) || 0); }, 0);
+      if (!(pctTotal > 0)) { out.unattributed += owed; return; }
+      Object.keys(split).forEach(function (id) {
+        var pct = Number(split[id]) || 0;
+        if (!pct) return;
+        var share = owed * (pct / pctTotal);
+        var a = byId[id];
+        if (a && a.name) add(a.name, share);
+        else out.unattributed += share;   // the account is gone; the debt is not
+      });
+    });
+    return out;
+  }
+
+  // One portfolio's share, matched to a contributing account by name — the only
+  // link between the two, which live in different tables. "all" is the whole
+  // household, including anything that could not be attributed to a name.
+  function liabilityForPortfolio(deductions, portfolio) {
+    if (!deductions) return 0;
+    var pf = String(portfolio == null ? "all" : portfolio).trim();
+    if (!pf || pf.toLowerCase() === "all") return deductions.total;
+    return deductions.byName[pf.toLowerCase()] || 0;
+  }
+
   root.WfMath = {
     DAYS_PER_YEAR: DAYS_PER_YEAR,
+    liabilityRemainingCount: liabilityRemainingCount,
+    liabilityRemaining: liabilityRemaining,
+    liabilityDeductions: liabilityDeductions,
+    liabilityForPortfolio: liabilityForPortfolio,
     calculateXIRR: calculateXIRR,
     fifoRemainingLots: fifoRemainingLots,
     forwardFillOverTimeline: forwardFillOverTimeline,

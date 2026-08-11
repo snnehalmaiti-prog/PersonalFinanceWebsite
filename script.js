@@ -2230,6 +2230,33 @@
     return { portfolio: _ovCurrentPortfolio(), staleWritesDropped: _ovStaleDrops, slices: ovDebugProvenance() };
   };
 
+  // ── Liabilities against the Current figure ────────────────────────────────
+  //
+  // Deliberately display-only. It is subtracted from what the Overview's
+  // Current stat SHOWS, and nowhere else: not from getOverviewCurrentTotal,
+  // which feeds the daily snapshot writer, and not from the figure pushed into
+  // the Account Value chart's tail. Net worth history stays a record of assets,
+  // so turning this on cannot rewrite what past months are worth.
+  //
+  // Invested, P&L and Return % also stay gross — they measure how investments
+  // performed, a question a loan does not enter into. The tooltip on the figure
+  // says what was taken off, so the card does not simply look like it fails to
+  // add up.
+  function _ovLiabilities() {
+    var list;
+    try { list = JSON.parse(localStorage.getItem("wf-liabilities")) || []; }
+    catch (e) { return null; }
+    if (!list.length || !window.WfMath || !WfMath.liabilityDeductions) return null;
+    var accounts = (window.dashExpState && dashExpState.accounts) || [];
+    return WfMath.liabilityDeductions(list, accounts);
+  }
+
+  function _ovLiabilityDeduction() {
+    var d = _ovLiabilities();
+    if (!d) return 0;
+    return WfMath.liabilityForPortfolio(d, _ovCurrentPortfolio()) || 0;
+  }
+
   function refreshOverviewStats() {
     var overviewInvestedEl = document.getElementById("overview-total-investment");
     var overviewCurrentEl = document.getElementById("overview-total-current-value");
@@ -2241,7 +2268,19 @@
     var totalCurrent = agg.current;
     var totalRealized = agg.realized;
     setMoneyText(overviewInvestedEl, formatCurrency(totalInvested), totalInvested);
-    setMoneyText(overviewCurrentEl, formatCurrency(totalCurrent), totalCurrent);
+    var owed = _ovLiabilityDeduction();
+    var shownCurrent = totalCurrent - owed;
+    setMoneyText(overviewCurrentEl, formatCurrency(shownCurrent), shownCurrent);
+    if (overviewCurrentEl) {
+      if (owed > 0) {
+        overviewCurrentEl.setAttribute("title",
+          "Assets " + formatCurrency(totalCurrent) + " less liabilities " + formatCurrency(owed));
+      } else {
+        overviewCurrentEl.removeAttribute("title");
+      }
+    }
+    // Gross, both of them: P&L is how the investments did, and the chart's tail
+    // has to keep matching the series it sits on.
     setUnrealizedReturn(overviewReturnEl, overviewPctEl, totalCurrent, totalInvested);
     if (overviewRealizedEl) setSignedCurrency(overviewRealizedEl, totalRealized);
     // Keep the Account Value chart's tail in lockstep with this card. The store is
@@ -2250,6 +2289,12 @@
     // chart snap once (and lag when FI/commodity arrive later).
     syncAccountValueTail(totalCurrent);
   }
+
+  // The liability deduction needs the expense accounts to know whose debt is
+  // whose, and those load asynchronously — later than the first paint of this
+  // card. Exposed so the expense loader can ask for a repaint once they arrive,
+  // instead of the deduction appearing only on the next portfolio switch.
+  window.refreshOverviewStats = refreshOverviewStats;
 
   // Update only the Account Value chart's last data point + "Current Value"
   // label to match the Overview Current card, without a full re-render.
