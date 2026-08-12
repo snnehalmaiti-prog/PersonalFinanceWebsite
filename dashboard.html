@@ -408,24 +408,6 @@
         <div class="nwm-chart-wrap" id="nwm-chart-wrap" hidden>
           <canvas id="nwm-chart" height="220"></canvas>
         </div>
-        <!-- Drill-down: click a month to see which sub-categories moved it.
-             Reuses CASH FLOW · MONTHLY's modal markup and styles so the two
-             drill-downs are the same object to the reader, not two designs. -->
-        <div id="nwm-drill-overlay" class="mic-txn-overlay" hidden>
-          <div class="mic-txn-modal" role="dialog" aria-modal="true" aria-labelledby="nwm-drill-title">
-            <div class="mic-txn-header">
-              <div>
-                <h3 class="mic-txn-title" id="nwm-drill-title">Market movement</h3>
-                <p class="mic-txn-sub" id="nwm-drill-sub"></p>
-              </div>
-              <div class="mic-txn-head-right">
-                <button type="button" class="mic-txn-close" id="nwm-drill-close" aria-label="Close">&times;</button>
-              </div>
-            </div>
-            <div class="mic-txn-totals" id="nwm-drill-totals"></div>
-            <div class="mic-txn-body" id="nwm-drill-body"></div>
-          </div>
-        </div>
         <!-- Rendered by _nwmDrawChart: which keys exist depends on what the
              period actually contains, and each one is clickable. -->
         <div class="nwm-chart-legend mic-legend" id="nwm-chart-legend" hidden></div>

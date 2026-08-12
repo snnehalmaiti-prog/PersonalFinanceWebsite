@@ -523,88 +523,8 @@
       .sort(function (a, b) { return b.amount - a.amount; });
   }
 
-  // ── Attributing a month's market movement to sub-categories ───────────────
-  //
-  // NET WORTH · MONTHLY charts market movement as a RESIDUAL: whatever is left
-  // of a month's change after contributions, interest and idle cash are taken
-  // out. A residual has no parts, so there is nothing stored to drill into.
-  // This rebuilds the parts from the other direction — per sub-category:
-  //
-  //     market = (value now − value a month ago) − contributions − interest
-  //
-  // and the two numbers are then compared. They are computed from different
-  // sources (the residual from recorded snapshots, this from today's sheets and
-  // price history), so they will not always agree, and the gap is REPORTED as
-  // `unattributed` rather than spread across the rows. A breakdown that always
-  // adds up exactly is the suspicious one: it means the difference was hidden.
-  //
-  // Inputs are plain maps so this stays testable without a browser:
-  //   valueBySub     { "YYYY-MM": { sub: value at that month's end } }
-  //   contribBySub   { "YYYY-MM": { sub: net money in that month } }
-  //   interestBySub  { "YYYY-MM": { sub: interest earned that month } }
-  //   marketTotal    the residual the card is showing for that month
-  //
-  // prevMonth is passed explicitly rather than derived by subtracting one from
-  // the month key: the series can skip months, and differencing against a month
-  // that has no valuation would book a whole quarter's movement as one month's.
-  function attributeMarketBySubCategory(month, prevMonth, valueBySub, contribBySub,
-                                        interestBySub, marketTotal) {
-    var cur = (valueBySub && valueBySub[month]) || null;
-    if (!cur) return null;
-    var prev = (prevMonth && valueBySub && valueBySub[prevMonth]) || {};
-    var contrib = (contribBySub && contribBySub[month]) || {};
-    var interest = (interestBySub && interestBySub[month]) || {};
-
-    // Every sub-category seen in either valuation. NOT the intersection: a fund
-    // bought this month can genuinely gain, and its principal is removed by the
-    // contribution term rather than by excluding it. One sold to nothing is kept
-    // for the mirror reason — its value went to zero and the sale is a negative
-    // contribution, so what is left is the realised move.
-    var keys = {};
-    Object.keys(cur).forEach(function (k) { keys[k] = true; });
-    Object.keys(prev).forEach(function (k) { keys[k] = true; });
-    Object.keys(contrib).forEach(function (k) { keys[k] = true; });
-    Object.keys(interest).forEach(function (k) { keys[k] = true; });
-
-    var rows = [], attributed = 0;
-    Object.keys(keys).forEach(function (k) {
-      var dv = (Number(cur[k]) || 0) - (Number(prev[k]) || 0);
-      var c = Number(contrib[k]) || 0;
-      var inc = Number(interest[k]) || 0;
-      var raw = dv - c - inc;
-      // Tested BEFORE rounding. Rounded first, every survivor is already a whole
-      // number of paise, so this comparison could only ever have caught exact
-      // zero — it would read like a noise filter while being none.
-      if (Math.abs(raw) < 0.005 && Math.abs(inc) < 0.005) return;   // nothing happened
-      var mkt = round2(raw);
-      rows.push({ subCategory: k, market: mkt, interest: round2(inc),
-                  opening: round2(Number(prev[k]) || 0), closing: round2(Number(cur[k]) || 0),
-                  contributions: round2(c) });
-      attributed += mkt;
-    });
-    attributed = round2(attributed);
-
-    // Biggest mover first, by size — the reader is asking "what did this".
-    rows.sort(function (a, b) { return Math.abs(b.market) - Math.abs(a.market); });
-
-    var total = marketTotal == null ? null : round2(Number(marketTotal) || 0);
-    return {
-      rows: rows,
-      attributed: attributed,
-      total: total,
-      unattributed: total == null ? null : round2(total - attributed),
-      // No previous valuation means every row is measured from zero, so the
-      // whole month reads as gain. Flagged rather than suppressed: the caller
-      // decides whether to show it, and silence here would be the lie.
-      noBaseline: !prevMonth || !(valueBySub && valueBySub[prevMonth])
-    };
-  }
-
-  function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
-
   root.WfMath = {
     DAYS_PER_YEAR: DAYS_PER_YEAR,
-    attributeMarketBySubCategory: attributeMarketBySubCategory,
     liabilityRemainingCount: liabilityRemainingCount,
     liabilityRemaining: liabilityRemaining,
     liabilityDeductions: liabilityDeductions,
