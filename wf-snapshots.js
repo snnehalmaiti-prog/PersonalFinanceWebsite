@@ -85,29 +85,6 @@
     // Gold priced off a stale cache is a stored number that never happened.
     if (ctx.hasCommodity && ctx.goldStale) reasons.push("stale-gold");
 
-    // The sub-category split, if the caller supplied one. Held to the same rule
-    // as the category breakdown: it has to agree with the total it accompanies,
-    // or it is dropped. A split that does not sum to its own row's total would
-    // reappear later as an "unattributed" remainder in the drill-down — which is
-    // precisely what recording it is meant to remove. Dropped rather than
-    // refused: a snapshot with no split is still a snapshot, and losing the row
-    // outright is the worse outcome.
-    var subSplit = null, subReason = null;
-    if (ctx.bySubCategory && typeof ctx.bySubCategory === "object") {
-      var subSum = 0, subKeys = 0;
-      Object.keys(ctx.bySubCategory).forEach(function (pf) {
-        var m = ctx.bySubCategory[pf];
-        if (!m || typeof m !== "object") return;
-        Object.keys(m).forEach(function (k) {
-          var v = Number(m[k]);
-          if (isFinite(v)) { subSum += v; subKeys++; }
-        });
-      });
-      if (!subKeys) subReason = "subcategory-empty";
-      else if (ctx.total > 0 && !isStable(subSum, ctx.total, 0.005)) subReason = "subcategory-mismatch";
-      else subSplit = ctx.bySubCategory;
-    }
-
     var b = ctx.breakdown || null;
     var parts = null;
     if (!b) reasons.push("no-breakdown");
@@ -137,15 +114,9 @@
         fixed_income: round2(parts.fixed_income),
         commodity: round2(parts.commodity),
         by_portfolio: ctx.byPortfolio || null,
-        by_subcategory: subSplit,
         meta: {
           source: "live",
-          market: ctx.marketSource || null,
-          // Why the split is absent, when it is. Without this a null column is
-          // ambiguous between "written before the column existed", "nothing to
-          // record" and "recorded but did not add up" — three states that want
-          // three different responses.
-          subcategory: subReason || (subSplit ? "ok" : "absent")
+          market: ctx.marketSource || null
         }
       }
     };

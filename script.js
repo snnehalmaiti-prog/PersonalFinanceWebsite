@@ -16437,149 +16437,6 @@
       return { x: date, y: total };
     });
   }
-  // Sub-category for an instrument, from either mapping sheet.
-  // Holdings that belong to no named portfolio still belong to the household.
-  var UNASSIGNED_PORTFOLIO = "Unassigned";
-  var _snapSubCatMemo = null;
-  function _snapSubCategoryMap() {
-    var mf = getSheetRows("mfmapping"), se = getSheetRows("stocksetfmapping");
-    if (_snapSubCatMemo && _snapSubCatMemo.mf === mf && _snapSubCatMemo.se === se) return _snapSubCatMemo.map;
-    var map = {};
-    [mf, se].forEach(function (rows) {
-      if (!rows || rows.length < 2) return;
-      var header = rows[0].map(normalizeText);
-      var i = header.indexOf("instrument name"), c = header.indexOf("instrument sub category");
-      if (i === -1 || c === -1) return;
-      rows.slice(1).forEach(function (r) {
-        var nm = (r[i] || "").trim(), sub = (r[c] || "").trim();
-        if (nm && sub) map[normalizeText(nm)] = sub;
-      });
-    });
-    _snapSubCatMemo = { mf: mf, se: se, map: map };
-    return map;
-  }
-
-  // What each sub-category was worth, per portfolio, at the given dates.
-  //
-  // A REGROUPING of _snapSeriesForPortfolio's arithmetic, not a second way of
-  // valuing a portfolio: same timeline, same NAVs, same historical prices, same
-  // USD/INR rates, same FD accrual engine. That is what lets each row's split
-  // sum to the row's own total — and a split that does not sum to its total is
-  // dropped by evaluateWrite, so drift here shows up as a missing split rather
-  // than a wrong one.
-  //
-  // Unfiltered, for the same reason the series it mirrors is: recorded history
-  // does not change because of what is hidden on screen.
-  //
-  // Returns { "YYYY-MM-DD": { portfolio: { subCategory: value } } }.
-  function _snapSubCategoryByDate(portfolios, wantDates) {
-    var v = _snapValueInputs;
-    if (!v || !v.timeline || !v.timeline.length || !wantDates || !wantDates.length) return {};
-    var _ff = WfMath.forwardFillOverTimeline;
-    var timeline = v.timeline;
-    var subOf = _snapSubCategoryMap();
-
-    // Timeline index for each wanted date: the last point ON OR BEFORE it.
-    // Not an exact match — the timeline is built from NAV and transaction dates,
-    // so a month end that fell on a weekend has no point of its own, and an
-    // exact lookup silently skipped it. That is what left rows unrepairable.
-    var idxByDate = {};
-    var sorted = wantDates.slice().sort();
-    var ti = 0;
-    for (var di = 0; di < sorted.length; di++) {
-      var wantD = sorted[di];
-      while (ti + 1 < timeline.length && formatDateISO(timeline[ti + 1]) <= wantD) ti++;
-      if (formatDateISO(timeline[ti]) <= wantD) idxByDate[wantD] = ti;
-    }
-    var dates = Object.keys(idxByDate);
-    if (!dates.length) return {};
-
-    var out = {};
-    dates.forEach(function (d) { out[d] = {}; });
-    function add(date, pf, sub, amt) {
-      if (!amt || !isFinite(amt)) return;
-      var m = out[date][pf] = out[date][pf] || {};
-      var k = sub || "Unclassified";
-      m[k] = (m[k] || 0) + amt;
-    }
-
-    var fdRows = getSheetRows("fd");
-    var mapping = buildStockMappingTable();
-    var subByTicker = {};
-    Object.keys(mapping).forEach(function (nm) {
-      var m = mapping[nm];
-      if (m && m.ticker) subByTicker[m.ticker] = m.subCat || "Unclassified";
-    });
-
-    (portfolios || []).forEach(function (pf) {
-      // Mutual funds: units x NAV.
-      var unitEvents = buildInstrumentUnitEvents(pf) || {};
-      Object.keys(unitEvents).forEach(function (name) {
-        var nav = v.navAtByName[name];
-        if (!nav) return;
-        var units = _ff(unitEvents[name], timeline, "cumulativeUnits");
-        var sub = subOf[normalizeText(name)] || "Unclassified";
-        dates.forEach(function (d) {
-          var i = idxByDate[d], u = units[i] || 0;
-          if (u > UNITS_EPSILON && nav[i]) add(d, pf, sub, u * nav[i]);
-        });
-      });
-
-      // Stocks / ETFs: historical price where there is one, else the live one.
-      var seByTicker = buildSeUnitEventsByTicker(getSheetRows("stocksetf"), pf, mapping);
-      Object.keys(seByTicker).forEach(function (ticker) {
-        var hist = v.stockHistoryAll[ticker] || null;
-        var live = v.allPrices[ticker] || null;
-        var isUsd = hist ? hist.currency === "USD" : !!(live && live.currency === "USD");
-        var units = _ff(seByTicker[ticker], timeline, "cumulativeUnits");
-        var sub = subByTicker[ticker] || "Unclassified";
-        dates.forEach(function (d) {
-          var i = idxByDate[d], u = units[i] || 0;
-          if (!(u > UNITS_EPSILON)) return;
-          var price = hist && hist.prices ? lookupIndexPrice(hist.prices, d) : null;
-          if (!price) price = live ? live.price : null;
-          if (!price) return;
-          add(d, pf, sub, u * (isUsd ? price * (v.usdInrHistMap[d] || v.usdInrToday) : price));
-        });
-      });
-
-      // Fixed income: valued per holding at each date by the same engine the
-      // interest series uses, and already carrying its own sub-category.
-      if (fdRows && fdRows.length > 1) {
-        dates.forEach(function (d) {
-          (buildFdHoldingsList(fdRows, pf, function () { return true; },
-                               timeline[idxByDate[d]]) || []).forEach(function (h) {
-            add(d, pf, h.subCategory || "Fixed Income", h.current || 0);
-          });
-        });
-      }
-
-      // Commodity: grams x the gold price on that date. Re-run per sub-category
-      // over a filtered copy of the sheet, so two commodities never merge.
-      if (fdRows && fdRows.length > 1) {
-        var hdr = fdRows[0].map(normalizeText);
-        var catI = hdr.indexOf("instrument category"), subI = hdr.indexOf("instrument sub category");
-        if (catI !== -1) {
-          var bySub = {};
-          fdRows.slice(1).forEach(function (r) {
-            if (normalizeText(r[catI]) !== "commodity") return;
-            var sub = (subI !== -1 ? (r[subI] || "").trim() : "") || "Commodity";
-            (bySub[sub] = bySub[sub] || []).push(r);
-          });
-          Object.keys(bySub).forEach(function (sub) {
-            var grams = _ff(buildCommodityGramEvents([fdRows[0]].concat(bySub[sub]), pf),
-                            timeline, "cumulativeGrams");
-            dates.forEach(function (d) {
-              var i = idxByDate[d], g = grams[i] || 0;
-              if (g > 0) add(d, pf, sub, g * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0));
-            });
-          });
-        }
-      }
-    });
-    return out;
-  }
-
   var _snapDone = false;                // at most one write attempt per load
   var SNAP_TABLE = "net_worth_snapshots";
   var SNAP_LAST_KEY = "wf-snapshot-last";
@@ -16661,9 +16518,6 @@
   // Called from both the write path and the Account Value render, whichever
   // finishes first, latched per load so the pair can't both write.
   var _snapBackfillTimer = null, _snapBackfillStarted = false;
-  // Last backfill write failure, surfaced on the card. Null when the last
-  // attempt succeeded or none has run.
-  var _snapBackfillError = null;
   function _snapBackfillSoon() {
     if (_snapBackfillStarted) return;
     if (_snapBackfillTimer) clearTimeout(_snapBackfillTimer);
@@ -16701,8 +16555,7 @@
     // card could filter carries no by_portfolio, and repairing it means writing
     // back everything it already records alongside the split.
     return WfDb.select(SNAP_TABLE,
-        "select=snapshot_date,total,invested,equity,fixed_income,commodity," +
-        "by_portfolio,by_subcategory,meta")
+        "select=snapshot_date,total,invested,equity,fixed_income,commodity,by_portfolio,meta")
       .then(function (rows) {
       var existing = rows || [];
       var have = existing.map(function (r) { return String(r.snapshot_date).slice(0, 10); });
@@ -16734,121 +16587,15 @@
         seenDate[row.snapshot_date] = true;
         return true;
       });
-      // Rows that already exist but carry no sub-category split.
-      //
-      // planBackfill only writes dates it does not already have, and the refresh
-      // planner deliberately leaves LIVE rows alone — they are records, not
-      // derivations. So without this every month recorded before the column
-      // existed stays undrillable forever, which is exactly what shipping the
-      // feature without it produced.
-      //
-      // Same discipline planSplitBackfill uses for by_portfolio: everything the
-      // row already records is carried forward unchanged. The upsert replaces
-      // the whole row, and a recorded total is not something a reconstruction
-      // may overwrite — only the missing split is added.
-      var needSplit = existing.filter(function (r) {
-        return r && !r.by_subcategory && !seenDate[String(r.snapshot_date).slice(0, 10)];
-      }).sort(function (a, b) {
-        return String(b.snapshot_date).localeCompare(String(a.snapshot_date));
-      }).slice(0, 600);
-      needSplit.forEach(function (r) {
-        var d = String(r.snapshot_date).slice(0, 10);
-        seenDate[d] = true;
-        plan.push({
-          snapshot_date: d,
-          total: r.total,
-          invested: r.invested, equity: r.equity,
-          fixed_income: r.fixed_income, commodity: r.commodity,
-          by_portfolio: r.by_portfolio,
-          meta: r.meta || null
-        });
-      });
-      if (needSplit.length) dbg("[Snapshot] backfill: " + needSplit.length + " rows need a split");
-
-      // Per-portfolio sub-category values for exactly the dates being written.
-      // Attached here rather than inside the planners: they stay pure, and this
-      // is the only place that knows the final deduped date list.
-      //
-      // Each split is checked against ITS OWN row's total before being kept. A
-      // split that does not sum to the row it sits on would resurface in the
-      // drill-down as an unattributed remainder, which is the whole thing
-      // recording it is meant to remove — so a row keeps its total and loses its
-      // split, never the other way round.
-      try {
-        var subDates = plan.map(function (r) { return r.snapshot_date; });
-        var pfNames = Object.keys(byPortfolio);
-        var subByDate = _snapSubCategoryByDate(pfNames, subDates);
-        // Whatever the named portfolios do not cover.
-        //
-        // The household total counts every holding; the split only counted
-        // holdings belonging to a NAMED portfolio. One row with a blank
-        // Portfolio Name therefore made the split fall short of the total on
-        // every date, and the guard — correctly — rejected all of them. In a
-        // fixture, adding a single such row took the split from 179 of 179 rows
-        // to 0 of 179.
-        //
-        // Measured rather than assumed: the household is valued the same way,
-        // and the remainder per sub-category becomes its own bucket. If every
-        // holding is attributed the remainder is zero and no bucket appears.
-        var allByDate = _snapSubCategoryByDate(["all"], subDates);
-        Object.keys(subByDate).forEach(function (d) {
-          var household = (allByDate[d] || {})["all"] || {};
-          var named = subByDate[d] || {};
-          var rest = {};
-          Object.keys(household).forEach(function (sub) {
-            var claimed = 0;
-            pfNames.forEach(function (pf) { claimed += (named[pf] && named[pf][sub]) || 0; });
-            var left = (household[sub] || 0) - claimed;
-            if (Math.abs(left) > 0.5) rest[sub] = left;
-          });
-          if (Object.keys(rest).length) named[UNASSIGNED_PORTFOLIO] = rest;
-        });
-        var kept = 0, dropped = 0;
-        plan.forEach(function (row) {
-          var split = subByDate[row.snapshot_date];
-          if (!split) { row.by_subcategory = null; return; }
-          var sum = 0;
-          Object.keys(split).forEach(function (pf) {
-            Object.keys(split[pf]).forEach(function (k) { sum += Number(split[pf][k]) || 0; });
-          });
-          if (WfSnapshots.isStable(sum, Number(row.total) || 0, 0.005)) {
-            row.by_subcategory = split; kept++;
-          } else {
-            // Record the two figures, not just the verdict. "Did not add up" is
-            // the same sentence for a rupee of rounding and for a whole missing
-            // leg, and those want completely different fixes — so the row keeps
-            // what the split came to and what it was measured against.
-            row.by_subcategory = null; dropped++;
-            row.meta = Object.assign({}, row.meta, {
-              subcategory: "subcategory-mismatch",
-              subcategorySum: Math.round(sum),
-              subcategoryTotal: Math.round(Number(row.total) || 0)
-            });
-          }
-        });
-        dbg("[Snapshot] backfill: sub-category splits kept " + kept + ", dropped " + dropped);
-      } catch (e) { dbg("[Snapshot] backfill: sub-category split skipped, " + e.message); }
-
       dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
           " already stored, " + plan.length + " to write (" + refreshed.length +
           " re-reconstructed, " + repairs.length + " split repairs)");
       if (!plan.length) return 0;
       return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
         dbg("[Snapshot] backfilled " + plan.length + " month ends");
-        _snapBackfillError = null;
         return plan.length;
       });
-    }).catch(function (e) {
-      // Every row goes in ONE upsert, so a single rejected column loses the
-      // whole batch. Swallowing that into a debug line meant a backfill could
-      // fail on every load, forever, while the card looked merely empty — which
-      // is exactly how a missing PostgREST schema reload cost a round trip to
-      // diagnose. Kept for the card to show.
-      _snapBackfillError = (e && e.message) ? String(e.message) : "unknown error";
-      dbg("[Snapshot] backfill FAILED:", _snapBackfillError);
-      try { renderNetWorthMonthly(); } catch (e2) {}
-      return 0;
-    });
+    }).catch(function (e) { dbg("[Snapshot] backfill skipped:", e && e.message); return 0; });
   }
 
   // The stability check: read the total, wait, read it again. A slice landing in
@@ -17052,271 +16799,6 @@
       cur.setMonth(cur.getMonth() + 1);
     }
     return out;
-  }
-
-  // Interest earned per sub-category between two month ends.
-  //
-  // Same discipline as _nwmInterestByMonth, which feeds the card's own bars:
-  // interest EARNED per holding rather than the holding's value (for provident
-  // fund the two differ by the month's contribution, already counted as a
-  // contribution), and only holdings present in BOTH valuations count — a
-  // deposit that did not exist at the earlier date has no accrual to measure,
-  // and booking its principal as interest is the mistake being guarded against.
-  function _nwmInterestBySubForMonth(portfolio, prevMonth, month) {
-    var out = {};
-    var rows = getSheetRows("fd");
-    if (!rows || rows.length < 2 || !prevMonth || !month) return out;
-    var today = new Date();
-    var eomOf = function (mk) {
-      var p = String(mk).split("-");
-      var d = new Date(+p[0], +p[1], 0, 23, 59, 59);
-      return d > today ? today : d;
-    };
-    function valuedAt(d) {
-      var m = {};
-      (buildFdHoldingsList(rows, portfolio || "all", _fiIsTermDeposit, d) || []).forEach(function (h) {
-        if (!h.startDate || h.startDate > d) return;
-        var k = "fd|" + normalizeText(h.portfolio) + "|" + normalizeText(h.bank) + "|" +
-                normalizeText(h.instrument) + "|" + formatDateISO(h.startDate);
-        m[k] = { sub: h.subCategory || "Fixed Deposit", earned: (h.current || 0) - (h.invested || 0) };
-      });
-      (buildFdFixedIncomeHoldingsList(rows, portfolio || "all", d) || []).forEach(function (h) {
-        if (!isProvidentFundSub(normalizeText(h.subCategory || ""))) return;
-        var k = "pf|" + normalizeText(h.portfolio) + "|" + normalizeText(h.instrument) + "|" +
-                normalizeText(h.subCategory);
-        m[k] = { sub: h.subCategory || "Provident Fund", earned: (h.current || 0) - (h.invested || 0) };
-      });
-      return m;
-    }
-    var prev = valuedAt(eomOf(prevMonth)), cur = valuedAt(eomOf(month));
-    Object.keys(cur).forEach(function (k) {
-      if (!(k in prev)) return;
-      var d = cur[k].earned - prev[k].earned;
-      if (!d) return;
-      out[cur[k].sub] = (out[cur[k].sub] || 0) + d;
-    });
-    return out;
-  }
-
-  // ── Drill-down: what moved a month ────────────────────────────────────────
-  //
-  // Reads the stored split for the two month ends the bar spans and differences
-  // them, so the figures come from the same rows the bar came from. Contributions
-  // and interest are the card's own series, split by sub-category from the same
-  // passes that produce the totals — so the parts sum to the bar rather than
-  // approaching it.
-  //
-  // A month whose either endpoint predates the split column cannot be answered
-  // from records. It says so instead of recomputing: an answer derived from
-  // today's sheets, presented beside one read from a record, would look like the
-  // same kind of number and is not.
-  var __nwmDrillCache = {};
-  // Why a date has no split, straight from the row that lacks it.
-  var __nwmDrillWhy = {};
-  // The row's meta, for the figures behind a mismatch.
-  var __nwmDrillMeta = {};
-
-  function _nwmDrillFetch(dates) {
-    var need = dates.filter(function (d) { return d && !(d in __nwmDrillCache); });
-    if (!need.length) return Promise.resolve(__nwmDrillCache);
-    // Only the column the card deliberately leaves out of its own load, and only
-    // for the dates asked about.
-    return WfDb.select(SNAP_TABLE,
-        "select=snapshot_date,by_subcategory,meta&snapshot_date=in.(" + need.join(",") + ")")
-      .then(function (rows) {
-        // meta as well as the split: when the split is absent the writer records
-        // WHY in meta.subcategory, and the panel has no business asserting a
-        // reason it did not check. The first version of this message blamed the
-        // column's age in every case, which is one of at least four.
-        need.forEach(function (d) { __nwmDrillCache[d] = null; __nwmDrillWhy[d] = "no row"; });
-        (rows || []).forEach(function (r) {
-          var d = String(r.snapshot_date).slice(0, 10);
-          __nwmDrillCache[d] = r.by_subcategory || null;
-          __nwmDrillWhy[d] = r.by_subcategory ? "ok"
-            : ((r.meta && r.meta.subcategory) || "not recorded");
-          __nwmDrillMeta[d] = r.meta || {};
-        });
-        return __nwmDrillCache;
-      })
-      .catch(function () { return __nwmDrillCache; });
-  }
-
-  // One portfolio's slice of a stored split, or the household by summing.
-  function _nwmSplitFor(split, portfolio) {
-    if (!split) return null;
-    var pf = portfolio || "all";
-    var out = {};
-    Object.keys(split).forEach(function (name) {
-      if (pf !== "all" && normalizeText(name) !== normalizeText(pf)) return;
-      var m = split[name] || {};
-      Object.keys(m).forEach(function (k) { out[k] = (out[k] || 0) + (Number(m[k]) || 0); });
-    });
-    return out;
-  }
-
-  // Net money in per sub-category, from the same pass CASH FLOW · MONTHLY uses.
-  function _nwmContribBySub(portfolio) {
-    var out = {};
-    var d = buildMonthlyInvestCatData(portfolio || "all") || {};
-    function fold(src, sign) {
-      Object.keys(src || {}).forEach(function (mk) {
-        out[mk] = out[mk] || {};
-        Object.keys(src[mk]).forEach(function (sub) {
-          out[mk][sub] = (out[mk][sub] || 0) + sign * (src[mk][sub] || 0);
-        });
-      });
-    }
-    fold(d.byMonthCat, 1);
-    fold(d.byMonthCatOut, -1);
-    return out;
-  }
-
-  function _nwmDrillClose() {
-    var ov = document.getElementById("nwm-drill-overlay");
-    if (ov) ov.hidden = true;
-  }
-
-  // Bound once on the element, not per redraw — the chart is rebuilt on every
-  // year change and portfolio switch, and binding there would stack a listener
-  // each time. Same guard the Cash Flow modal uses.
-  (function bindNwmDrillOnce() {
-    var ov = document.getElementById("nwm-drill-overlay");
-    if (!ov || ov.dataset.bound) return;
-    ov.dataset.bound = "1";
-    var btn = document.getElementById("nwm-drill-close");
-    if (btn) btn.addEventListener("click", _nwmDrillClose);
-    // Backdrop only: a click that began inside the dialog must not close it, or
-    // dragging across a figure to select it would dismiss the panel.
-    ov.addEventListener("click", function (e) { if (e.target === ov) _nwmDrillClose(); });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !ov.hidden) _nwmDrillClose();
-    });
-  }());
-
-  function _nwmOpenDrill(row, prevRow) {
-    var ov = document.getElementById("nwm-drill-overlay");
-    var bodyEl = document.getElementById("nwm-drill-body");
-    var totalsEl = document.getElementById("nwm-drill-totals");
-    var subEl = document.getElementById("nwm-drill-sub");
-    if (!ov || !bodyEl || !row || row.delta == null) return;
-
-    var pf = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    if (subEl) {
-      subEl.textContent = _nwmMonthLabel(row.month) +
-        (row.gapMonths > 1 ? " · covers " + row.gapMonths + " months" : "") +
-        (pf === "all" ? " · All portfolios" : " · " + pf);
-    }
-    if (totalsEl) totalsEl.innerHTML = "";
-    bodyEl.innerHTML = '<p class="muted small" style="padding:12px 4px;">Loading…</p>';
-    ov.hidden = false;
-
-    var curDate = row.date, prevDate = prevRow ? prevRow.date : null;
-    _nwmDrillFetch([curDate, prevDate]).then(function (cache) {
-      var cur = _nwmSplitFor(cache[curDate], pf);
-      var prev = prevDate ? _nwmSplitFor(cache[prevDate], pf) : null;
-
-      if (!cur || !prev) {
-        // Name the dates and the recorded reason rather than assert a cause.
-        // "not recorded" means no split was ever written for that row;
-        // "subcategory-mismatch" means one was computed and rejected because it
-        // did not sum to that row's own total — different problems with
-        // different fixes, and the reader cannot tell them apart from a
-        // sentence that guesses.
-        var missing = [];
-        var det = function (d) {
-          var m = __nwmDrillMeta[d] || {};
-          return { d: d, why: __nwmDrillWhy[d] || "unknown",
-                   sum: m.subcategorySum, total: m.subcategoryTotal };
-        };
-        if (!prev) missing.push(det(prevDate));
-        if (!cur) missing.push(det(curDate));
-        var lines = missing.map(function (m) {
-          var extra = "";
-          if (m.sum != null && m.total) {
-            var offBy = m.sum - m.total;
-            var pct = m.total ? (offBy / m.total) * 100 : 0;
-            extra = " — parts came to " + formatCurrency(m.sum) + " against a recorded " +
-              formatCurrency(m.total) + " (" + (offBy > 0 ? "+" : "−") +
-              formatCurrency(Math.abs(offBy)) + ", " + Math.abs(pct).toFixed(1) + "%)";
-          }
-          return "<li>" + escapeHtml(m.d) + " — " + escapeHtml(String(m.why)) +
-            escapeHtml(extra) + "</li>";
-        }).join("");
-        bodyEl.innerHTML = '<p class="muted small" style="padding:4px 4px 0;">' +
-          "This month cannot be broken down: one of its two month ends has no " +
-          "stored sub-category split. Rebuilding it from today's sheets would " +
-          "put a guess next to figures read from a record, so it is not done." +
-          '</p><ul class="muted small" style="padding:4px 4px 4px 22px;">' + lines + "</ul>" +
-          '<p class="muted small" style="padding:0 4px 4px;">' +
-          "\u201cnot recorded\u201d means no split was written for that date. " +
-          "\u201csubcategory-mismatch\u201d means one was computed and rejected " +
-          "for not summing to that row\u2019s own recorded total." + "</p>";
-        return;
-      }
-
-      var contrib = (_nwmContribBySub(pf)[row.month]) || {};
-      var interest = {};
-      try { interest = _nwmInterestBySubForMonth(pf, prevRow.month, row.month) || {}; } catch (e) {}
-
-      var keys = {};
-      [cur, prev, contrib, interest].forEach(function (m) {
-        Object.keys(m || {}).forEach(function (k) { keys[k] = true; });
-      });
-      var rows = [], attributed = 0, interestTotal = 0;
-      Object.keys(keys).forEach(function (k) {
-        var open = Number(prev[k]) || 0, close = Number(cur[k]) || 0;
-        var c = Number(contrib[k]) || 0, inc = Number(interest[k]) || 0;
-        var raw = (close - open) - c - inc;
-        if (Math.abs(raw) < 0.005 && Math.abs(inc) < 0.005) return;
-        rows.push({ sub: k, opening: open, closing: close, contributions: c,
-                    interest: inc, market: Math.round(raw * 100) / 100 });
-        attributed += raw; interestTotal += inc;
-      });
-      rows.sort(function (a, b) { return Math.abs(b.market) - Math.abs(a.market); });
-      attributed = Math.round(attributed * 100) / 100;
-
-      var tot = function (label, val, neg) {
-        return '<div class="mic-hs-tot"><span class="mic-hs-tot-label">' + escapeHtml(label) +
-          '</span><b class="' + (neg ? "negative" : "mic-hs-pos") + '">' + val + "</b></div>";
-      };
-      var market = row.market || 0;
-      var gap = Math.round((market - attributed) * 100) / 100;
-      if (totalsEl) {
-        totalsEl.innerHTML =
-          tot("Market", _nwmSigned(market), market < 0) +
-          tot("Interest", _nwmSigned(interestTotal), interestTotal < 0) +
-          (Math.abs(gap) >= 1 ? tot("Unreconciled", _nwmSigned(gap), gap < 0) : "");
-      }
-
-      if (!rows.length) {
-        bodyEl.innerHTML = '<p class="muted small" style="padding:4px;">Nothing moved this month.</p>';
-        return;
-      }
-      var html = '<table class="mic-txn-table"><thead><tr>' +
-        "<th>Sub-category</th><th class=\"num\">Opening</th><th class=\"num\">Invested</th>" +
-        "<th class=\"num\">Interest</th><th class=\"num\">Market</th><th class=\"num\">Closing</th>" +
-        "</tr></thead><tbody>";
-      rows.forEach(function (r) {
-        html += "<tr><td>" + escapeHtml(r.sub) + "</td>" +
-          '<td class="num">' + formatCurrency(r.opening) + "</td>" +
-          '<td class="num">' + (r.contributions ? _nwmSigned(r.contributions) : "—") + "</td>" +
-          '<td class="num">' + (r.interest ? _nwmSigned(r.interest) : "—") + "</td>" +
-          '<td class="num ' + (r.market < 0 ? "negative" : "mic-hs-pos") + '">' +
-            _nwmSigned(r.market) + "</td>" +
-          '<td class="num">' + formatCurrency(r.closing) + "</td></tr>";
-      });
-      html += "</tbody></table>";
-      // Should be zero: both sides now come from the same recorded rows. Shown
-      // when it is not, because a breakdown that quietly disagrees with the bar
-      // above it is worse than one that says so.
-      if (Math.abs(gap) >= 1) {
-        html += '<p class="muted small" style="margin:10px 0 0;">' +
-          "Unreconciled should be zero — the parts and the bar are read from the " +
-          "same snapshots. A figure here means one of the two months' splits does " +
-          "not match its own recorded total." + "</p>";
-      }
-      bodyEl.innerHTML = html;
-    });
   }
 
   function _nwmIsAccruing(normSub) {
@@ -17629,21 +17111,6 @@
             i = pts && pts.length ? pts[0].index : -1;
           }
           _nwmShowHovered(i >= 0 && i < bars.length ? bars[i] : null);
-        },
-        // Click a month to see which sub-categories moved it. The whole column
-        // opens the panel rather than one segment: at 150 months a segment is a
-        // few pixels of a few pixels, and the panel names interest and market
-        // side by side anyway.
-        onClick: function (evt, elements, chart) {
-          var i = elements && elements.length ? elements[0].index : -1;
-          if (i < 0 && chart && chart.getElementsAtEventForMode) {
-            var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
-            i = pts && pts.length ? pts[0].index : -1;
-          }
-          if (i < 0 || i >= bars.length) return;
-          // The month before it in the SERIES — what this bar's change was
-          // actually measured against, not the previous calendar month.
-          _nwmOpenDrill(bars[i], i > 0 ? bars[i - 1] : null);
         }
       }
     });
@@ -17840,18 +17307,7 @@
       _nwmDrawChart([]);
       return;
     }
-    // A failed backfill is said out loud rather than left to look like an empty
-    // card. The chart still draws whatever IS recorded — the failure concerns
-    // what could not be added, not what is already there.
-    if (statusEl) {
-      if (_snapBackfillError) {
-        statusEl.hidden = false;
-        statusEl.textContent = "Some history could not be saved: " + _snapBackfillError +
-          ". The months below are what has been recorded so far.";
-      } else {
-        statusEl.hidden = true;
-      }
-    }
+    if (statusEl) statusEl.hidden = true;
     _nwmAllRows = rows;
     _nwmSyncYearControls(rows);
     rows = _nwmForYear(rows);
@@ -17877,14 +17333,7 @@
       var nwmPort = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
       nwmPortNameEl.textContent = nwmPort === "all" ? "" : " · " + nwmPort;
     }
-    // Columns listed rather than select=*, deliberately: by_subcategory is the
-    // widest thing on the row — a per-portfolio, per-sub-category map — and the
-    // card needs none of it to draw. Fetching it here would multiply the payload
-    // of every page load by several times to serve a panel most loads never
-    // open. The drill-down fetches it for the one month it is asked about.
-    WfDb.select(SNAP_TABLE,
-        "select=snapshot_date,total,invested,equity,fixed_income,commodity," +
-        "by_portfolio,meta&order=snapshot_date.asc")
+    WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
       .then(function (rows) {
         var list = rows || [];
         // Nothing to attribute with fewer than two snapshots, so neither series
