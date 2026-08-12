@@ -16954,6 +16954,211 @@
     });
   };
 
+  // The same interest series _nwmInterestByMonth builds, split by sub-category.
+  //
+  // Same discipline, and for the same reasons: interest EARNED per holding
+  // rather than the holding's value (for provident fund the two differ by the
+  // month's contribution, which is already counted elsewhere), and only keys
+  // present in BOTH valuations count — a deposit that did not exist last month
+  // has no accrual to measure, and booking its principal as interest is exactly
+  // the mistake being guarded against.
+  //
+  // Kept separate from _nwmInterestByMonth rather than folded into it: that one
+  // feeds the chart's own arithmetic, and giving it a second output shape would
+  // put the card's totals and this breakdown on one code path where a change
+  // meant for the drill-down could move the bars.
+  function _nwmInterestBySubCategory(portfolio, months) {
+    var out = {};
+    (months || []).forEach(function (m) { out[m] = {}; });
+    var rows = getSheetRows("fd");
+    if (!rows || rows.length < 2 || !months || !months.length) return out;
+
+    function valuedAt(d) {
+      var m = {};
+      (buildFdHoldingsList(rows, portfolio || "all", _fiIsTermDeposit, d) || []).forEach(function (h) {
+        if (!h.startDate || h.startDate > d) return;
+        var k = "fd|" + normalizeText(h.portfolio) + "|" + normalizeText(h.bank) + "|" +
+                normalizeText(h.instrument) + "|" + formatDateISO(h.startDate);
+        m[k] = { sub: h.subCategory || "Fixed Deposit", earned: (h.current || 0) - (h.invested || 0) };
+      });
+      (buildFdFixedIncomeHoldingsList(rows, portfolio || "all", d) || []).forEach(function (h) {
+        if (!isProvidentFundSub(normalizeText(h.subCategory || ""))) return;
+        var k = "pf|" + normalizeText(h.portfolio) + "|" + normalizeText(h.instrument) + "|" +
+                normalizeText(h.subCategory);
+        m[k] = { sub: h.subCategory || "Provident Fund", earned: (h.current || 0) - (h.invested || 0) };
+      });
+      return m;
+    }
+
+    var sorted = months.slice().sort();
+    var today = new Date();
+    var eomOf = function (mk) {
+      var parts = String(mk).split("-");
+      var d = new Date(+parts[0], +parts[1], 0, 23, 59, 59);
+      return d > today ? today : d;
+    };
+    // Seed from the month BEFORE the first one asked for. Without it the first
+    // month has no baseline and reports zero interest, while the card — which
+    // starts one month earlier for exactly this reason — reports the real
+    // figure. The drill-down would then show a gap that does not exist.
+    var firstParts = sorted[0].split("-");
+    var prevVals = valuedAt(new Date(+firstParts[0], +firstParts[1] - 1, 0, 23, 59, 59));
+    sorted.forEach(function (mk) {
+      var vals = valuedAt(eomOf(mk));
+      if (prevVals) {
+        Object.keys(vals).forEach(function (k) {
+          if (!(k in prevVals)) return;                 // no baseline, no accrual
+          var d = vals[k].earned - prevVals[k].earned;
+          if (!d) return;
+          var sub = vals[k].sub;
+          out[mk][sub] = (out[mk][sub] || 0) + d;
+        });
+      }
+      prevVals = vals;
+    });
+    return out;
+  }
+
+  // Net money in per sub-category, from the same pass CASH FLOW · MONTHLY uses
+  // for its own bars. Money out is subtracted rather than tracked separately:
+  // the attribution only cares about the net principal that moved.
+  function _nwmContribBySubCategory(portfolio) {
+    var out = {};
+    var d = buildMonthlyInvestCatData(portfolio || "all") || {};
+    function fold(src, sign) {
+      Object.keys(src || {}).forEach(function (mk) {
+        out[mk] = out[mk] || {};
+        Object.keys(src[mk]).forEach(function (sub) {
+          out[mk][sub] = (out[mk][sub] || 0) + sign * (src[mk][sub] || 0);
+        });
+      });
+    }
+    fold(d.byMonthCat, 1);
+    fold(d.byMonthCatOut, -1);
+    return out;
+  }
+
+  // Everything the drill-down panel needs for one month.
+  //
+  // prevMonth comes from the row BEFORE this one in the card's own series, not
+  // from subtracting one from the month key: the series can skip months, and the
+  // bar being explained measures its change across whatever gap there was.
+  function _nwmDrillFor(monthKey, prevMonthKey, portfolio, marketTotal) {
+    var vals = _nwmValueBySubCategory(portfolio || "all");
+    if (!vals) return null;
+    var months = Object.keys(vals);
+    return WfMath.attributeMarketBySubCategory(
+      monthKey, prevMonthKey, vals,
+      _nwmContribBySubCategory(portfolio || "all"),
+      _nwmInterestBySubCategory(portfolio || "all", months),
+      marketTotal);
+  }
+
+  function _nwmDrillClose() {
+    var ov = document.getElementById("nwm-drill-overlay");
+    if (ov) ov.hidden = true;
+  }
+
+  // Bound once on the element, not per redraw — the chart is rebuilt on every
+  // year change and portfolio switch, and binding there would stack a listener
+  // each time. Same guard the Cash Flow modal uses.
+  (function bindNwmDrillOnce() {
+    var ov = document.getElementById("nwm-drill-overlay");
+    if (!ov || ov.dataset.bound) return;
+    ov.dataset.bound = "1";
+    var btn = document.getElementById("nwm-drill-close");
+    if (btn) btn.addEventListener("click", _nwmDrillClose);
+    // Backdrop only: a click that started inside the dialog must not close it,
+    // or selecting a figure by dragging across it would dismiss the panel.
+    ov.addEventListener("click", function (e) { if (e.target === ov) _nwmDrillClose(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !ov.hidden) _nwmDrillClose();
+    });
+  }());
+
+  // Renders the panel for the month at `idx` of the rows currently charted.
+  function _nwmOpenDrill(row, prevRow) {
+    var ov = document.getElementById("nwm-drill-overlay");
+    var bodyEl = document.getElementById("nwm-drill-body");
+    var totalsEl = document.getElementById("nwm-drill-totals");
+    var subEl = document.getElementById("nwm-drill-sub");
+    if (!ov || !bodyEl || !row || row.delta == null) return;
+
+    var pf = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var res = null;
+    try {
+      res = _nwmDrillFor(row.month, prevRow ? prevRow.month : null, pf, row.market || 0);
+    } catch (e) { res = null; }
+
+    if (subEl) {
+      // Same caption the hover readout builds. Kept in step by hand because the
+      // shared helper that once did this went out with a reverted change.
+      subEl.textContent = _nwmMonthLabel(row.month) +
+        (row.gapMonths > 1 ? " · covers " + row.gapMonths + " months" : "") +
+        (pf && pf !== "all" ? " · " + pf : " · All portfolios");
+    }
+
+    if (!res) {
+      if (totalsEl) totalsEl.innerHTML = "";
+      bodyEl.innerHTML = '<p class="muted small" style="padding:12px 4px;">' +
+        "This needs the Account Value chart's valuations, which have not " +
+        "finished loading yet. Try again in a moment.</p>";
+      ov.hidden = false;
+      return;
+    }
+
+    var money = function (n) { return _nwmSigned(n); };
+    var tot = function (label, val, cls) {
+      return '<div class="mic-hs-tot"><span class="mic-hs-tot-label">' + escapeHtml(label) +
+        '</span><b class="' + (cls || "") + '">' + val + "</b></div>";
+    };
+    if (totalsEl) {
+      totalsEl.innerHTML =
+        tot("Market", money(res.total == null ? res.attributed : res.total),
+            (res.total || 0) < 0 ? "negative" : "mic-hs-pos") +
+        tot("Attributed", money(res.attributed), res.attributed < 0 ? "negative" : "mic-hs-pos") +
+        (res.unattributed == null ? "" :
+          tot("Unattributed", money(res.unattributed),
+              res.unattributed < 0 ? "negative" : "mic-hs-pos"));
+    }
+
+    var html = "";
+    if (res.noBaseline) {
+      html += '<p class="muted small" style="margin:0 0 8px;">' +
+        "No earlier valuation to measure against, so this month's figures are " +
+        "its holdings' whole value rather than a change.</p>";
+    }
+    if (!res.rows.length) {
+      html += '<p class="muted small">Nothing moved this month.</p>';
+    } else {
+      html += '<table class="mic-txn-table"><thead><tr>' +
+        "<th>Sub-category</th><th class=\"num\">Opening</th><th class=\"num\">Invested</th>" +
+        "<th class=\"num\">Interest</th><th class=\"num\">Market</th><th class=\"num\">Closing</th>" +
+        "</tr></thead><tbody>";
+      res.rows.forEach(function (r) {
+        html += "<tr><td>" + escapeHtml(r.subCategory) + "</td>" +
+          '<td class="num">' + formatCurrency(r.opening) + "</td>" +
+          '<td class="num">' + (r.contributions ? money(r.contributions) : "—") + "</td>" +
+          '<td class="num">' + (r.interest ? money(r.interest) : "—") + "</td>" +
+          '<td class="num ' + (r.market < 0 ? "negative" : "mic-hs-pos") + '">' + money(r.market) + "</td>" +
+          '<td class="num">' + formatCurrency(r.closing) + "</td></tr>";
+      });
+      html += "</tbody></table>";
+    }
+    // Said plainly rather than buried: these figures are recomputed from today's
+    // sheets and price history, while the bar above them came from a recorded
+    // snapshot. When the two disagree the difference is the Unattributed line,
+    // and the reader is owed the reason rather than left to notice it.
+    if (res.unattributed != null && Math.abs(res.unattributed) >= 1) {
+      html += '<p class="muted small" style="margin:10px 0 0;">' +
+        "Unattributed is the part of the recorded month's change these holdings " +
+        "do not account for — typically a holding with no price history for one " +
+        "of the two dates. It is shown rather than spread across the rows.</p>";
+    }
+    bodyEl.innerHTML = html;
+    ov.hidden = false;
+  }
+
   function _nwmIsAccruing(normSub) {
     return _fiIsTermDeposit(normSub) || isProvidentFundSub(normSub);
   }
@@ -17264,6 +17469,22 @@
             i = pts && pts.length ? pts[0].index : -1;
           }
           _nwmShowHovered(i >= 0 && i < bars.length ? bars[i] : null);
+        },
+        // Click a month to see which sub-categories moved it. The whole column
+        // opens the panel rather than an individual segment: at 150 months a
+        // segment is a few pixels of a few pixels, and the panel names interest
+        // and market side by side anyway, so requiring the reader to hit the
+        // right one would be precision spent on nothing.
+        onClick: function (evt, elements, chart) {
+          var i = elements && elements.length ? elements[0].index : -1;
+          if (i < 0 && chart && chart.getElementsAtEventForMode) {
+            var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
+            i = pts && pts.length ? pts[0].index : -1;
+          }
+          if (i < 0 || i >= bars.length) return;
+          // The month before it in the SERIES, which is what the bar's own
+          // change was measured against — not the previous calendar month.
+          _nwmOpenDrill(bars[i], i > 0 ? bars[i - 1] : null);
         }
       }
     });
