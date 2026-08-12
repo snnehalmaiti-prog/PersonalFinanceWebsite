@@ -10286,7 +10286,6 @@
         // from here means it runs whenever the series actually arrives, in
         // whichever order that happens.
         if (selectedPortfolio === "all") {
-          _snapAccountValuePoints = pointsAll;
           // Everything a per-portfolio series needs that does NOT depend on the
           // portfolio: the timeline, and the prices along it. Unit counts are
           // the only portfolio-specific input, and those come straight from the
@@ -10304,6 +10303,12 @@
             stockHistoryAll: stockHistoryAll,
             allPrices: allPrices
           };
+          // Built from the inputs above rather than taken from pointsAll, so the
+          // exclusion toggles cannot reach it. pointsAll is what is drawn: it
+          // honours the toggles and has its last point snapped to the Overview.
+          // Neither belongs in recorded history — and the snapped point is the
+          // current month, which the backfill drops anyway.
+          _snapAccountValuePoints = _snapSeriesForPortfolio("all", true) || pointsAll;
           _snapBackfillSoon();
         }
 
@@ -16369,7 +16374,11 @@
   // USD/INR rates. Only the holdings differ. The property that matters is that
   // the portfolios sum to the household — asserted in the tests, because a
   // second valuation path that drifts from the first is worse than none.
-  function _snapSeriesForPortfolio(portfolio) {
+  // `unfiltered` ignores the exclusion toggles. Reconstruction is history, and
+  // history does not change because of what is currently hidden on screen — a
+  // series built with Fixed Income excluded would record a permanently
+  // understated past. The chart keeps honouring the toggles; only this does not.
+  function _snapSeriesForPortfolio(portfolio, unfiltered) {
     var v = _snapValueInputs;
     if (!v || !v.timeline || !v.timeline.length) return null;
     var _ff = WfMath.forwardFillOverTimeline;
@@ -16394,13 +16403,14 @@
     });
 
     var fdRows = getSheetRows("fd");
-    var fiEx = isFixedIncomeExcluded();
+    var fiEx = unfiltered ? false : isFixedIncomeExcluded();
+    var savEx = unfiltered ? false : isSavingsInvestmentExcluded();
     var epfAt = _ff(fiEx ? [] : buildEpfValueEvents(portfolio), timeline, "cumulativeValue");
     // includeFd=false plus the accrual series, the same split the chart uses —
     // this replay has to stay arithmetically identical to it, or one portfolio's
     // reconstructed history stops summing to the household's.
     var fdAt = _ff(fiEx || !fdRows ? []
-      : buildFdValueEvents(portfolio, isSavingsInvestmentExcluded(), false),
+      : buildFdValueEvents(portfolio, savEx, false),
       timeline, "cumulativeValue");
     var fdAccrAt = (fiEx || !fdRows) ? [] : buildFdAccrualAt(timeline, portfolio);
     var gramsAt = _ff((!fiEx && fdRows) ? buildCommodityGramEvents(fdRows, portfolio) : [],
@@ -16528,16 +16538,17 @@
       dbg("[Snapshot] backfill: no Account Value series yet, will retry when it renders");
       return Promise.resolve(0);
     }
-    // The Account Value series honours the exclusion toggles, so with fixed
-    // income or savings hidden its line is a partial one — reconstructing years
-    // of history off it would write a permanently understated past. The write
-    // rules refuse a live snapshot for the same reason; the backfill, which
-    // bypasses them, has to refuse for itself. Checked before latching, so
-    // turning the toggle back off lets the backfill run.
-    if (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) {
-      dbg("[Snapshot] backfill: skipped, an exclusion toggle is on");
-      return Promise.resolve(0);
-    }
+    // No exclusion check here any more. It used to refuse outright, because the
+    // series it reconstructed from was the one on screen and that honours the
+    // toggles — years of understated history was the worse outcome. The series
+    // is now built unfiltered for this purpose alone, so the reason is gone.
+    //
+    // It mattered more than it looks: the setting is sticky, so switching an
+    // exclusion on once and forgetting stopped BOTH the live write and the
+    // backfill indefinitely, and the only symptom was empty months appearing on
+    // NET WORTH · MONTHLY weeks later. The live write still refuses — it really
+    // is reading filtered on-screen totals — but a refusal there is now repaired
+    // by the next reconstruction instead of compounding.
     _snapBackfillStarted = true;
     var points = _snapAccountValuePoints;
     // The existing rows in full, not just their dates: a row written before the
@@ -16553,7 +16564,7 @@
       var byPortfolio = {};
       collectPortfolioNamesFromSheets(["equity", "stocksetf", "fd", "fixedincome"])
         .forEach(function (name) {
-          var series = _snapSeriesForPortfolio(name);
+          var series = _snapSeriesForPortfolio(name, true);
           if (series && series.length) byPortfolio[name] = series;
         });
       var plan = WfSnapshots.planBackfill(points, have, WfSnapshots.localDateKey(), 600, byPortfolio);

@@ -228,15 +228,31 @@ const monthlyNav = () => {
      backRows().map((r) => r.snapshot_date));
   existingDates = [];
 
-  // ── Fixed income hidden: nothing is written, live OR backfilled ──────────
-  // The live rules refuse this case. The backfill bypasses them entirely — it
-  // reads the Account Value series, which honours the same toggle — so it has to
-  // refuse for itself or it writes years of understated history.
+  // ── Fixed income hidden: the LIVE row is refused, the backfill is not ────
+  // The live write reads the Overview's on-screen totals, and with fixed income
+  // hidden those are correct for what they claim and wrong as history — so it
+  // still refuses.
+  //
+  // The backfill used to refuse too, because it reconstructed from the Account
+  // Value series and that honours the same toggle. It now builds its own
+  // unfiltered series, so the reason is gone and it runs. That matters because
+  // the setting is sticky: while both refused, switching an exclusion on once
+  // and forgetting stopped history accruing indefinitely, and the only symptom
+  // was empty months on NET WORTH · MONTHLY weeks later.
+  //
+  // That the reconstruction writes the SAME figures with the toggle on is the
+  // property that makes this safe, and it is pinned in detail by
+  // e2e-backfill-exclusions.js rather than here.
   await seed({ "wf-exclude-fixedincome": "true" });
   await load();
   console.log("  fi-excluded: live=" + liveRows().length + " backfill=" + backRows().length);
   ok(liveRows().length === 0, "S15b no live snapshot with fixed income excluded", liveRows());
-  ok(backRows().length === 0, "S15c and no backfill either", backRows().slice(0, 2));
+  ok(backRows().length > 0,
+     "S15c but the backfill still runs — a refusal here used to be permanent and " +
+     "silent", backRows().length);
+  ok(backRows().every((r) => Number(r.total) > 0),
+     "S15d writing real totals, not the understated ones the old refusal existed " +
+     "to prevent", backRows().slice(0, 2).map((r) => [r.snapshot_date, r.total]));
 
   // ── Same day, already recorded, unchanged ────────────────────────────────
   await seed();
