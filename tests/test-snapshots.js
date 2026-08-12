@@ -499,23 +499,57 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
      "K18 months are ordered before differencing, and no change is no flow");
 }
 
-// ── The current month is not a month end ────────────────────────────────────
-// Its latest snapshot is today. Charting it puts a part-month beside full ones
-// and produces a bar that grows between visits, so it waits until the month
-// finishes. planBackfill has always taken this view; this is the reader agreeing.
+// ── The current month is carried, and says so ───────────────────────────────
+// Its latest snapshot is today, so its change covers part of a month and is
+// short for that reason alone — it cannot be read against a full month. The
+// reader carries it anyway, because "where does this month stand" is a fair
+// question, and flags it `partial` so no consumer can draw it as finished by
+// accident. The flag is the whole safety mechanism here, which is why these
+// assert it as hard as they assert the row's presence.
 {
   const rows = [R("2026-06-30", 100), R("2026-07-31", 150), R("2026-08-09", 175)];
   const s = S.monthEndSeries(rows, "2026-08-09");
-  eq(s.length, 2, "E1 the month in progress is not in the series");
-  eq(s[s.length - 1].month, "2026-07", "E2 the newest is the last completed month");
-  eq(S.monthEndSeries(rows, "2026-09-01").length, 3,
-     "E3 and it joins once the month has finished — the snapshot is not discarded");
+  eq(s.length, 3, "E1 the month in progress IS in the series");
+  eq(s[s.length - 1].month, "2026-08", "E2 as the newest entry");
+  eq(s[s.length - 1].partial, true, "E3 flagged partial");
+  ok(s.slice(0, -1).every((r) => r.partial === false),
+     "E4 and the completed months are not", s.map((r) => [r.month, r.partial]));
+  // Same rows read a month later: August is over, so nothing is partial now.
+  const later = S.monthEndSeries(rows, "2026-09-01");
+  eq(later.length, 3, "E5 once the month has finished the row is still there");
+  ok(later.every((r) => r.partial === false),
+     "E6 and none of them is partial any more", later.map((r) => [r.month, r.partial]));
 
   const out = S.buildMonthlyChange(rows, {}, {}, "2026-08-09");
-  eq(out.length, 2, "E4 no bar for it either");
-  eq(out[0].month, "2026-07", "E5 the newest bar is July");
-  ok(!out.some((r) => r.month === "2026-08"),
-     "E6 specifically, nothing part-month is charted", out.map((r) => r.month));
+  eq(out.length, 3, "E7 there is a bar for it");
+  eq(out[0].month, "2026-08", "E8 the newest bar is the running month");
+  eq(out[0].partial, true,
+     "E9 and buildMonthlyChange carries the flag through — the chart reads its " +
+     "rows from here, so a flag lost in this hop is a part-month drawn solid");
+  ok(out.slice(1).every((r) => r.partial === false),
+     "E10 while the finished months stay unflagged", out.map((r) => [r.month, r.partial]));
+  // A row dated in the future is a clock problem, not data.
+  const ahead = S.monthEndSeries(rows.concat([R("2026-10-01", 999)]), "2026-08-09");
+  ok(!ahead.some((r) => r.month === "2026-10"),
+     "E11 a month later than today is still dropped", ahead.map((r) => r.month));
+}
+
+// The WRITER is unchanged: backfill still stops at the last completed month.
+// The live write owns today's row, and the two must never put different values
+// on the same date. This is the guard that keeps the reader change from leaking
+// into the writer.
+{
+  const pts = [
+    { x: new Date("2026-06-30T00:00:00"), y: 100 },
+    { x: new Date("2026-07-31T00:00:00"), y: 150 },
+    { x: new Date("2026-08-09T00:00:00"), y: 175 },
+  ];
+  const planned = S.planBackfill(pts, [], "2026-08-09", null, {});
+  ok(!planned.some((r) => String(r.snapshot_date).slice(0, 7) === "2026-08"),
+     "E12 planBackfill writes no row for the month in progress",
+     planned.map((r) => r.snapshot_date));
+  eq(planned.length, 2, "E13 just the two completed month ends",
+     planned.map((r) => r.snapshot_date));
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
