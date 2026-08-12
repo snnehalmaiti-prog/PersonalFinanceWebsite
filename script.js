@@ -17075,6 +17075,8 @@
   // today's sheets, presented beside one read from a record, would look like the
   // same kind of number and is not.
   var __nwmDrillCache = {};
+  // Why a date has no split, straight from the row that lacks it.
+  var __nwmDrillWhy = {};
 
   function _nwmDrillFetch(dates) {
     var need = dates.filter(function (d) { return d && !(d in __nwmDrillCache); });
@@ -17082,11 +17084,18 @@
     // Only the column the card deliberately leaves out of its own load, and only
     // for the dates asked about.
     return WfDb.select(SNAP_TABLE,
-        "select=snapshot_date,by_subcategory&snapshot_date=in.(" + need.join(",") + ")")
+        "select=snapshot_date,by_subcategory,meta&snapshot_date=in.(" + need.join(",") + ")")
       .then(function (rows) {
-        need.forEach(function (d) { __nwmDrillCache[d] = null; });
+        // meta as well as the split: when the split is absent the writer records
+        // WHY in meta.subcategory, and the panel has no business asserting a
+        // reason it did not check. The first version of this message blamed the
+        // column's age in every case, which is one of at least four.
+        need.forEach(function (d) { __nwmDrillCache[d] = null; __nwmDrillWhy[d] = "no row"; });
         (rows || []).forEach(function (r) {
-          __nwmDrillCache[String(r.snapshot_date).slice(0, 10)] = r.by_subcategory || null;
+          var d = String(r.snapshot_date).slice(0, 10);
+          __nwmDrillCache[d] = r.by_subcategory || null;
+          __nwmDrillWhy[d] = r.by_subcategory ? "ok"
+            : ((r.meta && r.meta.subcategory) || "not recorded");
         });
         return __nwmDrillCache;
       })
@@ -17168,13 +17177,27 @@
       var prev = prevDate ? _nwmSplitFor(cache[prevDate], pf) : null;
 
       if (!cur || !prev) {
-        bodyEl.innerHTML = '<p class="muted small" style="padding:4px;">' +
-          "This month cannot be broken down. One of its two month ends was " +
-          "recorded before the sub-category split was stored, so the parts are " +
-          "not on record — and rebuilding them from today's sheets would put a " +
-          "guess next to figures read from a record." +
-          "</p><p class=\"muted small\" style=\"padding:4px;\">" +
-          "Months recorded from here on will break down." + "</p>";
+        // Name the dates and the recorded reason rather than assert a cause.
+        // "not recorded" means no split was ever written for that row;
+        // "subcategory-mismatch" means one was computed and rejected because it
+        // did not sum to that row's own total — different problems with
+        // different fixes, and the reader cannot tell them apart from a
+        // sentence that guesses.
+        var missing = [];
+        if (!prev) missing.push({ d: prevDate, why: __nwmDrillWhy[prevDate] || "unknown" });
+        if (!cur) missing.push({ d: curDate, why: __nwmDrillWhy[curDate] || "unknown" });
+        var lines = missing.map(function (m) {
+          return "<li>" + escapeHtml(m.d) + " — " + escapeHtml(String(m.why)) + "</li>";
+        }).join("");
+        bodyEl.innerHTML = '<p class="muted small" style="padding:4px 4px 0;">' +
+          "This month cannot be broken down: one of its two month ends has no " +
+          "stored sub-category split. Rebuilding it from today's sheets would " +
+          "put a guess next to figures read from a record, so it is not done." +
+          '</p><ul class="muted small" style="padding:4px 4px 4px 22px;">' + lines + "</ul>" +
+          '<p class="muted small" style="padding:0 4px 4px;">' +
+          "\u201cnot recorded\u201d means no split was written for that date. " +
+          "\u201csubcategory-mismatch\u201d means one was computed and rejected " +
+          "for not summing to that row\u2019s own recorded total." + "</p>";
         return;
       }
 
