@@ -48,11 +48,27 @@ const pxG=iso=>+(50+(new Date(iso).getMonth()+1)*1.2).toFixed(2);
  const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1500,height:900}});
  const p=await ctx.newPage();const errs=[];p.on("pageerror",e=>errs.push(e.message));
  const j=body=>({status:200,contentType:"application/json",headers:{"access-control-allow-origin":"*"},body:JSON.stringify(body)});
- let stored=[], selects=[];
+ let stored=[], selects=[], rejectWrites=null, rejectColumn=null;
  await p.route("**://*.supabase.co/**",r=>{
    const req=r.request(), u=req.url();
    if(/net_worth_snapshots/.test(u)){
-     if(req.method()==="POST"){ try{ (JSON.parse(req.postData()||"[]")).forEach(row=>{
+     if(req.method()==="POST"){
+       // Shaped like a real PostgREST error: it carries BOTH code and message,
+       // and the client only treats a body as an error when both are present.
+       // A mock with just a message resolves as success and tests nothing.
+       if(rejectWrites) return r.fulfill({status:400,contentType:"application/json",
+         headers:{"access-control-allow-origin":"*"},
+         body:JSON.stringify({code:"PGRST204",message:rejectWrites})});
+       // A database that predates the migration: it rejects any payload naming
+       // the column, and accepts the same payload without it.
+       if(rejectColumn){
+         let names=[]; try{ names=Object.keys((JSON.parse(req.postData()||"[]")[0])||{}); }catch(e){}
+         if(names.indexOf(rejectColumn)!==-1) return r.fulfill({status:400,
+           contentType:"application/json",headers:{"access-control-allow-origin":"*"},
+           body:JSON.stringify({code:"PGRST204",
+             message:"'"+rejectColumn+"' column of 'net_worth_snapshots' does not exist"})});
+       }
+       try{ (JSON.parse(req.postData()||"[]")).forEach(row=>{
         const i=stored.findIndex(x=>x.snapshot_date===row.snapshot_date);
         if(i>=0) stored[i]=Object.assign({},stored[i],row); else stored.push(row); }); }catch(e){}
        return r.fulfill(j([])); }
@@ -158,6 +174,50 @@ const pxG=iso=>+(50+(new Date(iso).getMonth()+1)*1.2).toFixed(2);
     "R2 and carries each row's recorded total forward unchanged — a repair may " +
     "add what is missing, never restate what was recorded",
     restated.slice(0, 2).map((r) => [r.snapshot_date, r.total, byDate[r.snapshot_date]]));
+
+ // ── A rejected write is reported, not hidden ─────────────────────────────
+ // Every row goes in ONE upsert, so a single rejected column loses the whole
+ // batch. That failure used to go to a debug line only, which meant a backfill
+ // could fail on every load forever while the card looked merely empty — the
+ // exact shape of a real incident: the migration had run, the code was
+ // deployed, and 0 of 153 rows had a split with nothing on screen saying why.
+ // Strip again first: the repair pass above filled every row, so without this
+ // there is nothing left to write, no POST is made, and the rejection under test
+ // never happens — the assertion would be measuring an idle load.
+ stored.forEach((r) => { delete r.by_subcategory;
+   if (r.meta) delete r.meta.subcategory; });
+ rejectWrites = "column net_worth_snapshots.by_subcategory does not exist";
+ await load();
+ const failMsg = await p.evaluate(() => {
+   const el = document.getElementById("nwm-status");
+   return el && !el.hidden ? el.textContent : "";
+ });
+ console.log("  on rejected write: " + JSON.stringify(failMsg));
+ ok(/could not be saved/i.test(failMsg),
+    "E1 a rejected write says so on the card", failMsg);
+ ok(failMsg.indexOf("by_subcategory") !== -1,
+    "E2 quoting the database's own reason — 'something went wrong' would have " +
+    "cost the same round trip it is meant to save", failMsg);
+ rejectWrites = null;
+
+ // ── A missing column costs the split, not the history ────────────────────
+ // The retry that makes this true lives in dbUpsert. Without it one unknown
+ // column rejects the whole batch, so a database that predates the migration
+ // records NOTHING rather than recording rows without a split — the difference
+ // between a feature that is not available yet and a dashboard that quietly
+ // stops keeping history.
+ stored.length = 0;
+ rejectColumn = "by_subcategory";
+ await load();
+ console.log("  against a pre-migration schema: " + stored.length + " rows written");
+ ok(stored.length >= 12,
+    "X1 rows are still recorded against a schema without the column", stored.length);
+ ok(stored.every((r) => !("by_subcategory" in r)),
+    "X2 with the unknown column dropped rather than the batch",
+    Object.keys(stored[0] || {}));
+ ok(stored.every((r) => Number(r.total) > 0),
+    "X3 and their totals intact", stored.slice(0, 2).map((r) => [r.snapshot_date, r.total]));
+ rejectColumn = null;
 
  // ── What the card fetched ────────────────────────────────────────────────
  // Identified by order=, which only the card's load uses — NOT by column names.

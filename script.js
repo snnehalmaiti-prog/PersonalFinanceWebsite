@@ -16659,6 +16659,9 @@
   // Called from both the write path and the Account Value render, whichever
   // finishes first, latched per load so the pair can't both write.
   var _snapBackfillTimer = null, _snapBackfillStarted = false;
+  // Last backfill write failure, surfaced on the card. Null when the last
+  // attempt succeeded or none has run.
+  var _snapBackfillError = null;
   function _snapBackfillSoon() {
     if (_snapBackfillStarted) return;
     if (_snapBackfillTimer) clearTimeout(_snapBackfillTimer);
@@ -16796,9 +16799,20 @@
       if (!plan.length) return 0;
       return WfDb.upsert(SNAP_TABLE, plan, "user_id,snapshot_date").then(function () {
         dbg("[Snapshot] backfilled " + plan.length + " month ends");
+        _snapBackfillError = null;
         return plan.length;
       });
-    }).catch(function (e) { dbg("[Snapshot] backfill skipped:", e && e.message); return 0; });
+    }).catch(function (e) {
+      // Every row goes in ONE upsert, so a single rejected column loses the
+      // whole batch. Swallowing that into a debug line meant a backfill could
+      // fail on every load, forever, while the card looked merely empty — which
+      // is exactly how a missing PostgREST schema reload cost a round trip to
+      // diagnose. Kept for the card to show.
+      _snapBackfillError = (e && e.message) ? String(e.message) : "unknown error";
+      dbg("[Snapshot] backfill FAILED:", _snapBackfillError);
+      try { renderNetWorthMonthly(); } catch (e2) {}
+      return 0;
+    });
   }
 
   // The stability check: read the total, wait, read it again. A slice landing in
@@ -17750,7 +17764,18 @@
       _nwmDrawChart([]);
       return;
     }
-    if (statusEl) statusEl.hidden = true;
+    // A failed backfill is said out loud rather than left to look like an empty
+    // card. The chart still draws whatever IS recorded — the failure concerns
+    // what could not be added, not what is already there.
+    if (statusEl) {
+      if (_snapBackfillError) {
+        statusEl.hidden = false;
+        statusEl.textContent = "Some history could not be saved: " + _snapBackfillError +
+          ". The months below are what has been recorded so far.";
+      } else {
+        statusEl.hidden = true;
+      }
+    }
     _nwmAllRows = rows;
     _nwmSyncYearControls(rows);
     rows = _nwmForYear(rows);

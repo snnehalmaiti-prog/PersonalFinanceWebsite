@@ -435,6 +435,15 @@
   // dbInsert would 409 on the second write of the same day; merge-duplicates makes
   // a repeat load update the existing row instead of appending a duplicate — the
   // same rule saveSheetData follows.
+  // The column a PostgREST error is complaining about, if that is what it is.
+  // Two shapes in the wild: "'x' column of 'y' does not exist" (PGRST204) and
+  // "column y.x does not exist" (42703, straight from Postgres).
+  function _unknownColumn(message) {
+    var msg = String(message || "");
+    var m = msg.match(/'([^']+)' column/) || msg.match(/column [\w.]*?\.?([\w]+) does not exist/);
+    return m ? m[1] : null;
+  }
+
   function dbUpsert(table, row, onConflict) {
     return getValidToken().then(function (token) {
       if (!token) return null;
@@ -444,8 +453,34 @@
         ? row.map(function (r) { return Object.assign({ user_id: uid }, r); })
         : Object.assign({ user_id: uid }, row);
       var path = table + (onConflict ? "?on_conflict=" + encodeURIComponent(onConflict) : "");
-      return dbRequest("POST", path, payload, token,
-        "resolution=merge-duplicates,return=minimal");
+
+      // One unknown column rejects the WHOLE batch, so a schema that predates a
+      // new column loses every row rather than one field — which is how a
+      // missing migration turned into no snapshots at all rather than snapshots
+      // without a split. Drop the offending column and retry, the same
+      // resilience the settings sync has had for the same reason.
+      //
+      // Bounded by the number of columns actually sent, and it only ever
+      // removes a column the database itself named.
+      var sample = Array.isArray(payload) ? (payload[0] || {}) : payload;
+      var tries = Object.keys(sample).length;
+      function attempt(body, left) {
+        return dbRequest("POST", path, body, token,
+            "resolution=merge-duplicates,return=minimal")
+          .catch(function (e) {
+            var col = _unknownColumn(e && e.message);
+            if (!col || left <= 0) throw e;
+            var probe = Array.isArray(body) ? (body[0] || {}) : body;
+            if (!(col in probe)) throw e;
+            console.warn("Upsert to " + table + ": column '" + col + "' missing in the " +
+              "database — retrying without it. Run the schema migration to store it.");
+            var slim = Array.isArray(body)
+              ? body.map(function (r) { var c = Object.assign({}, r); delete c[col]; return c; })
+              : (function () { var c = Object.assign({}, body); delete c[col]; return c; }());
+            return attempt(slim, left - 1);
+          });
+      }
+      return attempt(payload, tries);
     });
   }
 
