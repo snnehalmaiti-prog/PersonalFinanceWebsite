@@ -518,5 +518,65 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
      "E6 specifically, nothing part-month is charted", out.map((r) => r.month));
 }
 
+// ── The per-portfolio sub-category split ────────────────────────────────────
+// Recorded so the drill-down can read the same row the bar came from. The
+// guard here is the whole point: a split that does not sum to its own row's
+// total would resurface later as an "unattributed" remainder, which is exactly
+// what storing it is meant to remove.
+{
+  const base = () => ({
+    total: 100000, totalAgain: 100000, invested: 90000,
+    breakdown: { equity: 60000, fixedIncome: 30000, commodity: 10000 },
+    dateKey: "2026-07-31",
+  });
+
+  const good = Object.assign(base(), {
+    bySubCategory: { Snnehal: { "Mutual Funds": 60000, "Fixed Deposit": 30000 },
+                     Trisha: { Gold: 10000 } },
+  });
+  const rg = S.evaluateWrite(good);
+  ok(rg.write, "SC1 a split that adds up is written", rg.reasons);
+  eq(JSON.stringify(rg.row.by_subcategory), JSON.stringify(good.bySubCategory),
+     "SC2 stored per portfolio, exactly as given");
+  eq(rg.row.meta.subcategory, "ok", "SC3 and the row says the split is good");
+
+  // Off by 10% — a real mis-split, not rounding.
+  const bad = Object.assign(base(), {
+    bySubCategory: { Snnehal: { "Mutual Funds": 60000 }, Trisha: { Gold: 10000 } },
+  });
+  const rb = S.evaluateWrite(bad);
+  ok(rb.write,
+     "SC4 a split that does NOT add up still writes the row — losing a snapshot " +
+     "is worse than losing its split", rb.reasons);
+  eq(rb.row.by_subcategory, null, "SC5 but the bad split is dropped, not stored");
+  eq(rb.row.meta.subcategory, "subcategory-mismatch",
+     "SC6 and the row records why, so a null column is never ambiguous between " +
+     "'not supported yet', 'nothing to record' and 'did not add up'");
+
+  // Half a percent is the same tolerance the category breakdown gets.
+  const edge = Object.assign(base(), {
+    bySubCategory: { Snnehal: { "Mutual Funds": 99700 } },
+  });
+  ok(S.evaluateWrite(edge).row.by_subcategory !== null,
+     "SC7 a rupee or two of rounding is tolerated, matching the category guard");
+
+  const none = S.evaluateWrite(base());
+  eq(none.row.by_subcategory, null, "SC8 no split supplied, none stored");
+  eq(none.row.meta.subcategory, "absent", "SC9 recorded as absent rather than failed");
+
+  const empty = Object.assign(base(), { bySubCategory: { Snnehal: {} } });
+  eq(S.evaluateWrite(empty).row.meta.subcategory, "subcategory-empty",
+     "SC10 an empty split is its own state — it is not a mismatch");
+
+  // A refusal for any other reason must not be rescued by a valid split.
+  const filtered = Object.assign(base(), {
+    portfolioFilter: "Snnehal",
+    bySubCategory: { Snnehal: { "Mutual Funds": 100000 } },
+  });
+  ok(!S.evaluateWrite(filtered).write,
+     "SC11 and a good split does not make an otherwise-refused row writable",
+     S.evaluateWrite(filtered).reasons);
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

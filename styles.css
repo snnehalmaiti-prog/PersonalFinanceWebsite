@@ -4392,6 +4392,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 }
 .mic-txn-table td { padding: 7px 20px; border-top: 1px solid var(--border, rgba(0, 0, 0, 0.07)); color: var(--text); }
 .mic-txn-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+/* A right-aligned column wants its heading right-aligned too, or the label
+   drifts away from the figures it names. Cash Flow's drill-down never needed
+   this — its numeric columns are the last two; the Net Worth one has four. */
+.mic-txn-table th.num { text-align: right; }
 .mic-txn-table td.num.out { color: #E8623A; }
 .mic-txn-table td.num.pos { color: #10B981; }
 /* Value genuinely unavailable (no unit price on the row), not zero. */
