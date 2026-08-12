@@ -3095,7 +3095,12 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
   z-index: 40;
   background: var(--bg);
   padding: 6px 0;
-  margin-bottom: 0;
+  /* The bar owns the space beneath it, and it is the same 10px the Investments
+     bar leaves. It used to leave nothing and each sub-panel opened its own gap
+     with an inline margin-top — three of the four chose 20px and the fourth
+     chose none, so the distance from the tabs to the content depended on which
+     tab you were on. */
+  margin-bottom: 10px;
   margin-top: 4px;
 }
 .exp-top-bar-center {

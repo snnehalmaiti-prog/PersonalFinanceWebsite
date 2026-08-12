@@ -190,6 +190,63 @@ const opaque = (bg) => {
      "B3 Add record is the same height as the pills it shares a row with — it " +
      "sat taller and broke the line", { add: add.h, subtab: sub.h });
 
+  // ── The gap under the bar ────────────────────────────────────────────────
+  // Measured, per sub-tab, because it used to be set in four different places:
+  // the Investments bar left 10px of its own, while each Expense sub-panel
+  // opened its own with an inline margin-top — three chose 20px and the fourth
+  // chose none. The distance from the tabs to the content depended on which tab
+  // you were standing on. The bar owns it now, so every sub-tab reads the same.
+  const gapUnder = (barSel) => p.evaluate((sel) => {
+    const bar = document.querySelector(sel);
+    if (!bar) return null;
+    const bottom = bar.getBoundingClientRect().bottom + window.scrollY;
+    const panel = [...document.querySelectorAll("section.invest-panel, section.settings-panel")]
+      .find((s) => !s.hidden);
+    if (!panel) return null;
+    // The topmost thing rendered below the bar, whatever it happens to be —
+    // asserting against a named element would miss a wrapper growing a margin.
+    const below = [...panel.querySelectorAll("*")].filter((e) => {
+      const r = e.getBoundingClientRect();
+      return r.height > 8 && e.offsetParent !== null && (r.top + window.scrollY) > bottom + 0.5;
+    }).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
+    if (!below) return null;
+    return { gap: Math.round(below.getBoundingClientRect().top + window.scrollY - bottom),
+             first: (below.id || String(below.className)).slice(0, 32) };
+  }, barSel);
+
+  await p.evaluate(() => window.scrollTo(0, 0));
+  await p.evaluate(() => { const e = document.getElementById("tab-investment"); if (e) e.click(); });
+  await p.waitForTimeout(2000);
+  const invGaps = {};
+  for (const st of ["subtab-equity", "subtab-stocksetf", "subtab-fixedincome"]) {
+    await p.evaluate((id) => { const e = document.getElementById(id); if (e) e.click(); }, st);
+    await p.waitForTimeout(1500);
+    invGaps[st] = await gapUnder(".invest-sub-tabs");
+  }
+  await p.evaluate(() => { const e = document.getElementById("tab-expense"); if (e) e.click(); });
+  await p.waitForTimeout(2500);
+  const expGaps = {};
+  for (const st of ["accounts", "records", "analytics"]) {
+    await p.evaluate((k) => {
+      const e = document.querySelector('[data-dash-exp-subtab="' + k + '"]'); if (e) e.click();
+    }, st);
+    await p.waitForTimeout(1800);
+    expGaps[st] = await gapUnder(".exp-top-bar");
+  }
+  console.log("  gaps  investments " + JSON.stringify(invGaps));
+  console.log("  gaps  expense     " + JSON.stringify(expGaps));
+
+  const all = Object.assign({}, invGaps, expGaps);
+  const names = Object.keys(all);
+  ok(names.every((k) => all[k] && all[k].gap != null),
+     "G0 every sub-tab has something measurable below its bar", all);
+  const GAP = 10;
+  const wrong = names.filter((k) => !all[k] || all[k].gap !== GAP);
+  ok(wrong.length === 0,
+     "G1 the same " + GAP + "px sits under the bar on every sub-tab of both tabs — " +
+     "Expense used to open a 20px gap of its own on top of it",
+     wrong.map((k) => [k, all[k] && all[k].gap]));
+
   // ── Narrow ───────────────────────────────────────────────────────────────
   // The Expense bar becomes three stacked rows below 760px; pinned, that is a
   // third of a phone screen spent on chrome, so it is deliberately let go.
