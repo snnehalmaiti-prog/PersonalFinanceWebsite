@@ -174,9 +174,35 @@ const monthlyNav = () => {
   if (back.length) {
     ok(back.every((r) => r.meta.backfilled === true),
        "S11 every backfilled row says so — it came from the derivation this table exists to escape");
-    ok(back.every((r) => r.equity === null && r.invested === null),
-       "S12 with null category columns rather than invented zeros",
+    ok(back.every((r) => r.invested === null),
+       "S12 carrying no invested figure — the backfill reconstructs what the " +
+       "holdings were WORTH at a past month end, not what was paid for them",
        back.slice(0, 2));
+    // These columns used to be null on every reconstruction, which left half
+    // the history undrillable by category. They are filled now — but by
+    // regrouping the same series that produced the total, and only when the
+    // three agree with that row's own total. The guarantee the old assertion
+    // was really making still holds and is the second one below: a split that
+    // cannot be measured stays absent rather than becoming zeros.
+    const split = back.filter((r) => r.equity !== null);
+    ok(split.length > 0,
+       "S12b reconstructions carry their category split, so a month drilled " +
+       "into on NET WORTH · MONTHLY can be broken down",
+       { filled: split.length, of: back.length });
+    const offBy = split.filter((r) =>
+      Math.abs((r.equity + r.fixed_income + (r.commodity || 0)) - r.total) >
+      Math.max(2, Math.abs(r.total) * 0.005));
+    ok(offBy.length === 0,
+       "S12c and it sums to that row's OWN total — measured from the same " +
+       "series, not a second valuation to be reconciled against the first",
+       offBy.slice(0, 2));
+    const fakeZeros = back.filter((r) =>
+      r.equity === 0 && r.fixed_income === 0 && (r.commodity || 0) === 0 &&
+      Math.abs(r.total) > 1);
+    ok(fakeZeros.length === 0,
+       "S12d and a split that could not be measured is left null, never " +
+       "written as zeros — the original point of this assertion",
+       fakeZeros.slice(0, 2));
     ok(back.every((r) => r.snapshot_date.slice(0, 7) < localToday().slice(0, 7)),
        "S13 and never in the current month, which the live writer owns",
        back.map((r) => r.snapshot_date).slice(0, 3));
