@@ -1,5 +1,10 @@
 /* ===== Design tokens ===== */
 :root {
+  /* The site header's rendered height: .header-inner (56px) + its 1px bottom
+     border + the notch inset when running as a standalone PWA. Sticky sub-tab
+     bars park at exactly this offset, so a change to the header moves them
+     rather than leaving a gap or an overlap. */
+  --wf-header-h: calc(56px + 1px + env(safe-area-inset-top, 0px));
   --navy: #2B2A25;
   --emerald: #1F9D6B;
   --emerald-deep: #167A53;
@@ -1176,20 +1181,31 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* header-tab active state is handled by .header-tab.active (dark pill) */
 
 /* Investment sub-tabs — styled like Expense subtabs (dark pill for active) */
+/* Stays under the header while the tab scrolls: which section you are in is
+   worth as much at the bottom of a long holdings list as at the top.
+   Opaque, because content passes underneath it. z-index below the header's 50
+   so the two never argue about which is in front. The vertical padding is what
+   makes the band opaque edge to edge — without it rows show through beside the
+   pills. overflow-x on this element is fine; it is overflow on an ANCESTOR that
+   breaks sticky, which is why main.container had to change to clip. */
 .invest-sub-tabs {
   display: flex; align-items: center; gap: 2px;
-  height: 36px;
-  margin-top: 8px;
-  margin-bottom: 16px;
+  position: sticky;
+  top: var(--wf-header-h);
+  z-index: 40;
+  background: var(--bg);
+  padding: 6px 0;
+  margin-top: 2px;
+  margin-bottom: 10px;
   overflow-x: auto;
   max-width: 100%;
 }
 .invest-sub-tab {
   border: none; background: none; cursor: pointer;
-  padding: 6px 16px; border-radius: 999px;
-  font-size: 0.875rem; font-weight: 500; color: var(--muted);
+  padding: 4px 12px; border-radius: 999px;
+  font-size: 0.8rem; font-weight: 500; color: var(--muted);
   white-space: nowrap; transition: color 0.15s, background 0.15s;
-  height: 36px; box-sizing: border-box;
+  height: 28px; box-sizing: border-box;
 }
 .invest-sub-tab:hover { color: var(--text); }
 .invest-sub-tab.active { background: var(--text); color: var(--bg); font-weight: 600; }
@@ -2128,7 +2144,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   background: var(--emerald);
   color: #fff;
   box-shadow: 0 1px 3px rgba(26,158,110,0.25);
-  height: 36px; box-sizing: border-box; padding: 0 16px;
+  /* Same height as the sub-tab pills it shares a row with — it sat 8px taller
+     and broke the line. Only the box is matched: the uppercase weight is what
+     marks it as the action rather than another tab, and that is character, not
+     size. */
+  height: 28px; box-sizing: border-box; padding: 0 14px;
 }
 .rec-add-btn:hover { background: var(--emerald-dark, #15846b); color: #fff; }
 .rec-add-plus { font-weight: 700; }
@@ -2395,7 +2415,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
    page. <html> clips the horizontal axis just as well without owning the
    header's stickiness. */
 html { overflow-x: hidden; }
-main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
+/* clip, NOT hidden. Both stop a wide child from widening the page, but hidden
+   computes overflow-y to auto and makes this a scroll container — which steals
+   position:sticky from everything inside it, including the sub-tab bars. clip
+   does not establish a scrollport, so the panels stay sticky-transparent. Same
+   trap that kept .site-header from sticking, one level down. */
+main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 .benchmark-card, .equity-card, .value-chart-card { max-width: 100%; box-sizing: border-box; }
 .benchmark-header { flex-wrap: wrap; }
 @media (max-width: 760px) {
@@ -3062,8 +3087,16 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
   grid-template-columns: 320px 1fr auto;
   align-items: center;
   gap: 0;
+  /* The BAR sticks, not .exp-subtabs inside it: a sticky grid item can only
+     travel within its parent's box, and this parent is exactly as tall as the
+     bar, so the child would have nowhere to go and would never appear stuck. */
+  position: sticky;
+  top: var(--wf-header-h);
+  z-index: 40;
+  background: var(--bg);
+  padding: 6px 0;
   margin-bottom: 0;
-  margin-top: 10px;
+  margin-top: 4px;
 }
 .exp-top-bar-center {
   display: flex; align-items: center; justify-content: center; padding-left: 0;
@@ -3086,6 +3119,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
     gap: 10px;
   }
   .exp-subtabs { grid-area: subtabs; min-width: 0; }
+  /* Three stacked rows here (tabs, add, period). Pinned, that is a third of a
+     phone screen permanently spent on chrome, so it scrolls away on mobile and
+     only the header stays. */
+  .exp-top-bar { position: static; padding: 0; }
   /* Add-record: compact, centred green CTA just below the sub-tab chips. */
   .rec-add-btn {
     grid-area: add; justify-self: center; width: auto;
@@ -3202,14 +3239,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: hidden; }
 /* ── Expense sub-tabs (Accounts / Records / Analytics) ───────────────────── */
 .exp-subtabs {
   display: flex; align-items: center; gap: 2px;
-  height: 36px;
+  height: 28px;
 }
 .exp-subtab {
   border: none; background: none; cursor: pointer;
-  padding: 6px 16px; border-radius: 999px;
-  font-size: 0.875rem; font-weight: 500; color: var(--muted);
+  padding: 4px 12px; border-radius: 999px;
+  font-size: 0.8rem; font-weight: 500; color: var(--muted);
   white-space: nowrap; transition: color 0.15s, background 0.15s;
-  height: 36px; box-sizing: border-box;
+  height: 28px; box-sizing: border-box;
 }
 .exp-subtab:hover { color: var(--text); }
 .exp-subtab.active { background: var(--text); color: var(--bg); font-weight: 600; }
