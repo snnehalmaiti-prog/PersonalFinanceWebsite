@@ -129,10 +129,35 @@ const pxG=iso=>+(50+(new Date(iso).getMonth()+1)*1.2).toFixed(2);
      Object.keys(r.by_subcategory[pf]).forEach((k) => { s += Number(r.by_subcategory[pf][k]) || 0; }));
    return Math.abs(s - Number(r.total)) > Math.max(1, Math.abs(Number(r.total)) * 0.005);
  });
+ const byDate = {};
+ stored.forEach((r) => { byDate[r.snapshot_date] = r.total; });
  ok(badSums.length === 0,
     "W3 and each split sums to its OWN row's total — a split that does not would " +
     "resurface in the panel as an unexplained remainder",
     badSums.slice(0, 2).map((r) => r.snapshot_date));
+
+ // ── Repairing rows that predate the column ───────────────────────────────
+ // The situation every existing user is in: months already recorded, none with
+ // a split. planBackfill only writes dates it does not have, and the refresh
+ // planner leaves live rows alone by design — so without a repair pass those
+ // months stay undrillable forever. Shipping without this produced exactly that:
+ // a migration that worked, and a panel that still said "cannot be broken down".
+ stored.forEach((r) => { delete r.by_subcategory;
+   if (r.meta) delete r.meta.subcategory; });
+ ok(stored.every((r) => !r.by_subcategory), "R0 (setup) splits stripped", stored.length);
+ await load();
+ const repaired = stored.filter((r) => r.by_subcategory).length;
+ console.log("  after repair pass: " + repaired + "/" + stored.length + " rows have a split");
+ ok(repaired >= stored.length - 1,
+    "R1 a later load fills the split into rows that already existed, without " +
+    "being asked to rewrite them for any other reason",
+    { repaired, rows: stored.length });
+ const restated = stored.filter((r) => r.by_subcategory &&
+   Math.abs(Number(r.total) - Number(byDate[r.snapshot_date])) > 1);
+ ok(restated.length === 0,
+    "R2 and carries each row's recorded total forward unchanged — a repair may " +
+    "add what is missing, never restate what was recorded",
+    restated.slice(0, 2).map((r) => [r.snapshot_date, r.total, byDate[r.snapshot_date]]));
 
  // ── What the card fetched ────────────────────────────────────────────────
  // Identified by order=, which only the card's load uses — NOT by column names.

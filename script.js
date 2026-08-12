@@ -16477,13 +16477,17 @@
     var timeline = v.timeline;
     var subOf = _snapSubCategoryMap();
 
-    // Timeline index for each wanted date: the last point on or before it.
+    // Timeline index for each wanted date: the last point ON OR BEFORE it.
+    // Not an exact match — the timeline is built from NAV and transaction dates,
+    // so a month end that fell on a weekend has no point of its own, and an
+    // exact lookup silently skipped it. That is what left rows unrepairable.
     var idxByDate = {};
-    var want = {};
-    wantDates.forEach(function (d) { want[d] = true; });
-    for (var i = 0; i < timeline.length; i++) {
-      var k = formatDateISO(timeline[i]);
-      if (want[k]) idxByDate[k] = i;
+    var sorted = wantDates.slice().sort();
+    var ti = 0;
+    for (var di = 0; di < sorted.length; di++) {
+      var wantD = sorted[di];
+      while (ti + 1 < timeline.length && formatDateISO(timeline[ti + 1]) <= wantD) ti++;
+      if (formatDateISO(timeline[ti]) <= wantD) idxByDate[wantD] = ti;
     }
     var dates = Object.keys(idxByDate);
     if (!dates.length) return {};
@@ -16692,7 +16696,8 @@
     // card could filter carries no by_portfolio, and repairing it means writing
     // back everything it already records alongside the split.
     return WfDb.select(SNAP_TABLE,
-        "select=snapshot_date,total,invested,equity,fixed_income,commodity,by_portfolio,meta")
+        "select=snapshot_date,total,invested,equity,fixed_income,commodity," +
+        "by_portfolio,by_subcategory,meta")
       .then(function (rows) {
       var existing = rows || [];
       var have = existing.map(function (r) { return String(r.snapshot_date).slice(0, 10); });
@@ -16724,6 +16729,37 @@
         seenDate[row.snapshot_date] = true;
         return true;
       });
+      // Rows that already exist but carry no sub-category split.
+      //
+      // planBackfill only writes dates it does not already have, and the refresh
+      // planner deliberately leaves LIVE rows alone — they are records, not
+      // derivations. So without this every month recorded before the column
+      // existed stays undrillable forever, which is exactly what shipping the
+      // feature without it produced.
+      //
+      // Same discipline planSplitBackfill uses for by_portfolio: everything the
+      // row already records is carried forward unchanged. The upsert replaces
+      // the whole row, and a recorded total is not something a reconstruction
+      // may overwrite — only the missing split is added.
+      var needSplit = existing.filter(function (r) {
+        return r && !r.by_subcategory && !seenDate[String(r.snapshot_date).slice(0, 10)];
+      }).sort(function (a, b) {
+        return String(b.snapshot_date).localeCompare(String(a.snapshot_date));
+      }).slice(0, 600);
+      needSplit.forEach(function (r) {
+        var d = String(r.snapshot_date).slice(0, 10);
+        seenDate[d] = true;
+        plan.push({
+          snapshot_date: d,
+          total: r.total,
+          invested: r.invested, equity: r.equity,
+          fixed_income: r.fixed_income, commodity: r.commodity,
+          by_portfolio: r.by_portfolio,
+          meta: r.meta || null
+        });
+      });
+      if (needSplit.length) dbg("[Snapshot] backfill: " + needSplit.length + " rows need a split");
+
       // Per-portfolio sub-category values for exactly the dates being written.
       // Attached here rather than inside the planners: they stay pure, and this
       // is the only place that knows the final deduped date list.
