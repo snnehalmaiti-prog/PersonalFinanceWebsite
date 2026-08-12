@@ -1040,15 +1040,9 @@ const money = (t) => {
   snapshotRows = SNAPSHOTS;
 
   // ── The month in progress ───────────────────────────────────────────────
-  // Today's snapshot is a real row, written every day, and the month it belongs
-  // to has not finished. It IS charted — "where does this month stand" is a fair
-  // question — but its change covers part of a month, so its bar is short for a
-  // reason that has nothing to do with performance. Everything below is about
-  // whether the card says so: a part-month drawn like a finished one is a lie
-  // told in the reader's own units.
-  //
-  // The marking is deliberately not the `estimated` fade, which already means
-  // "measured from a reconstruction". These assert the two stay distinguishable.
+  // Today's snapshot is a real row and is written every day, but the month it
+  // belongs to has not finished. Charting it would put a part-month beside full
+  // ones and give a bar that grows between visits.
   const today = new Date();
   const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
                      "-" + String(d.getDate()).padStart(2, "0");
@@ -1063,81 +1057,28 @@ const money = (t) => {
   await load();
   const cur = await p.evaluate(() => {
     const c = window.__wfNwmChart || { data: { labels: [], datasets: [{ data: [] }] } };
-    const d0 = c.data.datasets[0] || {};
-    const flat = (l) => (Array.isArray(l) ? l.join(" ") : l);
     return {
-      labels: c.data.labels.map(flat),
-      raw: c.data.labels,
-      filled: c.data.labels.map(flat).filter((_, i) => d0.data[i] != null),
-      bg: d0.backgroundColor, bw: d0.borderWidth, bc: d0.borderColor,
+      labels: c.data.labels,
+      filled: c.data.labels.filter((_, i) => c.data.datasets[0].data[i] != null),
     };
   });
   const thisMonth = MON[today.getMonth()] + " " + today.getFullYear();
   const prevMonth = MON[lastMonthEnd.getMonth()] + " " + lastMonthEnd.getFullYear();
-  console.log("  in-progress month: " + JSON.stringify(cur.labels) + " (this=" + thisMonth + ")");
-
-  const curIdx = cur.labels.indexOf(thisMonth + " so far");
-  const prevIdx = cur.labels.indexOf(prevMonth);
-  ok(curIdx !== -1,
-     "P1 the running month is on the axis, and its tick says \"so far\" — the axis " +
-     "is where the eye lands, so the caveat cannot live only in the hover readout",
-     cur.labels);
-  ok(Array.isArray(cur.raw[curIdx]) && cur.raw[curIdx][1] === "so far",
-     "P1b as a second line rather than a longer tick", cur.raw[curIdx]);
-  ok(cur.filled.indexOf(thisMonth + " so far") !== -1,
-     "P2 and it carries a bar — the point of the change", cur.filled);
-  eq(cur.filled[cur.filled.length - 1], thisMonth + " so far",
-     "P3 the newest bar is the running month", cur.filled);
-
-  // Drawn hollow: light fill, full-strength outline. No completed month has one.
-  ok(cur.bw[curIdx] > 0,
-     "P4 the running month's bar is outlined", { got: cur.bw[curIdx] });
-  ok(cur.bw[prevIdx] === 0,
-     "P4b and a completed month is not — the outline is the distinguishing mark, " +
-     "so it must not appear anywhere else", { got: cur.bw[prevIdx] });
-  ok(/rgba\(.*0\.18\)/.test(String(cur.bg[curIdx])),
-     "P5 filled at the hollow alpha", cur.bg[curIdx]);
-  // The completed months in this fixture are backfilled, so they wear the
-  // `estimated` fade. If the two treatments ever collapse to the same value the
-  // reader cannot tell a reconstruction from a month still running.
-  ok(String(cur.bg[curIdx]) !== String(cur.bg[prevIdx]),
-     "P6 and distinguishable from the reconstruction fade, which means something " +
-     "else entirely", { partial: cur.bg[curIdx], estimated: cur.bg[prevIdx] });
-
-  // The readout has to repeat the caveat — someone reading figures is not
-  // looking at the axis.
-  const curHover = await p.evaluate((lbl) => {
-    const c = window.__wfNwmChart;
-    const i = c.data.labels.findIndex((l) => (Array.isArray(l) ? l.join(" ") : l) === lbl);
-    c.options.onHover({}, [{ index: i, datasetIndex: 0 }], c);
-    return (document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || "";
-  }, thisMonth + " so far");
-  console.log("  hovered: " + JSON.stringify(curHover));
-  ok(/month to date/i.test(curHover),
-     "P7 hovering it says the figures are month to date", curHover);
-  ok(curHover.indexOf(thisMonth) === 0,
-     "P7b after naming the month", curHover);
-
-  const prevHover = await p.evaluate((lbl) => {
-    const c = window.__wfNwmChart;
-    const i = c.data.labels.findIndex((l) => (Array.isArray(l) ? l.join(" ") : l) === lbl);
-    c.options.onHover({}, [{ index: i, datasetIndex: 0 }], c);
-    return (document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || "";
-  }, prevMonth);
-  ok(!/month to date/i.test(prevHover),
-     "P8 and a finished month does not — the caveat is not boilerplate on every " +
-     "month", prevHover);
-
-  await p.evaluate(() => {
-    const cv = document.getElementById("nwm-chart");
-    if (cv && typeof cv.onmouseleave === "function") cv.onmouseleave();
-  });
-  await p.waitForTimeout(300);
+  console.log("  in-progress month: " + JSON.stringify(cur) + " (this=" + thisMonth + ")");
+  ok(cur.labels.indexOf(thisMonth) !== -1,
+     "P1 the month in progress keeps its slot on the axis", { labels: cur.labels, thisMonth });
+  ok(cur.filled.indexOf(thisMonth) === -1,
+     "P1b but carries no bar — it is not a month end", { filled: cur.filled, thisMonth });
+  eq(cur.filled[cur.filled.length - 1], prevMonth,
+     "P2 the newest bar is the last COMPLETED month");
+  eq(cur.filled.length, 1,
+     "P3 leaving one bar — the completed month that has one before it", cur.filled);
   const curScope = await p.evaluate(() =>
     ((document.querySelector("#nwm-split .mic-hs-month") || {}).textContent || ""));
   console.log("  scope: " + JSON.stringify(curScope));
   eq(curScope, String(new Date().getFullYear()) + " · Year to date",
-     "P9 the current year's resting figures are still labelled year to date");
+     "P4 the current year's resting figures are labelled year to date — they cover " +
+     "the year so far, and only its completed months");
   snapshotRows = SNAPSHOTS;
 
   // ── Exactly one snapshot ────────────────────────────────────────────────

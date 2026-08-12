@@ -331,20 +331,19 @@
 
   // ── Reading snapshots back ────────────────────────────────────────────────
 
-  // One row per calendar month: the latest snapshot in it, oldest first. Rows are
-  // normalised here so every consumer sees the same shape whether they came from
-  // the database or a fixture.
+  // One row per COMPLETED calendar month: the latest snapshot in it, oldest
+  // first. Rows are normalised here so every consumer sees the same shape
+  // whether they came from the database or a fixture.
   //
-  // The CURRENT month is included and flagged `partial`. Its latest snapshot is
-  // today, not a month end, so its change covers part of a month and cannot be
-  // read against a full one — a partial bar is shorter for that reason alone. It
-  // is carried anyway because "where does this month stand" is a real question,
-  // and the flag exists so every consumer has to answer it deliberately: the
-  // chart draws the bar differently and the label says so.
+  // The current month is excluded. Its latest snapshot is today, which is not a
+  // month end: charting it puts a part-month beside full ones, invites reading
+  // their heights against each other, and produces a bar that grows between
+  // visits. planBackfill has always taken that view; this is the reader agreeing
+  // with it, rather than one half of the code calling today a month end and the
+  // other half not.
   //
-  // This is the READER only. planBackfill still stops at the last completed
-  // month (monthEndPoints), because the live writer owns today's row and the two
-  // must never write the same date with different values.
+  // The daily snapshot is still recorded — it simply joins the series once the
+  // month it belongs to has finished.
   function monthEndSeries(rows, todayKey) {
     if (!rows || !rows.length) return [];
     var curMonth = (todayKey || localDateKey()).slice(0, 7);
@@ -359,8 +358,7 @@
       var total = Number(r.total);
       if (!isFinite(total)) return;
       var m = date.slice(0, 7);
-      // A month AFTER the current one is a clock problem, not data — drop it.
-      if (m > curMonth) return;
+      if (m >= curMonth) return;
       if (byMonth[m] && byMonth[m].date >= date) return;
       byMonth[m] = {
         month: m,
@@ -371,8 +369,7 @@
         fixed_income: numOrNull(r.fixed_income),
         commodity: numOrNull(r.commodity),
         by_portfolio: r.by_portfolio || null,
-        backfilled: !!(r.meta && (r.meta.backfilled || r.meta.source === "backfill")),
-        partial: m === curMonth
+        backfilled: !!(r.meta && (r.meta.backfilled || r.meta.source === "backfill"))
       };
     });
     return Object.keys(byMonth).sort().map(function (m) { return byMonth[m]; });
@@ -425,7 +422,6 @@
         invested: row.invested, equity: row.equity,
         fixed_income: row.fixed_income, commodity: row.commodity,
         by_portfolio: row.by_portfolio, backfilled: row.backfilled,
-        partial: !!row.partial,
         delta: null, contributions: null, interest: null, idle: null, market: null,
         estimated: false, gapMonths: 0
       };

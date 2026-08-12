@@ -16644,18 +16644,6 @@
     return NWM_MONTHS[(+p[1] || 1) - 1] + " " + p[0];
   }
 
-  // How a month names itself in the readouts, caveats included. One function so
-  // the hover line and the selection line cannot describe the same month
-  // differently — and so a month that is BOTH partial and spanning a gap says
-  // both rather than whichever the caller remembered to check.
-  function _nwmCaption(r) {
-    if (!r) return "";
-    var out = _nwmMonthLabel(r.month);
-    if (r.partial) out += " · month to date";
-    if (r.gapMonths > 1) out += " · covers " + r.gapMonths + " months";
-    return out;
-  }
-
   // Net contributions per month, household-wide: money in minus money out, from
   // the same builder the Cash Flow card uses. Passed "all" explicitly — the
   // snapshots are whole net worth, so attributing their change with one
@@ -16833,20 +16821,11 @@
   // new "all rows" and the picker would lose every other year on the first use.
   function _nwmRerender() { _nwmRender(_nwmAllRows); }
 
-  function _nwmRgb(hex) {
-    var n = parseInt(hex.slice(1), 16);
-    return ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255);
-  }
   function _nwmFade(hex, on) {
     if (!on) return hex;
-    return "rgba(" + _nwmRgb(hex) + ",0.35)";
+    var n = parseInt(hex.slice(1), 16);
+    return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + ",0.35)";
   }
-  // The month still running. It gets its OWN treatment rather than the fade
-  // above, because that fade already means "measured from a reconstruction" —
-  // one wash for two different doubts would say neither. A part-month is drawn
-  // hollow: a light fill inside a full-strength outline, which reads as a bar
-  // not yet filled in, and which no completed month ever wears.
-  function _nwmPartialFill(hex) { return "rgba(" + _nwmRgb(hex) + ",0.18)"; }
 
   // Years that actually have a comparable month. Built from the rows rather
   // than from a date range, so a year you have no snapshots for is greyed out in
@@ -17025,12 +17004,7 @@
     wrap.hidden = false;
     if (legend) legend.hidden = false;
 
-    // Two lines for the month in progress. The axis is where the eye lands
-    // first, so the caveat belongs there and not only in the hover readout —
-    // a short bar with no explanation reads as a bad month, not a young one.
-    var labels = bars.map(function (r) {
-      return r.partial ? [_nwmMonthLabel(r.month), "so far"] : _nwmMonthLabel(r.month);
-    });
+    var labels = bars.map(function (r) { return _nwmMonthLabel(r.month); });
     // What the card charts is what only IT can say: the interest earned and what
     // the market did. Contributions and idle-cash movements are CASH FLOW ·
     // MONTHLY's subject, drawn there against their own axis — carrying them here
@@ -17057,29 +17031,17 @@
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
-    var fill = function (hex) {
-      return function (r) {
-        return r.partial ? _nwmPartialFill(hex) : _nwmFade(hex, r.estimated);
-      };
-    };
-    var intColors = bars.map(fill(NWM_INT));
-    var gainColors = bars.map(fill(NWM_UP));
-    var lossColors = bars.map(fill(NWM_DOWN));
-    // The outline that completes the hollow bar. Zero-width everywhere else, so
-    // only the running month is drawn this way.
-    var edge = function (hex) {
-      return { color: bars.map(function (r) { return r.partial ? hex : "transparent"; }),
-               width: bars.map(function (r) { return r.partial ? 1.5 : 0; }) };
-    };
-    var intEdge = edge(NWM_INT), gainEdge = edge(NWM_UP), lossEdge = edge(NWM_DOWN);
+    var intColors = bars.map(function (r) { return _nwmFade(NWM_INT, r.estimated); });
+    var gainColors = bars.map(function (r) { return _nwmFade(NWM_UP, r.estimated); });
+    var lossColors = bars.map(function (r) { return _nwmFade(NWM_DOWN, r.estimated); });
 
     // The rows the legend redraws from. Kept here rather than threaded through
     // the click handler, so a toggle redraws exactly what is on screen.
     __nwmChartRows = rows;
     var series = [
-      { key: "Interest", present: anyInterest, data: interest, colors: intColors, edge: intEdge, swatch: NWM_INT },
-      { key: "Market gain", present: anyGain, data: gain, colors: gainColors, edge: gainEdge, swatch: NWM_UP },
-      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, edge: lossEdge, swatch: NWM_DOWN }
+      { key: "Interest", present: anyInterest, data: interest, colors: intColors, swatch: NWM_INT },
+      { key: "Market gain", present: anyGain, data: gain, colors: gainColors, swatch: NWM_UP },
+      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, swatch: NWM_DOWN }
     ].filter(function (s) { return s.present; });
     _nwmRenderLegend(legend, series);
 
@@ -17096,8 +17058,7 @@
         datasets: series.filter(function (s) { return _nwmSeriesOn(s.key); })
           .map(function (s) {
             return { label: s.key, data: s.data, backgroundColor: s.colors, stack: "chg",
-                     borderColor: s.edge.color, borderWidth: s.edge.width,
-                     borderSkipped: false, borderRadius: 2 };
+                     borderWidth: 0, borderRadius: 2 };
           })
       },
       options: {
@@ -17224,7 +17185,8 @@
       el.innerHTML = _nwmSelectionHtml(__nwmViewRows, r);
       return;
     }
-    var label = _nwmCaption(r);
+    var label = _nwmMonthLabel(r.month) +
+      (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
     el.innerHTML = _nwmSplitHtml(label, {
       opening: r.total - r.delta, closing: r.total,
       invested: r.contributions || 0, interest: r.interest || 0,
@@ -17286,7 +17248,8 @@
 
     var rest = "";
     if (hovered) {
-      var month = _nwmCaption(hovered);
+      var month = _nwmMonthLabel(hovered.month) +
+        (hovered.gapMonths > 1 ? " · covers " + hovered.gapMonths + " months" : "");
       rest = '<span class="mic-hs-month">' + escapeHtml(month) + '</span>';
       if (hovered.delta != null) {
         rest += keys.map(function (k) {
