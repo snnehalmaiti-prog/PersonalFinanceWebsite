@@ -518,5 +518,153 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
      "E6 specifically, nothing part-month is charted", out.map((r) => r.month));
 }
 
+// ── What moved a month, by Instrument Category ──────────────────────────────
+// The parts must SUM to the bar, not approach it. That is only true because
+// every term is a partition of what the card already computes for the month as
+// a whole — the stored category columns, the contributions rollup from the same
+// pass as the total, and interest/idle which are Fixed Income by definition.
+{
+  const row = (d, e, f, c, mkt) => ({ date: d, month: d.slice(0, 7),
+    equity: e, fixed_income: f, commodity: c, market: mkt });
+  // Contributions arrive as the whole month → category map; these fixtures are
+  // consecutive months, so only July's slice is ever charged.
+  const jul = (g) => ({ "2026-07": g });
+
+  // Nothing bought or accrued: the whole change is market, per category.
+  const a = S.categoryChange(row("2026-07-31", 110000, 52000, 9000, 9000),
+                             row("2026-06-30", 100000, 50000, 12000), {}, 0, 0);
+  eq(a.rows.length, 3, "CC1 all three categories reported", a.rows);
+  eq(a.rows[0].market, 10000, "CC2 equity's gain is its own change");
+  eq(a.rows[1].market, 2000, "CC3 fixed income's likewise");
+  eq(a.rows[2].market, -3000, "CC4 and commodity's loss");
+  eq(a.attributed, 9000, "CC5 which together are the month's movement");
+  eq(a.residual, 0, "CC6 leaving nothing unexplained");
+
+  // Money in is not a gain: ₹20,000 into equity, value up ₹25,000.
+  const b = S.categoryChange(row("2026-07-31", 125000, 50000, 0, 5000),
+                             row("2026-06-30", 100000, 50000, 0),
+                             jul({ Equity: 20000 }), 0, 0);
+  eq(b.rows[0].market, 5000, "CC7 the contribution comes out before the rest is called market");
+  eq(b.rows[0].contributions, 20000, "CC8 and is reported beside it");
+  eq(b.residual, 0, "CC9 reconciling");
+
+  // A deposit that only accrued: interest, not market, and only Fixed Income
+  // can carry it.
+  const c = S.categoryChange(row("2026-07-31", 100000, 53000, 0, 0),
+                             row("2026-06-30", 100000, 50000, 0), {}, 3000, 0);
+  eq(c.rows[1].market, 0, "CC10 a deposit's growth is interest, not a market gain");
+  eq(c.rows[1].interest, 3000, "CC11 carried on the Fixed Income row");
+  eq(c.rows[0].interest, 0, "CC12 and never on Equity — interest is Fixed Income by definition");
+  eq(c.attributed, 0, "CC13 contributing nothing to market");
+
+  // Idle cash moves the Fixed Income column without being market either.
+  const d = S.categoryChange(row("2026-07-31", 100000, 80000, 0, 0),
+                             row("2026-06-30", 100000, 50000, 0), {}, 0, 30000);
+  eq(d.rows[1].market, 0, "CC14 parked cash is idle, not a market gain");
+  eq(d.rows[1].idle, 30000, "CC15 and is named as such");
+
+  // The residual is reported, never absorbed.
+  const e = S.categoryChange(row("2026-07-31", 110000, 50000, 0, 12000),
+                             row("2026-06-30", 100000, 50000, 0), {}, 0, 0);
+  eq(e.attributed, 10000, "CC16 the parts add to what they add to");
+  eq(e.market, 12000, "CC17 the card's figure is carried through unchanged");
+  eq(e.residual, 2000,
+     "CC18 and the difference is stated — spreading it across the categories " +
+     "would make every row wrong to make the total look right");
+
+  // A month whose either endpoint predates the category fill cannot be shown.
+  const f = S.categoryChange(row("2026-07-31", 110000, 50000, 0, 0),
+    { date: "2026-06-30", month: "2026-06", equity: null, fixed_income: null, commodity: null },
+    {}, 0, 0);
+  eq(f.rows.length, 0, "CC19 no breakdown when an endpoint has no categories");
+  eq(f.missing.length, 1, "CC20 and the offending date is named, not guessed at", f.missing);
+  eq(f.missing[0], "2026-06-30", "CC21 specifically which end is at fault");
+
+  ok(S.categoryChange(null, row("2026-06-30", 1, 1, 1), {}, 0, 0) === null,
+     "CC22 no row, no breakdown");
+  ok(S.categoryChange(row("2026-07-31", 1, 1, 1, 0), null, {}, 0, 0) === null,
+     "CC23 nor without a month to measure from");
+
+  // A category the household has never held earns no row.
+  const g = S.categoryChange(row("2026-07-31", 110000, 0, 0, 10000),
+                             row("2026-06-30", 100000, 0, 0), {}, 0, 0);
+  eq(g.rows.length, 1, "CC24 a category with nothing on either side is left out", g.rows);
+  eq(g.rows[0].category, "Equity", "CC25 leaving the one that moved");
+
+  // A bar that spans a gap. Snapshots for January and April only; ₹15,000 into
+  // equity in each of February, March and April. The bar is charged for all
+  // three, so the breakdown must be too — charging it for April alone leaves
+  // ₹30,000 of investing to be called a market gain, and the two numbers on
+  // screen disagree by that much on precisely the months a user opens after
+  // being away.
+  const gapRows = [
+    { snapshot_date: "2026-01-31", total: 100000, equity: 100000, fixed_income: 0, commodity: 0 },
+    { snapshot_date: "2026-04-30", total: 160000, equity: 160000, fixed_income: 0, commodity: 0 }
+  ];
+  const perMonth = { "2026-02": 15000, "2026-03": 15000, "2026-04": 15000 };
+  const perCat = { "2026-02": { Equity: 15000 }, "2026-03": { Equity: 15000 },
+                   "2026-04": { Equity: 15000 } };
+  const gapBars = S.buildMonthlyChange(gapRows, perMonth, {}, "2026-05-15", {});
+  const apr = gapBars.find((b) => b.month === "2026-04");
+  const janB = gapBars.find((b) => b.month === "2026-01");
+  eq(apr.gapMonths, 3, "CC26 the bar covers three months", apr.gapMonths);
+  eq(apr.contributions, 45000, "CC27 and is charged for all three months' investing");
+  const h = S.categoryChange(apr, janB, perCat, apr.interest || 0, apr.idle || 0);
+  eq(h.rows[0].contributions, 45000,
+     "CC28 so the category is charged for the same three, not for April alone");
+  eq(h.rows[0].market, 15000, "CC29 leaving the gain the bar actually reports");
+  eq(h.residual, 0,
+     "CC30 and the breakdown reconciles across the gap — this is the assertion " +
+     "that fails if the two ever sum over different spans");
+
+  // …and the chart has to hand categoryChange that same January. Its array has
+  // a slot per calendar month, so the two months in the gap are placeholders
+  // sitting between April and the row it was measured against.
+  const slots = [
+    janB,
+    { month: "2026-02", delta: null },
+    { month: "2026-03", delta: null },
+    apr
+  ];
+  const prev = S.previousRecorded(slots, 3);
+  ok(prev === janB,
+     "CC31 the bar before a gap is the previous SNAPSHOT, not the previous slot",
+     prev && prev.month);
+  eq(S.categoryChange(apr, prev, perCat, apr.interest || 0, apr.idle || 0).residual, 0,
+     "CC32 which is what lets the panel open at all — the placeholder has no " +
+     "category columns, so index-1 would refuse to break down a month it can");
+  ok(S.previousRecorded(slots, 0) === null,
+     "CC33 and the earliest bar has nothing before it");
+  ok(S.previousRecorded([{ month: "2026-01", delta: null, total: 100000 }, apr], 1) !== null,
+     "CC34 while a real row with a null delta — the first month ever recorded — " +
+     "is still a row, not a placeholder");
+
+  // Contribution categories are whatever the mapping sheet says. The stored
+  // columns are only ever three, so a sheet that says "Debt" has to fold the
+  // same way the valuation walk folded it — or the deposit it names comes out
+  // as a market gain of the same size.
+  const deposit = (label) => S.categoryChange(
+    row("2026-07-31", 100000, 60000, 0, 0),
+    row("2026-06-30", 100000, 50000, 0),
+    { "2026-07": { [label]: 10000 } }, 0, 0);
+  ["Fixed Income", "fixed income", "FIXED INCOME", "Fixed  Income", " Fixed Income "]
+    .forEach((label, i) => {
+      const z = deposit(label);
+      eq(z.rows[1].contributions, 10000,
+         "CC35." + i + ' "' + label + '" is the Fixed Income column');
+      eq(z.rows[1].market, 0, "CC36." + i + " so the deposit is not a market gain");
+      eq(z.residual, 0, "CC37." + i + " and the month reconciles");
+    });
+  // An unrecognised name goes where the valuation walk put its value: equity.
+  // Not because that is right, but because the two must agree — a category the
+  // stored columns cannot represent has to land in the same place on both sides.
+  const other = S.categoryChange(row("2026-07-31", 110000, 50000, 0, 0),
+                                 row("2026-06-30", 100000, 50000, 0),
+                                 { "2026-07": { "Real Estate": 10000 } }, 0, 0);
+  eq(other.rows[0].contributions, 10000,
+     "CC38 an unrecognised category folds into Equity, matching the walk");
+  eq(other.residual, 0, "CC39 leaving nothing to be called a market gain");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

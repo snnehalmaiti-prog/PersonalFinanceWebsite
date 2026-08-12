@@ -16437,6 +16437,115 @@
       return { x: date, y: total };
     });
   }
+  // Household value per Instrument Category at the given dates.
+  //
+  // A REGROUPING of _snapSeriesForPortfolio("all", true) — same timeline, same
+  // NAVs, same historical prices, same USD/INR rates, same FD accrual — sorted
+  // into the three categories the snapshot already records. Grouping the same
+  // arithmetic is what lets the parts sum to the row's own total; a second way
+  // of valuing the portfolio would not, and reconciling two derivations is the
+  // trap this feature exists to avoid.
+  //
+  // Categories come from the instrument's OWN Instrument Category, never from
+  // the sheet it lives in: a gold ETF sits in the stocks sheet and is Commodity,
+  // a debt fund sits in the equity sheet and is Fixed Income. Assuming the sheet
+  // is the exact double-count e2e-category-split guards against.
+  //
+  // Returns { "YYYY-MM-DD": { equity, fixed_income, commodity } }.
+  function _snapCategoryByDate(wantDates) {
+    var v = _snapValueInputs;
+    if (!v || !v.timeline || !v.timeline.length || !wantDates || !wantDates.length) return {};
+    var _ff = WfMath.forwardFillOverTimeline;
+    var timeline = v.timeline;
+    var catMap = buildInstrumentTopCategoryMap();
+
+    // The last timeline point ON OR BEFORE each wanted date. Not an exact match:
+    // the timeline is built from NAV and transaction dates, so for a portfolio
+    // with no daily-priced holding a month end falling on a weekend has no point
+    // of its own. Any commodity holding densifies the timeline to every calendar
+    // day, which is why e2e-nwm-category-drill cannot cover this branch — an
+    // exact-match version of this line passes that whole suite.
+    //
+    // A date EARLIER than the first point is left unmapped on purpose: the
+    // caller then writes no categories for it, rather than valuing it at a
+    // price that did not exist yet.
+    var idxByDate = {};
+    var sorted = wantDates.slice().sort();
+    var ti = 0;
+    for (var di = 0; di < sorted.length; di++) {
+      var wantD = sorted[di];
+      while (ti + 1 < timeline.length && formatDateISO(timeline[ti + 1]) <= wantD) ti++;
+      if (formatDateISO(timeline[ti]) <= wantD) idxByDate[wantD] = ti;
+    }
+    var dates = Object.keys(idxByDate);
+    if (!dates.length) return {};
+
+    var out = {};
+    dates.forEach(function (d) { out[d] = { equity: 0, fixed_income: 0, commodity: 0 }; });
+    var KEY = { "fixed income": "fixed_income", "commodity": "commodity" };
+    function bucketFor(name) {
+      return KEY[normalizeText(catMap[normalizeText(name || "")] || "")] || "equity";
+    }
+    function add(date, bucket, amt) {
+      if (amt && isFinite(amt)) out[date][bucket] += amt;
+    }
+
+    // Mutual funds: units x NAV, each under its own category (a debt fund is
+    // Fixed Income even though it is in the equity sheet).
+    var unitEvents = buildInstrumentUnitEvents("all") || {};
+    Object.keys(unitEvents).forEach(function (name) {
+      var nav = v.navAtByName[name];
+      if (!nav) return;
+      var units = _ff(unitEvents[name], timeline, "cumulativeUnits");
+      var bucket = bucketFor(name);
+      dates.forEach(function (d) {
+        var i = idxByDate[d], u = units[i] || 0;
+        if (u > UNITS_EPSILON && nav[i]) add(d, bucket, u * nav[i]);
+      });
+    });
+
+    // Stocks / ETFs: historical price where there is one, else the live one.
+    var mapping = buildStockMappingTable();
+    var seByTicker = buildSeUnitEventsByTicker(getSheetRows("stocksetf"), "all", mapping);
+    var bucketByTicker = {};
+    Object.keys(mapping).forEach(function (nm) {
+      var m = mapping[nm];
+      if (m && m.ticker) bucketByTicker[m.ticker] = bucketFor(nm);
+    });
+    Object.keys(seByTicker).forEach(function (ticker) {
+      var hist = v.stockHistoryAll[ticker] || null;
+      var live = v.allPrices[ticker] || null;
+      var isUsd = hist ? hist.currency === "USD" : !!(live && live.currency === "USD");
+      var units = _ff(seByTicker[ticker], timeline, "cumulativeUnits");
+      var bucket = bucketByTicker[ticker] || "equity";
+      dates.forEach(function (d) {
+        var i = idxByDate[d], u = units[i] || 0;
+        if (!(u > UNITS_EPSILON)) return;
+        var price = hist && hist.prices ? lookupIndexPrice(hist.prices, d) : null;
+        if (!price) price = live ? live.price : null;
+        if (!price) return;
+        add(d, bucket, u * (isUsd ? price * (v.usdInrHistMap[d] || v.usdInrToday) : price));
+      });
+    });
+
+    // Provident fund, deposits and their accrual are all Fixed Income; gold
+    // grams are Commodity. Unfiltered, like the series this mirrors — recorded
+    // history does not change because of what is hidden on screen.
+    var fdRows = getSheetRows("fd");
+    var epfAt = _ff(buildEpfValueEvents("all"), timeline, "cumulativeValue");
+    var fdAt = _ff(fdRows ? buildFdValueEvents("all", false, false) : [], timeline, "cumulativeValue");
+    var fdAccrAt = fdRows ? buildFdAccrualAt(timeline, "all") : [];
+    var gramsAt = _ff(fdRows ? buildCommodityGramEvents(fdRows, "all") : [],
+                      timeline, "cumulativeGrams");
+    dates.forEach(function (d) {
+      var i = idxByDate[d];
+      add(d, "fixed_income", (epfAt[i] || 0) + (fdAt[i] || 0) + (fdAccrAt[i] || 0));
+      var g = gramsAt[i] || 0;
+      if (g > 0) add(d, "commodity", g * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0));
+    });
+    return out;
+  }
+
   var _snapDone = false;                // at most one write attempt per load
   var SNAP_TABLE = "net_worth_snapshots";
   var SNAP_LAST_KEY = "wf-snapshot-last";
@@ -16587,6 +16696,58 @@
         seenDate[row.snapshot_date] = true;
         return true;
       });
+      // Category values for the rows being written, plus any existing row that
+      // has none.
+      //
+      // planBackfill writes equity/fixed_income/commodity as null, so every
+      // reconstructed month is undrillable by category — half the history, for
+      // no reason other than that nobody filled them in. Live rows already
+      // carry them, so those need nothing.
+      //
+      // Each row's three values are checked against ITS OWN total before being
+      // kept. Both come from the same series, so they agree by construction;
+      // the check is there to notice the day that stops being true, not to
+      // paper over it. A row keeps its total and loses its categories, never
+      // the reverse.
+      try {
+        var needCat = existing.filter(function (r) {
+          return r && r.equity == null && !seenDate[String(r.snapshot_date).slice(0, 10)];
+        }).sort(function (a, b) {
+          return String(b.snapshot_date).localeCompare(String(a.snapshot_date));
+        }).slice(0, 600);
+        needCat.forEach(function (r) {
+          var d = String(r.snapshot_date).slice(0, 10);
+          seenDate[d] = true;
+          plan.push({
+            snapshot_date: d, total: r.total, invested: r.invested,
+            by_portfolio: r.by_portfolio, meta: r.meta || null
+          });
+        });
+
+        var catByDate = _snapCategoryByDate(plan.map(function (r) { return r.snapshot_date; }));
+        var catKept = 0, catDropped = 0;
+        plan.forEach(function (row) {
+          var c = catByDate[row.snapshot_date];
+          if (!c) return;
+          var sum = c.equity + c.fixed_income + c.commodity;
+          if (!WfSnapshots.isStable(sum, Number(row.total) || 0, 0.005)) {
+            catDropped++;
+            row.meta = Object.assign({}, row.meta, {
+              categories: "category-mismatch",
+              categorySum: Math.round(sum),
+              categoryTotal: Math.round(Number(row.total) || 0)
+            });
+            return;
+          }
+          row.equity = Math.round(c.equity * 100) / 100;
+          row.fixed_income = Math.round(c.fixed_income * 100) / 100;
+          row.commodity = Math.round(c.commodity * 100) / 100;
+          catKept++;
+        });
+        dbg("[Snapshot] backfill: categories filled " + catKept + ", dropped " + catDropped +
+            " (" + needCat.length + " existing rows needed them)");
+      } catch (e) { dbg("[Snapshot] backfill: category fill skipped, " + e.message); }
+
       dbg("[Snapshot] backfill: " + points.length + " chart points, " + have.length +
           " already stored, " + plan.length + " to write (" + refreshed.length +
           " re-reconstructed, " + repairs.length + " split repairs)");
@@ -16659,6 +16820,29 @@
   // the same builder the Cash Flow card uses. Passed "all" explicitly — the
   // snapshots are whole net worth, so attributing their change with one
   // portfolio's flows would blame the market for the other portfolio's investing.
+  // The same flows _nwmContributionsByMonth totals, kept split by Instrument
+  // Category. Same pass, same rows, same filters — so the categories sum to the
+  // figure the bar was built from, rather than being a second count of the same
+  // money.
+  function _nwmContribByCategory(portfolio) {
+    var out = {};
+    try {
+      var d = buildMonthlyInvestCatData(portfolio || "all");
+      if (!d) return out;
+      function fold(src, sign) {
+        Object.keys(src || {}).forEach(function (m) {
+          out[m] = out[m] || {};
+          Object.keys(src[m]).forEach(function (cat) {
+            out[m][cat] = (out[m][cat] || 0) + sign * (src[m][cat] || 0);
+          });
+        });
+      }
+      fold(d.byMonthGrp, 1);
+      fold(d.byMonthGrpOut, -1);
+    } catch (e) {}
+    return out;
+  }
+
   function _nwmContributionsByMonth(portfolio) {
     var out = {};
     try {
@@ -16799,6 +16983,128 @@
       cur.setMonth(cur.getMonth() + 1);
     }
     return out;
+  }
+
+  // ── Drill-down: what moved a month, by Instrument Category ────────────────
+  //
+  // Everything comes from rows the card has ALREADY loaded — equity,
+  // fixed_income and commodity are recorded in the same write as the total —
+  // plus the same contributions/interest/idle series the bar itself was built
+  // from. There is no second derivation to reconcile, which is the whole reason
+  // this works at category level.
+  var __nwmDrillCtx = null;   // set by the render: the series feeding the bars
+
+  function _nwmDrillClose() {
+    var ov = document.getElementById("nwm-drill-overlay");
+    if (ov) ov.hidden = true;
+  }
+
+  // Bound once on the element, not per redraw — the chart is rebuilt on every
+  // year change and portfolio switch, and binding there would stack a listener
+  // each time. Same guard the Cash Flow modal uses.
+  (function bindNwmDrillOnce() {
+    var ov = document.getElementById("nwm-drill-overlay");
+    if (!ov || ov.dataset.bound) return;
+    ov.dataset.bound = "1";
+    var btn = document.getElementById("nwm-drill-close");
+    if (btn) btn.addEventListener("click", _nwmDrillClose);
+    // Backdrop only: a click that began inside the dialog must not close it, or
+    // dragging across a figure to select it would dismiss the panel.
+    ov.addEventListener("click", function (e) { if (e.target === ov) _nwmDrillClose(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !ov.hidden) _nwmDrillClose();
+    });
+  }());
+
+  function _nwmOpenDrill(row, prevRow) {
+    var ov = document.getElementById("nwm-drill-overlay");
+    var bodyEl = document.getElementById("nwm-drill-body");
+    var totalsEl = document.getElementById("nwm-drill-totals");
+    var subEl = document.getElementById("nwm-drill-sub");
+    if (!ov || !bodyEl || !row || row.delta == null) return;
+
+    var pf = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    if (subEl) {
+      subEl.textContent = _nwmMonthLabel(row.month) +
+        (row.gapMonths > 1 ? " \u00b7 covers " + row.gapMonths + " months" : "");
+    }
+    if (totalsEl) totalsEl.innerHTML = "";
+
+    // Household only. The category columns are the household's; by_portfolio
+    // records each portfolio's TOTAL, not its categories, so a per-portfolio
+    // breakdown is not on record and is not invented here.
+    if (pf !== "all") {
+      bodyEl.innerHTML = '<p class="muted small" style="padding:4px;">' +
+        "Snapshots record the category split for the household, not per " +
+        "portfolio, so this breakdown is only available with All Portfolios " +
+        "selected." + "</p>";
+      ov.hidden = false;
+      return;
+    }
+
+    // The whole per-month map, not this month's slice: a bar covering a gap is
+    // charged for every month since the previous snapshot, and categoryChange
+    // sums the same span. row.interest and row.idle are already summed that way
+    // by buildMonthlyChange, so they are passed through as they are.
+    var ctx = __nwmDrillCtx || {};
+    var res = WfSnapshots.categoryChange(
+      row, prevRow, ctx.contribByCat || {},
+      row.interest || 0, row.idle || 0);
+
+    if (!res || (res.missing && res.missing.length)) {
+      var dates = (res && res.missing) ? res.missing : [];
+      bodyEl.innerHTML = '<p class="muted small" style="padding:4px;">' +
+        "This month cannot be broken down: " +
+        (dates.length === 1 ? escapeHtml(dates[0]) + " has" : "these month ends have") +
+        " no recorded category split." +
+        (dates.length > 1 ? " (" + dates.map(escapeHtml).join(", ") + ")" : "") +
+        "</p><p class=\"muted small\" style=\"padding:4px;\">" +
+        "Reload once and the reconstruction will fill them in where it can " +
+        "reach the date." + "</p>";
+      ov.hidden = false;
+      return;
+    }
+
+    var tot = function (label, val, neg) {
+      return '<div class="mic-hs-tot"><span class="mic-hs-tot-label">' + escapeHtml(label) +
+        '</span><b class="' + (neg ? "negative" : "mic-hs-pos") + '">' + val + "</b></div>";
+    };
+    if (totalsEl) {
+      totalsEl.innerHTML =
+        tot("Market", _nwmSigned(res.market || 0), (res.market || 0) < 0) +
+        tot("Interest", _nwmSigned(row.interest || 0), (row.interest || 0) < 0) +
+        (Math.abs(res.residual || 0) >= 1
+          ? tot("Unreconciled", _nwmSigned(res.residual), res.residual < 0) : "");
+    }
+
+    var html = '<table class="mic-txn-table"><thead><tr>' +
+      "<th>Category</th><th class=\"num\">Opening</th><th class=\"num\">Invested</th>" +
+      "<th class=\"num\">Interest</th><th class=\"num\">Idle cash</th>" +
+      "<th class=\"num\">Market</th><th class=\"num\">Closing</th>" +
+      "</tr></thead><tbody>";
+    res.rows.forEach(function (r) {
+      html += "<tr><td>" + escapeHtml(r.category) + "</td>" +
+        '<td class="num">' + formatCurrency(r.opening) + "</td>" +
+        '<td class="num">' + (r.contributions ? _nwmSigned(r.contributions) : "\u2014") + "</td>" +
+        '<td class="num">' + (r.interest ? _nwmSigned(r.interest) : "\u2014") + "</td>" +
+        '<td class="num">' + (r.idle ? _nwmSigned(r.idle) : "\u2014") + "</td>" +
+        '<td class="num ' + (r.market < 0 ? "negative" : "mic-hs-pos") + '">' +
+          _nwmSigned(r.market) + "</td>" +
+        '<td class="num">' + formatCurrency(r.closing) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    // Should be zero: the categories and the total are recorded in the same
+    // write. Shown when it is not, because a breakdown that quietly disagrees
+    // with the bar above it is worse than one that says so.
+    if (Math.abs(res.residual || 0) >= 1) {
+      html += '<p class="muted small" style="margin:10px 0 0;">' +
+        "Unreconciled is the part of the month's change the three categories do " +
+        "not account for. It should be zero \u2014 they are recorded alongside " +
+        "the total \u2014 so a figure here means one of the two months' columns " +
+        "does not sum to its own recorded total." + "</p>";
+    }
+    bodyEl.innerHTML = html;
+    ov.hidden = false;
   }
 
   function _nwmIsAccruing(normSub) {
@@ -17111,6 +17417,21 @@
             i = pts && pts.length ? pts[0].index : -1;
           }
           _nwmShowHovered(i >= 0 && i < bars.length ? bars[i] : null);
+        },
+        // Click a month to see which Instrument Category moved it. The whole
+        // column opens the panel rather than one segment: at 150 months a
+        // segment is a few pixels of a few pixels, and the panel names every
+        // term side by side anyway.
+        onClick: function (evt, elements, chart) {
+          var i = elements && elements.length ? elements[0].index : -1;
+          if (i < 0 && chart && chart.getElementsAtEventForMode) {
+            var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, false);
+            i = pts && pts.length ? pts[0].index : -1;
+          }
+          if (i < 0 || i >= bars.length) return;
+          // The previous SNAPSHOT, not the previous slot: bars has a slot per
+          // calendar month, and the ones between two snapshots are placeholders.
+          _nwmOpenDrill(bars[i], WfSnapshots.previousRecorded(bars, i));
         }
       }
     });
@@ -17352,6 +17673,9 @@
         // Parked cash stays IN the totals, so Closing matches the Overview's
         // net worth. Its movement comes out as its own two segments below.
         var cash = from ? _nwmIdleByMonth(pf) : {};
+        // Kept for the drill-down: the same per-category flows these bars are
+        // built from, so the panel cannot disagree with the chart it opens off.
+        __nwmDrillCtx = { contribByCat: from ? _nwmContribByCategory(pf) : {} };
         _nwmRender(WfSnapshots.buildMonthlyChange(list,
           from ? _nwmContributionsByMonth(pf) : {},
           from ? _nwmInterestByMonth(from, pf) : {},

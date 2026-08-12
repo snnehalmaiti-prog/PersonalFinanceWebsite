@@ -375,6 +375,132 @@
     return Object.keys(byMonth).sort().map(function (m) { return byMonth[m]; });
   }
 
+  // What moved a month, split by Instrument Category.
+  //
+  // Every term is a partition of what the card already computes for the month
+  // as a whole, which is why the parts sum to the bar rather than approaching
+  // it:
+  //
+  //   Δcategory       the stored equity / fixed_income / commodity columns,
+  //                   recorded in the same write as the total
+  //   contributions   byMonthGrp, already rolled up by Instrument Category by
+  //                   the same pass that produces the month's total
+  //   interest        deposits and provident fund — all Fixed Income
+  //   idle cash       Investment Corpus and Savings — all Fixed Income
+  //
+  //   market = Δcategory − contributions − interest − idle
+  //
+  // `contribByCatByMonth` is the WHOLE map, month → { category: amount }, not
+  // one month's slice, because this function — not its caller — has to decide
+  // which months a bar covers. A bar spanning a gap measures the change since
+  // the last snapshot, so buildMonthlyChange sums contributions over every
+  // month since then; taking only the bar's own month here would leave the
+  // skipped months' investing to be called market gain. Passing one month's
+  // slice reconciled perfectly on every consecutive bar and silently overstated
+  // the gain on exactly the months a user is most likely to open — the ones
+  // after a long absence. Both spans now come from eachMonthAfter, so they
+  // cannot drift apart.
+  //
+  // Returns null when either endpoint has no category columns: those rows
+  // predate the fill, and a breakdown cannot be invented for them. The caller
+  // says so rather than guessing, and `missing` names which end is at fault.
+  //
+  // `residual` is the part of the month's change the three categories do not
+  // account for — the stored columns are allowed to differ from the stored
+  // total by up to the write guard's tolerance. It should be pennies; it is
+  // reported rather than folded into a category, because spreading it would
+  // make every row slightly wrong to make the total look exact.
+  // Which of the three columns a category NAME belongs to.
+  //
+  // Contribution categories are whatever the mapping sheet says, verbatim —
+  // "Fixed Income", but also "fixed income", "Debt", "Real Estate". The stored
+  // columns are only ever three, and the walk that produced them sorts anything
+  // it does not recognise into equity. Matching the label exactly meant a
+  // contribution under any other spelling found no row, and its money came out
+  // as a market gain: a ₹10,000 deposit booked as a ₹10,000 gain on a sheet
+  // that says "Debt". Both sides now fold the same way, so they agree whatever
+  // the sheet calls it.
+  function catLabel(name) {
+    var k = String(name == null ? "" : name).trim().toLowerCase().replace(/\s+/g, " ");
+    if (k === "fixed income") return "Fixed Income";
+    if (k === "commodity") return "Commodity";
+    return "Equity";
+  }
+
+  function categoryChange(row, prevRow, contribByCatByMonth, interest, idle) {
+    if (!row || !prevRow) return null;
+    var CATS = [
+      { key: "equity", label: "Equity" },
+      { key: "fixed_income", label: "Fixed Income" },
+      { key: "commodity", label: "Commodity" }
+    ];
+    var missing = [];
+    if (row.equity == null) missing.push(row.date || row.month);
+    if (prevRow.equity == null) missing.push(prevRow.date || prevRow.month);
+    if (missing.length) return { rows: [], missing: missing };
+
+    // Exactly the months buildMonthlyChange charged this bar for. Falling back
+    // to the bar's own month when either end is unlabelled keeps a caller that
+    // hands over bare rows working, rather than throwing inside a panel.
+    var src = contribByCatByMonth || {};
+    var contrib = {};
+    var months = (prevRow.month && row.month) ? eachMonthAfter(prevRow.month, row.month)
+                                              : (row.month ? [row.month] : []);
+    months.forEach(function (m) {
+      var g = src[m];
+      if (!g) return;
+      Object.keys(g).forEach(function (cat) {
+        var k = catLabel(cat);
+        contrib[k] = (contrib[k] || 0) + (Number(g[cat]) || 0);
+      });
+    });
+    var rows = [], attributed = 0;
+    CATS.forEach(function (c) {
+      var open = Number(prevRow[c.key]) || 0;
+      var close = Number(row[c.key]) || 0;
+      // Interest and idle cash are Fixed Income by definition — a deposit's
+      // accrual and a savings balance are not equities or metal.
+      var inc = c.key === "fixed_income" ? (Number(interest) || 0) : 0;
+      var idl = c.key === "fixed_income" ? (Number(idle) || 0) : 0;
+      var con = Number(contrib[c.label]) || 0;
+      var mkt = round2((close - open) - con - inc - idl);
+      if (!open && !close && !con && !inc && !idl) return;   // nothing here at all
+      rows.push({ category: c.label, opening: round2(open), closing: round2(close),
+                  contributions: round2(con), interest: round2(inc),
+                  idle: round2(idl), market: mkt });
+      attributed += mkt;
+    });
+    attributed = round2(attributed);
+    var market = row.market == null ? null : round2(row.market);
+    return {
+      rows: rows,
+      attributed: attributed,
+      market: market,
+      residual: market == null ? null : round2(market - attributed),
+      missing: []
+    };
+  }
+
+  // The bar a given bar's change was measured against.
+  //
+  // The chart's array has one slot per CALENDAR month, with placeholders where
+  // no snapshot exists, so that a gap shows as empty space rather than two
+  // adjacent months pretending to be consecutive. buildMonthlyChange measures
+  // against the previous SNAPSHOT, which after a gap is not the previous slot.
+  // Taking index-1 hands back a placeholder with no category columns, and the
+  // breakdown refuses a month it could have explained — on exactly the months
+  // that follow an absence.
+  //
+  // A placeholder is a slot with no total. Not "delta is null": the earliest
+  // recorded month has a null delta too, and it is a real row.
+  function previousRecorded(bars, i) {
+    if (!bars || i == null) return null;
+    for (var j = i - 1; j >= 0; j--) {
+      if (bars[j] && bars[j].total != null) return bars[j];
+    }
+    return null;
+  }
+
   function numOrNull(v) {
     if (v == null || v === "") return null;
     var n = Number(v);
@@ -535,6 +661,8 @@
 
   root.WfSnapshots = {
     monthEndSeries: monthEndSeries,
+    categoryChange: categoryChange,
+    previousRecorded: previousRecorded,
     buildMonthlyChange: buildMonthlyChange,
     accruedBetween: accruedBetween,
     monthlyDeltas: monthlyDeltas,
