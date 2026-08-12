@@ -16790,6 +16790,170 @@
     return out;
   }
 
+  // Sub-category for an instrument, from either mapping sheet. Same memo-on-
+  // identity trick buildInstrumentTopCategoryMap uses, for the same reason: this
+  // is rebuilt per drill-down and the sheets rarely change.
+  var _subCatMemo = null;
+  function _nwmSubCategoryMap() {
+    var mf = getSheetRows("mfmapping"), se = getSheetRows("stocksetfmapping");
+    if (_subCatMemo && _subCatMemo.mf === mf && _subCatMemo.se === se) return _subCatMemo.map;
+    var map = {};
+    [mf, se].forEach(function (rows) {
+      if (!rows || rows.length < 2) return;
+      var header = rows[0].map(normalizeText);
+      var i = header.indexOf("instrument name"), c = header.indexOf("instrument sub category");
+      if (i === -1 || c === -1) return;
+      rows.slice(1).forEach(function (r) {
+        var nm = (r[i] || "").trim(), sub = (r[c] || "").trim();
+        if (nm && sub) map[normalizeText(nm)] = sub;
+      });
+    });
+    _subCatMemo = { mf: mf, se: se, map: map };
+    return map;
+  }
+
+  // What each sub-category was worth at every month end, for one portfolio.
+  //
+  // Deliberately a regrouping of _snapSeriesForPortfolio's arithmetic rather than
+  // a second way of valuing a portfolio: same timeline, same NAVs, same
+  // historical prices, same USD/INR rates, same FD accrual. The property that
+  // matters is that the sub-categories sum to that series — asserted in the
+  // tests, because a breakdown that does not add up to the line it explains is
+  // worse than no breakdown.
+  //
+  // Sampled only at month ends. The drill-down differences consecutive months,
+  // so the days in between are never read and valuing them would be work thrown
+  // away on every open.
+  function _nwmValueBySubCategory(portfolio) {
+    var v = _snapValueInputs;
+    if (!v || !v.timeline || !v.timeline.length) return null;
+    var _ff = WfMath.forwardFillOverTimeline;
+    var timeline = v.timeline;
+    var subOf = _nwmSubCategoryMap();
+    var pf = portfolio || "all";
+
+    // Last timeline index within each calendar month. Later points overwrite
+    // earlier ones, so what survives is the month's final valuation.
+    var idxByMonth = {};
+    timeline.forEach(function (d, i) {
+      idxByMonth[d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")] = i;
+    });
+    var months = Object.keys(idxByMonth).sort();
+    var out = {};
+    months.forEach(function (mk) { out[mk] = {}; });
+    function add(mk, sub, amt) {
+      if (!amt || !isFinite(amt)) return;
+      var k = sub || "Unclassified";
+      out[mk][k] = (out[mk][k] || 0) + amt;
+    }
+
+    // ── Mutual funds: units × NAV, both already over the timeline ───────────
+    var unitEvents = buildInstrumentUnitEvents(pf) || {};
+    Object.keys(unitEvents).forEach(function (name) {
+      var nav = v.navAtByName[name];
+      if (!nav) return;
+      var units = _ff(unitEvents[name], timeline, "cumulativeUnits");
+      var sub = subOf[normalizeText(name)] || "Unclassified";
+      months.forEach(function (mk) {
+        var i = idxByMonth[mk], u = units[i] || 0;
+        if (u > UNITS_EPSILON && nav[i]) add(mk, sub, u * nav[i]);
+      });
+    });
+
+    // ── Stocks / ETFs: historical price where there is one, else the live one ─
+    var seRows = getSheetRows("stocksetf");
+    var mapping = buildStockMappingTable();
+    var seByTicker = buildSeUnitEventsByTicker(seRows, pf, mapping);
+    // mapping is keyed by instrument NAME and carries the ticker; the unit
+    // events are keyed by ticker, so this inverts it once rather than scanning
+    // the mapping for every ticker.
+    var subByTicker = {};
+    Object.keys(mapping).forEach(function (nm) {
+      var m = mapping[nm];
+      if (m && m.ticker) subByTicker[m.ticker] = m.subCat || "Unclassified";
+    });
+    Object.keys(seByTicker).forEach(function (ticker) {
+      var hist = v.stockHistoryAll[ticker] || null;
+      var live = v.allPrices[ticker] || null;
+      var isUsd = hist ? hist.currency === "USD" : !!(live && live.currency === "USD");
+      var units = _ff(seByTicker[ticker], timeline, "cumulativeUnits");
+      var sub = subByTicker[ticker] || "Unclassified";
+      months.forEach(function (mk) {
+        var i = idxByMonth[mk], u = units[i] || 0;
+        if (!(u > UNITS_EPSILON)) return;
+        var ds = formatDateISO(timeline[i]);
+        var price = hist && hist.prices ? lookupIndexPrice(hist.prices, ds) : null;
+        if (!price) price = live ? live.price : null;
+        if (!price) return;
+        add(mk, sub, u * (isUsd ? price * (v.usdInrHistMap[ds] || v.usdInrToday) : price));
+      });
+    });
+
+    // ── Fixed income: valued per holding at each month end ──────────────────
+    // buildFdHoldingsList already carries each holding's sub-category and knows
+    // how to value it at a date (deposits compounded, provident fund accrued),
+    // which is the same engine the interest series uses.
+    var fdRows = getSheetRows("fd");
+    if (fdRows && fdRows.length > 1 && !isFixedIncomeExcluded()) {
+      var savingsEx = isSavingsInvestmentExcluded();
+      months.forEach(function (mk) {
+        var asOf = timeline[idxByMonth[mk]];
+        (buildFdHoldingsList(fdRows, pf, function (normSub) {
+          if (savingsEx && (normSub === "investment corpus" || normSub === "savings account")) return false;
+          return true;
+        }, asOf) || []).forEach(function (h) {
+          add(mk, h.subCategory || "Fixed Income", h.current || 0);
+        });
+      });
+    }
+
+    // ── Commodity: grams × the gold price on that date ──────────────────────
+    // Re-run per sub-category over a filtered copy of the sheet, so two
+    // commodities never merge into one row. Same builder either way.
+    if (fdRows && fdRows.length > 1 && !isFixedIncomeExcluded()) {
+      var hdr = fdRows[0].map(normalizeText);
+      var catI = hdr.indexOf("instrument category"), subI = hdr.indexOf("instrument sub category");
+      if (catI !== -1) {
+        var bySub = {};
+        fdRows.slice(1).forEach(function (r) {
+          if (normalizeText(r[catI]) !== "commodity") return;
+          var sub = (subI !== -1 ? (r[subI] || "").trim() : "") || "Commodity";
+          (bySub[sub] = bySub[sub] || []).push(r);
+        });
+        Object.keys(bySub).forEach(function (sub) {
+          var grams = _ff(buildCommodityGramEvents([fdRows[0]].concat(bySub[sub]), pf),
+                          timeline, "cumulativeGrams");
+          months.forEach(function (mk) {
+            var i = idxByMonth[mk], g = grams[i] || 0;
+            if (g > 0) add(mk, sub, g * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0));
+          });
+        });
+      }
+    }
+
+    return out;
+  }
+
+  // Test hook: the month-end sub-category valuations beside the Account Value
+  // series they must sum to. Exposed so a browser test can hold the two against
+  // each other; nothing in the app reads it.
+  window.__wfNwmProbe = function (portfolio) {
+    var pf = portfolio || "all";
+    var byMonth = _nwmValueBySubCategory(pf);
+    var series = _snapSeriesForPortfolio(pf);
+    if (!byMonth || !series) return { error: "no inputs", byMonth: !!byMonth, series: !!series };
+    var lastByMonth = {};
+    series.forEach(function (pt) {
+      lastByMonth[pt.x.getFullYear() + "-" + String(pt.x.getMonth() + 1).padStart(2, "0")] = pt.y;
+    });
+    return Object.keys(byMonth).sort().map(function (mk) {
+      var parts = byMonth[mk];
+      var sum = Object.keys(parts).reduce(function (a, k) { return a + parts[k]; }, 0);
+      return { month: mk, sum: Math.round(sum), chart: Math.round(lastByMonth[mk] || 0),
+               diff: Math.round(sum - (lastByMonth[mk] || 0)), subs: parts };
+    });
+  };
+
   function _nwmIsAccruing(normSub) {
     return _fiIsTermDeposit(normSub) || isProvidentFundSub(normSub);
   }
