@@ -16438,6 +16438,8 @@
     });
   }
   // Sub-category for an instrument, from either mapping sheet.
+  // Holdings that belong to no named portfolio still belong to the household.
+  var UNASSIGNED_PORTFOLIO = "Unassigned";
   var _snapSubCatMemo = null;
   function _snapSubCategoryMap() {
     var mf = getSheetRows("mfmapping"), se = getSheetRows("stocksetfmapping");
@@ -16774,7 +16776,33 @@
       // split, never the other way round.
       try {
         var subDates = plan.map(function (r) { return r.snapshot_date; });
-        var subByDate = _snapSubCategoryByDate(Object.keys(byPortfolio), subDates);
+        var pfNames = Object.keys(byPortfolio);
+        var subByDate = _snapSubCategoryByDate(pfNames, subDates);
+        // Whatever the named portfolios do not cover.
+        //
+        // The household total counts every holding; the split only counted
+        // holdings belonging to a NAMED portfolio. One row with a blank
+        // Portfolio Name therefore made the split fall short of the total on
+        // every date, and the guard — correctly — rejected all of them. In a
+        // fixture, adding a single such row took the split from 179 of 179 rows
+        // to 0 of 179.
+        //
+        // Measured rather than assumed: the household is valued the same way,
+        // and the remainder per sub-category becomes its own bucket. If every
+        // holding is attributed the remainder is zero and no bucket appears.
+        var allByDate = _snapSubCategoryByDate(["all"], subDates);
+        Object.keys(subByDate).forEach(function (d) {
+          var household = (allByDate[d] || {})["all"] || {};
+          var named = subByDate[d] || {};
+          var rest = {};
+          Object.keys(household).forEach(function (sub) {
+            var claimed = 0;
+            pfNames.forEach(function (pf) { claimed += (named[pf] && named[pf][sub]) || 0; });
+            var left = (household[sub] || 0) - claimed;
+            if (Math.abs(left) > 0.5) rest[sub] = left;
+          });
+          if (Object.keys(rest).length) named[UNASSIGNED_PORTFOLIO] = rest;
+        });
         var kept = 0, dropped = 0;
         plan.forEach(function (row) {
           var split = subByDate[row.snapshot_date];
@@ -16786,8 +16814,16 @@
           if (WfSnapshots.isStable(sum, Number(row.total) || 0, 0.005)) {
             row.by_subcategory = split; kept++;
           } else {
+            // Record the two figures, not just the verdict. "Did not add up" is
+            // the same sentence for a rupee of rounding and for a whole missing
+            // leg, and those want completely different fixes — so the row keeps
+            // what the split came to and what it was measured against.
             row.by_subcategory = null; dropped++;
-            row.meta = Object.assign({}, row.meta, { subcategory: "subcategory-mismatch" });
+            row.meta = Object.assign({}, row.meta, {
+              subcategory: "subcategory-mismatch",
+              subcategorySum: Math.round(sum),
+              subcategoryTotal: Math.round(Number(row.total) || 0)
+            });
           }
         });
         dbg("[Snapshot] backfill: sub-category splits kept " + kept + ", dropped " + dropped);
@@ -17077,6 +17113,8 @@
   var __nwmDrillCache = {};
   // Why a date has no split, straight from the row that lacks it.
   var __nwmDrillWhy = {};
+  // The row's meta, for the figures behind a mismatch.
+  var __nwmDrillMeta = {};
 
   function _nwmDrillFetch(dates) {
     var need = dates.filter(function (d) { return d && !(d in __nwmDrillCache); });
@@ -17096,6 +17134,7 @@
           __nwmDrillCache[d] = r.by_subcategory || null;
           __nwmDrillWhy[d] = r.by_subcategory ? "ok"
             : ((r.meta && r.meta.subcategory) || "not recorded");
+          __nwmDrillMeta[d] = r.meta || {};
         });
         return __nwmDrillCache;
       })
@@ -17184,10 +17223,24 @@
         // different fixes, and the reader cannot tell them apart from a
         // sentence that guesses.
         var missing = [];
-        if (!prev) missing.push({ d: prevDate, why: __nwmDrillWhy[prevDate] || "unknown" });
-        if (!cur) missing.push({ d: curDate, why: __nwmDrillWhy[curDate] || "unknown" });
+        var det = function (d) {
+          var m = __nwmDrillMeta[d] || {};
+          return { d: d, why: __nwmDrillWhy[d] || "unknown",
+                   sum: m.subcategorySum, total: m.subcategoryTotal };
+        };
+        if (!prev) missing.push(det(prevDate));
+        if (!cur) missing.push(det(curDate));
         var lines = missing.map(function (m) {
-          return "<li>" + escapeHtml(m.d) + " — " + escapeHtml(String(m.why)) + "</li>";
+          var extra = "";
+          if (m.sum != null && m.total) {
+            var offBy = m.sum - m.total;
+            var pct = m.total ? (offBy / m.total) * 100 : 0;
+            extra = " — parts came to " + formatCurrency(m.sum) + " against a recorded " +
+              formatCurrency(m.total) + " (" + (offBy > 0 ? "+" : "−") +
+              formatCurrency(Math.abs(offBy)) + ", " + Math.abs(pct).toFixed(1) + "%)";
+          }
+          return "<li>" + escapeHtml(m.d) + " — " + escapeHtml(String(m.why)) +
+            escapeHtml(extra) + "</li>";
         }).join("");
         bodyEl.innerHTML = '<p class="muted small" style="padding:4px 4px 0;">' +
           "This month cannot be broken down: one of its two month ends has no " +

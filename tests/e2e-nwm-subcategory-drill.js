@@ -27,7 +27,11 @@ const PORT = process.env.PORT || 8098;
 const TXN=["Transaction Date","Portfolio Name","Instrument Name","Transaction Type","Units","Price"];
 const FDH=["Transaction Date","Portfolio Name","Bank","Instrument Name","Instrument Category","Instrument Sub Category","Transaction Type","Invested Amount","Maturity Date/Sell Date","Rate of Return","Grams"];
 const SHEETS={
- "wf-equity-data":[TXN,["1-Jan-2024","Snnehal","Fund A","Buy","1000","10"],["1-Mar-2024","Trisha","Fund B","Buy","500","20"]],
+ "wf-equity-data":[TXN,["1-Jan-2024","Snnehal","Fund A","Buy","1000","10"],["1-Mar-2024","Trisha","Fund B","Buy","500","20"],
+   // No Portfolio Name: counted in the household total but belonging to no
+   // named portfolio. One such row used to make the split fall short on EVERY
+   // date and be rejected on all of them — 179 of 179 rows to 0 in a fixture.
+   ["1-Jan-2024","","Fund A","Buy","2000","10"]],
  "wf-mfmapping-data":[["Instrument Name","Instrument Category","Instrument Sub Category","Scheme Code","ISIN"],
    ["Fund A","Equity","Flexi Cap","100001","INFA"],["Fund B","Equity","Large Cap","100002","INFB"]],
  "wf-stocksetf-data":[TXN,["1-Feb-2024","Snnehal","GOLDBEES","Buy","100","50"]],
@@ -134,6 +138,10 @@ const pxG=iso=>+(50+(new Date(iso).getMonth()+1)*1.2).toFixed(2);
  ok(withSplit === stored.length,
     "W1 every reconstructed row carries a sub-category split", { withSplit, rows: stored.length });
  const shape = (stored.find((r) => r.by_subcategory) || {}).by_subcategory;
+ ok(shape && shape.Unassigned && Object.keys(shape.Unassigned).length > 0,
+    "W1b holdings belonging to no named portfolio get their own bucket — the " +
+    "household total counts them, so a split that does not falls short on every " +
+    "date and is rejected on all of them", shape && Object.keys(shape));
  ok(shape && Object.keys(shape).length >= 2 &&
     typeof shape[Object.keys(shape)[0]] === "object",
     "W2 shaped portfolio -> sub-category, not a flat map — the whole point is " +
