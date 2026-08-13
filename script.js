@@ -9534,6 +9534,50 @@
   //
   // Returns a value per timeline index; the caller adds it alongside the EPF/
   // savings series, having asked buildFdValueEvents to leave FDs out.
+  // Provident fund accrual along the timeline.
+  //
+  // buildFdValueEvents carries PF at PAR — its value moves only when a
+  // contribution is recorded. But _nwmInterestByMonth credits it interest every
+  // month (via _nwmIsAccruing, which includes provident fund where
+  // _fiIsTermDeposit deliberately does not). Market is a residual, so the
+  // interest was being subtracted from a change that never contained it, and
+  // Fixed Income showed a market LOSS of exactly the interest every single
+  // month. Aug 2023: interest +3,352, market −3,352.
+  //
+  // Valued per MONTH rather than per day. Interest is credited at financial-year
+  // end and accrues monthly, so a per-day valuation would re-scan the sheet
+  // hundreds of times to produce the same figure — the cost buildFdAccrualAt
+  // parses once to avoid. Month ends are exact, which is what the snapshots read.
+  function buildPfAccrualAt(timeline, portfolioFilter) {
+    var out = new Array((timeline && timeline.length) || 0);
+    for (var z = 0; z < out.length; z++) out[z] = 0;
+    var rows = getSheetRows("fd");
+    if (!rows || !rows.length || !out.length) return out;
+    var today = new Date();
+    var cache = {};
+    function accrualForMonthOf(d) {
+      var key = d.getFullYear() + "-" + d.getMonth();
+      if (cache[key] != null) return cache[key];
+      // The month in progress accrues only up to now, not to a future month end.
+      var eom = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+      var at = eom > today ? today : eom;
+      var t = 0;
+      try {
+        (buildFdFixedIncomeHoldingsList(rows, portfolioFilter || "all", at) || [])
+          .forEach(function (h) {
+            if (!isProvidentFundSub(normalizeText(h.subCategory || ""))) return;
+            // Interest EARNED, not the holding's value: the principal is already
+            // in the value series, and adding it again would double count.
+            t += (h.current || 0) - (h.invested || 0);
+          });
+      } catch (e) { t = 0; }
+      cache[key] = t;
+      return t;
+    }
+    for (var i = 0; i < timeline.length; i++) out[i] = accrualForMonthOf(timeline[i]);
+    return out;
+  }
+
   function buildFdAccrualAt(timeline, portfolioFilter) {
     var out = new Array((timeline && timeline.length) || 0);
     for (var z = 0; z < out.length; z++) out[z] = 0;
@@ -10456,8 +10500,9 @@
         var epfAllAt = _ff(epfEventsAll, timeline, "cumulativeValue");
         var fdAllAt = _ff(fdValueEventsAll, timeline, "cumulativeValue");
         var fdAccrAt = isFixedIncomeExcluded() ? [] : buildFdAccrualAt(timeline, selectedPortfolio);
+        var pfAccrAt = isFixedIncomeExcluded() ? [] : buildPfAccrualAt(timeline, selectedPortfolio);
         var pointsAll = points.map(function (p, i) {
-          var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0) + (fdAccrAt[i] || 0);
+          var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0) + (fdAccrAt[i] || 0) + (pfAccrAt[i] || 0);
           return { x: p.x, y: p.y + extra };
         });
 
@@ -16706,12 +16751,13 @@
       : buildFdValueEvents(portfolio, savEx, false),
       timeline, "cumulativeValue");
     var fdAccrAt = (fiEx || !fdRows) ? [] : buildFdAccrualAt(timeline, portfolio);
+    var pfAccrAt = (fiEx || !fdRows) ? [] : buildPfAccrualAt(timeline, portfolio);
     var gramsAt = _ff((!fiEx && fdRows) ? buildCommodityGramEvents(fdRows, portfolio) : [],
       timeline, "cumulativeGrams");
 
     return timeline.map(function (date, i) {
       var grams = gramsAt[i] || 0;
-      var total = (epfAt[i] || 0) + (fdAt[i] || 0) + (fdAccrAt[i] || 0) +
+      var total = (epfAt[i] || 0) + (fdAt[i] || 0) + (fdAccrAt[i] || 0) + (pfAccrAt[i] || 0) +
                   (grams > 0 ? grams * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0) : 0);
       for (var mi = 0; mi < names.length; mi++) {
         var u = mfUnits[mi][i] || 0, nav = mfNav[mi][i];
@@ -16835,11 +16881,12 @@
     var epfAt = _ff(buildEpfValueEvents("all"), timeline, "cumulativeValue");
     var fdAt = _ff(fdRows ? buildFdValueEvents("all", false, false) : [], timeline, "cumulativeValue");
     var fdAccrAt = fdRows ? buildFdAccrualAt(timeline, "all") : [];
+    var pfAccrAt = fdRows ? buildPfAccrualAt(timeline, "all") : [];
     var gramsAt = _ff(fdRows ? buildCommodityGramEvents(fdRows, "all") : [],
                       timeline, "cumulativeGrams");
     dates.forEach(function (d) {
       var i = idxByDate[d];
-      add(d, "fixed_income", (epfAt[i] || 0) + (fdAt[i] || 0) + (fdAccrAt[i] || 0));
+      add(d, "fixed_income", (epfAt[i] || 0) + (fdAt[i] || 0) + (fdAccrAt[i] || 0) + (pfAccrAt[i] || 0));
       var g = gramsAt[i] || 0;
       if (g > 0) add(d, "commodity", g * (v.goldPriceSeriesAt[i] || v.currentGoldPrice || 0));
     });

@@ -138,6 +138,11 @@ const money = (t) => {
       localStorage.setItem("wf-sb-session", keep || JSON.stringify({ access_token: "x",
         expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: "u1", email: "a@b.c" } }));
       localStorage.setItem("wf-gold-premium-pct", "0");
+      // Without a rate the provident fund accrues nothing, and the defect this
+      // suite is meant to catch — interest credited that the value never gains —
+      // cannot occur at all. Both mutants survived until this was set.
+      localStorage.setItem("wf-epf-interest-rates", JSON.stringify(
+        [2023, 2024, 2025, 2026].map((y) => ({ year: y, rate: 8.25 }))));
       for (const k in s) localStorage.setItem(k, JSON.stringify(s[k]));
     }, SHEETS);
     await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
@@ -352,6 +357,41 @@ const money = (t) => {
     y.dispatchEvent(new Event("change"));
   });
   await p.waitForTimeout(2500);
+
+  // Fixed Income must show NO market movement.
+  //
+  // The fixture's fixed income is a deposit and a provident fund. Neither has a
+  // market price, so neither can have a market gain or loss — but PF is carried
+  // at PAR by buildFdValueEvents while _nwmInterestByMonth credits it interest
+  // every month, and market is a residual. The interest was being subtracted
+  // from a change that never contained it, so every month reported a Fixed
+  // Income market LOSS of exactly the interest. Reported from Aug 2023:
+  // interest +3,352, market −3,352.
+  const fiMarket = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    const out = [];
+    for (let i = 0; i < c.data.labels.length; i++) {
+      if (!c.data.datasets.some((d) => d.data[i] != null)) continue;
+      c.options.onClick({}, [{ index: i, datasetIndex: 0 }], c);
+      const row = [...document.querySelectorAll("#nwm-drill-body tbody tr")]
+        .map((tr) => [...tr.children].map((td) => td.textContent.trim()))
+        .find((r) => r[0] === "Fixed Income");
+      if (row) out.push({ month: c.data.labels[i], interest: row[4], market: row[6] });
+    }
+    return out;
+  });
+  const mny = (t) => money(t);
+  const opposite = fiMarket.filter((r) =>
+    Math.abs(mny(r.interest)) > 1 && Math.abs(mny(r.market) + mny(r.interest)) < 2);
+  ok(fiMarket.length > 0, "F1 there are Fixed Income rows to inspect", fiMarket.length);
+  ok(opposite.length === 0,
+     "F2 no month reports a Fixed Income market loss equal and opposite to its " +
+     "interest — that signature means the interest was subtracted from a change " +
+     "that never contained it", opposite.slice(0, 3));
+  // No "Fixed Income never moves" assertion: this fixture holds a DEBT FUND by
+  // design — one of the category traps — and a debt fund is priced daily, so it
+  // genuinely does move. The equal-and-opposite signature above is the precise
+  // test, and it is specific to the defect rather than to the asset class.
 
   // January, with a year selected. Reported: "This month cannot be broken down"
   // on Jan 2026 — and with no dates named, which is the tell. A missing category
