@@ -4439,32 +4439,47 @@
     return flows;
   }
 
-  // Fixed-income value (PF/EPF principal+interest, plus active Fixed Deposits at
-  // par) as of a date — the opening mark for a period XIRR. Investment Corpus /
-  // Savings Account are excluded (never part of XIRR), matching the Overview.
+  // Fixed-income value as of a date — the opening mark for a period XIRR.
+  // Investment Corpus / Savings Account are excluded (never part of XIRR),
+  // matching the Overview.
+  //
+  // This MUST be the same valuation the period terminal uses, just stopped at
+  // `asOf`, or the window pays out growth it never opened with. Both legs used to
+  // break that rule in the same direction:
+  //
+  //   Fixed Deposits were marked at PAR here and at their quarterly-compounded
+  //   accrued value in the terminal. A deposit opened five years ago and still
+  //   running therefore contributed five years of interest to a ONE-year window.
+  //
+  //   PF/EPF was read off buildFdValueEvents, which sums deposits and withdrawals
+  //   and deliberately skips interest rows — contributed principal, not balance —
+  //   while the terminal (sumProvidentFundCurrentValue) is principal plus every
+  //   rupee of interest ever accrued. The entire accrued balance landed inside
+  //   whatever window was selected.
+  //
+  // Both are annualised over the window, so on 1Y they inflate the reported XIRR
+  // enormously — the shape of a portfolio XIRR sitting tens of points above its
+  // own rolling return. Both now call the very builders the terminal calls, with
+  // `asOf` passed through, so the two ends can only ever differ by real growth.
   function fixedIncomeValueAtDate(fdRows, portfolioFilter, asOf) {
     if (!fdRows || !fdRows.length) return 0;
-    // PF/EPF: principal + accrued interest up to asOf (from the value timeline,
-    // with the parked-cash "balance" rows excluded).
-    var pfEvents = buildFdValueEvents(portfolioFilter, true);
-    var pf = lastAtOrBefore(pfEvents, asOf, "cumulativeValue") || 0;
-    // Fixed Deposits open at asOf → par value (bought on/before asOf, not yet matured).
-    var header = fdRows[0].map(normalizeText);
-    var pIdx = header.indexOf("portfolio name"), cIdx = header.indexOf("instrument category"),
-        sIdx = header.indexOf("instrument sub category"), aIdx = header.indexOf("invested amount"),
-        dIdx = header.indexOf("transaction date");
-    var mIdx = header.indexOf("maturity date/sell date");
-    if (mIdx === -1) mIdx = header.indexOf("maturity date");
-    var fd = 0;
-    fdRows.slice(1).forEach(function (row) {
-      if (pIdx !== -1 && portfolioFilter !== "all" && normalizeText(row[pIdx]) !== normalizeText(portfolioFilter)) return;
-      if (cIdx !== -1 && normalizeText(row[cIdx]) !== "fixed income") return;
-      if (sIdx === -1 || !_fiIsTermDeposit(normalizeText(row[sIdx]))) return;
-      var buy = parseFlexibleDate(row[dIdx]); if (!buy || buy > asOf) return;
-      var mat = mIdx !== -1 ? parseFlexibleDate(row[mIdx]) : null;
-      if (mat && mat <= asOf) return; // matured before asOf → already realized
-      fd += parseNumber(row[aIdx]);
+
+    // PF/EPF: accrued balance at asOf. computePfAccountValue walks months up to
+    // asOf and no further, so contributions and interest after it are excluded.
+    var pf = 0;
+    (buildFdFixedIncomeHoldingsList(fdRows, portfolioFilter, asOf) || []).forEach(function (h) {
+      if (isProvidentFundSub(normalizeText(h.subCategory || ""))) pf += h.current;
     });
+
+    // Fixed Deposits open at asOf, accrued to asOf — the mirror of
+    // sumFdActiveCurrentValue, which is the terminal these open against.
+    var fd = 0;
+    (buildFdHoldingsList(fdRows, portfolioFilter, _fiIsTermDeposit, asOf) || []).forEach(function (h) {
+      if (h.matured) return;                          // matured before asOf → already realized
+      if (h.startDate && h.startDate > asOf) return;  // not opened yet at asOf (would count at par)
+      fd += h.current;
+    });
+
     return pf + fd;
   }
 
@@ -4868,6 +4883,34 @@
         });
     }
 
+    // PF/EPF at its ACCRUED balance, the same way the deposits above are carried
+    // at their accrued value rather than at par.
+    //
+    // This leg used to read pfEvents (buildFdValueEvents), which sums deposits and
+    // withdrawals and deliberately SKIPS interest rows — contributed principal,
+    // not balance. A provident fund was therefore held at cost forever: each
+    // contribution was subtracted from the period as an external flow, exactly as
+    // it should be, but the interest it went on to earn was never added back as
+    // value. The series this feeds is the one behind the Portfolio CAGR and the
+    // Rolling Return columns, so both reported a fixed-income book that earned
+    // nothing at all — the mirror image of the period XIRR bug, where the same
+    // principal-vs-balance mismatch put every rupee of accrued interest INSIDE
+    // the selected window.
+    //
+    // Memoized per date: valueAt is called once per monthly sample and the builder
+    // re-reads the whole FD sheet on each call.
+    var _pfValueCache = {};
+    function pfValueAt(date) {
+      var key = formatDateISO(date);
+      if (_pfValueCache[key] !== undefined) return _pfValueCache[key];
+      var total = 0;
+      (buildFdFixedIncomeHoldingsList(fdRows, selected, date) || []).forEach(function (h) {
+        if (isProvidentFundSub(normalizeText(h.subCategory || ""))) total += h.current;
+      });
+      _pfValueCache[key] = total;
+      return total;
+    }
+
     function valueAt(date) {
       var total = 0;
       deposits.forEach(function (x) {
@@ -4875,7 +4918,7 @@
         if (x.maturity && x.maturity <= date) return; // matured: now a cash flow
         total += fdMaturityValue(x.principal, x.buy, date, x.rate);
       });
-      total += lastAtOrBefore(pfEvents, date, "cumulativeValue") || 0;
+      total += pfValueAt(date);
       if (goldPriceAt) {
         var price = goldPriceAt[formatDateISO(date)];
         if (price) {
