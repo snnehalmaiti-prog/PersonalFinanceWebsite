@@ -409,7 +409,7 @@
       <div class="value-chart-card nwm-card" id="net-worth-monthly-card" style="margin-top:16px;">
         <div class="nwm-header mic-header">
           <div class="mic-title-group">
-            <span class="mic-eyebrow">NET WORTH &middot; MONTHLY<span id="nwm-portfolio-name" class="mic-portfolio-name"></span></span>
+            <span class="mic-eyebrow">GAIN &middot; MONTHLY<span id="nwm-portfolio-name" class="mic-portfolio-name"></span></span>
           </div>
           <div class="mic-controls">
             <button id="nwm-alltime" type="button" class="mic-dropdown-btn">All time <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -442,6 +442,19 @@
         <!-- Rendered by _nwmDrawChart: which keys exist depends on what the
              period actually contains, and each one is clickable. -->
         <div class="nwm-chart-legend mic-legend" id="nwm-chart-legend" hidden></div>
+        <!-- A standing caveat, at the foot of the card rather than under the
+             title: both cards keep their heading and their figures at a
+             fixed spacing that a test pins, and a line between the two
+             pushes them apart on one card only.
+
+             Both ignore the exclusion filters, for related reasons. This
+             pair reads recorded snapshots and the transaction sheets
+             directly; neither consults the toggles. Snapshots are written
+             unfiltered on purpose, so recorded history does not change
+             with what is hidden on screen. Either way the figures will
+             not match a filtered Overview, which is worth saying rather
+             than leaving to be found as a discrepancy. -->
+        <p class="mic-exclusion-note">Exclusion filters are not applied to this card.</p>
       </div>
 
       <!-- Monthly Investment (75%) + Investment Split pie (25%) side by side -->
@@ -494,6 +507,7 @@
         </div>
         <div id="monthly-invest-cat-wrap" style="position:relative;height:280px;"></div>
         <div class="mic-legend" id="monthly-invest-cat-legend"></div>
+        <p class="mic-exclusion-note">Exclusion filters are not applied to this card.</p>
       </div>
 
       </div><!-- /monthly-invest-row -->

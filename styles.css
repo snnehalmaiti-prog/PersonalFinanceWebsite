@@ -4606,3 +4606,14 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
   font-variant-numeric: tabular-nums; white-space: nowrap; margin-top: 1px; }
 .mfh-fx-split .mfh-negative { color: #E8623A; }
 @media (max-width: 640px) { .mfh-fx-split { font-size: 0.55rem; } }
+
+/* Says what the card does NOT do. Sits under the eyebrow, quieter than it and
+   than the figures beside it — a standing caveat, not a warning. */
+.mic-exclusion-note {
+  margin: 2px 0 0;
+  padding: 0 20px 10px;
+  font-size: 0.65rem;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  font-weight: 500;
+}

@@ -656,10 +656,10 @@ const money = (t) => {
   // ── The card names the selection ────────────────────────────────────────
   // Same treatment CASH FLOW · MONTHLY gives it: the portfolio appended to the
   // eyebrow, so a card showing one person's figures says whose they are.
-  ok(/NET WORTH . MONTHLY . Snnehal$/.test(sn.eyebrow || ""),
+  ok(/GAIN . MONTHLY . Snnehal$/.test(sn.eyebrow || ""),
      "R1 a portfolio selection is named in the title", sn.eyebrow);
   ok(/Trisha$/.test(tr.eyebrow || ""), "R2 the other one too", tr.eyebrow);
-  ok(/NET WORTH . MONTHLY$/.test(household.eyebrow || ""),
+  ok(/GAIN . MONTHLY$/.test(household.eyebrow || ""),
      "R3 and the household is not — 'All' would be noise on every load",
      household.eyebrow);
   ok(sn.named === " \u00b7 Snnehal",
@@ -667,12 +667,29 @@ const money = (t) => {
   // The two cards sit one above the other, so a difference in how they name the
   // same selection is visible at a glance.
   ok(sn.cashflowEyebrow && sn.eyebrow &&
-     sn.cashflowEyebrow.replace(/^CASH FLOW/, "") === sn.eyebrow.replace(/^NET WORTH/, ""),
+     sn.cashflowEyebrow.replace(/^CASH FLOW/, "") === sn.eyebrow.replace(/^GAIN/, ""),
      "R5 named identically to CASH FLOW · MONTHLY, which sits right below it",
      { nwm: sn.eyebrow, cf: sn.cashflowEyebrow });
 
+  // Both cards ignore the exclusion filters — this one because snapshots are
+  // recorded unfiltered, CASH FLOW because it reads the sheets directly. With a
+  // filter on they will not match the Overview, and nothing said so.
+  const notes = await p.evaluate(() => {
+    const note = (id) => {
+      const el = document.querySelector("#" + id + " .mic-exclusion-note");
+      return el ? el.textContent.replace(/\s+/g, " ").trim() : null;
+    };
+    return { nwm: note("net-worth-monthly-card"), cf: note("monthly-invest-cat-card") };
+  });
+  ok(/exclusion filters are not applied/i.test(notes.nwm || ""),
+     "R8 GAIN · MONTHLY says the exclusion filters do not reach it", notes);
+  ok(notes.cf === notes.nwm,
+     "R9 and CASH FLOW · MONTHLY says it identically — the two sit one above " +
+     "the other, so a difference in wording reads as a difference in meaning",
+     notes);
+
   const backToAll = await pickPortfolio("all");
-  ok(/NET WORTH . MONTHLY$/.test(backToAll.eyebrow || ""),
+  ok(/GAIN . MONTHLY$/.test(backToAll.eyebrow || ""),
      "R6 and the name is dropped again on returning to the household",
      backToAll.eyebrow);
 
