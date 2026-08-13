@@ -18,8 +18,12 @@ const SHEETS = {
     ["1-Jan-2025", "Trisha", "Fund A", "Buy", "500", "10"]],
   "wf-mfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Scheme Code", "ISIN"],
     ["Fund A", "Equity", "Flexi Cap", "100001", "INFA"]],
-  "wf-stocksetf-data": [TXN],
-  "wf-stocksetfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Market Segment", "Region", "Identifier", "Sector"]],
+  // A stock whose price history STOPS three months before today. It is the
+  // gap case: lookupIndexPrice gives up after five days, and the holding used
+  // to be dropped from the total outright for every date after that.
+  "wf-stocksetf-data": [TXN, ["1-Jan-2025", "Snnehal", "GAPPY", "Buy", "100", "50"]],
+  "wf-stocksetfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Market Segment", "Region", "Identifier", "Sector"],
+    ["GAPPY", "Equity", "Large Cap", "Stock", "India", "GAPPY", "Misc"]],
   "wf-fd-data": [["Transaction Date", "Portfolio Name", "Bank", "Instrument Name", "Instrument Category",
     "Instrument Sub Category", "Transaction Type", "Invested Amount", "Maturity Date/Sell Date", "Rate of Return", "Grams"]],
   "wf-fixedincome-data": [["Transaction Date", "Portfolio Name", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Amount"]],
@@ -30,6 +34,8 @@ const DAYS = (() => { const o = []; const d = new Date("2025-01-01T00:00:00"), e
     d.setDate(d.getDate() + 1); } return o; })();
 const dmy = (i) => { const [y, m, d] = i.split("-"); return `${d}-${m}-${y}`; };
 const nav = (i) => (10 + (new Date(i).getMonth() + 1) * 0.25).toFixed(4);
+// GAPPY is priced up to here and never again.
+const GAP_FROM = DAYS[Math.max(0, DAYS.length - 60)];
 
 let pass = 0, fail = 0;
 const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
@@ -52,8 +58,12 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
   await p.route("**/amfi_isin_map.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(), data: { INFA: "100001" } })));
   await p.route("**/amfi_nav.json*", (r) => r.fulfill(j({ fetchedAt: Date.now(),
     data: { "100001": { date: "01-Aug-2026", nav: nav("2026-08-01") } } })));
+  // No LIVE price for GAPPY either, so the carry-forward is the only thing that
+  // can keep it on the chart. With a live price the drop would be masked.
   await p.route("**/stock_prices.json*", (r) => r.fulfill(j({ prices: { __USD_INR__: { price: 84 } }, usd_inr_history: {}, index_history: {} })));
-  await p.route("**/stock_history.json*", (r) => r.fulfill(j({ stock_history: {} })));
+  await p.route("**/stock_history.json*", (r) => r.fulfill(j({ stock_history: {
+    GAPPY: { currency: "INR", prices: Object.fromEntries(
+      DAYS.filter((d) => d <= GAP_FROM).map((d) => [d, 50])) } } })));
 
   // A stub that REMEMBERS its x-window, so the assertions can read what the
   // picker actually asked the chart to show. A no-op stub would let every
@@ -238,6 +248,57 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
   const back = await state();
   ok(back.allActive && back.min === undefined && back.btnHidden === true,
      "A12 All time puts the full range back and hides the picker again", back);
+
+  // A holding whose price series ends must hold its last value, not vanish.
+  //
+  // Market movement is a RESIDUAL, so a dropped holding does not read as "we do
+  // not know" — it reads as the position becoming worthless, and then as an
+  // equal gain when it prices again. One gap, two wrong months, both blamed on
+  // the market. GAPPY is 100 units at 50 = 5,000 and has no live price, so the
+  // carry-forward is the only thing that can keep it counted.
+  const tail = await p.evaluate(() => {
+    const c = window.__wfPortfolioValueChart;
+    const pts = c.data.datasets[0].data.filter((q) => q && q.y != null);
+    const ys = pts.map((q) => q.y);
+    return { last: ys[ys.length - 1], min: Math.min(...ys), max: Math.max(...ys), n: ys.length };
+  });
+  // Back to the household. An earlier step selects Trisha, who does not own
+  // GAPPY at all — leaving it selected made every assertion below true of a
+  // series the unpriced holding was never in.
+  await p.evaluate(() => {
+    const btn = document.querySelector('#portfolio-pills [data-ov-portfolio="all"]')
+      || document.querySelector("#portfolio-pills button");
+    if (btn) btn.click();
+  });
+  await p.waitForTimeout(6000);
+  ok(tail.n > 100, "G1 the series has points to inspect", tail);
+  ok(tail.min >= 5000,
+     "G2 the value never collapses below the unpriced holding's own worth — a " +
+     "drop would take 5,000 out of every date past the end of its history",
+     tail);
+  // Measured AT the boundary rather than as a worst-case step anywhere: the
+  // final point is snapped to the Overview total and legitimately jumps, so a
+  // whole-series maximum catches that instead of the thing under test.
+  const edge = await p.evaluate((gap) => {
+    const pts = window.__wfPortfolioValueChart.data.datasets[0].data
+      .filter((q) => q && q.y != null);
+    const iso = (x) => new Date(x).toISOString().slice(0, 10);
+    let before = null, after = null;
+    for (const q of pts) {
+      const d = iso(q.x);
+      if (d <= gap) before = q.y;
+      // Well past lookupIndexPrice's five-day reach, so the price is genuinely
+      // gone by here rather than merely a few days stale.
+      if (after === null && d > gap && (new Date(d) - new Date(gap)) > 12 * 864e5) after = q.y;
+    }
+    return { before, after, drop: before != null && after != null ? before - after : null };
+  }, GAP_FROM);
+  ok(edge.before != null && edge.after != null,
+     "G3 there are points either side of the price gap to compare", edge);
+  ok(edge.drop != null && Math.abs(edge.drop) < 2500,
+     "G3b and the total does not fall by the unpriced holding's 5,000 when its " +
+     "prices run out — that fall is what dropping it looks like, and it would " +
+     "be reported as a market loss and then an equal market gain", edge);
 
   ok(errs.length === 0, "no page errors", errs.slice(0, 3));
 

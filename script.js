@@ -10421,7 +10421,20 @@
             var seUnits = meta.units[i] || 0;
             var price = meta.histPrices ? lookupIndexPrice(meta.histPrices, dateStr) : null;
             if (!price) price = meta.livePrice;
-            if (!price) continue;
+            // Carry the last price forward rather than dropping the holding.
+            //
+            // lookupIndexPrice gives up after five calendar days, and `continue`
+            // used to remove the position from the total entirely for that date.
+            // Because market movement is a RESIDUAL — everything the other terms
+            // do not explain — a gap did not read as "we do not know", it read as
+            // the holding having become worthless and then, on the next priced
+            // date, as an equal gain. One gap, two wrong months, both blamed on
+            // the market. A price a few days stale is wrong by whatever the
+            // market did in between; a dropped holding is wrong by its entire
+            // value.
+            if (!price) price = meta.lastPrice;
+            if (!price) continue;          // never priced at all: genuinely unknown
+            meta.lastPrice = price;
             var priceInr = meta.isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
             if (seUnits > UNITS_EPSILON) total += seUnits * priceInr;
             // Same rule, and the same INR price: the flow can never disagree with
@@ -16711,7 +16724,11 @@
         if (!(units > UNITS_EPSILON)) continue;
         var price = m.histPrices ? lookupIndexPrice(m.histPrices, dateStr) : null;
         if (!price) price = m.livePrice;
+        // Same carry-forward as the chart, and it has to be the same or the
+        // reconstruction and the drawing would disagree about a gap.
+        if (!price) price = m.lastPrice;
         if (!price) continue;
+        m.lastPrice = price;
         total += units * (m.isUsd ? price * (v.usdInrHistMap[dateStr] || v.usdInrToday) : price);
       }
       return { x: date, y: total };
@@ -16798,12 +16815,15 @@
       var isUsd = hist ? hist.currency === "USD" : !!(live && live.currency === "USD");
       var units = _ff(seByTicker[ticker], timeline, "cumulativeUnits");
       var bucket = bucketByTicker[ticker] || "equity";
+      var lastPrice = null;                 // carried forward across a price gap
       dates.forEach(function (d) {
         var i = idxByDate[d], u = units[i] || 0;
         if (!(u > UNITS_EPSILON)) return;
         var price = hist && hist.prices ? lookupIndexPrice(hist.prices, d) : null;
         if (!price) price = live ? live.price : null;
+        if (!price) price = lastPrice;
         if (!price) return;
+        lastPrice = price;
         add(d, bucket, u * (isUsd ? price * (v.usdInrHistMap[d] || v.usdInrToday) : price));
       });
     });
