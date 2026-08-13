@@ -442,8 +442,18 @@
     // Exactly the months buildMonthlyChange charged this bar for. Falling back
     // to the bar's own month when either end is unlabelled keeps a caller that
     // hands over bare rows working, rather than throwing inside a panel.
+    // Bought and sold are carried SEPARATELY, as { in, out } per category, and
+    // netted only where the arithmetic needs it.
+    //
+    // Only the net moves net worth, so only the net can come out of the market
+    // figure. But reporting the net under the heading "Invested" put a number
+    // beside CASH FLOW · MONTHLY's gross one, under the same word, with no way
+    // to see why they differed: a month that bought 86,878 of equity and sold
+    // 31,502 read as 55,376 here and 86,878 there. Netting also erases the
+    // difference between a quiet month and one that bought and sold ten lakh.
+    // Both figures are reported; the market column still uses in − out.
     var src = contribByCatByMonth || {};
-    var contrib = {};
+    var flow = {};
     var months = (prevRow.month && row.month) ? eachMonthAfter(prevRow.month, row.month)
                                               : (row.month ? [row.month] : []);
     months.forEach(function (m) {
@@ -451,7 +461,16 @@
       if (!g) return;
       Object.keys(g).forEach(function (cat) {
         var k = catLabel(cat);
-        contrib[k] = (contrib[k] || 0) + (Number(g[cat]) || 0);
+        var v = g[cat];
+        if (!flow[k]) flow[k] = { in: 0, out: 0 };
+        // A bare number is money in, nothing out — the shape this took before
+        // redemptions were reported, and what a caller with only one figure has.
+        if (v && typeof v === "object") {
+          flow[k].in += Number(v.in) || 0;
+          flow[k].out += Number(v.out) || 0;
+        } else {
+          flow[k].in += Number(v) || 0;
+        }
       });
     });
     var rows = [], attributed = 0;
@@ -462,12 +481,13 @@
       // accrual and a savings balance are not equities or metal.
       var inc = c.key === "fixed_income" ? (Number(interest) || 0) : 0;
       var idl = c.key === "fixed_income" ? (Number(idle) || 0) : 0;
-      var con = Number(contrib[c.label]) || 0;
+      var f = flow[c.label] || { in: 0, out: 0 };
+      var con = round2(f.in - f.out);
       var mkt = round2((close - open) - con - inc - idl);
-      if (!open && !close && !con && !inc && !idl) return;   // nothing here at all
+      if (!open && !close && !f.in && !f.out && !inc && !idl) return;   // nothing here at all
       rows.push({ category: c.label, opening: round2(open), closing: round2(close),
-                  contributions: round2(con), interest: round2(inc),
-                  idle: round2(idl), market: mkt });
+                  bought: round2(f.in), sold: round2(f.out), contributions: con,
+                  interest: round2(inc), idle: round2(idl), market: mkt });
       attributed += mkt;
     });
     attributed = round2(attributed);

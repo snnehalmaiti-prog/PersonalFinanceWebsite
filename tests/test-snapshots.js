@@ -547,6 +547,36 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
   eq(b.rows[0].market, 5000, "CC7 the contribution comes out before the rest is called market");
   eq(b.rows[0].contributions, 20000, "CC8 and is reported beside it");
   eq(b.residual, 0, "CC9 reconciling");
+  eq(b.rows[0].bought, 20000,
+     "CC9a a bare number is money in — the shape a caller with only one figure has");
+  eq(b.rows[0].sold, 0, "CC9b and nothing out");
+
+  // A month that BOUGHT and SOLD. The reported symptom: 86,878 of equity bought
+  // and 31,502 sold showed as 55,376 here and 86,878 on CASH FLOW · MONTHLY,
+  // under the same word, with nothing on screen explaining the gap. Both
+  // figures are now reported; only the net may reach the market column, since
+  // only the net moved the net worth.
+  const t = S.categoryChange(row("2026-07-31", 160000, 0, 0, 4624),
+                             row("2026-06-30", 100000, 0, 0),
+                             { "2026-07": { Equity: { in: 86878, out: 31502 } } }, 0, 0);
+  eq(t.rows[0].bought, 86878,
+     "CC9c Invested is money IN, the same figure CASH FLOW · MONTHLY shows " +
+     "under that word — not the net, which read lower for no visible reason");
+  eq(t.rows[0].sold, 31502, "CC9d and what was sold is reported beside it rather than folded in");
+  eq(t.rows[0].contributions, 55376, "CC9e the net is still carried, for the arithmetic");
+  eq(t.rows[0].market, 4624,
+     "CC9f which is what comes out of market — netting is right for the sum " +
+     "and wrong for the label, so it is done for one and not the other");
+  eq(t.residual, 0, "CC9g and the month still reconciles");
+
+  // Buying and selling the same amount is not a quiet month, and must not
+  // render as one.
+  const u = S.categoryChange(row("2026-07-31", 100000, 0, 0, 0),
+                             row("2026-06-30", 100000, 0, 0),
+                             { "2026-07": { Equity: { in: 1000000, out: 1000000 } } }, 0, 0);
+  eq(u.rows[0].bought, 1000000, "CC9h ten lakh in and ten lakh out is still reported");
+  eq(u.rows[0].sold, 1000000, "CC9i on both sides");
+  eq(u.rows[0].market, 0, "CC9j while the net effect on the month was nothing");
 
   // A deposit that only accrued: interest, not market, and only Fixed Income
   // can carry it.

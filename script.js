@@ -16829,16 +16829,21 @@
     try {
       var d = buildMonthlyInvestCatData(portfolio || "all");
       if (!d) return out;
-      function fold(src, sign) {
+      // Kept apart rather than netted here: the panel reports what was bought
+      // and what was sold, so its "Invested" is the same figure CASH FLOW ·
+      // MONTHLY shows under that word. categoryChange nets them for the market
+      // arithmetic, where only the net belongs.
+      function fold(src, key) {
         Object.keys(src || {}).forEach(function (m) {
           out[m] = out[m] || {};
           Object.keys(src[m]).forEach(function (cat) {
-            out[m][cat] = (out[m][cat] || 0) + sign * (src[m][cat] || 0);
+            if (!out[m][cat]) out[m][cat] = { in: 0, out: 0 };
+            out[m][cat][key] += Number(src[m][cat]) || 0;
           });
         });
       }
-      fold(d.byMonthGrp, 1);
-      fold(d.byMonthGrpOut, -1);
+      fold(d.byMonthGrp, "in");
+      fold(d.byMonthGrpOut, "out");
     } catch (e) {}
     return out;
   }
@@ -17077,15 +17082,20 @@
           ? tot("Unreconciled", _nwmSigned(res.residual), res.residual < 0) : "");
     }
 
+    // Invested and Withdrawn are shown separately, and Invested means exactly
+    // what it means on CASH FLOW \u00b7 MONTHLY \u2014 money in, before any sales. The
+    // net of the two is what the Market column has been reduced by.
     var html = '<table class="mic-txn-table"><thead><tr>' +
       "<th>Category</th><th class=\"num\">Opening</th><th class=\"num\">Invested</th>" +
+      "<th class=\"num\">Withdrawn</th>" +
       "<th class=\"num\">Interest</th><th class=\"num\">Idle cash</th>" +
       "<th class=\"num\">Market</th><th class=\"num\">Closing</th>" +
       "</tr></thead><tbody>";
     res.rows.forEach(function (r) {
       html += "<tr><td>" + escapeHtml(r.category) + "</td>" +
         '<td class="num">' + formatCurrency(r.opening) + "</td>" +
-        '<td class="num">' + (r.contributions ? _nwmSigned(r.contributions) : "\u2014") + "</td>" +
+        '<td class="num">' + (r.bought ? _nwmSigned(r.bought) : "\u2014") + "</td>" +
+        '<td class="num out">' + (r.sold ? _nwmSigned(-r.sold) : "\u2014") + "</td>" +
         '<td class="num">' + (r.interest ? _nwmSigned(r.interest) : "\u2014") + "</td>" +
         '<td class="num">' + (r.idle ? _nwmSigned(r.idle) : "\u2014") + "</td>" +
         '<td class="num ' + (r.market < 0 ? "negative" : "mic-hs-pos") + '">' +
@@ -17102,6 +17112,27 @@
         "not account for. It should be zero \u2014 they are recorded alongside " +
         "the total \u2014 so a figure here means one of the two months' columns " +
         "does not sum to its own recorded total." + "</p>";
+    }
+    // Snapshots are recorded unfiltered, on purpose — recorded history does not
+    // change because of what is hidden on screen. So with an exclusion on, the
+    // Account Value chart and these figures are deliberately different totals,
+    // and nothing on screen said so.
+    //
+    // Worse, the two disagree about what "fixed income" even means. The toggle
+    // drops the FD SHEET (deposits, provident fund); these rows are grouped by
+    // each instrument's Instrument Category. A debt fund in the equity sheet is
+    // therefore still in the chart and already out of Equity here — the same
+    // sheet-versus-category distinction this whole breakdown is built on, with
+    // the toggle on the other side of it.
+    if (isFixedIncomeExcluded() || isSavingsInvestmentExcluded()) {
+      html += '<p class="muted small" style="margin:10px 0 0;">' +
+        "An exclusion is switched on for the dashboard, but not here: snapshots " +
+        "record the whole portfolio, so these figures include what the toggle " +
+        "hides and will not match the Account Value chart while it is on. Note " +
+        "also that the toggle hides a SHEET (deposits and provident fund), " +
+        "while these rows group by each instrument's Instrument Category — " +
+        "so a debt fund kept in the equity sheet is counted by the chart and " +
+        "sits under Fixed Income here." + "</p>";
     }
     bodyEl.innerHTML = html;
     ov.hidden = false;

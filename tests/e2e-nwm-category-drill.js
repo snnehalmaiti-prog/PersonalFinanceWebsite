@@ -226,7 +226,7 @@ const money = (t) => {
 
   // The property the whole design turns on.
   const M = money(drill.totals["Market"]);
-  const sum = (drill.rows || []).reduce((a, r) => a + money(r[5]), 0);
+  const sum = (drill.rows || []).reduce((a, r) => a + money(r[6]), 0);
   ok(Math.abs(sum - M) <= Math.max(2, Math.abs(M) * 0.002),
      "D5 the categories' market figures sum to the bar's — exactly, because both " +
      "are read from the same recorded rows", { rows: sum, market: M });
@@ -236,8 +236,51 @@ const money = (t) => {
   // Interest and idle cash belong to Fixed Income and nowhere else.
   const eq = (drill.rows || []).find((r) => r[0] === "Equity");
   const fi = (drill.rows || []).find((r) => r[0] === "Fixed Income");
-  ok(eq && eq[3] === "—", "D7 Equity never carries interest — it is Fixed Income by definition", eq);
-  ok(fi && money(fi[3]) > 0, "D8 while Fixed Income does", fi);
+  ok(eq && eq[4] === "—", "D7 Equity never carries interest — it is Fixed Income by definition", eq);
+  ok(fi && money(fi[4]) > 0, "D8 while Fixed Income does", fi);
+
+  // Invested must mean what it means on CASH FLOW · MONTHLY.
+  //
+  // That card shows money IN, gross, and does not list withdrawals in its
+  // aggregate view at all. This panel used to report the NET under the same
+  // word, so a month that bought 86,878 of equity and sold 31,502 read 55,376
+  // here and 86,878 there, with nothing on screen accounting for the gap.
+  // June 2024 sells 200 units of Fund A at 12 and buys nothing, so the two
+  // figures are as far apart as they get: nothing in, 2,400 out.
+  const june = await p.evaluate(() => {
+    const sel = document.getElementById("nwm-year");
+    if (sel) { sel.value = "2024"; if (sel.onchange) sel.onchange(); }
+    return new Promise((res) => setTimeout(() => {
+      const c = window.__wfNwmChart;
+      const i = (c.data.labels || []).findIndex((l) => /Jun/.test(l));
+      if (i < 0) return res({ err: "no June bar", labels: c.data.labels });
+      c.options.onClick({}, [{ index: i, datasetIndex: 0 }], c);
+      res({ label: c.data.labels[i],
+            headers: [...document.querySelectorAll("#nwm-drill-body thead th")].map((t) => t.textContent.trim()),
+            rows: [...document.querySelectorAll("#nwm-drill-body tbody tr")]
+              .map((tr) => [...tr.children].map((td) => td.textContent.trim())) });
+    }, 2500));
+  });
+  const jEq = (june.rows || []).find((r) => r[0] === "Equity");
+  ok((june.headers || []).indexOf("Withdrawn") !== -1,
+     "D9 the panel has a Withdrawn column — netting a sale into Invested hid " +
+     "it entirely, and made a month that bought and sold ten lakh look quiet",
+     june.headers);
+  ok(jEq && jEq[2] === "—",
+     "D10 a month that bought nothing shows nothing invested, rather than a " +
+     "negative Invested figure standing in for a sale", jEq);
+  ok(jEq && Math.abs(money(jEq[3]) + 2400) <= 5,
+     "D11 and reports the 2,400 sold in its own column", jEq);
+  // Still reconciles: only the net may reach Market.
+  const jSum = (june.rows || []).reduce((a, r) => a + money(r[6]), 0);
+  const jMkt = await p.evaluate(() => {
+    const el = [...document.querySelectorAll("#nwm-drill-totals .mic-hs-tot")]
+      .find((e) => /Market/.test(e.textContent));
+    return el ? (el.querySelector("b") || {}).textContent : null;
+  });
+  ok(Math.abs(jSum - money(jMkt)) <= Math.max(2, Math.abs(money(jMkt)) * 0.002),
+     "D12 while Market is still reduced by the NET — reporting both figures " +
+     "must not change the arithmetic", { rows: jSum, market: jMkt });
 
   // A month where money actually went IN, which the latest month has none of.
   // March 2024 is the debt fund purchase — 500 units at ₹20, Fixed Income by
@@ -387,6 +430,32 @@ const money = (t) => {
      "G4 while the two rows either side of it are filled normally — the guard " +
      "drops the row it doubts, not the batch it arrived in",
      { filled, bystanders, posted: posted.length });
+
+  // With an exclusion on, the panel and the Account Value chart are measuring
+  // different things, and it took a report to notice that nothing said so.
+  // Set and reload WITHOUT going through load(), which clears localStorage and
+  // would take the toggle with it.
+  await p.evaluate(() => localStorage.setItem("wf-exclude-fixedincome", "true"));
+  await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
+  await p.waitForTimeout(14000);
+  const excl = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    if (!c) return { err: "no chart" };
+    let i = -1; for (let k = c.data.labels.length - 1; k >= 0; k--) {
+      if (c.data.datasets.some((d) => d.data[k] != null)) { i = k; break; } }
+    if (i < 0) return { err: "no filled bar" };
+    c.options.onClick({}, [{ index: i, datasetIndex: 0 }], c);
+    return { body: (document.getElementById("nwm-drill-body") || {}).textContent || "",
+             rows: document.querySelectorAll("#nwm-drill-body tbody tr").length };
+  });
+  ok(!excl.err && excl.rows > 0,
+     "X1 an exclusion does not empty the panel — snapshots are recorded " +
+     "unfiltered, so the history is all still there", excl);
+  ok(/exclusion is switched on/i.test(excl.body),
+     "X2 and the panel says the figures include what the toggle hides, rather " +
+     "than leaving the reader to find the gap against the Account Value chart",
+     excl.body.slice(0, 120));
+  await p.evaluate(() => localStorage.removeItem("wf-exclude-fixedincome"));
 
   ok(errs.length === 0, "no page errors", errs.slice(0, 3));
 
