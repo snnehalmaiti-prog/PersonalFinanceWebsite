@@ -43,10 +43,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- mf_history.json; then
+          # Staged BEFORE comparing: git diff ignores untracked files, so for a
+          # file that has never been committed it reports "no changes"
+          # every time and the commit below never runs. That is how
+          # mf_history.json went months being rebuilt nightly by a green
+          # workflow that never once published it. --cached sees a newly
+          # added file, so this works for the first commit and every one after.
+          git add mf_history.json
+          if git diff --cached --quiet -- mf_history.json; then
             echo "No changes to mf_history.json"
           else
-            git add mf_history.json
             git commit -m "chore: update mf_history.json"
             git push
           fi
