@@ -7747,7 +7747,13 @@
     var csvUrl = type ? toCsvFetchUrl(url, type) : null;
     if (!csvUrl) { onError("query"); return; }
 
-    fetch(csvUrl)
+    // no-store, because the whole point of this call is to read the sheet as it
+    // is NOW. Google serves these exports as cacheable, and the default fetch
+    // cache mode will happily reuse one: a transaction added minutes ago shows
+    // up on the load that fetched it and then vanishes on the next reload, when
+    // the browser answers from its own copy instead of asking Google. Reads as
+    // the app losing the row rather than as a stale cache.
+    fetch(csvUrl, { cache: "no-store" })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.text();
@@ -7837,7 +7843,10 @@
       "https://docs.google.com/spreadsheets/d/" + id +
       "/gviz/tq?gid=" + gid + rangeParam +
       "&headers=1" +
-      "&tqx=out:json;responseHandler:" + callbackName;
+      "&tqx=out:json;responseHandler:" + callbackName +
+      // Same reason as the CSV path, by the only means a JSONP <script> has:
+      // a URL nothing has seen before cannot be answered from cache.
+      "&_=" + Date.now();
 
     timeoutId = setTimeout(function () {
       cleanup();
