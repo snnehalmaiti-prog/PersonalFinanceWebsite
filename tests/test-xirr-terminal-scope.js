@@ -129,9 +129,15 @@ console.log("\nF. The benchmark card reads the whole-sheet value, not the slice"
      "F3 the PERIOD portfolio XIRR (1Y/2Y/3Y/5Y/10Y) marks the MF sheet in the scope on screen");
   ok(/function _ovScopedMfCurrent\(\) \{\s*return \(isEquityExcluded\(\) \? 0 : _ovSlice\.mf\.current\) \+\s*\(isFixedIncomeExcluded\(\) \? 0 : _ovSlice\.debtMf\.current \+ _ovSlice\.commMf\.current\);/.test(SRC),
      "F4 and that scope is the whole sheet whenever no exclusion is on");
+  // F5 used to require this terminal to be _ovAggregate().current — the header's
+  // total value. Right scope, wrong set: the aggregate also carries Savings/
+  // Investment Corpus and the EPF sheet, which appear in no flow list, so the
+  // benchmark card paid back money that never went in and read +13.89% where the
+  // Overview read +8.57%. Both now close with the SAME flow-matched terminal,
+  // which is what "both sides agree" was always meant to guarantee.
   ok(/var currentVal = scopedReturnTerminal\(\);/.test(SRC) &&
-     /function scopedReturnTerminal\(\)[\s\S]{0,200}_ovAggregate\(\)\.current/.test(SRC),
-     "F5 the all-time terminal is the Overview's own current value, so both sides agree");
+     /function scopedReturnTerminal\(\)[\s\S]{0,200}scopedOverviewXirrTerminal\(selected\)/.test(SRC),
+     "F5 the all-time terminal is the one the Overview's own XIRR uses, so both sides agree");
 
   // The opening mark is the other half of the pair: computePortfolioValueAtDate
   // prices every held instrument, so a terminal that dropped a class made the

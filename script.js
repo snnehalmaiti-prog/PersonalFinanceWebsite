@@ -4425,12 +4425,18 @@
     return flows;
   }
 
-  // The terminal for those flows: the CURRENT value the Overview header is showing.
-  // Taking it from the aggregator rather than re-summing slices here is what keeps
-  // the two in scope with each other under every exclusion.
+  // The terminal for those flows — the one the Overview header's own XIRR uses, so
+  // the same quantity shown in two places can never disagree.
+  //
+  // This used to be _ovAggregate().current, the header's total value. That is the
+  // right SCOPE but the wrong SET: the aggregate also carries Savings/Investment
+  // Corpus and the EPF sheet, whose balance updates are not cash-flow events and
+  // appear in no flow list. Paying them back returned money that never went in and
+  // lifted the benchmark card's portfolio XIRR above the Overview's — +13.89%
+  // against +8.57% on the integration fixture, for the same portfolio.
   function scopedReturnTerminal() {
-    var cur = _ovAggregate().current;
-    return isFinite(cur) && cur > 0 ? cur : 0;
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    return scopedOverviewXirrTerminal(selected);
   }
 
   // The Overview header's XIRR, over exactly the holdings the exclusion in force
@@ -4475,9 +4481,17 @@
     var flows = buildScopedReturnFlows(selected);
     if (!flows.length) return { ready: true, xirr: null };
     var terminal = scopedOverviewXirrTerminal(selected);
-    if (terminal <= 0) return { ready: false, xirr: null };
+    if (terminal <= 0) {
+      // Zero value with nothing ever paid back is not a portfolio state — it is a
+      // leg that hasn't resolved yet, and pairing live buys with a zero payout
+      // would flash a ~-100% return. A fully EXITED book does belong here: its
+      // sale proceeds are already in the flows and it needs no terminal at all.
+      var returned = 0;
+      flows.forEach(function (f) { if (f.amount > 0) returned += f.amount; });
+      if (returned <= 0) return { ready: false, xirr: null };
+    }
     var withTerminal = flows.slice();
-    withTerminal.push({ date: new Date(), amount: terminal });
+    if (terminal > 0) withTerminal.push({ date: new Date(), amount: terminal });
     return { ready: true, xirr: calculateXIRR(withTerminal) };
   }
 
@@ -4596,6 +4610,168 @@
   // with Exclude Fixed Income on, the equity holdings alone. (Deposit-style fixed
   // income — FD/PF/EPF — has never been part of this series and still isn't: it
   // has no priced NAV history to chain returns from.)
+  // ─── The deposit + physical-gold leg of the TWR series ────────────────────
+  // Fixed deposits, PF/EPF and physical gold have no quoted NAV to chain returns
+  // from, so the TWR NAV series left them out altogether. Harmless while the
+  // Benchmark card was equity-only. Under "Exclude Equity" it is not: those
+  // holdings ARE the portfolio on screen, and dropping them left the Portfolio
+  // CAGR measuring the gold/debt FUND sleeve alone — the most volatile slice of
+  // the scope, annualised as though it were the whole book. A portfolio showing
+  // +7.20% XIRR reported a +44.59% CAGR beside it, over a window that had also
+  // silently shrunk to the sleeve's own (much shorter) life.
+  //
+  // They can be time-weighted perfectly well; the value just comes from an
+  // accrual rather than a price:
+  //   term deposits — principal compounded at the deposit's own rate up to the
+  //                   sample date, via fdMaturityValue (the same accrual the
+  //                   maturity proceeds use, so the two can't disagree), and
+  //                   gone once matured — the proceeds are a cash flow instead;
+  //   PF/EPF        — the value timeline, contributions plus credited interest;
+  //   physical gold — grams held × the gold price on the sample date.
+  // The cash flows are the existing XIRR builders, which already keep credited
+  // interest OUT: interest is return, not a contribution, and subtracting it as
+  // a flow would erase exactly the thing being measured.
+  //
+  // Returns null when the leg is out of scope or empty. Otherwise the caller
+  // MUST await prime(sampleDates) — which fetches the dated gold prices — before
+  // reading valueAt/flowIn.
+  function buildUnpricedTwrLeg(selected) {
+    if (isFixedIncomeExcluded()) return null;
+    var fdRows = getSheetRows("fd");
+    if (!fdRows || !fdRows.length) return null;
+
+    var header = fdRows[0].map(normalizeText);
+    var pIdx = header.indexOf("portfolio name"),
+        cIdx = header.indexOf("instrument category"),
+        sIdx = header.indexOf("instrument sub category"),
+        aIdx = header.indexOf("invested amount"),
+        dIdx = header.indexOf("transaction date"),
+        rIdx = header.indexOf("rate of return"),
+        gIdx = header.indexOf("grams");
+    var mIdx = header.indexOf("maturity date/sell date");
+    if (mIdx === -1) mIdx = header.indexOf("maturity date");
+    if (dIdx === -1) return null;
+
+    var deposits = [], goldLots = [];
+    fdRows.slice(1).forEach(function (row) {
+      if (pIdx !== -1 && selected !== "all" && normalizeText(row[pIdx]) !== normalizeText(selected)) return;
+      var buy = parseFlexibleDate(row[dIdx]);
+      if (!buy) return;
+      // Same column for both: an FD matures, a gold lot is sold.
+      var end = mIdx !== -1 ? parseFlexibleDate(row[mIdx]) : null;
+      var cat = cIdx !== -1 ? normalizeText(row[cIdx]) : "";
+      if (cat === "commodity") {
+        var grams = gIdx !== -1 ? parseNumber(row[gIdx]) : 0;
+        if (grams) goldLots.push({ buy: buy, sell: end, grams: grams });
+        return;
+      }
+      if (cat !== "fixed income") return;
+      // Term deposits only. Savings Account / Investment Corpus carry a rolling
+      // balance, not an investment, and have never been part of any return here.
+      if (sIdx === -1 || !_fiIsTermDeposit(normalizeText(row[sIdx]))) return;
+      var principal = aIdx !== -1 ? parseNumber(row[aIdx]) : 0;
+      if (!principal) return;
+      deposits.push({
+        principal: principal, buy: buy, maturity: end,
+        rate: rIdx !== -1 ? parsePercentRate(row[rIdx]) : 0
+      });
+    });
+
+    var pfEvents = buildFdValueEvents(selected, true) || [];
+    if (!deposits.length && !goldLots.length && !pfEvents.length) return null;
+
+    var depositFlows = buildFdMaturedXirrCashFlows(fdRows, selected)
+      .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+
+    var firstDate = null;
+    function seen(d) { if (d && (!firstDate || d < firstDate)) firstDate = d; }
+    deposits.forEach(function (x) { seen(x.buy); });
+    goldLots.forEach(function (x) { seen(x.buy); });
+    if (pfEvents.length) seen(pfEvents[0].date);
+
+    // Filled by prime(). Gold stays out of BOTH sides until then, and stays out
+    // of both permanently if every price fetch fails — a contribution that
+    // outlives its valuation reads as money that vanished.
+    var goldPriceAt = null;
+    var goldFlows = [];
+
+    function prime(sampleDates) {
+      if (!goldLots.length) return Promise.resolve();
+      return fetchGoldPriceINRPerGram().catch(function () { return null; })
+        .then(function (currentGoldPrice) {
+          if (!currentGoldPrice) return null;
+          return Promise.all([
+            Promise.all(sampleDates.map(function (date) {
+              var key = formatDateISO(date);
+              return fetchXauInrForDate(key)
+                .then(function (price) { return { key: key, price: price }; })
+                .catch(function () { return { key: key, price: null }; });
+            })),
+            buildCommodityXirrCashFlows(fdRows, selected, currentGoldPrice).catch(function () { return []; })
+          ]);
+        })
+        .then(function (res) {
+          if (!res) return;
+          var samplesOut = res[0];
+          // A missing price is a gap in the data, not gold becoming worthless:
+          // carry the last known price forward, and back-fill any leading gap
+          // with the first one that did resolve.
+          var byKey = {}, carry = null;
+          samplesOut.forEach(function (r) {
+            if (r.price) carry = r.price;
+            if (carry) byKey[r.key] = carry;
+          });
+          if (!carry) return; // nothing resolved at all — gold leaves the leg
+          var back = null;
+          for (var i = samplesOut.length - 1; i >= 0; i--) {
+            if (byKey[samplesOut[i].key]) back = byKey[samplesOut[i].key];
+            else if (back) byKey[samplesOut[i].key] = back;
+          }
+          goldPriceAt = byKey;
+          goldFlows = (res[1] || []).filter(function (f) { return !f._terminal; });
+        });
+    }
+
+    function valueAt(date) {
+      var total = 0;
+      deposits.forEach(function (x) {
+        if (x.buy > date) return;
+        if (x.maturity && x.maturity <= date) return; // matured: now a cash flow
+        total += fdMaturityValue(x.principal, x.buy, date, x.rate);
+      });
+      total += lastAtOrBefore(pfEvents, date, "cumulativeValue") || 0;
+      if (goldPriceAt) {
+        var price = goldPriceAt[formatDateISO(date)];
+        if (price) {
+          var grams = 0;
+          goldLots.forEach(function (x) {
+            if (x.buy > date) return;
+            if (x.sell && x.sell <= date) return;
+            grams += x.grams;
+          });
+          total += grams * price;
+        }
+      }
+      return total;
+    }
+
+    // (from, to] — the same half-open interval tradedUnitsInRange uses, so the
+    // priced and unpriced legs attribute a flow to the same month.
+    function flowIn(from, to) {
+      var net = 0;
+      function add(f) {
+        // XIRR signs money IN as negative; a TWR net flow is positive for a
+        // contribution, which is what the caller subtracts from the end value.
+        if (f.date > from && f.date <= to) net += -f.amount;
+      }
+      depositFlows.forEach(add);
+      goldFlows.forEach(add);
+      return net;
+    }
+
+    return { firstDate: firstDate, prime: prime, valueAt: valueAt, flowIn: flowIn };
+  }
+
   function computePortfolioTwrNavSeries(selected) {
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var unitEvents = buildInstrumentUnitEvents(selected);
@@ -4640,6 +4816,12 @@
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
+        // Deposits and physical gold are part of the portfolio being measured
+        // whenever Fixed Income/Commodity is on screen — including, crucially,
+        // the case where they are ALL of it and there is no priced instrument to
+        // set the window at all.
+        var leg = buildUnpricedTwrLeg(selected);
+
         var firstDate = null;
         instruments.forEach(function (name) {
           var evs = unitEvents[name];
@@ -4649,6 +4831,7 @@
           var evs = seUnitEventsByTicker[ticker].events;
           if (evs.length && (!firstDate || evs[0].date < firstDate)) firstDate = evs[0].date;
         });
+        if (leg && leg.firstDate && (!firstDate || leg.firstDate < firstDate)) firstDate = leg.firstDate;
         if (!firstDate) return null;
 
         var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -4657,6 +4840,7 @@
         while (d <= today) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
         if (!samples.length || samples[samples.length - 1] < today) samples.push(today);
 
+        return (leg ? leg.prime(samples) : Promise.resolve()).then(function () {
         // Each sample records the price it valued every instrument at, so the
         // period's cash flow can be measured with those same prices. Measuring the
         // flow with the price recorded on the sheet instead let the gap between the
@@ -4687,6 +4871,7 @@
             priceOf["se|" + normalizeText(entry.instrument || "")] = priceInr;
             if (units > UNITS_EPSILON) total += units * priceInr;
           });
+          if (leg) total += leg.valueAt(date);
           if (total > 0) portfolioValues.push({ date: date, value: total, priceOf: priceOf });
         });
 
@@ -4710,6 +4895,7 @@
             var u = tradedUnitsInRange(byDate, prevPt.date, curPt.date);
             if (u) netFlow += u * curPt.priceOf[key];
           });
+          if (leg) netFlow += leg.flowIn(prevPt.date, curPt.date);
           var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
           // C4: reflect real drawdowns instead of flattening them. Previously a
           // collapse interval (g <= 0, i.e. netted value fell to/through zero) was
@@ -4722,6 +4908,7 @@
           navSeries.push({ date: curPt.date, nav: navSeries[m - 1].nav * g });
         }
         return navSeries;
+        });
       });
     });
   }
@@ -4964,6 +5151,12 @@
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
 
+        // Deposits and physical gold, on the same terms as the CAGR series: they
+        // are part of the portfolio being measured whenever Fixed Income and
+        // Commodity are on screen, and they also extend the history far enough
+        // back for a long rolling window to exist at all.
+        var leg = buildUnpricedTwrLeg(selected);
+
         // Find earliest transaction date across all asset types
         var firstDate = null;
         instruments.forEach(function (name) {
@@ -4974,6 +5167,7 @@
           var evs = seUnitEventsByTicker[ticker].events;
           if (evs.length && (!firstDate || evs[0].date < firstDate)) firstDate = evs[0].date;
         });
+        if (leg && leg.firstDate && (!firstDate || leg.firstDate < firstDate)) firstDate = leg.firstDate;
         if (!firstDate) return null;
 
         // Monthly sample dates from firstDate to today
@@ -4983,6 +5177,7 @@
         while (d <= today) { samples.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
         if (!samples.length || samples[samples.length - 1] < today) samples.push(today);
 
+        return (leg ? leg.prime(samples) : Promise.resolve()).then(function () {
         // Portfolio value at each sample date
         var portfolioValues = [];
         samples.forEach(function (date) {
@@ -5008,6 +5203,7 @@
             priceOf["se|" + normalizeText(entry.instrument || "")] = priceInr;
             if (units > UNITS_EPSILON) total += units * priceInr;
           });
+          if (leg) total += leg.valueAt(date);
           if (total > 0) portfolioValues.push({ date: date, value: total, priceOf: priceOf });
         });
 
@@ -5041,6 +5237,7 @@
             var u = tradedUnitsInRange(byDate, prevPt.date, curPt.date);
             if (u) netFlow += u * curPt.priceOf[key];
           });
+          if (leg) netFlow += leg.flowIn(prevPt.date, curPt.date);
           // End-of-period flow assumption: period growth = (V_t - F_t) / V_{t-1}
           var g = prevPt.value > 0 ? (curPt.value - netFlow) / prevPt.value : 1;
           if (!isFinite(g) || g <= 0) g = 1; // guard against degenerate months
@@ -5086,6 +5283,7 @@
           return { min: arr[0], median: _median, max: arr[arr.length - 1], count: arr.length };
         }
         return { portfolio: stats(portRolling), index: idxRolling.length ? stats(idxRolling) : null };
+        });
       });
     });
   }
@@ -5249,13 +5447,33 @@
       var portVal, idxVal;
       if (mode === "cagr") {
         // Portfolio CAGR = true time-weighted CAGR over the period, so it compares
-        // like-for-like with the index's point-to-point CAGR (and with the
-        // Growth-of-₹100 chart). XIRR (money-weighted) is shown in XIRR mode.
+        // like-for-like with the index's point-to-point CAGR. XIRR
+        // (money-weighted) is shown in XIRR mode.
+        //
+        // It no longer tracks the Growth-of-₹100 chart under an exclusion, and
+        // deliberately so: that chart is a pure MF + Stocks/ETF vs equity-index
+        // comparison by construction (see renderValueChart), while this figure
+        // covers whatever the exclusion leaves on screen — deposits and physical
+        // gold included, since otherwise "Exclude Equity" annualises the gold
+        // fund sleeve and calls it the portfolio.
         portVal = (cagrResult && cagrResult.portfolioCagr != null) ? cagrResult.portfolioCagr : null;
         idxVal = cagrResult ? cagrResult.indexCagr : null;
       } else {
         portVal = xirrResult ? xirrResult.portfolioXirr : null;
         idxVal = xirrResult ? xirrResult.indexXirr : null;
+      }
+
+      // computeAlignedCagr falls back to the portfolio's own life when it is
+      // younger than the selected period — a "3Y" button can quietly produce a
+      // 1.6-year window, and annualising a short window is exactly where an
+      // implausible figure comes from. Say which window was actually measured
+      // rather than letting the pill's label speak for it.
+      if (subtitleEl && mode === "cagr") {
+        var reqYears = (_period && _period !== "all") ? parseFloat(_period) : null;
+        var actualYears = cagrResult ? cagrResult.years : null;
+        subtitleEl.textContent = (reqYears && actualYears && actualYears < reqYears * 0.95)
+          ? "point-to-point CAGR over " + actualYears.toFixed(1) + "y — the portfolio's full history, shorter than the " + reqYears + "Y selected"
+          : "point-to-point CAGR over selected period";
       }
 
       portfolioXirrEl.textContent = fmtRate(portVal);
