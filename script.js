@@ -2182,6 +2182,16 @@
 
   function _ovCurrentPortfolio() { return localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all"; }
 
+  // Whole-sheet current value per source sheet, i.e. before the by-category split
+  // that moves debt and gold holdings out of `mf`/`se` into their own slices.
+  //
+  // XIRR terminals need these, never the split slices: the cash flows are read
+  // from the sheets and carry no Instrument Category, so the money that went into
+  // a debt or gold fund IS in the flows and has to come back out at the end.
+  // Pairing full flows with a split terminal understates every XIRR on the page.
+  function _ovMfAllCurrent() { return _ovSlice.mf.current + _ovSlice.debtMf.current + _ovSlice.commMf.current; }
+  function _ovSeAllCurrent() { return _ovSlice.se.current + _ovSlice.debtSe.current + _ovSlice.commSe.current; }
+
   // Apply a partial slice for one asset class. `source` names the originating
   // flow purely for diagnostics. Fields absent from `patch` are left untouched —
   // a flow that only knows the day change must not blank out the current value.
@@ -4380,7 +4390,7 @@
     if (_ovFlows.overviewBaseFlows && _ovFlows.overviewBaseFlows.length) {
       flowsWithTerminal = _ovFlows.overviewBaseFlows.concat(_ovFlows.seXirrFlows || []);
     } else {
-      var currentVal = _ovSlice.mf.current + (_ovSlice.se.current > 0 ? _ovSlice.se.current : 0) + (isFixedIncomeExcluded() ? 0 : _ovSlice.fi.current) + _ovSlice.comm.current;
+      var currentVal = _ovMfAllCurrent() + (_ovSeAllCurrent() > 0 ? _ovSeAllCurrent() : 0) + (isFixedIncomeExcluded() ? 0 : _ovSlice.fi.current) + _ovSlice.comm.current;
       flowsWithTerminal = allFlows.slice();
       if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
     }
@@ -4399,7 +4409,15 @@
         var startVal = result.value;
         // Terminal value in the same scope: MF current + stocks' current value
         // (post-cutoff purchases now included via computePortfolioValueAtDate).
-        var periodCurrentVal = _ovSlice.mf.current + result.seCurrentIncluded;
+        // Whole-sheet Mutual Fund value, not the equity-only slice: the period
+        // flows below are every Mutual Fund row and the opening mark from
+        // computePortfolioValueAtDate prices every held instrument, debt and gold
+        // funds included. Marking the terminal at the equity slice alone is what
+        // made a period XIRR (1Y/2Y/…) read far below the same window's rolling
+        // return — the debt/gold funds were bought and opened but never paid out.
+        // The Stocks/ETF side needs no such repair: seCurrentIncluded is already
+        // built from every mapped ticker.
+        var periodCurrentVal = _ovMfAllCurrent() + result.seCurrentIncluded;
         // Period cash flows for MF + stocks (buys/sells after the cutoff).
         var periodFlows = [];
         var mfSeFlows = buildXirrCashFlows(equityRows, selected);
@@ -6976,8 +6994,17 @@
             updateOverviewDayChange();
           });
 
+          // The flows are every row of the Mutual Fund sheet — debt funds and gold
+          // funds included, since buildXirrCashFlows does not read Instrument
+          // Category. `total` no longer does: the reclassification above moves the
+          // debt and commodity funds into their own slices. Marking the terminal at
+          // `total` alone therefore paid out only part of what the flows bought, so
+          // every rupee in a debt or gold fund read as money that had vanished —
+          // dragging the Mutual Fund XIRR, the Overview XIRR and the benchmark's
+          // portfolio side down, and the more so the larger that allocation.
+          var mfXirrTerminal = total + debtCurrent + commVal.current;
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
-          if (total > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: total });
+          if (mfXirrTerminal > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: mfXirrTerminal });
           var xirr = calculateXIRR(xirrCashFlows);
           var ovBaseFlows2 = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
           _ovFlows.overviewBaseFlows = ovBaseFlows2;
@@ -16669,7 +16696,12 @@
           _ovFlows.seFlowsINR = seXirrFlows.slice();
           // Store flows WITH terminal so the overview XIRR has a positive terminal to converge on.
           var seXirrFlowsWithTerminal = seXirrFlows.slice();
-          if (totalCurrentINR > UNITS_EPSILON) seXirrFlowsWithTerminal.push({ date: new Date(), amount: totalCurrentINR });
+          // Same scope rule as the Mutual Fund leg: buildSeInrFlows walks every
+          // mapped instrument, so bond ETFs and gold ETFs are among the buys.
+          // totalCurrentINR excludes them (they were split into debtSe/commSe), so
+          // the terminal has to add them back or their money reads as lost.
+          var seXirrTerminal = totalCurrentINR + dbtCurrentINR + cmdCurrentINR;
+          if (seXirrTerminal > UNITS_EPSILON) seXirrFlowsWithTerminal.push({ date: new Date(), amount: seXirrTerminal });
           _ovFlows.seXirrFlows = seXirrFlowsWithTerminal;
           if (seXirrEl) {
             var allFlows = seXirrFlowsWithTerminal;
