@@ -306,17 +306,6 @@
       <div class="avc-card" id="portfolio-value-card" style="flex:1 1 480px;min-width:0;">
         <div class="avc-header">
           <span class="avc-eyebrow" id="pvc-eyebrow">ACCOUNT VALUE</span>
-          <!-- Period picker, on the eyebrow's own line. Same two controls and
-               the same .mic-dropdown-btn sizing the other cards use, so the
-               header reads as one row of pills rather than a new kind of
-               control. "All time" is the default; picking a month reorients
-               the chart to that month's first and last day. -->
-          <div class="avc-period" id="pvc-period-picker">
-            <button id="pvc-alltime" type="button" class="mic-dropdown-btn active">All time
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <select id="pvc-month" class="mic-dropdown-btn mic-year-sel" aria-label="Select month"></select>
-          </div>
           <div class="avc-legend">
             <div class="avc-legend-item">
               <span class="avc-legend-line avc-legend-portfolio"></span>
@@ -335,6 +324,18 @@
           </div>
         </div>
         <p class="avc-subtitle" id="pvc-period">OVER TIME</p>
+        <!-- Period picker, under the title rather than in the header row: the
+             header's right-hand side is already a dense row of figures, and a
+             control wedged between the two competes with them for the same
+             line. "All time" is the default; picking a month reorients the
+             chart to that month's first and last day. Same .mic-dropdown-btn
+             sizing as the other cards' controls. -->
+        <div class="avc-period" id="pvc-period-picker">
+          <button id="pvc-alltime" type="button" class="mic-dropdown-btn active">All time
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <select id="pvc-month" class="mic-dropdown-btn mic-year-sel" data-yp-mode="month" aria-label="Select month"></select>
+        </div>
         <p class="muted small" id="pvc-status" hidden></p>
         <div class="avc-chart-wrap">
           <canvas id="portfolio-value-chart" height="320"></canvas>

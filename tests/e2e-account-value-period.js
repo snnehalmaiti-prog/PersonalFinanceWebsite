@@ -93,34 +93,46 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
     if (!eye || !per || !sel || !ref) return { err: "missing", per: !!per, ref: !!ref };
     const e = eye.getBoundingClientRect(), q = per.getBoundingClientRect(), r = ref.getBoundingClientRect();
     return {
-      sameLine: Math.abs((e.top + e.height / 2) - (q.top + q.height / 2)) <= 6,
-      after: q.left >= e.right - 1,
-      selH: Math.round(sel.getBoundingClientRect().height), refH: Math.round(r.height),
-      selFs: getComputedStyle(sel).fontSize, refFs: getComputedStyle(ref).fontSize,
+      below: q.top >= e.bottom - 1,
+      alignedLeft: Math.abs(q.left - e.left) <= 2,
+      // The BUTTON, not the select: WfYearPicker hides the select outright, so
+      // measuring it reports a height of 0 and the comparison means nothing.
+      selH: Math.round((sel.__wfYpBtn || sel).getBoundingClientRect().height),
+      refH: Math.round((ref.__wfYpBtn || ref).getBoundingClientRect().height),
+      selFs: getComputedStyle(sel.__wfYpBtn || sel).fontSize,
+      refFs: getComputedStyle(ref.__wfYpBtn || ref).fontSize,
     };
   });
-  ok(!geom.err && geom.sameLine, "A1 the picker sits on the same line as ACCOUNT VALUE", geom);
-  ok(!geom.err && geom.after, "A2 and after it, not before or below", geom);
-  ok(Math.abs(geom.selH - geom.refH) <= 2 && geom.selFs === geom.refFs,
-     "A3 at the same size as the Income & Expenses · MONTHLY control", geom);
+  ok(!geom.err && geom.below, "A1 the picker sits below the ACCOUNT VALUE title", geom);
+  ok(!geom.err && geom.alignedLeft,
+     "A2 left-aligned with it, so the two read as one block", geom);
 
   const state = () => p.evaluate(() => {
     const c = window.__wfPortfolioValueChart;
     const sel = document.getElementById("pvc-month");
+    const btn = sel.__wfYpBtn;
     return {
       value: sel.value,
       allActive: document.getElementById("pvc-alltime").classList.contains("active"),
-      options: [...sel.options].map((o) => o.textContent),
+      options: [...sel.options].map((o) => o.value),
+      // What the reader actually sees: the select is hidden once WfYearPicker
+      // is attached, and the button beside it carries the label.
+      btnText: btn ? btn.textContent.trim() : null,
+      btnHidden: btn ? btn.style.display === "none" : null,
+      selVisible: getComputedStyle(sel).display !== "none",
       min: c && c.scales.x.min, max: c && c.scales.x.max,
     };
   });
 
   const first = await state();
-  ok(first.value === "" && first.allActive,
-     "A4 All time is the default", { value: first.value, active: first.allActive });
-  ok(first.options[0] === "All time" && first.options.length > 3,
-     "A5 with the months the data actually spans beneath it — built from the " +
-     "points, so there is no month to pick that would draw an empty chart",
+  ok(first.allActive, "A4 All time is the default", { active: first.allActive });
+  ok(first.btnHidden === true && first.selVisible === false,
+     "A5 and the month picker is hidden while it is on. Reported: the toggle " +
+     "and the picker BOTH read \"All time\", because the select carried an " +
+     "All time option of its own and was never attached to WfYearPicker",
+     { btn: first.btnText, btnHidden: first.btnHidden, selVisible: first.selVisible });
+  ok(first.options.length > 3 && first.options.every((v) => /^\d{4}-\d{2}$/.test(v)),
+     "A6b the options are months the data actually spans, and nothing else",
      first.options.slice(0, 4));
   ok(first.min === undefined && first.max === undefined,
      "A6 and the chart is left at its full range", { min: first.min, max: first.max });
@@ -130,14 +142,32 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
   // in progress, where the data stops mid-month and the window is clamped to
   // the last point — correct, but it would not show whether a whole month is
   // covered. That case is asserted separately below.
+  // Through the POPUP, the way a reader reaches it: press All time to turn it
+  // off, open the picker, step to the month, click the cell.
   const picked = await p.evaluate(() => {
+    document.getElementById("pvc-alltime").click();
     const sel = document.getElementById("pvc-month");
     const vals = [...sel.options].map((o) => o.value).filter(Boolean);   // newest first
     const v = vals[2];
-    sel.value = v; sel.dispatchEvent(new Event("change"));
+    sel.__wfYpBtn.click();
+    const pop = document.querySelector(".wf-yp-pop");
+    if (!pop) return { err: "no popup" };
+    const head = pop.querySelector(".wf-yp-range").textContent.trim();
+    let guard = 0;
+    while (pop.querySelector('.wf-yp-range').textContent.trim() !== v.slice(0, 4) && guard++ < 24) {
+      pop.querySelector('[data-yp-nav="-1"]').click();
+    }
+    const cell = document.querySelector('.wf-yp-pop [data-yp-year="' + v + '"]');
+    const cells = [...document.querySelectorAll(".wf-yp-pop .wf-yp-year")].map((c) => c.textContent.trim());
+    if (!cell) return { err: "no cell for " + v, cells };
+    cell.click();
     const c = window.__wfPortfolioValueChart;
-    return { v, min: c.scales.x.min, max: c.scales.x.max };
+    return { v, head, cells, min: c.scales.x.min, max: c.scales.x.max };
   });
+  ok(!picked.err && (picked.cells || []).length === 12 && picked.cells[0] === "Jan",
+     "A6c the popup shows a grid of MONTHS for one year, navigated by year — " +
+     "the same popup as the year picker, one step finer",
+     picked.err || picked.cells);
   const bounds = (k) => {
     const y = +k.slice(0, 4), m = +k.slice(5, 7);
     return { min: new Date(y, m - 1, 1).getTime(), max: new Date(y, m, 0, 23, 59, 59, 999).getTime() };
@@ -147,7 +177,27 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
      "A7 choosing a month reorients the chart to that month's first and last " +
      "day — the whole month, not the first and last day that happen to have a " +
      "data point", { got: [picked.min, picked.max], want: [want.min, want.max], month: picked.v });
-  ok((await state()).allActive === false, "A8 and All time stops being the active one");
+  const afterPick = await state();
+  ok(afterPick.allActive === false, "A8 and All time stops being the active one");
+  // Measured HERE, not at load: the picker is hidden while All time is on, and
+  // a hidden element reports a height of 0 — which would have compared equal to
+  // nothing in particular and passed for the wrong reason.
+  const size = await p.evaluate(() => {
+    const a = document.getElementById("pvc-month").__wfYpBtn;
+    const b = document.getElementById("pvc-alltime");
+    const r = document.getElementById("epc-year");
+    const ref = r.__wfYpBtn || r;
+    const h = (el) => Math.round(el.getBoundingClientRect().height);
+    return { pick: h(a), all: h(b), ref: h(ref),
+             pickFs: getComputedStyle(a).fontSize, refFs: getComputedStyle(ref).fontSize };
+  });
+  ok(size.pick > 0 && Math.abs(size.pick - size.ref) <= 2 && size.pickFs === size.refFs,
+     "A3 at the same size as the Income & Expenses · MONTHLY control", size);
+  ok(Math.abs(size.all - size.ref) <= 2,
+     "A3b and so is the All time toggle beside it", size);
+  ok(/^[A-Z][a-z]{2} \d{4}$/.test(afterPick.btnText || ""),
+     "A8b with the picker naming the month in words rather than showing 2026-05",
+     afterPick.btnText);
 
   // THE one that matters: a re-render must not silently drop the choice.
   await p.evaluate(() => {
@@ -171,7 +221,7 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
   const cur = await p.evaluate(() => {
     const sel = document.getElementById("pvc-month");
     const v = [...sel.options].map((o) => o.value).filter(Boolean)[0];   // newest
-    sel.value = v; sel.dispatchEvent(new Event("change"));
+    sel.value = v; sel.dispatchEvent(new Event("change", { bubbles: true }));
     const c = window.__wfPortfolioValueChart;
     const pts = c.data.datasets[0].data;
     const last = pts[pts.length - 1];
@@ -186,8 +236,8 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
   await p.evaluate(() => document.getElementById("pvc-alltime").click());
   await p.waitForTimeout(600);
   const back = await state();
-  ok(back.value === "" && back.allActive && back.min === undefined,
-     "A12 All time puts the full range back", back);
+  ok(back.allActive && back.min === undefined && back.btnHidden === true,
+     "A12 All time puts the full range back and hides the picker again", back);
 
   ok(errs.length === 0, "no page errors", errs.slice(0, 3));
 

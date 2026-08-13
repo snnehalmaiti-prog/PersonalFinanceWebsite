@@ -3837,10 +3837,10 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 /* Account Value chart redesign — growth-of-100 comparison */
 .avc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px 16px; margin-top: 16px; }
 .avc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: nowrap; margin-bottom: 8px; }
-/* The period picker sits with the eyebrow, not with the legend: it belongs to
-   the title ("ACCOUNT VALUE, for this period"), and the legend opposite it is
-   already a dense row of figures. shrink-0 so a long month never squeezes it. */
-.avc-period { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+/* The period picker sits BELOW the title block, not in the header row: the
+   header's other side is a dense row of figures, and a control between the two
+   competes with them for the same line. */
+.avc-period { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; }
 .avc-period .mic-dropdown-btn { display: inline-flex; align-items: center; gap: 4px; }
 .avc-header > .avc-eyebrow { flex: 0 0 auto; }
 /* Pushes the legend to the far edge so the eyebrow and its picker stay

@@ -9784,12 +9784,16 @@
     if (!allBtn || !sel || allBtn.dataset.bound) return;
     allBtn.dataset.bound = "1";
     allBtn.addEventListener("click", function () {
-      __pvcAllTime = true; __pvcMonth = null;
+      // A toggle, not a one-way switch: pressing it while it is on reveals the
+      // month picker, which is the only way to reach a month once it is hidden.
+      __pvcAllTime = !__pvcAllTime;
+      if (__pvcAllTime) __pvcMonth = null;
       if (__pvcApply) __pvcApply();
     });
     sel.addEventListener("change", function () {
-      if (!sel.value) { __pvcAllTime = true; __pvcMonth = null; }
-      else { __pvcAllTime = false; __pvcMonth = sel.value; }
+      // Reaching the picker at all means All time is already off, and every
+      // option in it is a month.
+      if (sel.value) { __pvcAllTime = false; __pvcMonth = sel.value; }
       if (__pvcApply) __pvcApply();
     });
   }());
@@ -10005,9 +10009,11 @@
         if (!seen[k]) { seen[k] = true; months.push(k); }
       });
       months.sort().reverse();
-      var want = '<option value="">All time</option>' + months.map(function (k) {
-        return '<option value="' + k + '">' +
-          NWM_MONTHS[+k.slice(5, 7) - 1] + " " + k.slice(0, 4) + "</option>";
+      // Months only. "All time" is the BUTTON beside this, and having it in
+      // here as well put the words on screen twice — once on the toggle and
+      // once as the picker's own label.
+      var want = months.map(function (k) {
+        return '<option value="' + k + '">' + k + "</option>";
       }).join("");
       if (sel.innerHTML !== want) sel.innerHTML = want;
       // A month that has dropped out of range — a portfolio switch can do it —
@@ -10021,7 +10027,15 @@
       __pvcApply = function () {
         var chart = window.__wfPortfolioValueChart;
         allBtn.classList.toggle("active", __pvcAllTime);
-        sel.value = __pvcMonth || "";
+        // The picker names the month it will show, and is hidden entirely while
+        // All time is on — the same two-control arrangement NET WORTH · MONTHLY
+        // uses, so the header reads the same way on both cards.
+        if (!__pvcMonth && months.length) sel.value = months[0];
+        else if (__pvcMonth) sel.value = __pvcMonth;
+        if (window.WfYearPicker) {
+          WfYearPicker.attach(sel);
+          WfYearPicker.setHidden(sel, __pvcAllTime);
+        }
         if (!chart) return;
         if (__pvcAllTime || !__pvcMonth) {
           resetChartXWindow(chart, pvcXMin, pvcXMax);
@@ -11137,12 +11151,32 @@
     pop.style.top = Math.round(top) + "px";
   }
 
+  var WF_YP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // "2026-03" → "Mar 2026". The select stays authoritative and keeps the sortable
+  // form; only what the reader sees is rewritten.
+  function _wfYpLabel(sel, v) {
+    v = String(v || "");
+    if (sel.getAttribute("data-yp-mode") !== "month" || v.length !== 7) return v;
+    return WF_YP_MONTHS[+v.slice(5, 7) - 1] + " " + v.slice(0, 4);
+  }
+
+  // A YEAR grid over a decade, or a MONTH grid over one year — the same popup,
+  // the same navigation, one step finer. Written as one function rather than two
+  // because the only differences are the cell list and what the arrows step by;
+  // a second copy would drift in placement and dismissal behaviour.
   function _wfYpOpen(sel, btn) {
     _wfYpClose();
+    var monthMode = sel.getAttribute("data-yp-mode") === "month";
     var available = [];
     for (var i = 0; i < sel.options.length; i++) available.push(String(sel.options[i].value));
     var current = String(sel.value || available[available.length - 1] || new Date().getFullYear());
     var decade = Math.floor(Number(current) / 10) * 10;
+    // In month mode the grid is a single year, and the arrows step one year.
+    var year = monthMode
+      ? Number(current.slice(0, 4)) || new Date().getFullYear()
+      : 0;
 
     var pop = document.createElement("div");
     pop.className = "wf-yp-pop";
@@ -11153,23 +11187,38 @@
 
     function paint() {
       var head = '<div class="wf-yp-head">' +
-        '<button type="button" class="wf-yp-nav" data-yp-nav="-1" aria-label="Previous decade">&lsaquo;</button>' +
-        '<span class="wf-yp-range">' + decade + ' &ndash; ' + (decade + 9) + '</span>' +
-        '<button type="button" class="wf-yp-nav" data-yp-nav="1" aria-label="Next decade">&rsaquo;</button>' +
+        '<button type="button" class="wf-yp-nav" data-yp-nav="-1" aria-label="' +
+          (monthMode ? "Previous year" : "Previous decade") + '">&lsaquo;</button>' +
+        '<span class="wf-yp-range">' +
+          (monthMode ? year : decade + " &ndash; " + (decade + 9)) + '</span>' +
+        '<button type="button" class="wf-yp-nav" data-yp-nav="1" aria-label="' +
+          (monthMode ? "Next year" : "Next decade") + '">&rsaquo;</button>' +
         '</div>';
       var cells = "";
-      for (var y = decade; y <= decade + 9; y++) {
-        var ys = String(y);
-        var has = available.indexOf(ys) !== -1;
-        cells += '<button type="button" class="wf-yp-year' +
-          (has ? "" : " is-disabled") + (ys === current ? " is-selected" : "") + '"' +
-          (has ? ' data-yp-year="' + ys + '"' : ' disabled aria-disabled="true"') +
-          '>' + ys + '</button>';
+      if (monthMode) {
+        for (var m = 1; m <= 12; m++) {
+          var key = year + "-" + (m < 10 ? "0" : "") + m;
+          var hasM = available.indexOf(key) !== -1;
+          cells += '<button type="button" class="wf-yp-year' +
+            (hasM ? "" : " is-disabled") + (key === current ? " is-selected" : "") + '"' +
+            (hasM ? ' data-yp-year="' + key + '"' : ' disabled aria-disabled="true"') +
+            '>' + WF_YP_MONTHS[m - 1] + '</button>';
+        }
+      } else {
+        for (var y = decade; y <= decade + 9; y++) {
+          var ys = String(y);
+          var has = available.indexOf(ys) !== -1;
+          cells += '<button type="button" class="wf-yp-year' +
+            (has ? "" : " is-disabled") + (ys === current ? " is-selected" : "") + '"' +
+            (has ? ' data-yp-year="' + ys + '"' : ' disabled aria-disabled="true"') +
+            '>' + ys + '</button>';
+        }
       }
       pop.innerHTML = head + '<div class="wf-yp-grid">' + cells + '</div>';
       Array.prototype.forEach.call(pop.querySelectorAll("[data-yp-nav]"), function (b) {
         b.addEventListener("click", function () {
-          decade += Number(b.getAttribute("data-yp-nav")) * 10;
+          var step = Number(b.getAttribute("data-yp-nav"));
+          if (monthMode) year += step; else decade += step * 10;
           paint();
         });
       });
@@ -11212,7 +11261,7 @@
       sel.parentNode.insertBefore(btn, sel.nextSibling);
       sel.__wfYpBtn = btn;
     }
-    btn.textContent = String(sel.value || "");
+    btn.textContent = _wfYpLabel(sel, sel.value);
     btn.style.display = (sel.getAttribute("data-wf-yp-hidden") === "1") ? "none" : "";
   }
 
