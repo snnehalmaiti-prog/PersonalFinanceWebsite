@@ -24,7 +24,7 @@ console.log("A. A Rolling Alpha of exactly zero renders, rather than throwing");
   // render's own .catch(), which resets the summary — so a portfolio whose
   // rolling median exactly matched the index's blanked ALL THREE rolling cells
   // instead of showing a legitimate 0.0%.
-  const from = SRC.indexOf("function setSummary(portMedian, idxMedian, notAvailable, title)");
+  const from = SRC.indexOf("function setSummary(portMedian, idxMedian, notAvailable)");
   ok(from !== -1, "A1 setSummary is where the rolling cells are written");
   const body = SRC.slice(from, SRC.indexOf("\n    }", from));
   ok(!/classList\.add\([^;]*:\s*""\s*\)/.test(body),
