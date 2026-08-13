@@ -437,6 +437,10 @@ eval(extract("function collectPortfolioNamesFromRows(rows)"));
 console.log("\nK. Parsed-sheet memo (the phone-freeze fix)");
 eval(extract("var _sheetRowsMemo = {}"));
 eval(extract("function getSheetRows(prefix)"));
+// _invalidateSheetRows also retires the Benchmark card's derived memos — the
+// sheets are what they are derived FROM, so nothing else can retire them.
+eval(extract("var _benchMemo = "));
+eval(extract("function _clearBenchmarkMemos()"));
 eval(extract("function _invalidateSheetRows(prefix)"));
 eval(extract("var _topCatMemo = null"));
 eval(extract("function buildInstrumentTopCategoryMap()"));

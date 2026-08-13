@@ -154,7 +154,9 @@ console.log("\nE. script.js builds the leg from the accruals it already trusts")
 
 console.log("\nF. Both series builders use it");
 {
-  ["computePortfolioTwrNavSeries", "computeRollingReturns"].forEach(function (fnName, i) {
+  // computeRollingReturns delegates its series build to _rollingNavSeries, so the
+  // series itself is built once per portfolio and reused by every window/index.
+  ["computePortfolioTwrNavSeries", "_rollingNavSeries"].forEach(function (fnName, i) {
     const from = SRC.indexOf("function " + fnName);
     const body = SRC.slice(from, from + 9000);
     const n = i + 1;

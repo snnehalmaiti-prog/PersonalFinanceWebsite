@@ -196,7 +196,9 @@ console.log("\nH. Scope is the exclusion on screen, not just the whole sheet");
 
   // The CAGR and Rolling Return columns are built from the TWR NAV series, not from
   // cash flows — they need the same gate or the card disagrees with itself.
-  ["computePortfolioTwrNavSeries", "computeRollingReturns"].forEach(function (fnName, i) {
+  // computeRollingReturns delegates its series build to _rollingNavSeries, so the
+  // series itself is built once per portfolio and reused by every window/index.
+  ["computePortfolioTwrNavSeries", "_rollingNavSeries"].forEach(function (fnName, i) {
     const f = SRC.slice(SRC.indexOf("function " + fnName));
     const body = f.slice(0, 4000);
     ok((body.match(/returnScopeIncludesInstrument/g) || []).length >= 2,

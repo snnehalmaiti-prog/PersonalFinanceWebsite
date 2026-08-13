@@ -1717,6 +1717,46 @@
   function _invalidateSheetRows(prefix) {
     if (prefix == null) _sheetRowsMemo = {};
     else delete _sheetRowsMemo[prefix];
+    // Anything derived from the sheets has to go with them. The benchmark card's
+    // memos are keyed by portfolio and exclusion, neither of which changes when a
+    // sync rewrites a sheet — so this is the only signal that can retire them.
+    // The value chart's index-only fast path closes over sheet-derived artifacts
+    // for the same reason.
+    _clearBenchmarkMemos();
+    _vcRedrawIndexLine = null;
+  }
+
+  // ─── Benchmark Comparison memos ───────────────────────────────────────────
+  // The card recomputed everything on every index click and every period pill,
+  // and the two most expensive things it computes depend on NEITHER: the TWR NAV
+  // series is a property of the portfolio alone, and so is the rolling-return
+  // series behind the columns beside it. Switching Nifty 50 → Nifty 500 rebuilt
+  // both from the sheets, re-walked eight years of monthly samples, and arrived
+  // at byte-identical arrays.
+  //
+  // Keyed by the things they DO depend on — the selected portfolio and the
+  // exclusion in force — and dropped wholesale when the sheets change.
+  var _benchMemo = { twr: null, rolling: null, valueAt: {} };
+
+  function _benchMemoKey(selected) {
+    return selected + "|" + (isEquityExcluded() ? 1 : 0) + (isFixedIncomeExcluded() ? 1 : 0);
+  }
+
+  function _clearBenchmarkMemos() {
+    _benchMemo = { twr: null, rolling: null, valueAt: {} };
+  }
+
+  // A rejected promise must not be cached: one transient failure would otherwise
+  // stick for the session and the card could never recover without a reload.
+  function _benchMemoized(slot, key, build) {
+    var hit = _benchMemo[slot];
+    if (hit && hit.key === key) return hit.promise;
+    var promise = build();
+    _benchMemo[slot] = { key: key, promise: promise };
+    promise.catch(function () {
+      if (_benchMemo[slot] && _benchMemo[slot].promise === promise) _benchMemo[slot] = null;
+    });
+    return promise;
   }
 
   // Fold/unfold long holdings lists: when there are >3 instrument rows,
@@ -4169,6 +4209,15 @@
     });
   }
 
+  // In-flight requests by date. The localStorage cache only helps AFTER a date has
+  // resolved; every caller that asks before that missed it and fetched its own
+  // copy. Several surfaces sample the same monthly grid on the same load — the
+  // Account Value chart, the commodity card, and the TWR leg behind Portfolio
+  // CAGR — so one date was being fetched several times over, all of them in the
+  // same burst. Dedup here rather than at each call site, which is where the
+  // duplication kept coming back.
+  var _goldHistPromises = {};
+
   function fetchXauInrForDate(dateStr) {
     // Historical prices never change — cache indefinitely (raw international spot).
     var cacheKey = "wf-gold-hist-" + dateStr;
@@ -4176,6 +4225,13 @@
       var cached = JSON.parse(localStorage.getItem(cacheKey));
       if (cached && cached.price) return Promise.resolve(cached.price * getGoldPremiumMultiplier());
     } catch (e) {}
+
+    // The premium is applied per call, never stored: it is a user setting that can
+    // change between two awaits of the same shared promise, and the cached value
+    // is raw spot for exactly that reason.
+    if (_goldHistPromises[dateStr]) {
+      return _goldHistPromises[dateStr].then(function (raw) { return raw * getGoldPremiumMultiplier(); });
+    }
 
     // Fetch from one currency-api CDN URL
     function fetchFromCurrencyApi(url) {
@@ -4204,7 +4260,7 @@
       return tryDateAllSources(dStr)
         .then(function (pricePerGram) {
           try { localStorage.setItem(cacheKey, JSON.stringify({ price: pricePerGram })); } catch (e) {}
-          return pricePerGram * getGoldPremiumMultiplier();
+          return pricePerGram;
         })
         .catch(function () {
           if (attemptsLeft <= 0) throw new Error("No XAU/INR found near " + dateStr);
@@ -4213,7 +4269,12 @@
           return tryDate(formatDateISO(d), attemptsLeft - 1);
         });
     }
-    return tryDate(dateStr, 3);
+    // Shared raw-spot promise; a failure is dropped from the map so a later render
+    // can retry rather than inheriting one transient CDN outage for the session.
+    var pending = tryDate(dateStr, 3);
+    _goldHistPromises[dateStr] = pending;
+    pending.catch(function () { delete _goldHistPromises[dateStr]; });
+    return pending.then(function (raw) { return raw * getGoldPremiumMultiplier(); });
   }
 
   // Reads the user-configured India-retail premium % (0 = raw international spot).
@@ -4537,7 +4598,18 @@
     // portfolio's rupee terminal (buildIndexXirrCashFlows computes its own terminal).
     var portfolioXirrPromise;
     if (periodYears && cutoff) {
-      portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected, returnScopeIncludesInstrument).then(function (result) {
+      // The opening mark depends on the period and the portfolio, never on the
+      // index — so all four indexes at a given pill share one computation. Keyed
+      // on the cutoff's day, since `cutoff` is derived from Date.now() and would
+      // otherwise miss by milliseconds between two clicks.
+      var markKey = _benchMemoKey(selected) + "|" + formatDateISO(cutoff);
+      var markPromise = _benchMemo.valueAt[markKey];
+      if (!markPromise) {
+        markPromise = computePortfolioValueAtDate(cutoff, selected, returnScopeIncludesInstrument);
+        _benchMemo.valueAt[markKey] = markPromise;
+        markPromise.catch(function () { delete _benchMemo.valueAt[markKey]; });
+      }
+      portfolioXirrPromise = markPromise.then(function (result) {
         // Opening mark (MF + stocks priced at the cutoff).
         var startVal = result.value;
         // Terminal value in the same scope: MF current + stocks' current value
@@ -4935,7 +5007,11 @@
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     var EMPTY = { portfolioCagr: null, indexCagr: null, years: null };
     return Promise.all([
-      computePortfolioTwrNavSeries(selected),
+      // Memoized: index- and period-independent, so every other pill and every
+      // other index in the dropdown reuses this one build.
+      _benchMemoized("twr", _benchMemoKey(selected), function () {
+        return computePortfolioTwrNavSeries(selected);
+      }),
       fetchIndexHistory()
     ]).then(function (res) {
       var navSeries = res[0];
@@ -5105,8 +5181,16 @@
   // Scoped by the exclusion in force, for the same reason the CAGR series is: the
   // Rolling Return columns sit in the same card as the Portfolio CAGR and must
   // measure the same portfolio.
-  function computeRollingReturns(windowYears, indexKey) {
-    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+  // The series half: monthly TWR NAV for the portfolio on screen. Depends on the
+  // portfolio and the exclusion, and on NOTHING the card's controls change — so it
+  // is built once and every window and every index reuses it. Rebuilding it per
+  // (window x index) was the card's dominant cost.
+  //
+  // Kept separate from computePortfolioTwrNavSeries on purpose: this one prices a
+  // stock only from real history (lookupIndexPrice, five-day lookback), where the
+  // CAGR series carries the last price forward indefinitely. Unifying them would
+  // move the rolling numbers, which is not a performance change.
+  function _rollingNavSeries(selected) {
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var unitEvents = buildInstrumentUnitEvents(selected);
       var instruments = Object.keys(unitEvents).filter(function (name) {
@@ -5146,7 +5230,6 @@
         var usdInrHistMap = spData.usd_inr_history || {};
         var allPrices = spData.prices || {};
         var usdInrToday = allPrices["__USD_INR__"] ? allPrices["__USD_INR__"].price : 84;
-        var indexPrices = ((spData.index_history || {})[indexKey] || {}).prices || null;
 
         var navByInstrument = {};
         instruments.forEach(function (name, i) { navByInstrument[name] = navHistories[i]; });
@@ -5244,47 +5327,62 @@
           navSeries.push({ date: curPt.date, nav: navSeries[m - 1].nav * g });
         }
 
-        var windowMs = windowYears * 365.25 * 24 * 60 * 60 * 1000;
-        var portRolling = [], idxRolling = [];
-
-        navSeries.forEach(function (startPt, i) {
-          var targetEnd = new Date(startPt.date.getTime() + windowMs);
-          if (targetEnd > today) return;
-          var endPt = null;
-          for (var j = i + 1; j < navSeries.length; j++) {
-            if (navSeries[j].date >= targetEnd) { endPt = navSeries[j]; break; }
-          }
-          if (!endPt || startPt.nav <= 0) return;
-          var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
-          if (actualYears < windowYears * 0.85) return;
-
-          var cagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
-          // Keep any finite, economically-valid CAGR (> -100%). The old cagr<20
-          // (2000%) upper cutoff silently dropped genuine extreme windows,
-          // biasing min/median/max/count.
-          if (isFinite(cagr) && cagr > -1) portRolling.push(cagr);
-
-          if (indexPrices) {
-            var sp = lookupIndexPrice(indexPrices, formatDateISO(startPt.date));
-            var ep = lookupIndexPrice(indexPrices, formatDateISO(endPt.date));
-            if (sp && ep) {
-              var ic = Math.pow(ep / sp, 1 / actualYears) - 1;
-              if (isFinite(ic) && ic > -1 && ic < 20) idxRolling.push(ic);
-            }
-          }
-        });
-
-        if (!portRolling.length) return null;
-
-        function stats(arr) {
-          arr.sort(function (a, b) { return a - b; });
-          var _n = arr.length, _mid = Math.floor(_n / 2);
-          var _median = _n % 2 ? arr[_mid] : (arr[_mid - 1] + arr[_mid]) / 2;
-          return { min: arr[0], median: _median, max: arr[arr.length - 1], count: arr.length };
-        }
-        return { portfolio: stats(portRolling), index: idxRolling.length ? stats(idxRolling) : null };
+        return { navSeries: navSeries, today: today };
         });
       });
+    });
+  }
+
+  function computeRollingReturns(windowYears, indexKey) {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    return Promise.all([
+      _benchMemoized("rolling", _benchMemoKey(selected), function () { return _rollingNavSeries(selected); }),
+      fetchIndexHistory().catch(function () { return {}; })
+    ]).then(function (res) {
+      var built = res[0];
+      if (!built) return null;
+      var navSeries = built.navSeries, today = built.today;
+      var indexPrices = ((res[1] || {})[indexKey] || {}).prices || null;
+
+      var windowMs = windowYears * 365.25 * 24 * 60 * 60 * 1000;
+      var portRolling = [], idxRolling = [];
+
+      navSeries.forEach(function (startPt, i) {
+        var targetEnd = new Date(startPt.date.getTime() + windowMs);
+        if (targetEnd > today) return;
+        var endPt = null;
+        for (var j = i + 1; j < navSeries.length; j++) {
+          if (navSeries[j].date >= targetEnd) { endPt = navSeries[j]; break; }
+        }
+        if (!endPt || startPt.nav <= 0) return;
+        var actualYears = (endPt.date - startPt.date) / (365.25 * 24 * 60 * 60 * 1000);
+        if (actualYears < windowYears * 0.85) return;
+
+        var cagr = Math.pow(endPt.nav / startPt.nav, 1 / actualYears) - 1;
+        // Keep any finite, economically-valid CAGR (> -100%). The old cagr<20
+        // (2000%) upper cutoff silently dropped genuine extreme windows,
+        // biasing min/median/max/count.
+        if (isFinite(cagr) && cagr > -1) portRolling.push(cagr);
+
+        if (indexPrices) {
+          var sp = lookupIndexPrice(indexPrices, formatDateISO(startPt.date));
+          var ep = lookupIndexPrice(indexPrices, formatDateISO(endPt.date));
+          if (sp && ep) {
+            var ic = Math.pow(ep / sp, 1 / actualYears) - 1;
+            if (isFinite(ic) && ic > -1 && ic < 20) idxRolling.push(ic);
+          }
+        }
+      });
+
+      if (!portRolling.length) return null;
+
+      function stats(arr) {
+        arr.sort(function (a, b) { return a - b; });
+        var _n = arr.length, _mid = Math.floor(_n / 2);
+        var _median = _n % 2 ? arr[_mid] : (arr[_mid - 1] + arr[_mid]) / 2;
+        return { min: arr[0], median: _median, max: arr[arr.length - 1], count: arr.length };
+      }
+      return { portfolio: stats(portRolling), index: idxRolling.length ? stats(idxRolling) : null };
     });
   }
 
@@ -10098,6 +10196,10 @@
   // an 18-fund / 6-stock / 8-year portfolio, a refresh built each value chart four
   // times and three of those were byte-identical to the one before.
   var _vcLastInputKey = null;
+  // Redraws JUST the benchmark line of the last completed value-chart render,
+  // against the portfolio artifacts that render already computed. Set by
+  // renderValueChart, and null whenever there is nothing valid to redraw against.
+  var _vcRedrawIndexLine = null;
 
   var _vcGen = 0;
   // The Growth chart's inception year, so its period line can go back to
@@ -10767,6 +10869,9 @@
           statusEl.hidden = true;
           return null;
         }
+        // Past the cache check: this render is going to replace the artifacts the
+        // fast path closes over, so retire it until the new ones are in place.
+        _vcRedrawIndexLine = null;
 
         // Pre-compute each sorted series' value-at-or-before every timeline date in
         // one linear pass (WfMath.forwardFillOverTimeline), instead of a binary
@@ -11001,11 +11106,8 @@
         var fullMaxTime = last.getTime();
 
         // === Growth-of-₹100 normalization + benchmark overlay ===
-        var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
-        var indexDisplayName = indexKey === "NIFTY50" ? "Nifty 50"
-          : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
-          : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
-          : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
+        // (indexKey / indexDisplayName are read inside drawIndexLine below, so an
+        // index-only redraw picks up the new selection.)
 
         // === Time-Weighted Return NAV computation ===
         // The cash flow at each timeline point, valued at THE SAME PRICE the value
@@ -11111,8 +11213,25 @@
         var plotFrom = Math.max(0, Math.min(basePortIdx, normPortPoints.length));
         var plotPortPoints = plotFrom > 0 ? normPortPoints.slice(plotFrom) : normPortPoints;
 
+        // Everything from here down depends on the INDEX; everything above it does
+        // not. Switching Nifty 50 → Nifty 500 changes only which line is drawn
+        // beside an unchanged portfolio curve, yet it used to re-enter the whole
+        // render — rebuilding the timeline, the forward fills, the per-instrument
+        // valuation, the Account Value chart and the snapshot series, all to
+        // arrive at identical portfolio points.
+        //
+        // Capturing the tail as a closure lets an index-only change re-run
+        // exactly this code against the artifacts already computed, with no
+        // duplicate logic to drift. `indexKey` is re-read per call rather than
+        // captured, so the closure always draws the index in force now.
+        function drawIndexLine() {
+        var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
+        var indexDisplayName = indexKey === "NIFTY50" ? "Nifty 50"
+          : indexKey === "NIFTYNEXT50" ? "Nifty Next 50"
+          : indexKey === "NIFTYMIDCAP150" ? "Nifty Midcap 150"
+          : indexKey === "NIFTY500" ? "Nifty 500" : indexKey;
         // Fetch index history and build normalized benchmark series aligned to portfolio dates.
-        fetchIndexHistory().then(function (indexHistory) {
+        return fetchIndexHistory().then(function (indexHistory) {
           if (_superseded()) return null;
           var indexData = indexHistory && indexHistory[indexKey];
           var indexPrices = indexData && indexData.prices ? indexData.prices : null;
@@ -11172,6 +11291,22 @@
           if (_superseded()) return;
           _renderNormalizedChart([]);
         });
+        }
+        drawIndexLine();
+        // Offered to the index-only fast path below. Cleared by the next full
+        // render (and by a sheet change), so it can never redraw against
+        // artifacts that have been superseded.
+        _vcRedrawIndexLine = function () {
+          // Claim a fresh generation before redrawing. This closure's own
+          // _vcMyGen belongs to the render that created it, and ANY later call to
+          // renderValueChart bumps the counter — including one that immediately
+          // short-circuits on the input-key cache because nothing had changed.
+          // Left alone, the redraw would then find itself superseded by a render
+          // that drew nothing, bail silently, and leave the previous index's line
+          // on screen under the new index's name.
+          _vcMyGen = ++_vcGen;
+          drawIndexLine();
+        };
 
         var calloutEl = document.getElementById("value-chart-callout");
         var calloutValueEl = document.getElementById("value-chart-callout-value");
@@ -11434,8 +11569,27 @@
 
   // Re-render Growth-of-₹100 whenever the benchmark index changes on the
   // Benchmark Comparison card so both stay in sync.
-  document.addEventListener("wf-benchmark-changed", function () {
-    renderValueChart();
+  // The value chart draws the benchmark INDEX line, so it has to be rebuilt when
+  // the index changes — and only then. The event also fires for every period pill
+  // (1Y/2Y/3Y/5Y/10Y/All), which this chart does not read at all: it carries its
+  // own period control. Re-rendering on those revalued the entire portfolio over
+  // the whole timeline — forward fills, FD/PF accruals, gold, and the snapshot
+  // series — to redraw a picture that could not have changed. It was the single
+  // largest cost of using the Benchmark card, and none of it was the card's own
+  // work.
+  //
+  // When the index HAS changed, only the benchmark line is different — the
+  // portfolio curve beside it is built from the sheets and cannot have moved. So
+  // redraw just that line against the artifacts the last render already produced,
+  // and fall back to a full render whenever there is nothing valid to redraw
+  // against (first paint, or inputs changed since).
+  var _vcLastIndexKey = null;
+  document.addEventListener("wf-benchmark-changed", function (e) {
+    var indexKey = (e && e.detail && e.detail.indexKey) || localStorage.getItem("wf-benchmark-index") || null;
+    if (indexKey !== null && indexKey === _vcLastIndexKey) return;
+    _vcLastIndexKey = indexKey;
+    if (_vcRedrawIndexLine) _vcRedrawIndexLine();
+    else renderValueChart();
   });
   document.addEventListener("wf-exclusion-changed", function () {
     renderValueChart();
