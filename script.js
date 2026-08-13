@@ -10812,17 +10812,28 @@
             ? isFixedIncomeExcluded()
             : isEquityExcluded();
         }
-        var instrumentList = instruments.filter(function (n) { return !_vcHidden(n); });
-        var mfUnitsByIdx = instrumentList.map(function (name) { return unitsAtByName[name]; });
-        var mfNavByIdx = instrumentList.map(function (name) { return navAtByName[name]; });
-        var mfTradedByIdx = instrumentList.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
+        // The exclusion filter reaches the ACCOUNT VALUE chart only. Portfolio
+        // Performance (Growth of ₹100) is deliberately unfiltered: it is an
+        // equity-style return measured against an equity index, and the question
+        // it answers — "what would ₹100 left alone have become" — is not a
+        // question about which slice of the book is on screen. Filtering it made
+        // the curve change shape with the dropdown, and under Exclude Equity left
+        // it drawing the debt/gold fund sleeve against the Nifty.
+        //
+        // So the lists below are kept WHOLE and carry a `hidden` flag instead;
+        // the pass over the timeline accumulates the filtered total (Account
+        // Value) and the unfiltered one (Growth) side by side, rather than
+        // walking the instruments twice.
+        var mfHiddenByIdx = instruments.map(function (n) { return _vcHidden(n); });
+        var mfUnitsByIdx = instruments.map(function (name) { return unitsAtByName[name]; });
+        var mfNavByIdx = instruments.map(function (name) { return navAtByName[name]; });
+        var mfTradedByIdx = instruments.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
         var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
-        var seMeta = seTickers.filter(function (ticker) {
-          return !_vcHidden((seUnitEventsByTicker[ticker] || {}).instrument || "");
-        }).map(function (ticker) {
+        var seMeta = seTickers.map(function (ticker) {
           var hist = stockHistoryAll[ticker] || null;
           var live = allPrices[ticker] || null;
           return {
+            hidden: _vcHidden((seUnitEventsByTicker[ticker] || {}).instrument || ""),
             units: seUnitsAtByTicker[ticker],
             histPrices: hist ? hist.prices : null,
             livePrice: live ? live.price : null,
@@ -10832,9 +10843,13 @@
         });
 
         // Cash flow at each timeline point, marked at that point's own valuation.
+        // Unfiltered, because the only thing it feeds is the Growth series.
         var flowAt = new Array(timeline.length).fill(0);
+        // Growth-of-₹100's own value series: every MF and Stocks/ETF holding, no
+        // exclusion applied, and no physical gold (which has no contributions
+        // recorded, so its value would read as instant growth).
+        var growthValueAt = new Array(timeline.length).fill(0);
 
-        var commodityValueAt = [];
         var points = timeline.map(function (date, i) {
           // Physical gold is Commodity, so it goes with the Commodity
           // exclusion. It used to stay on this chart while the Overview beside
@@ -10842,13 +10857,16 @@
           var activeGrams = isFixedIncomeExcluded() ? 0 : (commodityGramsAt[i] || 0);
           var goldPriceAtDate = goldPriceSeriesAt[i] || currentGoldPrice || 0;
           var commVal = activeGrams > 0 ? activeGrams * goldPriceAtDate : 0;
-          commodityValueAt.push(commVal);
           var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
           var dk = dateKey(date);
-          for (var mi = 0; mi < instrumentList.length; mi++) {
+          for (var mi = 0; mi < mfUnitsByIdx.length; mi++) {
             var units = mfUnitsByIdx[mi][i] || 0;
             var nav = mfNavByIdx[mi][i];
-            if (units > UNITS_EPSILON && nav) total += units * nav;
+            if (units > UNITS_EPSILON && nav) {
+              var mfVal = units * nav;
+              growthValueAt[i] += mfVal;
+              if (!mfHiddenByIdx[mi]) total += mfVal;
+            }
             // The flow is valued at the SAME nav this instrument was just valued at,
             // so a purchase changes the unit count and never the unit price. Skipped
             // when there is no nav: the value series cannot see this instrument on
@@ -10880,7 +10898,11 @@
             if (!price) continue;          // never priced at all: genuinely unknown
             meta.lastPrice = price;
             var priceInr = meta.isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
-            if (seUnits > UNITS_EPSILON) total += seUnits * priceInr;
+            if (seUnits > UNITS_EPSILON) {
+              var seVal = seUnits * priceInr;
+              growthValueAt[i] += seVal;
+              if (!meta.hidden) total += seVal;
+            }
             // Same rule, and the same INR price: the flow can never disagree with
             // the valuation, in magnitude or in currency. Deliberately NOT gated on
             // still holding units — the sale that takes a position to zero is
@@ -11010,14 +11032,19 @@
         // nor flows here: Growth-of-₹100 is an equity vs equity-index comparison.
         // The dead branch that used to collect their cash flows is gone with the
         // contribEvents list it fed.
-// Growth-of-₹100 value series = portfolio value with commodity (physical
-        // gold/silver from the fd sheet) stripped out. Physical-gold purchases are
-        // not tracked as contributions, so leaving their value in would make each
-        // purchase look like instant growth. The ₹100 line is therefore a pure
-        // MF + Stocks/ETF vs equity-index comparison (Fixed Income is already
-        // excluded above). Commodity is still shown on the Account Value chart.
+        // Growth-of-₹100 value series: every MF + Stocks/ETF holding, priced along
+        // the same timeline, and NOTHING else. Physical gold is absent by
+        // construction rather than subtracted back off — its purchases are not
+        // tracked as contributions, so leaving its value in would make each one
+        // look like instant growth. Fixed income is absent for the same reason it
+        // always was: this is an equity vs equity-index comparison.
+        //
+        // Built from growthValueAt, not from `points`, because `points` is the
+        // FILTERED series that the Account Value chart draws. Deriving the ₹100
+        // line from it meant the exclusion dropdown reshaped a curve that is not
+        // about the current scope at all.
         var growthPoints = points.map(function (p, i) {
-          return { x: p.x, y: p.y - (commodityValueAt[i] || 0) };
+          return { x: p.x, y: growthValueAt[i] || 0 };
         });
 
         // Cumulative contributions at each timeline date, from the flows gathered in
