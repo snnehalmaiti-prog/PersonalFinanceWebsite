@@ -32,11 +32,20 @@
     };
   }
 
-  // Zero out a slice entirely — used for fixed income and commodity when the
-  // "Exclude Fixed Income" toggle is on. Both live in the same sheet and are
-  // gated together, so the header total, the category cards and the split
-  // charts all agree.
+  // Zero out a slice entirely. Each slice belongs to exactly one Instrument
+  // Category, and each exclusion names the categories it hides, so the header
+  // total, the category cards and the split charts all agree.
   function gate(slice, excluded) { return excluded ? ZERO : slice; }
+
+  function add(a, b) {
+    return {
+      invested: a.invested + b.invested,
+      current: a.current + b.current,
+      unrealized: a.unrealized + b.unrealized,
+      realized: a.realized + b.realized,
+      dayChange: a.dayChange + b.dayChange
+    };
+  }
 
   // A class's `current` is populated by its own async flow (NAV fetch, gold
   // price, live stock prices). Until that resolves the field is 0 while its
@@ -53,9 +62,24 @@
 
   // aggregateOverview — derive every Overview figure from the four slices.
   //
-  //   slices: { mf, se, fi, comm } — each { invested, current, unrealized,
-  //           realized, dayChange } or null/undefined while still loading.
-  //   opts:   { excludeFixedIncome: Boolean }
+  //   slices: { mf, se, fi, comm, debtMf, debtSe, commMf, commSe } — each
+  //           { invested, current, unrealized, realized, dayChange } or
+  //           null/undefined while still loading.
+  //   opts:   { excludeFixedIncome, excludeEquity: Boolean }
+  //
+  // EXCLUSIONS GATE BY INSTRUMENT CATEGORY, NOT BY SHEET. Every slice carries
+  // one category, whichever sheet it was typed into:
+  //
+  //   Equity        mf, se
+  //   Fixed Income  fi, debtMf, debtSe   — debt funds and ETFs live in the
+  //                                        Mutual Fund and Stocks/ETF sheets
+  //   Commodity     comm, commMf, commSe — gold funds and ETFs likewise
+  //
+  // excludeFixedIncome hides Fixed Income AND Commodity — the toggle is named
+  // for both. commMf / commSe are what make that true of a gold ETF kept in the
+  // Stocks sheet, which used to be hidden from the Commodity total and left in
+  // the Stocks one. They stay ON their own sheet's card when not excluded, so
+  // nothing moves on screen unless an exclusion is actually switched on.
   //
   // Returns { invested, current, unrealized, returnPct, realized, dayChange,
   //           cards: { mf, se, fi } } where `cards.fi` is the combined
@@ -70,11 +94,19 @@
   function aggregateOverview(slices, opts) {
     slices = slices || {};
     var excluded = !!(opts && opts.excludeFixedIncome);
+    var eqExcluded = !!(opts && opts.excludeEquity);
 
-    var mf = norm(slices.mf);
-    var se = norm(slices.se);
+    var mfEq = gate(norm(slices.mf), eqExcluded);
+    var seEq = gate(norm(slices.se), eqExcluded);
     var fi = gate(norm(slices.fi), excluded);
     var comm = gate(norm(slices.comm), excluded);
+    // Gold funds and ETFs: Commodity by category, so they are hidden with
+    // Commodity — but shown on the card belonging to the sheet they are kept
+    // in, so switching nothing on changes nothing.
+    var commMf = gate(norm(slices.commMf), excluded);
+    var commSe = gate(norm(slices.commSe), excluded);
+    var mf = add(mfEq, commMf);
+    var se = add(seEq, commSe);
     // Debt funds and ETFs are tracked in the Mutual Fund and Stocks/ETF sheets but
     // belong to Fixed Income. Two buckets, not one, because the MF and Stocks/ETF
     // flows resolve independently — a single shared bucket would let whichever
@@ -92,7 +124,14 @@
 
     // --- Header ---------------------------------------------------------
     var invested = mf.invested + se.invested + fi.invested + comm.invested + debt.invested;
-    var current = currentOrCost(mf) + currentOrCost(se) + currentOrCost(fi) + currentOrCost(comm) +
+    // Per BUCKET, never on a sum: the invested-fallback exists because one
+    // flow can still be in flight while another has resolved, and adding two
+    // slices before applying it lets a resolved one mask an unresolved one —
+    // the phantom-total-loss bug, in reverse. Same reason debtMf and debtSe
+    // are counted separately here rather than as `debt`.
+    var current = currentOrCost(mfEq) + currentOrCost(commMf) +
+                  currentOrCost(seEq) + currentOrCost(commSe) +
+                  currentOrCost(fi) + currentOrCost(comm) +
                   currentOrCost(debtMf) + currentOrCost(debtSe);
     var realized = mf.realized + se.realized + fi.realized + comm.realized + debt.realized;
     // Deposit-style fixed income has no intraday mark, but debt funds and ETFs do
@@ -100,7 +139,7 @@
     var dayChange = mf.dayChange + se.dayChange + comm.dayChange + debt.dayChange;
 
     // --- Category cards -------------------------------------------------
-    var seCardCurrent = currentOrCost(se);
+    var seCardCurrent = currentOrCost(seEq) + currentOrCost(commSe);
     // The Fixed Income card carries the debt funds and ETFs that were taken out of
     // the Mutual Fund and Stocks/ETF cards, so the three cards still total net worth.
     var fiCardInvested = fi.invested + comm.invested + debt.invested;

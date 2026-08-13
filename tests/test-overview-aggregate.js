@@ -293,5 +293,72 @@ console.log("G. Debt funds/ETFs reclassified out of MF and Stocks/ETF");
      String(r.current));
 }
 
+console.log("\nH. Exclusions gate by Instrument Category, not by sheet");
+
+// A gold ETF is Commodity wherever it is kept. It used to sit in the Stocks/ETF
+// slice, so "exclude fixed income and commodity" left it on screen while hiding
+// the physical gold beside it.
+const GOLDY = {
+  mf:     slice({ invested: 1000, current: 1100, dayChange: 5 }),
+  se:     slice({ invested: 2000, current: 2200, dayChange: 7 }),
+  commMf: slice({ invested: 300,  current: 330,  dayChange: 1 }),
+  commSe: slice({ invested: 400,  current: 440,  dayChange: 2 }),
+  comm:   slice({ invested: 500,  current: 550,  dayChange: 3 }),
+  fi:     slice({ invested: 900,  current: 950 }),
+};
+{
+  const r = aggregateOverview(GOLDY, {});
+  ok(approx(r.current, 1100 + 2200 + 330 + 440 + 550 + 950),
+     "H1 with nothing excluded every slice counts once", String(r.current));
+  ok(approx(r.cards.mf.current, 1100 + 330),
+     "H2 and a gold FUND still shows on the Mutual Fund card — gating by " +
+     "category must not move things about when no exclusion is on",
+     String(r.cards.mf.current));
+  ok(approx(r.cards.se.current, 2200 + 440),
+     "H3 nor a gold ETF off the Stocks/ETF card", String(r.cards.se.current));
+}
+{
+  const r = aggregateOverview(GOLDY, { excludeFixedIncome: true });
+  ok(approx(r.current, 1100 + 2200),
+     "H4 excluding fixed income and commodity leaves ONLY equity — the gold " +
+     "ETF and gold fund go with the physical gold, which is the whole point " +
+     "of the rename", String(r.current));
+  ok(approx(r.cards.se.current, 2200),
+     "H5 and the Stocks/ETF card drops the gold ETF, so the cards still total " +
+     "the header rather than over-counting it", String(r.cards.se.current));
+  ok(approx(r.cards.mf.current, 1100), "H6 likewise the Mutual Fund card", String(r.cards.mf.current));
+  ok(approx(r.dayChange, 5 + 7), "H7 including its day change", String(r.dayChange));
+}
+{
+  const r = aggregateOverview(GOLDY, { excludeEquity: true });
+  ok(approx(r.current, 330 + 440 + 550 + 950),
+     "H8 excluding equity leaves fixed income and commodity — the mirror " +
+     "image, and the gold held in equity sheets survives it", String(r.current));
+  ok(approx(r.cards.se.current, 440),
+     "H9 the Stocks/ETF card keeps only its gold ETF", String(r.cards.se.current));
+  ok(approx(r.cards.mf.current, 330), "H10 and the MF card only its gold fund", String(r.cards.mf.current));
+  ok(approx(r.dayChange, 1 + 2 + 3),
+     "H11 with equity's day change gone and commodity's kept", String(r.dayChange));
+}
+{
+  // The two exclusions are offered as alternatives, but nothing should break if
+  // both are ever set — the union is hidden, not some third behaviour.
+  const r = aggregateOverview(GOLDY, { excludeFixedIncome: true, excludeEquity: true });
+  ok(approx(r.current, 0), "H12 both at once hides everything, rather than misbehaving",
+     String(r.current));
+}
+{
+  // The invested-fallback is per bucket. An unresolved gold ETF must not be
+  // masked by a resolved equity one sharing the same card.
+  const r = aggregateOverview({
+    se:     slice({ invested: 2000, current: 2200 }),
+    commSe: slice({ invested: 400,  current: 0 }),
+  }, {});
+  ok(approx(r.current, 2200 + 400),
+     "H13 a slice still loading falls back to its cost even when the slice " +
+     "beside it has resolved — summing before the fallback would have read 2200",
+     String(r.current));
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

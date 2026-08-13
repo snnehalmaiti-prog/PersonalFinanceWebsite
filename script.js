@@ -530,11 +530,26 @@
   // ===== Portfolio selector =====
   var PORTFOLIO_NAMES_KEY = "wf-portfolio-names";
   var SELECTED_PORTFOLIO_KEY = "wf-selected-portfolio";
+  // The key still says "fixedincome" though the exclusion is now named
+  // "Exclude Fixed Income and Commodity". Renaming the key would silently reset
+  // the setting for anyone who had it on, which is a worse outcome than a name
+  // that has fallen slightly behind its label.
   var EXCLUDE_FIXED_INCOME_KEY = "wf-exclude-fixedincome";
   var EXCLUDE_SAVINGS_INVESTMENT_KEY = "wf-exclude-savings-investment";
+  var EXCLUDE_EQUITY_KEY = "wf-exclude-equity";
 
+  // Hides Fixed Income AND Commodity, by INSTRUMENT CATEGORY rather than by
+  // sheet. The distinction is the whole point: a gold ETF typed into the
+  // Stocks/ETF sheet is Commodity and goes; a debt fund typed into the Mutual
+  // Fund sheet is Fixed Income and goes. Sheet-based hiding left both on screen.
   function isFixedIncomeExcluded() {
     return localStorage.getItem(EXCLUDE_FIXED_INCOME_KEY) === "true";
+  }
+
+  // The mirror image: hides everything whose Instrument Category is Equity,
+  // wherever it is kept, and leaves fixed income and commodity on screen.
+  function isEquityExcluded() {
+    return localStorage.getItem(EXCLUDE_EQUITY_KEY) === "true";
   }
 
   // Investment Corpus/Savings Account holdings ("Savings/Investment Holding"). When excluded,
@@ -2097,7 +2112,10 @@
     mf: _ovEmptySlice(), se: _ovEmptySlice(), fi: _ovEmptySlice(), comm: _ovEmptySlice(),
     // Debt funds/ETFs pulled out of mf and se. Kept per source so the two
     // independent flows cannot overwrite each other's contribution.
-    debtMf: _ovEmptySlice(), debtSe: _ovEmptySlice()
+    debtMf: _ovEmptySlice(), debtSe: _ovEmptySlice(),
+    // Gold funds/ETFs pulled out of mf and se the same way, and for the same
+    // reason: Instrument Category decides, not the sheet they were typed into.
+    commMf: _ovEmptySlice(), commSe: _ovEmptySlice()
   };
 
   // Cash-flow bookkeeping for the XIRR/benchmark cards. Deliberately NOT part of
@@ -2124,12 +2142,17 @@
       fi: { invested: _ovSlice.fi.invested, current: _ovSlice.fi.current, unrealized: _ovSlice.fi.unrealized, realized: _ovSlice.fi.realized },
       comm: _ovSlice.comm,
       debtMf: _ovSlice.debtMf,
-      debtSe: _ovSlice.debtSe
+      debtSe: _ovSlice.debtSe,
+      commMf: _ovSlice.commMf,
+      commSe: _ovSlice.commSe
     };
   }
 
   function _ovAggregate() {
-    return WfOverview.aggregateOverview(_ovSlices(), { excludeFixedIncome: isFixedIncomeExcluded() });
+    return WfOverview.aggregateOverview(_ovSlices(), {
+      excludeFixedIncome: isFixedIncomeExcluded(),
+      excludeEquity: isEquityExcluded()
+    });
   }
 
   // ---- Slice write choke point (steps 2-4 of the orchestrator refactor) -----
@@ -2145,7 +2168,8 @@
   //   * an unknown-field guard, now that fields are real keys on a typed slice
   //     rather than concatenated strings on a shared bag.
   var OV_SLICE_FIELDS = ["invested", "current", "unrealized", "realized", "dayChange"];
-  var _ovProvenance = { mf: null, se: null, fi: null, comm: null, debtMf: null, debtSe: null };
+  var _ovProvenance = { mf: null, se: null, fi: null, comm: null, debtMf: null, debtSe: null,
+                        commMf: null, commSe: null };
   var _ovSeq = 0;
   var _ovStaleDrops = 0;
 
@@ -2412,13 +2436,16 @@
     if (_ovFlows.seComputedPortfolio !== selected) {
       _ovApply("se", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovApply("debtSe", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
+      _ovApply("commSe", { current: 0, unrealized: 0, dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovApply("debtMf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
+      _ovApply("commMf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovFlows.seXirrFlows = []; _ovFlows.seFlowsINR = [];
       _ovApply("mf", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
       _ovApply("comm", { dayChange: 0 }, "updateDashboardStats:portfolioChange");
     }
     _ovApply("fi", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
     _ovApply("debtMf", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
+    _ovApply("commMf", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
     _ovApply("comm", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
 
     var equityEl = document.getElementById("equity-total-investment");
@@ -2437,21 +2464,27 @@
     // Debt funds are reported as Fixed Income, so their cost leaves the Mutual
     // Fund invested figure. Same FIFO remaining-lot basis as the total it is
     // subtracted from, so the two cannot disagree by a rounding of method.
+    // Gold funds leave it too, so an exclusion named for Commodity reaches
+    // them; same basis, one pass over the sheet for both.
     var _dbtCatMap = buildInstrumentTopCategoryMap();
-    var mfDebtInvested = (function () {
+    var mfSplitInvested = (function () {
+      var out = { "fixed income": 0, commodity: 0 };
       var eqRows = getSheetRows("equity");
-      if (!eqRows) return 0;
+      if (!eqRows) return out;
       var byInst = groupUnitTransactionsByInstrument(eqRows, selected);
-      if (!byInst) return 0;
-      var t = 0;
+      if (!byInst) return out;
       Object.keys(byInst).forEach(function (nm) {
-        if (normalizeText(_dbtCatMap[normalizeText(nm)] || "") !== "fixed income") return;
-        fifoRemainingLots(byInst[nm]).forEach(function (l) { t += l.units * l.price; });
+        var cat = normalizeText(_dbtCatMap[normalizeText(nm)] || "");
+        if (cat !== "fixed income" && cat !== "commodity") return;
+        fifoRemainingLots(byInst[nm]).forEach(function (l) { out[cat] += l.units * l.price; });
       });
-      return t;
+      return out;
     })();
-    _ovApply("mf", { invested: mfInvested - mfDebtInvested }, "updateDashboardStats:sync");
+    var mfDebtInvested = mfSplitInvested["fixed income"];
+    var mfCommInvested = mfSplitInvested.commodity;
+    _ovApply("mf", { invested: mfInvested - mfDebtInvested - mfCommInvested }, "updateDashboardStats:sync");
     _ovApply("debtMf", { invested: mfDebtInvested }, "updateDashboardStats:sync");
+    _ovApply("commMf", { invested: mfCommInvested }, "updateDashboardStats:sync");
     _ovApply("se", { invested: seInvested }, "updateDashboardStats:sync");
     _ovApply("fi", { invested: fiBaseInvested }, "updateDashboardStats:sync");
 
@@ -6867,28 +6900,52 @@
           // figures and is reported separately. Splitting here — after valuation,
           // before the totals are published — keeps one valuation path and means
           // net worth is unchanged: what mf loses, debtMf gains.
+          //
+          // Gold funds are split out the same way, for the same reason: an
+          // exclusion named for Commodity has to reach a commodity fund kept in
+          // this sheet, and it can only do that if the value is countable on
+          // its own.
           var _dbtMap = buildInstrumentTopCategoryMap();
-          function _isDebtName(n) {
-            return normalizeText(_dbtMap[normalizeText(n || "")] || "") === "fixed income";
+          function _catOf(n) {
+            return normalizeText(_dbtMap[normalizeText(n || "")] || "");
           }
+          function _isDebtName(n) { return _catOf(n) === "fixed income"; }
+          function _isCommName(n) { return _catOf(n) === "commodity"; }
           var debtNames = heldInstruments.filter(_isDebtName);
-          var mfNames = heldInstruments.filter(function (n) { return !_isDebtName(n); });
-          var debtCurrent = 0, debtYesterday = 0;
-          debtNames.forEach(function (name) {
-            var idx = instruments.indexOf(name);
-            var evs = unitEvents[name] || [];
-            var u = evs.length ? evs[evs.length - 1].cumulativeUnits : 0;
-            if (u <= UNITS_EPSILON) return;
-            var nh = idx === -1 ? null : navHistories[idx];
-            var nv = nh ? latest_nav_for(nh) : null;
-            var pv = nh ? previous_nav_for(nh) : null;
-            if (nv) { debtCurrent += u * nv; debtYesterday += u * (pv || nv); }
-            else { var c = investedCostFor([name]); debtCurrent += c; debtYesterday += c; }
+          var commNames = heldInstruments.filter(_isCommName);
+          var mfNames = heldInstruments.filter(function (n) {
+            return !_isDebtName(n) && !_isCommName(n);
           });
+          // Same valuation for whichever bucket, so nothing depends on which
+          // one a holding fell into.
+          function _valueOf(names) {
+            var cur = 0, yday = 0;
+            names.forEach(function (name) {
+              var idx = instruments.indexOf(name);
+              var evs = unitEvents[name] || [];
+              var u = evs.length ? evs[evs.length - 1].cumulativeUnits : 0;
+              if (u <= UNITS_EPSILON) return;
+              var nh = idx === -1 ? null : navHistories[idx];
+              var nv = nh ? latest_nav_for(nh) : null;
+              var pv = nh ? previous_nav_for(nh) : null;
+              if (nv) { cur += u * nv; yday += u * (pv || nv); }
+              else { var c = investedCostFor([name]); cur += c; yday += c; }
+            });
+            return { current: cur, yesterday: yday };
+          }
+          var debtVal = _valueOf(debtNames);
+          var debtCurrent = debtVal.current, debtYesterday = debtVal.yesterday;
+          var commVal = _valueOf(commNames);
+          var commInvested = commNames.length ? investedCostFor(commNames) : 0;
           var debtInvested = debtNames.length ? investedCostFor(debtNames) : 0;
-          total -= debtCurrent;
-          yesterdayTotal -= debtYesterday;
+          total -= debtCurrent + commVal.current;
+          yesterdayTotal -= debtYesterday + commVal.yesterday;
           heldInstruments = mfNames;
+          _ovApply("commMf", {
+            current: commVal.current,
+            unrealized: commVal.current - commInvested,
+            dayChange: commVal.current - commVal.yesterday
+          }, "updateTotalCurrentValue:commodity", selected);
 
           var investment = investedCostFor(heldInstruments);
           var unrealizedProfit = total - investment;
@@ -7190,6 +7247,7 @@
   var exclusionsLabel = document.getElementById("exclusions-label");
   var excludeFixedIncomeToggle = document.getElementById("exclude-fixedincome-toggle");
   var excludeSavingsInvestmentToggle = document.getElementById("exclude-savings-investment-toggle");
+  var excludeEquityToggle = document.getElementById("exclude-equity-toggle");
   var exclusionsReset = document.getElementById("exclusions-reset");
 
   function closeExclusionsMenu() {
@@ -7205,34 +7263,44 @@
     if (exclusionsToggle) exclusionsToggle.setAttribute("aria-expanded", "true");
   }
 
+  // One list, in the order they appear on screen, so adding an exclusion is a
+  // line here rather than another branch in three places. They remain mutually
+  // exclusive: turning one on turns the others off.
+  var EXCLUSION_OPTIONS = [
+    { key: EXCLUDE_EQUITY_KEY, el: excludeEquityToggle },
+    { key: EXCLUDE_FIXED_INCOME_KEY, el: excludeFixedIncomeToggle },
+    { key: EXCLUDE_SAVINGS_INVESTMENT_KEY, el: excludeSavingsInvestmentToggle }
+  ];
+
   function syncExclusionOptionState() {
-    var fixedIncomeOn = isFixedIncomeExcluded();
-    var savingsInvestmentOn = isSavingsInvestmentExcluded();
-    if (excludeFixedIncomeToggle) {
-      excludeFixedIncomeToggle.classList.toggle("selected", fixedIncomeOn);
-      excludeFixedIncomeToggle.setAttribute("aria-selected", fixedIncomeOn ? "true" : "false");
-    }
-    if (excludeSavingsInvestmentToggle) {
-      excludeSavingsInvestmentToggle.classList.toggle("selected", savingsInvestmentOn);
-      excludeSavingsInvestmentToggle.setAttribute("aria-selected", savingsInvestmentOn ? "true" : "false");
-    }
+    var activeEl = null;
+    EXCLUSION_OPTIONS.forEach(function (o) {
+      var on = localStorage.getItem(o.key) === "true";
+      if (on && !activeEl && o.el) activeEl = o.el;
+      if (!o.el) return;
+      o.el.classList.toggle("selected", on);
+      o.el.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    var none = !activeEl;
     if (exclusionsReset) {
-      exclusionsReset.classList.toggle("selected", !fixedIncomeOn && !savingsInvestmentOn);
-      exclusionsReset.setAttribute("aria-selected", !fixedIncomeOn && !savingsInvestmentOn ? "true" : "false");
+      exclusionsReset.classList.toggle("selected", none);
+      exclusionsReset.setAttribute("aria-selected", none ? "true" : "false");
     }
+    // The button reads back the exclusion in force. Taken from the option's own
+    // text so the two cannot drift apart when one is reworded.
     if (exclusionsLabel) {
-      exclusionsLabel.textContent = fixedIncomeOn
-        ? (excludeFixedIncomeToggle ? excludeFixedIncomeToggle.textContent : "Exclusions")
-        : savingsInvestmentOn
-        ? (excludeSavingsInvestmentToggle ? excludeSavingsInvestmentToggle.textContent : "Exclusions")
-        : "No Exclusion";
+      exclusionsLabel.textContent = none ? "No Exclusion" : activeEl.textContent;
     }
   }
 
-  function applyExclusion(key, otherKey) {
+  function applyExclusion(key) {
     var nowExcluded = localStorage.getItem(key) !== "true";
     localStorage.setItem(key, nowExcluded ? "true" : "false");
-    if (nowExcluded) localStorage.setItem(otherKey, "false");
+    if (nowExcluded) {
+      EXCLUSION_OPTIONS.forEach(function (o) {
+        if (o.key !== key) localStorage.setItem(o.key, "false");
+      });
+    }
     syncExclusionOptionState();
     updateDashboardStats();
     renderValueChart();
@@ -7241,24 +7309,19 @@
     document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
   }
 
-  if (excludeFixedIncomeToggle) {
-    excludeFixedIncomeToggle.addEventListener("click", function () {
-      applyExclusion(EXCLUDE_FIXED_INCOME_KEY, EXCLUDE_SAVINGS_INVESTMENT_KEY);
+  EXCLUSION_OPTIONS.forEach(function (o) {
+    if (!o.el) return;
+    o.el.addEventListener("click", function () {
+      applyExclusion(o.key);
       closeExclusionsMenu();
     });
-  }
-
-  if (excludeSavingsInvestmentToggle) {
-    excludeSavingsInvestmentToggle.addEventListener("click", function () {
-      applyExclusion(EXCLUDE_SAVINGS_INVESTMENT_KEY, EXCLUDE_FIXED_INCOME_KEY);
-      closeExclusionsMenu();
-    });
-  }
+  });
 
   if (exclusionsReset) {
     exclusionsReset.addEventListener("click", function () {
-      localStorage.setItem(EXCLUDE_FIXED_INCOME_KEY, "false");
-      localStorage.setItem(EXCLUDE_SAVINGS_INVESTMENT_KEY, "false");
+      // Every one of them, from the same list the options are built from — a
+      // reset that clears all but the newest exclusion is worse than no reset.
+      EXCLUSION_OPTIONS.forEach(function (o) { localStorage.setItem(o.key, "false"); });
       syncExclusionOptionState();
       updateDashboardStats();
       renderValueChart();
@@ -10131,6 +10194,10 @@
           localStorage.getItem("wf-benchmark-index") || "NIFTY50",
           isFixedIncomeExcluded() ? 1 : 0,
           isSavingsInvestmentExcluded() ? 1 : 0,
+          // Without this the chart keeps its last drawing when Exclude Equity is
+          // switched, because every other input is unchanged — the cache would
+          // report a hit and the toggle would look broken.
+          isEquityExcluded() ? 1 : 0,
           timeline.length, +timeline[0], +timeline[timeline.length - 1],
           instruments.length, instruments.join(","),
           Object.keys(seUnitEventsByTicker).sort().join(","),
@@ -10175,12 +10242,30 @@
         // timeline point) and a fresh Object.keys() per point were the dominant
         // cost of the render on a multi-year, multi-instrument portfolio. Hoist
         // them so the per-point work is arithmetic and array indexing only.
-        var instrumentList = instruments.slice();
+        // Exclusions hide by INSTRUMENT CATEGORY, whichever sheet the holding is
+        // typed into — the same rule the Overview and the snapshot walk use.
+        // Filtering the LISTS rather than the arithmetic means a hidden holding
+        // loses its value and its cash flow together; dropping only the value
+        // would leave its purchases marked against a curve that never rose.
+        //
+        // Unmapped instruments count as Equity, matching the default everywhere
+        // else, so a holding with no mapping row is hidden by Exclude Equity
+        // rather than by neither exclusion.
+        var _vcCatMap = buildInstrumentTopCategoryMap();
+        function _vcHidden(name) {
+          var c = normalizeText(_vcCatMap[normalizeText(name || "")] || "");
+          return (c === "fixed income" || c === "commodity")
+            ? isFixedIncomeExcluded()
+            : isEquityExcluded();
+        }
+        var instrumentList = instruments.filter(function (n) { return !_vcHidden(n); });
         var mfUnitsByIdx = instrumentList.map(function (name) { return unitsAtByName[name]; });
         var mfNavByIdx = instrumentList.map(function (name) { return navAtByName[name]; });
         var mfTradedByIdx = instrumentList.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
         var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
-        var seMeta = seTickers.map(function (ticker) {
+        var seMeta = seTickers.filter(function (ticker) {
+          return !_vcHidden((seUnitEventsByTicker[ticker] || {}).instrument || "");
+        }).map(function (ticker) {
           var hist = stockHistoryAll[ticker] || null;
           var live = allPrices[ticker] || null;
           return {
@@ -10197,7 +10282,10 @@
 
         var commodityValueAt = [];
         var points = timeline.map(function (date, i) {
-          var activeGrams = commodityGramsAt[i] || 0;
+          // Physical gold is Commodity, so it goes with the Commodity
+          // exclusion. It used to stay on this chart while the Overview beside
+          // it dropped the same grams, and the two simply disagreed.
+          var activeGrams = isFixedIncomeExcluded() ? 0 : (commodityGramsAt[i] || 0);
           var goldPriceAtDate = goldPriceSeriesAt[i] || currentGoldPrice || 0;
           var commVal = activeGrams > 0 ? activeGrams * goldPriceAtDate : 0;
           commodityValueAt.push(commVal);
@@ -16183,21 +16271,31 @@
           // same price fallbacks, so what one total loses the other gains and net
           // worth is unchanged.
           var dbtCurrentINR = 0, dbtInvestedINR = 0, dbtDayChangeINR = 0, dbtPnlINR = 0;
+          // A gold ETF is Commodity though it is kept here, exactly as a debt
+          // ETF is Fixed Income. Counted apart so the Commodity exclusion can
+          // reach it; still shown on this card while nothing is excluded.
+          var cmdCurrentINR = 0, cmdInvestedINR = 0, cmdDayChangeINR = 0, cmdPnlINR = 0;
           var _seDbtMap = buildInstrumentTopCategoryMap();
           ovOpenHoldings.forEach(function (h) {
-            var _isDbt = normalizeText(_seDbtMap[normalizeText(h.instrument || "")] || "") === "fixed income";
+            var _seCat = normalizeText(_seDbtMap[normalizeText(h.instrument || "")] || "");
+            var _isDbt = _seCat === "fixed income";
+            var _isCmd = _seCat === "commodity";
             var priceEntry = allPrices[h.ticker] || null;
             var eodRaw = priceEntry ? priceEntry.price : null;
             var prevRaw = priceEntry ? priceEntry.prev_close : null;
             // Invested (cost basis) is price-independent — always count it, even for
             // a freshly-added instrument whose live price hasn't been fetched yet.
             // Only current value / P&L / day-change require a price.
-            if (_isDbt) dbtInvestedINR += h.investedINR; else totalInvestedINR += h.investedINR;
+            if (_isDbt) dbtInvestedINR += h.investedINR;
+            else if (_isCmd) cmdInvestedINR += h.investedINR;
+            else totalInvestedINR += h.investedINR;
             if (eodRaw === null) {
               // No live price yet: value the holding at cost so the Overview
               // Current reconciles with the split cards (which use the same cost
               // fallback via computeStocksEtfCurrentINR). Day change stays 0.
-              if (_isDbt) dbtCurrentINR += h.investedINR; else totalCurrentINR += h.investedINR;
+              if (_isDbt) dbtCurrentINR += h.investedINR;
+              else if (_isCmd) cmdCurrentINR += h.investedINR;
+              else totalCurrentINR += h.investedINR;
               return;
             }
             var ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
@@ -16211,6 +16309,10 @@
               dbtCurrentINR += cur;
               dbtPnlINR += cur - h.investedINR;
               dbtDayChangeINR += dayC;
+            } else if (_isCmd) {
+              cmdCurrentINR += cur;
+              cmdPnlINR += cur - h.investedINR;
+              cmdDayChangeINR += dayC;
             } else {
               totalCurrentINR += cur;
               totalPnlINR += cur - h.investedINR;
@@ -16223,6 +16325,12 @@
             unrealized: dbtPnlINR,
             dayChange: dbtDayChangeINR
           }, "renderStockEtfHoldingsTable:debt", ovPortfolio);
+          _ovApply("commSe", {
+            invested: cmdInvestedINR,
+            current: cmdCurrentINR,
+            unrealized: cmdPnlINR,
+            dayChange: cmdDayChangeINR
+          }, "renderStockEtfHoldingsTable:commodity", ovPortfolio);
 
           var indiaRowsData = rowsData.filter(function(r) { return r.region !== "US"; });
           var usRowsData = rowsData.filter(function(r) { return r.region === "US"; });
