@@ -1739,7 +1739,15 @@
   var _benchMemo = { twr: null, rolling: null, valueAt: {} };
 
   function _benchMemoKey(selected) {
-    return selected + "|" + (isEquityExcluded() ? 1 : 0) + (isFixedIncomeExcluded() ? 1 : 0);
+    // The price payload's own stamp is part of the key for the same reason the
+    // value chart's _inputKey carries it: prices refresh on their own cadence,
+    // and a memo keyed only on portfolio + exclusion would happily serve a series
+    // built before that refresh until the next sheet write. Null while the fetch
+    // is still in flight, which is a distinct key from any resolved payload — so
+    // the first series built without prices is replaced rather than kept.
+    var sp = getCachedStockPrices();
+    return selected + "|" + (isEquityExcluded() ? 1 : 0) + (isFixedIncomeExcluded() ? 1 : 0) +
+           "|" + ((sp && sp.updated) || "");
   }
 
   function _clearBenchmarkMemos() {
@@ -4376,8 +4384,30 @@
     var unitsHeld = 0;
     var flows = [];
 
+    // CHRONOLOGICAL ORDER IS LOAD-BEARING. The loop below carries `unitsHeld` and
+    // caps each sell at what the simulation is holding, so it only means anything
+    // if the flows arrive in the order they happened. They do not: the callers
+    // build their list by CONCATENATING sources — Mutual Fund, then Stocks/ETF,
+    // then matured FDs, then PF, then commodity — each in sheet order. A
+    // Stocks/ETF purchase from 2018 therefore arrived after a Mutual Fund sale
+    // from 2024, and that sale redeemed against units the simulation had not
+    // bought yet: on a fixture with one such pair the index leg read 10.98%
+    // against a true 11.52%, the 2024 sale redeeming Rs1.77L of a Rs4L position.
+    // The whole error lands in the alpha, since the portfolio side is computed by
+    // calculateXIRR, which is order-independent.
+    //
+    // Sorted here rather than at the call sites: this is the function whose
+    // correctness depends on it, and every future caller gets it for free. A copy,
+    // because the array belongs to the caller.
+    allCashFlows = allCashFlows.slice().sort(function (a, b) { return a.date - b.date; });
+
     allCashFlows.forEach(function (cf) {
-      var dateStr = cf.date.toISOString().slice(0, 10);
+      // formatDateISO, never toISOString: transaction dates are built at LOCAL
+      // midnight (parseFlexibleDate → new Date(y, m-1, d)), so in any timezone
+      // ahead of UTC — IST included — toISOString names the PREVIOUS day. It
+      // never failed loudly because lookupIndexPrice falls back up to five days
+      // and quietly returned the day before's price for every flow.
+      var dateStr = formatDateISO(cf.date);
       var price = lookupIndexPrice(indexPrices, dateStr);
       if (!price) return; // skip if no index price near this date
       if (cf.amount < 0) {
@@ -5436,7 +5466,12 @@
         var alpha = (portMedian - idxMedian) * 100;
         sumAlphaEl.textContent = (alpha > 0 ? "+" : "") + alpha.toFixed(1) + "%";
         sumAlphaEl.classList.remove("positive", "negative");
-        sumAlphaEl.classList.add(alpha > 0 ? "positive" : alpha < 0 ? "negative" : "");
+        // Never classList.add("") — it throws InvalidCharacterError, and the throw
+        // was caught by this render's own .catch(), which reset the summary. A
+        // portfolio whose rolling median exactly matched the index's therefore
+        // blanked ALL THREE rolling cells instead of showing a legitimate 0.0%.
+        if (alpha > 0) sumAlphaEl.classList.add("positive");
+        else if (alpha < 0) sumAlphaEl.classList.add("negative");
       } else {
         setSummaryCell(sumAlphaEl, null, "—");
       }
@@ -5596,7 +5631,15 @@
     function applyBenchmark(indexKey) {
       localStorage.setItem(BENCH_KEY, indexKey);
       var options = menu.querySelectorAll("[data-value]");
-      options.forEach(function (o) { o.classList.toggle("selected", o.dataset.value === indexKey); });
+      // aria-selected alongside the class: these are role="option" inside a
+      // role="listbox", where the selected state is what the role is FOR, and a
+      // CSS class conveys none of it. The exclusions menu beside this one already
+      // does both.
+      options.forEach(function (o) {
+        var on = o.dataset.value === indexKey;
+        o.classList.toggle("selected", on);
+        o.setAttribute("aria-selected", on ? "true" : "false");
+      });
       var selected = menu.querySelector("[data-value='" + indexKey + "']");
       var indexName = selected ? selected.textContent.trim() : "Index";
       labelEl.textContent = indexName || "Select Index";

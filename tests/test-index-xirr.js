@@ -19,6 +19,19 @@
 // Deliberately not "use strict": eval'd function declarations land in the eval's
 // own scope under strict mode, so the extracted functions would be invisible
 // here. The other extraction suites omit it for the same reason.
+//
+// Forced to Asia/Kolkata, because a UTC runner cannot see the class of bug this
+// simulation is most exposed to. Transaction dates are built at LOCAL midnight,
+// so anything that reaches for toISOString() names the previous day in every
+// timezone ahead of UTC — and silently gets away with it under TZ=UTC, which is
+// what this suite ran as. Section G is meaningless anywhere else, and the rest
+// of the file is timezone-agnostic, so the whole suite simply runs there.
+if (process.env.TZ !== "Asia/Kolkata") {
+  const r = require("child_process").spawnSync(process.execPath, [__filename], {
+    stdio: "inherit", env: Object.assign({}, process.env, { TZ: "Asia/Kolkata" }),
+  });
+  process.exit(r.status === null ? 1 : r.status);
+}
 
 const fs = require("fs");
 const path = require("path");
@@ -34,7 +47,7 @@ function extract(marker) {
   }
   return SRC.slice(start, i + 1);
 }
-eval(extract("function lookupIndexPrice(") + "\n\n" + extract("function buildIndexXirrCashFlows("));
+eval(extract("function formatDateISO(") + "\n\n" + extract("function lookupIndexPrice(") + "\n\n" + extract("function buildIndexXirrCashFlows("));
 eval(fs.readFileSync(path.join(__dirname, "..", "wf-math.js"), "utf8"));
 const calculateXIRR = globalThis.WfMath.calculateXIRR;
 
@@ -173,6 +186,65 @@ console.log("\nE. Degenerate inputs");
     [{ date: D("2020-01-01"), amount: 50000 }, { date: D("2021-01-01"), amount: -10000 }], PRICES);
   ok(orphan.length === 3 && orphan[0].amount === 0,
      "E4 a sale with nothing held takes in nothing", orphan.map((f) => f.amount));
+}
+
+console.log("\nF. Chronological order is the loop's own responsibility");
+{
+  // unitsHeld is carried across the list and every sale is capped at it, so the
+  // flows only mean anything in the order they happened. The CALLERS never
+  // guaranteed that: buildScopedReturnFlows concatenates sources — Mutual Fund,
+  // then Stocks/ETF, then matured FDs, then PF, then commodity — each in sheet
+  // order, and nothing sorted the result. A Stocks/ETF buy from 2020 therefore
+  // arrived AFTER a Mutual Fund sale from 2023, and that sale was capped against
+  // units the simulation had not bought yet.
+  //
+  // Only the INDEX leg was wrong: the portfolio side comes from calculateXIRR,
+  // which is order-independent. So the entire error landed in the alpha.
+  const mf = [{ date: D("2021-01-01"), amount: -100000 }, { date: D("2023-01-01"), amount: 400000 }];
+  const se = [{ date: D("2020-01-01"), amount: -300000 }];
+  const concatenated = mf.concat(se);
+  const sorted = concatenated.slice().sort((a, b) => a.date - b.date);
+  const shuffled = [concatenated[1], concatenated[2], concatenated[0]];
+
+  const xirrOf = (flows) => calculateXIRR(buildIndexXirrCashFlows(flows, PRICES));
+  ok(near(xirrOf(concatenated), xirrOf(sorted)),
+     "F1 concatenated order gives the same answer as chronological order",
+     [xirrOf(concatenated), xirrOf(sorted)]);
+  ok(near(xirrOf(shuffled), xirrOf(sorted)),
+     "F2 and so does an arbitrary shuffle", [xirrOf(shuffled), xirrOf(sorted)]);
+  ok(near(xirrOf(concatenated), RATE, 5e-4),
+     "F3 which is the index's own return, the only thing this may report",
+     xirrOf(concatenated));
+
+  // The mechanism, not just the summary: by 2023 the simulation holds units from
+  // both 2020 and 2021, so the sale redeems its whole Rs4,00,000.
+  const sale = buildIndexXirrCashFlows(concatenated, PRICES)
+    .find((f) => f.amount > 0 && f.date.getFullYear() === 2023);
+  ok(sale && Math.round(sale.amount) === 400000,
+     "F4 the 2023 sale redeems all Rs4,00,000, not the slice 2021 alone could fund",
+     sale && Math.round(sale.amount));
+}
+
+console.log("\nG. Flows are priced on their own LOCAL calendar day");
+{
+  ok(new Date(2024, 0, 15).toISOString().slice(0, 10) === "2024-01-14",
+     "G1 the runner is in a timezone where local date and UTC date disagree");
+
+  // Two prices a day apart and a factor of two apart, so choosing the wrong day
+  // is unmissable in the unit count rather than a rounding difference.
+  const twoDays = { "2024-01-14": 1000, "2024-01-15": 2000 };
+  const flows = buildIndexXirrCashFlows([{ date: D("2024-01-15"), amount: -100000 }], twoDays);
+  const terminal = flows[flows.length - 1].amount;
+  ok(Math.round(terminal) === 100000,
+     "G2 a flow dated the 15th buys at the 15th's level: 50 units, not 100",
+     Math.round(terminal));
+
+  // And the guarantee is stated where the loop that needs it lives, so a future
+  // caller cannot reintroduce either fault by passing its own list.
+  const fn = extract("function buildIndexXirrCashFlows(");
+  ok(/allCashFlows\.slice\(\)\.sort\(/.test(fn), "G3 the sort is inside the function");
+  ok(/formatDateISO\(cf\.date\)/.test(fn) && !/\.toISOString\(\)\.slice/.test(fn),
+     "G4 and the date comes from formatDateISO, as everywhere else in the file");
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
