@@ -43,6 +43,7 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAPPING_FILE = os.path.join(HERE, "mfmapping.json")
 OUTPUT_FILE = os.path.join(HERE, "mf_history.json")
+ISIN_MAP_FILE = os.path.join(HERE, "amfi_isin_map.json")
 
 MFAPI_URL = "https://api.mfapi.in/mf/{code}"
 TIMEOUT = 30
@@ -67,24 +68,50 @@ def scheme_codes_from_mapping():
         return []
 
     header = [str(c or "").strip().lower() for c in rows[0]]
-    try:
-        code_idx = next(i for i, h in enumerate(header) if "scheme code" in h)
-    except StopIteration:
-        print(f"WARNING: {MAPPING_FILE} has no 'Scheme Code' column; header was {header}")
-        return []
+    code_idx = next((i for i, h in enumerate(header) if "scheme code" in h), None)
     name_idx = next((i for i, h in enumerate(header) if "instrument name" in h), None)
+    # An ISIN identifies the fund just as well, and it is what the pushed sheet
+    # actually carries: the mapping arrives with the Stocks/ETF header
+    # (Market Segment / Region / Identifier) rather than the Mutual Fund one, so
+    # there is no Scheme Code column at all. Requiring one meant zero funds
+    # found, a "nothing to do" exit, and a green workflow that had never once
+    # produced this file. amfi_isin_map.json is already in the repo for exactly
+    # this translation, so use it rather than depending on which header arrived.
+    isin_idx = next((i for i, h in enumerate(header)
+                     if "isin" in h or "identifier" in h), None)
+    isin_map = {}
+    if isin_idx is not None and os.path.exists(ISIN_MAP_FILE):
+        try:
+            with open(ISIN_MAP_FILE) as f:
+                isin_map = (json.load(f) or {}).get("data") or {}
+        except (ValueError, OSError) as e:
+            print(f"WARNING: could not read {ISIN_MAP_FILE}: {e}")
 
-    out, seen = [], set()
+    if code_idx is None and not isin_map:
+        print(f"WARNING: {MAPPING_FILE} has no 'Scheme Code' column and no ISIN "
+              f"map to fall back on; header was {header}")
+        return []
+
+    out, seen, unresolved = [], set(), []
     for row in rows[1:]:
-        if code_idx >= len(row):
-            continue
-        code = str(row[code_idx] or "").strip()
+        code = ""
+        if code_idx is not None and code_idx < len(row):
+            code = str(row[code_idx] or "").strip()
+        if not code.isdigit() and isin_idx is not None and isin_idx < len(row):
+            isin = str(row[isin_idx] or "").strip().upper()
+            if isin:
+                code = str(isin_map.get(isin) or "").strip()
+                if not code.isdigit():
+                    unresolved.append(isin)
         # Scheme codes are numeric; anything else is a blank row or a stray note.
         if not code.isdigit() or code in seen:
             continue
         seen.add(code)
         name = str(row[name_idx] or "").strip() if name_idx is not None and name_idx < len(row) else ""
         out.append({"code": code, "name": name or code})
+    if unresolved:
+        print(f"{len(unresolved)} identifier(s) had no scheme code in the ISIN map, "
+              f"e.g. {unresolved[:3]}")
     return out
 
 
