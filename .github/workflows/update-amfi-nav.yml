@@ -39,7 +39,16 @@ jobs:
             echo "No changes to amfi_nav.json"
           else
             git commit -m "Update AMFI NAV data"
-            git push
+            # Rebase before pushing, and retry. Four workflows commit data
+            # files to main and their schedules overlap — the AMFI NAV and MF
+            # history runs collided within two seconds of each other, and the
+            # loser got a non-fast-forward rejection. Nothing was wrong with
+            # the data; it simply pushed second.
+            for i in 1 2 3 4 5; do
+              git pull --rebase --autostash origin main && git push && break
+              echo "push attempt $i failed; retrying"
+              sleep $((RANDOM % 10 + 5))
+            done
           fi
 
       - name: Publish AMFI NAV to Supabase
