@@ -239,6 +239,32 @@ const money = (t) => {
   ok(eq && eq[4] === "—", "D7 Equity never carries interest — it is Fixed Income by definition", eq);
   ok(fi && money(fi[4]) > 0, "D8 while Fixed Income does", fi);
 
+  // A loss has to LOOK like a loss. The table styles .num.pos / .num.out; the
+  // Overview's own .mic-hs-pos / .negative match nothing here, so Market
+  // rendered in plain body text and a loss read the same as a gain.
+  const paint = await p.evaluate(() =>
+    [...document.querySelectorAll("#nwm-drill-body tbody tr")].map((tr) => {
+      const td = [...tr.children];
+      const m = td[6];
+      return { text: m.textContent.trim(), cls: m.className,
+               colour: getComputedStyle(m).color,
+               dashes: td.filter((c) => c.textContent.trim() === "—")
+                         .map((c) => getComputedStyle(c).color) };
+    }));
+  const signed = paint.filter((r) => /[+−-]/.test(r.text));
+  ok(signed.length > 0 && signed.every((r) => /\b(pos|out)\b/.test(r.cls)),
+     "D13 every Market figure carries a class the table actually styles",
+     paint.map((r) => [r.text, r.cls]));
+  ok(signed.every((r) => /^-|−/.test(r.text)
+       ? /2[34]\d, ?9[0-9]|232|E8|rgb\(232/.test(r.colour) || r.colour !== "rgb(0, 0, 0)"
+       : true),
+     "D14 and resolves to a colour rather than falling back to body text",
+     signed.map((r) => [r.text, r.colour]));
+  const dashColours = paint.flatMap((r) => r.dashes);
+  ok(dashColours.every((c) => c !== "rgb(232, 98, 58)"),
+     "D15 while an em-dash takes no colour — it is not a loss, and colouring " +
+     "the whole column painted the blanks red", dashColours);
+
   // Invested must mean what it means on CASH FLOW · MONTHLY.
   //
   // That card shows money IN, gross, and does not list withdrawals in its

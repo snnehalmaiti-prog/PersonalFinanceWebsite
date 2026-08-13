@@ -130,6 +130,14 @@ const money = (t) => {
     return p.evaluate(() => ({
       current: (document.getElementById("overview-total-current-value") || {}).textContent,
       label: (document.getElementById("exclusions-label") || {}).textContent,
+      // The two split cards below the charts break the SAME total down, so an
+      // exclusion the Overview honours and they do not is visible as two
+      // different net worths on one screen.
+      splitTotal: (document.getElementById("isc-total-value") || {}).textContent,
+      catTotal: (document.getElementById("iscat-total-value") || {}).textContent,
+      cats: [...document.querySelectorAll("#iscat-list .isc-row-name, #iscat-list .isc-name")]
+        .map((e) => e.textContent.trim()),
+      catText: (document.getElementById("iscat-list") || {}).textContent || "",
     }));
   };
 
@@ -163,6 +171,44 @@ const money = (t) => {
      "E7 and No Exclusion clears whichever was on — including the newest, which " +
      "a reset written as a list of two keys would have missed",
      { got: reset.current, want: ALL });
+
+  // Portfolio Split and Category Split break the same total down, so they have
+  // to honour the same exclusions. Reported: with Exclude Equity on, the
+  // Overview dropped equity and both cards carried on showing all of it —
+  // two different net worths on one screen. They read their sheet list from
+  // the fixed-income toggle alone, and no sheet list can express "Equity"
+  // anyway, since a gold fund and a debt fund live in the equity sheet too.
+  const sNone = await pick("exclusions-reset");
+  ok(Math.abs(money(sNone.splitTotal) - ALL) <= 50,
+     "S1 Portfolio Split totals everything when nothing is excluded",
+     { got: sNone.splitTotal, want: ALL });
+  ok(Math.abs(money(sNone.catTotal) - ALL) <= 50,
+     "S2 and so does Category Split", { got: sNone.catTotal, want: ALL });
+
+  const sEq = await pick("exclude-equity-toggle");
+  ok(Math.abs(money(sEq.splitTotal) - (FIXED + GOLD)) <= 50,
+     "S3 Exclude Equity filters Portfolio Split — the reported bug",
+     { got: sEq.splitTotal, want: FIXED + GOLD });
+  ok(Math.abs(money(sEq.catTotal) - (FIXED + GOLD)) <= 50,
+     "S4 and Category Split", { got: sEq.catTotal, want: FIXED + GOLD });
+  ok(!/Equity/.test(sEq.catText),
+     "S5 with no Equity row at all — an excluded category has no row, no chip " +
+     "and no share of the bar, rather than a zero one", sEq.catText.slice(0, 120));
+  ok(Math.abs(money(sEq.splitTotal) - money(sEq.current)) <= 50,
+     "S6 and the cards agree with the Overview above them, which is the thing " +
+     "that was actually wrong on screen",
+     { split: sEq.splitTotal, overview: sEq.current });
+
+  const sFi = await pick("exclude-fixedincome-toggle");
+  ok(Math.abs(money(sFi.splitTotal) - EQUITY) <= 50,
+     "S7 Exclude Fixed Income and Commodity filters Portfolio Split by CATEGORY " +
+     "— the gold fund and debt fund in the equity sheet go too",
+     { got: sFi.splitTotal, want: EQUITY });
+  ok(Math.abs(money(sFi.catTotal) - EQUITY) <= 50,
+     "S8 and Category Split", { got: sFi.catTotal, want: EQUITY });
+  ok(!/Commodity|Fixed Income/.test(sFi.catText),
+     "S9 leaving neither a Commodity nor a Fixed Income row", sFi.catText.slice(0, 120));
+  await pick("exclusions-reset");
 
   ok(errs.length === 0, "no page errors", errs.slice(0, 3));
 

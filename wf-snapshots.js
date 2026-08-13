@@ -55,8 +55,9 @@
   //   breakdown          { equity, fixedIncome, commodity } for ALL portfolios
   //   byPortfolio        { name: {equity, fixedIncome, commodity} } (optional)
   //   portfolioFilter    the Overview's portfolio selector
-  //   fiExcluded         the Fixed Income exclusion toggle
+  //   fiExcluded         the Fixed Income and Commodity exclusion toggle
   //   savingsExcluded    the Savings-as-investment toggle
+  //   equityExcluded     the Equity exclusion toggle
   //   goldStale          gold price came from a stale cache
   //   hasCommodity       the portfolio actually holds commodity
   //   dateKey            local date key for the row
@@ -78,6 +79,11 @@
     // total on screen is correct for what it claims to be, and wrong as history.
     if (ctx.fiExcluded) reasons.push("fixed-income-excluded");
     if (ctx.savingsExcluded) reasons.push("savings-excluded");
+    // Every exclusion, not a list of the ones that existed when this was
+    // written. A new toggle that hides half the portfolio and is not named here
+    // does not refuse the write — it records the smaller number as history,
+    // which is the one failure this whole guard exists to prevent.
+    if (ctx.equityExcluded) reasons.push("equity-excluded");
 
     if (!(ctx.total > 0)) reasons.push("no-total");
     else if (!isStable(ctx.total, ctx.totalAgain)) reasons.push("unstable");

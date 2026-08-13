@@ -1554,6 +1554,13 @@
   // to zeros on any failure so the caller can fall back. Returns Promise<object>.
   function computePortfolioCurrentBreakdown(portfolio) {
     var fiEx = isFixedIncomeExcluded();
+    // Equity is gated here for the same reason fixed income and commodity are:
+    // every caller that shows a live figure reads this, so gating once keeps
+    // the Overview, Portfolio Split and Category Split from disagreeing about
+    // what is on screen. The snapshot writer also reads it — and refuses to
+    // record anything while ANY exclusion is on (evaluateWrite), which is what
+    // stops a filtered figure becoming history.
+    var eqEx = isEquityExcluded();
     var fdRows = getSheetRows("fd");
     var epfRows = getSheetRows("fixedincome");
     var commDates = (!fiEx && fdRows) ? collectCommodityUniqueDates(fdRows, portfolio) : [];
@@ -1603,7 +1610,7 @@
       // Subtract what was reclassified so nothing is double-counted; the three
       // buckets still sum to the same portfolio total as before.
       return {
-        equity: Math.max(0, mfCur + seCur - movedFi - movedComm),
+        equity: eqEx ? 0 : Math.max(0, mfCur + seCur - movedFi - movedComm),
         fixedIncome: fiCur + (fiEx ? 0 : movedFi),
         commodity: commCur + (fiEx ? 0 : movedComm)
       };
@@ -11746,6 +11753,11 @@
     // Same sheet coverage as the Overview's Total Investment: MF, Stocks/ETF,
     // Fixed Income (EPF) and FD — the latter two dropped when FI is excluded.
     var fiExcluded = isFixedIncomeExcluded();
+    var eqExcluded = isEquityExcluded();
+    // Only for FINDING portfolios and for Region mode. Amounts are composed from
+    // categories below: a sheet list can exclude whole sheets and nothing finer,
+    // which is how a gold fund kept in the equity sheet used to survive
+    // "exclude commodity" and every holding survived "exclude equity".
     var prefixes = fiExcluded ? ["equity", "stocksetf"] : ["equity", "stocksetf", "fixedincome", "fd"];
     var mode = getIscMode();
     var titleEl = document.getElementById("isc-title");
@@ -11774,13 +11786,6 @@
     var currentByName = null;
     var currentCatByName = {};
     var namedSum = 0;
-    names.forEach(function (name) {
-      var invested = computeTotalInvestment(name, prefixes);
-      if (invested > UNITS_EPSILON) {
-        investedByName[name] = invested;
-        namedSum += invested;
-      }
-    });
 
     // Commodity-category MF/ETF (from mapping.category === "commodity") should
     // be counted under Commodity, not Equity. Compute once per portfolio.
@@ -11814,6 +11819,26 @@
       return out;
     }
 
+    // Each portfolio's invested total, composed from its CATEGORIES so that an
+    // exclusion removes exactly what it names and the row total always equals
+    // the sum of the category chips drawn beneath it.
+    function investedForPortfolio(name) {
+      var eqInv = computeTotalInvestment(name, ["equity", "stocksetf"]);
+      var nonEq = _nonEquityFromEquitySources(name);
+      Object.keys(nonEq).forEach(function (n) { eqInv -= nonEq[n]; });
+      var fiInv = computeTotalInvestment(name, ["fixedincome", "fd"]) + (nonEq["fixed income"] || 0);
+      var commInv = nonEq["commodity"] || 0;
+      return (eqExcluded ? 0 : Math.max(0, eqInv)) +
+             (fiExcluded ? 0 : fiInv + commInv);
+    }
+    names.forEach(function (name) {
+      var invested = investedForPortfolio(name);
+      if (invested > UNITS_EPSILON) {
+        investedByName[name] = invested;
+        namedSum += invested;
+      }
+    });
+
     // US Stocks/ETF INR-conversion delta per portfolio — populated
     // asynchronously by applyStocksEtfInrConversion(). portfolioCatSubline
     // adds it to Equity so chip percentages line up with the row total.
@@ -11834,8 +11859,12 @@
         var extraFi = nonEq["fixed income"] || 0;
         // Move every non-equity category out of Equity, not just commodity.
         Object.keys(nonEq).forEach(function (n) { eq -= nonEq[n]; });
-        fi = (fiExcluded ? 0 : computeTotalInvestment(name, ["fixedincome", "fd"])) + extraFi;
-        comm = (fiExcluded ? 0 : (commodityByName[name] || 0)) + extraComm;
+        if (eqExcluded) eq = 0;
+        // The reclassified amounts are gated with the category they were moved
+        // INTO, never the sheet they came from — a gold fund in the equity sheet
+        // goes with Commodity.
+        fi = fiExcluded ? 0 : (computeTotalInvestment(name, ["fixedincome", "fd"]) + extraFi);
+        comm = fiExcluded ? 0 : ((commodityByName[name] || 0) + extraComm);
       }
       var parts = [
         { label: "Equity", value: eq, color: "#10B981" },
@@ -11854,7 +11883,7 @@
     // Reconcile to the overview's "all" figure: blank-portfolio rows become an
     // Unassigned slice; a small negative remainder (per-portfolio FIFO cost
     // matching vs "all") is scaled away so both totals agree exactly.
-    var allTotal = computeTotalInvestment("all", prefixes);
+    var allTotal = investedForPortfolio("all");
     var unassigned = allTotal - namedSum;
     // The negative-remainder rescale is BOUNDED: a large mismatch means a real
     // data/computation error, and silently scaling every portfolio would hide it.
@@ -12152,8 +12181,13 @@
     // never read from the overview store (which reflects the SELECTED portfolio).
     var selected = "all";
     var fiExcluded = isFixedIncomeExcluded();
+    var eqExcluded = isEquityExcluded();
 
-    // Category → color + display icon
+    // Category → color + display icon. No exclusion filter here on purpose: the
+    // AMOUNTS are gated (computePortfolioCurrentBreakdown, and eqInvByP /
+    // commInvByP below), and a category worth nothing already draws no row. A
+    // filter here as well passed every test with it removed — it read as the
+    // guard doing the work while the values were doing it.
     var CATS = [
       { key: "Equity",       bar: "#10B981", tint: "#D1FAE5", ink: "#065F46", icon: "📈" },
       { key: "Fixed Income", bar: "#3B82F6", tint: "#DBEAFE", ink: "#1E40AF", icon: "🏦" },
@@ -12201,8 +12235,8 @@
           if (_isCommoditySe(nm)) commInv += s; else eqInv += s;
         });
       }
-      if (eqInv > UNITS_EPSILON) eqInvByP[n] = eqInv;
-      if (commInv > UNITS_EPSILON) commInvByP[n] = commInv;
+      if (!eqExcluded && eqInv > UNITS_EPSILON) eqInvByP[n] = eqInv;
+      if (!fiExcluded && commInv > UNITS_EPSILON) commInvByP[n] = commInv;
       if (!fiExcluded) {
         var fi = computeTotalInvestment(n, ["fixedincome", "fd"]);
         if (fi > UNITS_EPSILON) fiInvByP[n] = fi;
@@ -16675,6 +16709,7 @@
       portfolioFilter: localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all",
       fiExcluded: isFixedIncomeExcluded(),
       savingsExcluded: isSavingsInvestmentExcluded(),
+      equityExcluded: isEquityExcluded(),
       goldStale: !!(_goldRateMeta && _goldRateMeta.stale),
       hasCommodity: !!(fdRows && _hasCommodityRows(fdRows, "all")),
       dateKey: WfSnapshots.localDateKey(),
@@ -17199,15 +17234,28 @@
       "<th class=\"num\">Interest</th><th class=\"num\">Idle cash</th>" +
       "<th class=\"num\">Market</th><th class=\"num\">Closing</th>" +
       "</tr></thead><tbody>";
+    // Signed money, coloured by sign: green for a gain, red for a loss. The
+    // classes have to be `pos` / `out` \u2014 the ones .mic-txn-table actually
+    // styles. It was using the Overview's `mic-hs-pos` / `negative`, which
+    // match no rule at this specificity, so every Market figure rendered in
+    // plain body text and a loss looked like a gain at a glance.
+    //
+    // An em-dash is not zero and not a loss, so it takes no colour at all;
+    // colouring the whole column painted those orange too.
+    var cell = function (v) {
+      if (!v) return '<td class="num">\u2014</td>';
+      return '<td class="num ' + (v < 0 ? "out" : "pos") + '">' + _nwmSigned(v) + "</td>";
+    };
     res.rows.forEach(function (r) {
       html += "<tr><td>" + escapeHtml(r.category) + "</td>" +
         '<td class="num">' + formatCurrency(r.opening) + "</td>" +
+        // Money in and money out are flows, not results: the sign is already in
+        // the figure, and they are the one pair whose colour says direction
+        // rather than good or bad.
         '<td class="num">' + (r.bought ? _nwmSigned(r.bought) : "\u2014") + "</td>" +
-        '<td class="num out">' + (r.sold ? _nwmSigned(-r.sold) : "\u2014") + "</td>" +
-        '<td class="num">' + (r.interest ? _nwmSigned(r.interest) : "\u2014") + "</td>" +
-        '<td class="num">' + (r.idle ? _nwmSigned(r.idle) : "\u2014") + "</td>" +
-        '<td class="num ' + (r.market < 0 ? "negative" : "mic-hs-pos") + '">' +
-          _nwmSigned(r.market) + "</td>" +
+        (r.sold ? '<td class="num out">' + _nwmSigned(-r.sold) + "</td>"
+                : '<td class="num">\u2014</td>') +
+        cell(r.interest) + cell(r.idle) + cell(r.market) +
         '<td class="num">' + formatCurrency(r.closing) + "</td></tr>";
     });
     html += "</tbody></table>";
