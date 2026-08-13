@@ -10048,6 +10048,17 @@
         // balance. Previously every PF row was added positively (no type read), so a
         // withdrawal inflated the FI value on the chart and the XIRR opening mark.
         var type = typeIdx !== -1 ? normalizeText(row[typeIdx]) : "";
+        // An INTEREST row is not a deposit, and its value is already supplied by
+        // the accrual series: computePfAccountValue folds a manually-typed credit
+        // into the holding's `current`, which buildPfAccrualAt then adds as
+        // current-minus-invested. Counting the row here as well put the same
+        // rupees into fixed_income TWICE — overstating net worth by every PF
+        // interest credit ever typed in, and, because only one copy was ever
+        // named as interest, leaving the other in the market residual. EPF
+        // credits at the financial year end, which is why Fixed Income grew a
+        // "market gain" every March, of about a year's interest, in an asset
+        // class that has no market to speak of.
+        if (type.indexOf("interest") !== -1) return;
         if (type.indexOf("withdraw") !== -1) amount = -Math.abs(amount);
         entries.push({ date: date, key: "pf||" + rowIdx, amount: amount });
         return;

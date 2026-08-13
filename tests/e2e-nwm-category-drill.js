@@ -28,6 +28,7 @@ const PORT = process.env.PORT || 8098;
 // A recognisable EPF interest credit, dated into the month the drill-down opens
 // on (the most recent filled bar) so the panel is asked about it directly.
 const EPF_CREDIT = 47000;
+const PF_CREDIT = 39000;   // typed into the FD sheet, not the EPF sheet
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 // Last month, not this one: the drill-down opens on a bar the backfill has
 // actually recorded, and the month in progress may not be one yet.
@@ -54,6 +55,13 @@ const SHEETS = {
   "wf-fd-data": [FDH,
     ["1-Jan-2024", "Snnehal", "HDFC", "FD-1", "Fixed Income", "Fixed Deposit", "Buy", "100000", "1-Jan-2027", "7%", ""],
     ["1-Jan-2024", "Trisha", "EPFO", "PF-1", "Fixed Income", "Provident Fund", "Buy", "50000", "", "", ""],
+    // A PF interest credit TYPED INTO THE FD SHEET — how an annual EPF credit is
+    // actually recorded. buildFdValueEvents adds every PF row to the running
+    // value whatever its type, while buildPfAccrualAt adds current-minus-invested
+    // for the same holding, and computePfAccountValue counts a manual credit in
+    // "current". The same rupees therefore enter fixed_income twice, and only one
+    // copy is ever named as interest.
+    [dmyToday(), "Trisha", "EPFO", "PF-1", "Fixed Income", "Provident Fund", "Interest", String(PF_CREDIT), "", "", ""],
     ["1-Jan-2024", "Snnehal", "—", "Physical Gold", "Commodity", "Gold", "Buy", "", "", "", "10"]],
   // The standalone Provident Fund (EPF) sheet — a SECOND source of fixed-income
   // interest, and one the Interest column used to be blind to. Its Interest rows
@@ -289,6 +297,18 @@ const money = (t) => {
   ok(efi && money(efi[6]) < EPF_CREDIT,
      "D7d and is gone from that month's market figure, not double-counted",
      { market: efi && efi[6], credit: EPF_CREDIT });
+  // BOTH credits, named once each. Interest must cover them together — an
+  // assertion on either alone passes while the other is being lost.
+  ok(efi && money(efi[4]) >= EPF_CREDIT + PF_CREDIT,
+     "D7e Interest covers the EPF-sheet and FD-sheet credits together",
+     { interest: efi && efi[4], expected: EPF_CREDIT + PF_CREDIT });
+  // And the market residual is NOISE, not a whole credit. `< PF_CREDIT` is not
+  // enough: the double-counted PF credit landed at 38,850 against a 39,000 row
+  // and slipped under exactly that bound. What matters is that the residual is a
+  // rounding-scale figure, so it is asserted as such.
+  ok(efi && Math.abs(money(efi[6])) < 1000,
+     "D7f leaving a market residual of rounding size, not a duplicated credit",
+     { market: efi && efi[6] });
   ok(fi && money(fi[4]) > 0, "D8 while Fixed Income does", fi);
 
   // A loss has to LOOK like a loss. The table styles .num.pos / .num.out; the
