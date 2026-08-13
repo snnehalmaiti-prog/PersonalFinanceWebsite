@@ -5435,7 +5435,14 @@
         }
       });
 
-      if (!portRolling.length) return null;
+      // How much history the series actually spans. Reported either way so the
+      // card can tell "no window of this length fits yet" apart from "something
+      // went wrong" — the difference between a portfolio that is simply younger
+      // than the window and one whose data failed to load. Both used to render an
+      // identical bare dash.
+      var spanYears = navSeries.length > 1
+        ? (navSeries[navSeries.length - 1].date - navSeries[0].date) / (365.25 * 24 * 60 * 60 * 1000)
+        : 0;
 
       function stats(arr) {
         arr.sort(function (a, b) { return a - b; });
@@ -5443,7 +5450,12 @@
         var _median = _n % 2 ? arr[_mid] : (arr[_mid - 1] + arr[_mid]) / 2;
         return { min: arr[0], median: _median, max: arr[arr.length - 1], count: arr.length };
       }
-      return { portfolio: stats(portRolling), index: idxRolling.length ? stats(idxRolling) : null };
+      return {
+        portfolio: portRolling.length ? stats(portRolling) : null,
+        index: idxRolling.length ? stats(idxRolling) : null,
+        windowYears: windowYears,
+        spanYears: spanYears
+      };
     });
   }
 
@@ -5455,8 +5467,9 @@
   }
 
   // Rolling-return summary shown beside the XIRR block (right of the divider) in the
-  // benchmark card. Driven by the selected period (1Y/2Y/3Y/5Y) and index; median is the
-  // representative single figure. "All" and "10Y" have no rolling window → "N/A".
+  // benchmark card. Driven by the selected period (1Y/2Y/3Y/5Y/10Y) and index; median
+  // is the representative single figure. Only "All" has no window length to roll,
+  // so only "All" is N/A by construction.
   function initRollingReturnSummary() {
     var sumPortEl = document.getElementById("rolling-summary-port");
     var sumIdxEl = document.getElementById("rolling-summary-idx");
@@ -5464,8 +5477,13 @@
     var sumIdxLabelEl = document.getElementById("rolling-summary-idx-label");
     if (!sumPortEl && !sumIdxEl) return;
 
-    // Windows we can compute a rolling return for. "all"/"10" are intentionally excluded.
-    var ROLLING_PERIODS = { "1": 1, "2": 1, "3": 1, "5": 1 };
+    // Every period pill that names a window length can be rolled; computeRollingReturns
+    // is generic in windowYears and always was. "10" used to be excluded alongside
+    // "all", which conflated two different things: "All" has no window to roll, while
+    // 10Y merely needs a portfolio old enough — and one with 12 years of history has
+    // 24 such windows. Whether enough history exists is decided per portfolio below,
+    // from the series itself, not by a list fixed at authoring time.
+    var ROLLING_PERIODS = { "1": 1, "2": 1, "3": 1, "5": 1, "10": 1 };
 
     function fmtPct(v) {
       if (v === null || v === undefined || !isFinite(v)) return "—";
@@ -5484,7 +5502,15 @@
       if (v > 0) el.classList.add("positive");
       else if (v < 0) el.classList.add("negative");
     }
-    function setSummary(portMedian, idxMedian, notAvailable) {
+    // `title` explains the figure (or its absence) on hover. A rolling median is a
+    // summary of N windows, and N matters: the median of 24 ten-year windows and
+    // the median of 2 are not the same claim, and nothing on the card distinguished
+    // them.
+    function setSummary(portMedian, idxMedian, notAvailable, title) {
+      [sumPortEl, sumIdxEl, sumAlphaEl].forEach(function (el) {
+        if (!el) return;
+        if (title) el.title = title; else el.removeAttribute("title");
+      });
       if (notAvailable) {
         setSummaryCell(sumPortEl, null, "N/A");
         setSummaryCell(sumIdxEl, null, "N/A");
@@ -5518,7 +5544,11 @@
       var indexKey = localStorage.getItem("wf-benchmark-index") || "NIFTY50";
       if (sumIdxLabelEl) sumIdxLabelEl.textContent = indexDisplayName(indexKey) + " Rolling Return";
 
-      if (!ROLLING_PERIODS[period]) { setSummary(null, null, true); return; }
+      // "All" names no window length, so there is nothing to roll.
+      if (!ROLLING_PERIODS[period]) {
+        setSummary(null, null, true, "Rolling returns need a fixed window length; \u201cAll\u201d has none.");
+        return;
+      }
 
       setSummary(null, null, false); // reset to "—" while computing
       var windowYears = parseFloat(period);
@@ -5526,8 +5556,21 @@
         if (gen !== _renderGen) return;
         if (!result) { setSummary(null, null, false); return; }
         var p = result.portfolio, idx = result.index;
+        if (!p) {
+          // The series exists, but no window of this length fits inside it — the
+          // portfolio is simply younger than the window. Say that, rather than
+          // showing the same bare dash a failed load shows. This is the ordinary
+          // case for 10Y and the reason it used to be excluded outright.
+          setSummary(null, null, true,
+            "Needs " + windowYears + " years of history to roll a " + windowYears +
+            "-year window; this portfolio has " + result.spanYears.toFixed(1) + ".");
+          return;
+        }
         // Median = representative single-figure rolling return.
-        setSummary(p.median, idx ? idx.median : null, false);
+        setSummary(p.median, idx ? idx.median : null, false,
+          "Median of " + p.count + " rolling " + windowYears + "-year window" +
+          (p.count === 1 ? "" : "s") + " (best " + (p.max * 100).toFixed(1) +
+          "%, worst " + (p.min * 100).toFixed(1) + "%).");
       }).catch(function () {
         if (gen !== _renderGen) return;
         setSummary(null, null, false);
