@@ -77,5 +77,50 @@ console.log("\nC. The benchmark dropdown reports its state to assistive tech");
      "C3 and applyBenchmark keeps it in step with the class");
 }
 
+console.log("\nD. A period that cannot be measured falls back on BOTH legs");
+{
+  // No opening mark at the cutoff means the requested window is unmeasurable —
+  // the portfolio did not exist then, or nothing it held can be priced that far
+  // back. Reporting all-time is right; reporting all-time for the PORTFOLIO while
+  // leaving the INDEX on flows filtered to the period was not. The two legs were
+  // measured over different windows and the alpha subtracted them anyway.
+  const from = SRC.indexOf("function computeBenchmarkXirr(indexKey, periodYears)");
+  ok(from !== -1, "D1 computeBenchmarkXirr is where the period window is chosen");
+  const body = SRC.slice(from, SRC.indexOf("\n  // Builds a synthetic", from));
+
+  ok(!/if \(!startVal \|\| startVal <= 0\) return \{ xirr: allTimePortfolioXirr, indexFlows: allFlowsForIndex \};/.test(body),
+     "D2 the mismatched fallback is gone");
+  ok(/if \(!startVal \|\| startVal <= 0\) \{\s*return \{ xirr: allTimePortfolioXirr, indexFlows: allFlows, fellBack: true \};/.test(body),
+     "D3 a missing opening mark sends BOTH legs to all-time");
+  // The solver giving up on the period window is the same situation.
+  ok(/if \(periodXirr == null \|\| !isFinite\(periodXirr\)\) \{\s*return \{ xirr: allTimePortfolioXirr, indexFlows: allFlows, fellBack: true \};/.test(body),
+     "D4 and so does a period XIRR that will not converge");
+  // The old code hid a non-converging period behind `|| allTimePortfolioXirr`,
+  // which kept the index on the period flows.
+  ok(!/calculateXIRR\(portFlows\) \|\| allTimePortfolioXirr/.test(body),
+     "D5 the inline || fallback that kept the index on period flows is gone");
+
+  ok(/function measuredYears\(fellBack\)/.test(body),
+     "D6 the window actually measured is computed, not assumed from the pill");
+  ok(/years: years/.test(body),
+     "D7 and returned with the result");
+}
+
+console.log("\nE. Both modes name the window they actually measured");
+{
+  // CAGR disclosed a shortened window; XIRR, which shortens for its own reason,
+  // said nothing — so the two modes disagreed about honesty on the same card.
+  const from = SRC.indexOf("function renderResult(mode, xirrResult, cagrResult)");
+  const body = SRC.slice(from, SRC.indexOf("\n    }", SRC.indexOf("subtitleEl.textContent", from)));
+  ok(!/if \(subtitleEl && mode === "cagr"\)/.test(body),
+     "E1 the disclosure is no longer gated on CAGR mode");
+  ok(/var result = mode === "cagr" \? cagrResult : xirrResult;/.test(body),
+     "E2 it reads the window from whichever result is on screen");
+  ok(/actualYears < reqYears \* 0\.95/.test(body),
+     "E3 and fires when the measured window is materially shorter than the pill");
+  ok(/the portfolio's full history, shorter than the/.test(body),
+     "E4 saying so in words, beside the figure it qualifies");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

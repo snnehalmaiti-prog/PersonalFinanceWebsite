@@ -4669,7 +4669,17 @@
                             + (sumProvidentFundCurrentValue(fdRows, selected) || 0);
         }
 
-        if (!startVal || startVal <= 0) return { xirr: allTimePortfolioXirr, indexFlows: allFlowsForIndex };
+        // No opening mark means the requested window cannot be measured: either the
+        // portfolio did not exist at the cutoff, or nothing it held then can be
+        // priced that far back. Falling back to the ALL-TIME figure is the right
+        // answer, but it has to be all-time on BOTH sides — this used to hand back
+        // the all-time portfolio XIRR while leaving the index on flows filtered to
+        // the period, so the two legs were measured over different windows and the
+        // alpha compared them anyway. `fellBack` carries the substitution up so the
+        // card can say which window it actually reported, the way CAGR mode does.
+        if (!startVal || startVal <= 0) {
+          return { xirr: allTimePortfolioXirr, indexFlows: allFlows, fellBack: true };
+        }
         // Index seed = same opening mark (cutoff value) + post-cutoff signed flows, so the
         // index is measured over the SAME window and starting capital as the portfolio.
         var idxFlows = periodFlows.slice();
@@ -4678,24 +4688,45 @@
         var portFlows = periodFlows.slice();
         portFlows.unshift({ date: cutoff, amount: -startVal });
         if (periodCurrentVal > 0) portFlows.push({ date: new Date(), amount: periodCurrentVal });
-        return { xirr: (calculateXIRR(portFlows) || allTimePortfolioXirr), indexFlows: idxFlows };
+        // The same rule for the solver giving up: if the period XIRR does not
+        // converge we report all-time, so both legs go back to all-time together.
+        var periodXirr = calculateXIRR(portFlows);
+        if (periodXirr == null || !isFinite(periodXirr)) {
+          return { xirr: allTimePortfolioXirr, indexFlows: allFlows, fellBack: true };
+        }
+        return { xirr: periodXirr, indexFlows: idxFlows };
       });
     } else {
       portfolioXirrPromise = Promise.resolve({ xirr: allTimePortfolioXirr, indexFlows: allFlowsForIndex });
     }
 
+    // The window actually measured, so the card can name it instead of letting the
+    // selected pill speak for a figure that is not from that period. Null means
+    // "all time", which is what the All pill already says. computeAlignedCagr
+    // reports the same thing as `years`.
+    function measuredYears(fellBack) {
+      if (!periodYears || fellBack) {
+        if (!allFlows.length) return null;
+        var earliest = allFlows[0].date;
+        allFlows.forEach(function (f) { if (f.date < earliest) earliest = f.date; });
+        return periodYears ? (new Date() - earliest) / (365.25 * 24 * 60 * 60 * 1000) : null;
+      }
+      return periodYears;
+    }
+
     return portfolioXirrPromise.then(function (pr) {
+      var years = measuredYears(pr.fellBack);
       return fetchIndexHistory().then(function (indexHistory) {
         var indexData = indexHistory[indexKey];
         var indexPriceDates = indexData && indexData.prices ? Object.keys(indexData.prices).sort() : [];
         var indexHasHistory = indexPriceDates.length >= 30 &&
           (new Date(indexPriceDates[indexPriceDates.length - 1]) - new Date(indexPriceDates[0])) > 180 * 24 * 60 * 60 * 1000;
-        if (!indexHasHistory) return { portfolioXirr: pr.xirr, indexXirr: null };
+        if (!indexHasHistory) return { portfolioXirr: pr.xirr, indexXirr: null, years: years };
         // Feed the FULL signed flows (buys AND sells) so the index redeems units when the
         // portfolio sells — apples-to-apples, not buy-only.
         var indexFlows = buildIndexXirrCashFlows(pr.indexFlows, indexData.prices);
         var indexXirr = indexFlows ? calculateXIRR(indexFlows) : null;
-        return { portfolioXirr: pr.xirr, indexXirr: indexXirr };
+        return { portfolioXirr: pr.xirr, indexXirr: indexXirr, years: years };
       });
     });
   }
@@ -5596,17 +5627,23 @@
         idxVal = xirrResult ? xirrResult.indexXirr : null;
       }
 
-      // computeAlignedCagr falls back to the portfolio's own life when it is
-      // younger than the selected period — a "3Y" button can quietly produce a
-      // 1.6-year window, and annualising a short window is exactly where an
-      // implausible figure comes from. Say which window was actually measured
-      // rather than letting the pill's label speak for it.
-      if (subtitleEl && mode === "cagr") {
+      // BOTH modes shorten their window silently when the requested period cannot
+      // be measured — CAGR falls back to the portfolio's own life when it is
+      // younger than the pill, XIRR falls back to all-time when there is no
+      // opening mark at the cutoff. Annualising a short window is exactly where
+      // an implausible figure comes from, so say which window was actually
+      // measured rather than letting the pill's label speak for it.
+      if (subtitleEl) {
         var reqYears = (_period && _period !== "all") ? parseFloat(_period) : null;
-        var actualYears = cagrResult ? cagrResult.years : null;
+        var result = mode === "cagr" ? cagrResult : xirrResult;
+        var actualYears = result ? result.years : null;
+        var base = mode === "cagr"
+          ? "point-to-point CAGR over selected period"
+          : "Based on actual investment cash flow dates";
         subtitleEl.textContent = (reqYears && actualYears && actualYears < reqYears * 0.95)
-          ? "point-to-point CAGR over " + actualYears.toFixed(1) + "y — the portfolio's full history, shorter than the " + reqYears + "Y selected"
-          : "point-to-point CAGR over selected period";
+          ? base.replace(/ over selected period$/, "") +
+            " over " + actualYears.toFixed(1) + "y — the portfolio's full history, shorter than the " + reqYears + "Y selected"
+          : base;
       }
 
       portfolioXirrEl.textContent = fmtRate(portVal);
