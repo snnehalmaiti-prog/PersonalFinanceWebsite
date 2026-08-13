@@ -187,6 +187,16 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
      "A7 choosing a month reorients the chart to that month's first and last " +
      "day — the whole month, not the first and last day that happen to have a " +
      "data point", { got: [picked.min, picked.max], want: [want.min, want.max], month: picked.v });
+  // The subtitle names the month's own first and last day. It used to read
+  // "FROM 2026 · TO JUL 2026" — a year on one side and a month on the other,
+  // which says neither where the window starts nor that it is a single month.
+  const sub = await p.evaluate(() =>
+    (document.getElementById("pvc-period") || {}).textContent || "");
+  ok(/^FROM 1ST [A-Z]+ TO \d{1,2}(ST|ND|RD|TH) [A-Z]+ \d{4}$/.test(sub.trim()),
+     "A7b the subtitle names the month's first and last day", sub);
+  ok(!/·/.test(sub),
+     "A7c and drops the year-versus-month form entirely", sub);
+
   const afterPick = await state();
   ok(afterPick.allActive === false, "A8 and All time stops being the active one");
   // Measured HERE, not at load: the picker is hidden while All time is on, and

@@ -9925,10 +9925,32 @@
         for (var fj = 0; fj < points.length; fj++) {
           if (points[fj].x.getTime() >= lo) { firstVis = points[fj]; break; }
         }
-        pvcPeriodEl.textContent = full
-          ? "OVER TIME"
-          : ("FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
-             " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase());
+        // A month chosen from the picker names its own first and last day.
+        // The generic form read "FROM 2026 · TO JUL 2026" for a single month —
+        // a year on one side and a month on the other, which says neither what
+        // the window starts at nor that it is one month at all.
+        var _ord = function (d) {
+          var n = d.getDate(), t = n % 100;
+          return n + ((t >= 11 && t <= 13) ? "th"
+            : n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th");
+        };
+        if (full) {
+          pvcPeriodEl.textContent = "OVER TIME";
+        } else if (!__pvcAllTime && __pvcMonth) {
+          // The calendar month, not the first and last point that happen to
+          // exist: a month whose 1st is a Sunday still began on the 1st.
+          var _b = _pvcMonthBounds(__pvcMonth);
+          var _s = new Date(_b.min), _e = new Date(_b.max);
+          var _long = new Intl.DateTimeFormat("en-IN", { month: "long" });
+          // The month is named once and the year once: both ends share them, so
+          // repeating either is noise on a line this short.
+          pvcPeriodEl.textContent = ("FROM " + _ord(_s) + " " + _long.format(_s) +
+            " TO " + _ord(_e) + " " + _long.format(_e) + " " + _e.getFullYear()).toUpperCase();
+        } else {
+          pvcPeriodEl.textContent =
+            "FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
+            " · TO " + _pvcMonthFmt.format(endPt.x).toUpperCase();
+        }
       }
       if (!changeEl) return;
       // A change needs two points to be a change. Zoomed to the full range there
