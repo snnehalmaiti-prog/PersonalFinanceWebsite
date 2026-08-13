@@ -353,6 +353,33 @@ const money = (t) => {
   });
   await p.waitForTimeout(2500);
 
+  // January, with a year selected. Reported: "This month cannot be broken down"
+  // on Jan 2026 — and with no dates named, which is the tell. A missing category
+  // column names the date it is missing from; naming nothing means there was no
+  // previous row at all. With a year filter on, January is the first bar on the
+  // chart, and its opening is the December the filter is hiding.
+  const janDrill = await p.evaluate(() => {
+    const sel = document.getElementById("nwm-year");
+    const years = [...sel.options].map((o) => o.value).sort();
+    // A year that is NOT the earliest, so a December genuinely exists before it.
+    sel.value = years[years.length - 1]; if (sel.onchange) sel.onchange();
+    return new Promise((res) => setTimeout(() => {
+      const c = window.__wfNwmChart;
+      const i = (c.data.labels || []).findIndex((l) => /Jan/.test(l));
+      if (i < 0) return res({ err: "no January bar", labels: c.data.labels });
+      c.options.onClick({}, [{ index: i, datasetIndex: 0 }], c);
+      res({ label: c.data.labels[i],
+            body: (document.getElementById("nwm-drill-body") || {}).textContent || "",
+            rows: document.querySelectorAll("#nwm-drill-body tbody tr").length });
+    }, 2500));
+  });
+  ok(!janDrill.err && janDrill.rows > 0,
+     "J1 January breaks down like any other month — its opening is the previous " +
+     "December, which the year filter hides from the chart but not from the data",
+     janDrill);
+  ok(!/cannot be broken down/i.test(janDrill.body || ""),
+     "J2 rather than refusing for want of a row that exists", (janDrill.body || "").slice(0, 90));
+
   // Totals, and the ability to actually reach them.
   //
   // Opened explicitly rather than relying on the panel still being up from an

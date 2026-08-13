@@ -17796,7 +17796,17 @@
           if (i < 0 || i >= bars.length) return;
           // The previous SNAPSHOT, not the previous slot: bars has a slot per
           // calendar month, and the ones between two snapshots are placeholders.
-          _nwmOpenDrill(bars[i], WfSnapshots.previousRecorded(bars, i));
+          var _prev = WfSnapshots.previousRecorded(bars, i);
+          // Nothing before it ON SCREEN is not the same as nothing before it.
+          // With a year selected, bars starts at January, whose opening lives in
+          // the December the filter is hiding.
+          if (!_prev && __nwmDrillCtx && __nwmDrillCtx.allRows) {
+            var _m = bars[i].month;
+            __nwmDrillCtx.allRows.forEach(function (r) {
+              if (r && r.month < _m && r.total != null) _prev = r;
+            });
+          }
+          _nwmOpenDrill(bars[i], _prev);
         }
       }
     });
@@ -18041,10 +18051,18 @@
         // Kept for the drill-down: the same per-category flows these bars are
         // built from, so the panel cannot disagree with the chart it opens off.
         __nwmDrillCtx = { contribByCat: from ? _nwmContribByCategory(pf) : {} };
-        _nwmRender(WfSnapshots.buildMonthlyChange(list,
+        var _nwmBuilt = WfSnapshots.buildMonthlyChange(list,
           from ? _nwmContributionsByMonth(pf) : {},
           from ? _nwmInterestByMonth(from, pf) : {},
-          null, cash));
+          null, cash);
+        // Every month, oldest first — NOT just the ones the year filter shows.
+        // January's opening is December's close, and with a year selected
+        // December is not on the chart, so the drill-down had nothing to measure
+        // the first month of any year against and refused to break it down.
+        __nwmDrillCtx.allRows = _nwmBuilt.slice().sort(function (x, y) {
+          return String(x.month).localeCompare(String(y.month));
+        });
+        _nwmRender(_nwmBuilt);
       })
       .catch(function (e) {
         // A missing table is the expected state until the migration is run, and
