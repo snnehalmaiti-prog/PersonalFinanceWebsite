@@ -125,8 +125,15 @@ console.log("\nF. The benchmark card reads the whole-sheet value, not the slice"
   // MINUS whatever the exclusion in force hides" — the same rule, applied to the
   // portfolio actually on screen (see section H). Whole-sheet is still what these
   // helpers return when no exclusion is on, which is the case F1/F2 pin.
-  ok(/var periodCurrentVal = _ovScopedMfCurrent\(\) \+ result\.seCurrentIncluded;/.test(SRC),
-     "F3 the PERIOD portfolio XIRR (1Y/2Y/3Y/5Y/10Y) marks the MF sheet in the scope on screen");
+  // F3 used to require the period terminal to be the WHOLE scoped MF sheet value.
+  // That paid out funds the opening mark could not price at the cutoff — no mark,
+  // no in-period buys, full terminal — which reads as pure profit and inflated the
+  // 1Y portfolio XIRR far above the same window's rolling return. The MF leg now
+  // follows the same include-both-or-neither rule as the Stocks/ETF leg.
+  ok(/var periodCurrentVal = result\.mfCurrentIncluded \+ result\.seCurrentIncluded;/.test(SRC),
+     "F3 the PERIOD portfolio XIRR (1Y/2Y/3Y/5Y/10Y) pays out only what it also opened or bought in-period");
+  ok(!/var periodCurrentVal = _ovScopedMfCurrent\(\)/.test(SRC),
+     "F3b the whole-sheet MF terminal is gone, not left beside it");
   ok(/function _ovScopedMfCurrent\(\) \{\s*return \(isEquityExcluded\(\) \? 0 : _ovSlice\.mf\.current\) \+\s*\(isFixedIncomeExcluded\(\) \? 0 : _ovSlice\.debtMf\.current \+ _ovSlice\.commMf\.current\);/.test(SRC),
      "F4 and that scope is the whole sheet whenever no exclusion is on");
   // F5 used to require this terminal to be _ovAggregate().current — the header's

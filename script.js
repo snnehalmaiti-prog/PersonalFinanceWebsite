@@ -4642,17 +4642,20 @@
       portfolioXirrPromise = markPromise.then(function (result) {
         // Opening mark (MF + stocks priced at the cutoff).
         var startVal = result.value;
-        // Terminal value in the same scope: MF current + stocks' current value
-        // (post-cutoff purchases now included via computePortfolioValueAtDate).
-        // Whole-sheet Mutual Fund value, not the equity-only slice: the period
-        // flows below are every Mutual Fund row and the opening mark from
-        // computePortfolioValueAtDate prices every held instrument, debt and gold
-        // funds included. Marking the terminal at the equity slice alone is what
-        // made a period XIRR (1Y/2Y/…) read far below the same window's rolling
-        // return — the debt/gold funds were bought and opened but never paid out.
-        // The Stocks/ETF side needs no such repair: seCurrentIncluded is already
-        // built from every mapped ticker the scope gate let through.
-        var periodCurrentVal = _ovScopedMfCurrent() + result.seCurrentIncluded;
+        // Terminal value in the same scope: the current value of exactly the
+        // instruments the opening mark could price at the cutoff, plus the ones
+        // bought entirely inside the period (whose buys are in periodFlows).
+        //
+        // This used to take the WHOLE scoped Mutual Fund sheet value
+        // (_ovScopedMfCurrent()) as the MF terminal, to stop debt/gold funds from
+        // being opened-but-never-paid-out. That over-corrected: any fund with no
+        // scheme mapping, or with no NAV history reaching back to the cutoff, then
+        // received a full terminal with NO opening mark and NO in-period buys —
+        // pure profit, arriving from nowhere. On a 1Y window that alone can lift
+        // the reported portfolio XIRR tens of points above the same window's
+        // rolling return. mfCurrentIncluded applies the same include-both-or-
+        // neither rule the Stocks/ETF leg (seCurrentIncluded) already used.
+        var periodCurrentVal = result.mfCurrentIncluded + result.seCurrentIncluded;
         // Period cash flows for MF + stocks (buys/sells after the cutoff), in the
         // same scope as the opening mark and the terminal above.
         var periodFlows = [];
@@ -5196,13 +5199,29 @@
         var dateStr = formatDateISO(targetDate);
         var mfTotal = 0, seTotal = 0;
         var includedStockTickers = [];
+        var today = new Date();
+        // Mutual Fund mirror of the Stocks/ETF rule below: a fund contributes its
+        // CURRENT value to a period terminal only when it also had an opening mark
+        // at the cutoff, or when it was bought entirely after the cutoff (so its
+        // buys are inside the period flows). A fund held at the cutoff but
+        // unpriceable then belongs to neither side — handing it a terminal with no
+        // opening mark is money that arrives from nowhere and inflates the period
+        // XIRR without limit.
+        var mfCurrentIncluded = 0;
         instruments.forEach(function (name) {
           var units = lastAtOrBefore(unitEvents[name], targetDate, "cumulativeUnits") || 0;
           var nav = lastAtOrBefore(navByInstrument[name], targetDate, "nav");
-          if (units > UNITS_EPSILON && nav) mfTotal += units * nav;
+          var unitsToday = lastAtOrBefore(unitEvents[name], today, "cumulativeUnits") || 0;
+          var navToday = lastAtOrBefore(navByInstrument[name], today, "nav");
+          var curVal = (unitsToday > UNITS_EPSILON && navToday) ? unitsToday * navToday : 0;
+          if (units > UNITS_EPSILON && nav) {
+            mfTotal += units * nav;
+            mfCurrentIncluded += curVal;
+          } else if (units <= UNITS_EPSILON && unitsToday > UNITS_EPSILON) {
+            mfCurrentIncluded += curVal;
+          }
         });
         var seCurrentIncluded = 0;
-        var today = new Date();
         Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
           var entry = seUnitEventsByTicker[ticker];
           var hist = stockHistory[ticker];
@@ -5231,7 +5250,9 @@
           // Held at cutoff but UNPRICED then → excluded from both opening and terminal
           // (its pre-cutoff buys are likewise outside the period flows).
         });
-        return { value: mfTotal + seTotal, mfValue: mfTotal, seValue: seTotal, seCurrentIncluded: seCurrentIncluded, includedStockTickers: includedStockTickers };
+        return { value: mfTotal + seTotal, mfValue: mfTotal, seValue: seTotal,
+                 mfCurrentIncluded: mfCurrentIncluded, seCurrentIncluded: seCurrentIncluded,
+                 includedStockTickers: includedStockTickers };
       });
     });
   }
