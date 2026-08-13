@@ -552,6 +552,26 @@
     return localStorage.getItem(EXCLUDE_EQUITY_KEY) === "true";
   }
 
+  // Is this instrument (a Mutual Fund or Stocks/ETF holding) inside the scope the
+  // Overview is currently showing? The return cards — Benchmark Comparison,
+  // Rolling Returns, and the period XIRR behind them — measure a PORTFOLIO, and
+  // the portfolio on screen is whatever the exclusion in force leaves visible.
+  // Reading the toggle only in the aggregator is what made "Exclude Equity" show
+  // a Portfolio CAGR/XIRR that was still the whole equity book: the Overview
+  // header dropped equity while the benchmark card kept valuing it, so the two
+  // halves of the same screen described different portfolios and the alpha was
+  // meaningless.
+  //
+  // Category, never sheet — same rule as the aggregator (see wf-overview.js): a
+  // debt fund typed into the Mutual Fund sheet is Fixed Income and a gold ETF
+  // typed into the Stocks/ETF sheet is Commodity. An unmapped or blank category
+  // counts as Equity, matching how updateTotalCurrentValue buckets it.
+  function returnScopeIncludesInstrument(name) {
+    var cat = normalizeText(buildInstrumentTopCategoryMap()[normalizeText(name || "")] || "");
+    if (cat === "fixed income" || cat === "commodity") return !isFixedIncomeExcluded();
+    return !isEquityExcluded();
+  }
+
   // Investment Corpus/Savings Account holdings ("Savings/Investment Holding"). When excluded,
   // their Invested Amount/Current Value are dropped from every dashboard aggregate (Overview,
   // Fixed Income stats, Account Value chart) — separate from, and on top of, the always-on
@@ -2190,6 +2210,12 @@
   // a debt or gold fund IS in the flows and has to come back out at the end.
   // Pairing full flows with a split terminal understates every XIRR on the page.
   function _ovMfAllCurrent() { return _ovSlice.mf.current + _ovSlice.debtMf.current + _ovSlice.commMf.current; }
+  // The Mutual Fund sheet's current value in the scope the exclusion in force
+  // leaves visible — the terminal that matches buildScopedReturnFlows' MF leg.
+  function _ovScopedMfCurrent() {
+    return (isEquityExcluded() ? 0 : _ovSlice.mf.current) +
+           (isFixedIncomeExcluded() ? 0 : _ovSlice.debtMf.current + _ovSlice.commMf.current);
+  }
   function _ovSeAllCurrent() { return _ovSlice.se.current + _ovSlice.debtSe.current + _ovSlice.commSe.current; }
 
   // Apply a partial slice for one asset class. `source` names the originating
@@ -4343,57 +4369,87 @@
     return pf + fd;
   }
 
-  // periodYears: number of years to look back (null = all time)
-  function computeBenchmarkXirr(indexKey, periodYears) {
-    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    var equityRows = getSheetRows("equity");
-    var seRows = getSheetRows("stocksetf");
+  // Every buy/sell the portfolio ON SCREEN made, in INR, with NO terminal — the
+  // one flow list the Benchmark Comparison card measures both sides from. Gated by
+  // the exclusion in force so it always describes the same holdings as the
+  // Overview header:
+  //
+  //   No Exclusion            everything (unchanged from before)
+  //   Exclude Equity          debt/gold funds and ETFs, FD/PF/EPF, physical gold
+  //   Exclude Fixed Income    equity funds and stocks only
+  //
+  // Commodity moves with Fixed Income here, as it does in the aggregator. It used
+  // to be included unconditionally, which paired gold's buys with a terminal that
+  // had already dropped gold's value — every rupee in gold read as lost.
+  // `omitPhysicalGold` leaves physical gold out. The period (1Y/2Y/…) path needs
+  // that: it has no gold price at the cutoff, so gold can be given a terminal but
+  // no opening mark, which reads as pure profit. Both sides of the period window
+  // drop it instead.
+  function buildScopedReturnFlows(selected, omitPhysicalGold) {
     var fdRows = getSheetRows("fd");
+    var seRows = getSheetRows("stocksetf");
+    var flows = buildXirrCashFlows(getSheetRows("equity"), selected, null, returnScopeIncludesInstrument);
 
     // INR-converted SE flows (US buys/sells converted at transaction-date FX). Fall
     // back to the raw sheet flows only until the SE render has populated _seFlowsINR.
-    var seFlowsINR = (_ovFlows.seFlowsINR && _ovFlows.seFlowsINR.length) ? _ovFlows.seFlowsINR
-                     : (seRows ? buildXirrCashFlows(seRows, selected) : []);
-
-    var allFlows = buildXirrCashFlows(equityRows, selected);
-    if (seRows) allFlows = allFlows.concat(seFlowsINR);
-    if (fdRows && !isFixedIncomeExcluded()) {
-      allFlows = allFlows
-        .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
-        .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+    if (_ovFlows.seFlowsINR && _ovFlows.seFlowsINR.length) {
+      flows = flows.concat(_ovFlows.seFlowsINR.filter(function (f) {
+        return f.instrument === undefined || returnScopeIncludesInstrument(f.instrument);
+      }));
+    } else if (seRows) {
+      flows = flows.concat(buildXirrCashFlows(seRows, selected, null, returnScopeIncludesInstrument));
     }
+
+    if (!isFixedIncomeExcluded()) {
+      if (fdRows) {
+        flows = flows
+          .concat(buildFdMaturedXirrCashFlows(fdRows, selected))
+          .concat(buildProvidentFundXirrCashFlows(fdRows, selected));
+      }
+      // Physical gold: the pre-terminal buys/sells only — the index side builds its
+      // own terminal, and the portfolio side takes its terminal from the Overview.
+      // Populated async by the overview; the card re-runs on wf-overview-flows-ready
+      // so a transient miss self-heals.
+      if (!omitPhysicalGold) {
+        flows = flows.concat((_ovFlows.commodityXirrFlows || []).filter(function (f) { return !f._terminal; }));
+      }
+    }
+    return flows;
+  }
+
+  // The terminal for those flows: the CURRENT value the Overview header is showing.
+  // Taking it from the aggregator rather than re-summing slices here is what keeps
+  // the two in scope with each other under every exclusion.
+  function scopedReturnTerminal() {
+    var cur = _ovAggregate().current;
+    return isFinite(cur) && cur > 0 ? cur : 0;
+  }
+
+  // periodYears: number of years to look back (null = all time)
+  function computeBenchmarkXirr(indexKey, periodYears) {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var fdRows = getSheetRows("fd");
+
+    // One scoped flow list drives BOTH sides of the card — the portfolio's XIRR and
+    // the rupees the index replays — so the two can never be measured over
+    // different holdings. It already honours the exclusion in force.
+    var allFlows = buildScopedReturnFlows(selected);
 
     var cutoff = periodYears ? new Date(new Date() - periodYears * 365.25 * 24 * 60 * 60 * 1000) : null;
     function afterCutoff(f) { return !cutoff || f.date >= cutoff; }
 
-    // Index XIRR: buy-only flows filtered to the selected period. Fixed Income
-    // flows are included/excluded with the same toggle as the portfolio side so
-    // the comparison stays apples-to-apples.
-    var allFlowsForIndex = buildXirrCashFlows(equityRows, selected).filter(afterCutoff);
-    if (seRows) allFlowsForIndex = allFlowsForIndex.concat(seFlowsINR.filter(afterCutoff));
-    if (fdRows && !isFixedIncomeExcluded()) {
-      allFlowsForIndex = allFlowsForIndex
-        .concat(buildFdMaturedXirrCashFlows(fdRows, selected).filter(afterCutoff))
-        .concat(buildProvidentFundXirrCashFlows(fdRows, selected).filter(afterCutoff));
-    }
-    // Commodity (gold) is always part of the portfolio XIRR (its flows are in
-    // _overviewBaseFlows regardless of the FI toggle), so the index must replay the
-    // same gold rupees — otherwise the index never buys Nifty with money put into
-    // gold and the displayed alpha is overstated. Strip the commodity terminal (the
-    // index builds its own terminal). Populated async by the overview; the card
-    // re-runs on wf-overview-flows-ready so a transient miss self-heals.
-    var commodityIndexFlows = (_ovFlows.commodityXirrFlows || []).filter(function (f) { return !f._terminal; });
-    if (commodityIndexFlows.length) allFlowsForIndex = allFlowsForIndex.concat(commodityIndexFlows.filter(afterCutoff));
+    // Index XIRR: the same flows, filtered to the selected period. The index has to
+    // replay every rupee the portfolio actually invested — including the ones that
+    // went into gold or fixed income when those are on screen — or it never "buys
+    // Nifty" with that money and the displayed alpha is overstated.
+    var allFlowsForIndex = allFlows.filter(afterCutoff);
 
-    // All-time portfolio XIRR (used for "All" period and as fallback)
-    var flowsWithTerminal;
-    if (_ovFlows.overviewBaseFlows && _ovFlows.overviewBaseFlows.length) {
-      flowsWithTerminal = _ovFlows.overviewBaseFlows.concat(_ovFlows.seXirrFlows || []);
-    } else {
-      var currentVal = _ovMfAllCurrent() + (_ovSeAllCurrent() > 0 ? _ovSeAllCurrent() : 0) + (isFixedIncomeExcluded() ? 0 : _ovSlice.fi.current) + _ovSlice.comm.current;
-      flowsWithTerminal = allFlows.slice();
-      if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
-    }
+    // All-time portfolio XIRR (used for "All" period and as fallback). The terminal
+    // is the Overview's own current value, which is the only figure guaranteed to
+    // cover exactly the holdings these flows describe.
+    var flowsWithTerminal = allFlows.slice();
+    var currentVal = scopedReturnTerminal();
+    if (currentVal > 0) flowsWithTerminal.push({ date: new Date(), amount: currentVal });
     var allTimePortfolioXirr = calculateXIRR(flowsWithTerminal);
 
     // For a selected period: compute portfolio value at cutoff as "starting investment",
@@ -4404,7 +4460,7 @@
     // portfolio's rupee terminal (buildIndexXirrCashFlows computes its own terminal).
     var portfolioXirrPromise;
     if (periodYears && cutoff) {
-      portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected).then(function (result) {
+      portfolioXirrPromise = computePortfolioValueAtDate(cutoff, selected, returnScopeIncludesInstrument).then(function (result) {
         // Opening mark (MF + stocks priced at the cutoff).
         var startVal = result.value;
         // Terminal value in the same scope: MF current + stocks' current value
@@ -4416,24 +4472,22 @@
         // made a period XIRR (1Y/2Y/…) read far below the same window's rolling
         // return — the debt/gold funds were bought and opened but never paid out.
         // The Stocks/ETF side needs no such repair: seCurrentIncluded is already
-        // built from every mapped ticker.
-        var periodCurrentVal = _ovMfAllCurrent() + result.seCurrentIncluded;
-        // Period cash flows for MF + stocks (buys/sells after the cutoff).
+        // built from every mapped ticker the scope gate let through.
+        var periodCurrentVal = _ovScopedMfCurrent() + result.seCurrentIncluded;
+        // Period cash flows for MF + stocks (buys/sells after the cutoff), in the
+        // same scope as the opening mark and the terminal above.
         var periodFlows = [];
-        var mfSeFlows = buildXirrCashFlows(equityRows, selected);
-        if (seRows) mfSeFlows = mfSeFlows.concat(seFlowsINR);
-        mfSeFlows.forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
+        buildScopedReturnFlows(selected, true).forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
 
         // Fixed Income follows the exclusion toggle: with "No Exclusion" it is
         // part of the portfolio return; with "Exclude Fixed Income" it is left
-        // out. (Matches the Overview / all-time treatment.)
+        // out. (Matches the Overview / all-time treatment.) Only the opening mark
+        // and the terminal are added here — its cash flows are already in
+        // periodFlows, which buildScopedReturnFlows produced.
         if (!isFixedIncomeExcluded() && fdRows) {
           startVal += fixedIncomeValueAtDate(fdRows, selected, cutoff);
           periodCurrentVal += (sumFdActiveCurrentValue(fdRows, selected) || 0)
                             + (sumProvidentFundCurrentValue(fdRows, selected) || 0);
-          buildFdMaturedXirrCashFlows(fdRows, selected)
-            .concat(buildProvidentFundXirrCashFlows(fdRows, selected))
-            .forEach(function (f) { if (f.date > cutoff) periodFlows.push(f); });
         }
 
         if (!startVal || startVal <= 0) return { xirr: allTimePortfolioXirr, indexFlows: allFlowsForIndex };
@@ -4472,10 +4526,19 @@
   // This is the same construction used by computeRollingReturns — external cash
   // flows (buys/sells) are netted out each month so contributions don't masquerade
   // as return. Returns Promise<[{date, nav}]> (null if insufficient data).
+  //
+  // Scoped by the exclusion in force: the CAGR this series feeds is shown beside
+  // the Overview's own numbers, so it has to describe the portfolio the Overview
+  // is describing. With Exclude Equity on, that is the debt and gold funds/ETFs;
+  // with Exclude Fixed Income on, the equity holdings alone. (Deposit-style fixed
+  // income — FD/PF/EPF — has never been part of this series and still isn't: it
+  // has no priced NAV history to chain returns from.)
   function computePortfolioTwrNavSeries(selected) {
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var unitEvents = buildInstrumentUnitEvents(selected);
-      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+      var instruments = Object.keys(unitEvents).filter(function (name) {
+        return !!lookupSchemeCode(schemeMap, name) && returnScopeIncludesInstrument(name);
+      });
 
       var seRows = getSheetRows("stocksetf");
       var seMappingTable = buildStockMappingTable();
@@ -4486,6 +4549,7 @@
           Object.keys(seTxns).forEach(function (instrument) {
             var mapping = seMappingTable[normalizeText(instrument)];
             if (!mapping) return;
+            if (!returnScopeIncludesInstrument(instrument)) return;
             var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
             if (!sorted.length) return;
             var running = 0;
@@ -4694,10 +4758,15 @@
   }
 
   // Returns a Promise<number> — total portfolio value (MF + stocks) at a historical date.
-  function computePortfolioValueAtDate(targetDate, portfolioFilter) {
+  // `includeName`, when given, keeps only the instruments it accepts — the return
+  // cards pass returnScopeIncludesInstrument so the opening mark covers the same
+  // holdings as the period's cash flows and terminal.
+  function computePortfolioValueAtDate(targetDate, portfolioFilter, includeName) {
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var unitEvents = buildInstrumentUnitEvents(portfolioFilter);
-      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+      var instruments = Object.keys(unitEvents).filter(function (name) {
+        return !!lookupSchemeCode(schemeMap, name) && (!includeName || includeName(name));
+      });
 
       var seRows = getSheetRows("stocksetf");
       var seMappingTable = buildStockMappingTable();
@@ -4708,6 +4777,7 @@
           Object.keys(seTxns).forEach(function (instrument) {
             var mapping = seMappingTable[normalizeText(instrument)];
             if (!mapping) return;
+            if (includeName && !includeName(instrument)) return;
             var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
             if (!sorted.length) return;
             var running = 0;
@@ -4782,11 +4852,16 @@
   // Compute rolling CAGR statistics over all rolling windows of `windowYears` in portfolio history.
   // Portfolio value at each monthly date = MF (units × NAV) + Stock (units × historical price).
   // Index CAGR = point-to-point from stock_prices.json index_history.
+  // Scoped by the exclusion in force, for the same reason the CAGR series is: the
+  // Rolling Return columns sit in the same card as the Portfolio CAGR and must
+  // measure the same portfolio.
   function computeRollingReturns(windowYears, indexKey) {
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
     return buildInstrumentSchemeMap().then(function (schemeMap) {
       var unitEvents = buildInstrumentUnitEvents(selected);
-      var instruments = Object.keys(unitEvents).filter(function (name) { return !!lookupSchemeCode(schemeMap, name); });
+      var instruments = Object.keys(unitEvents).filter(function (name) {
+        return !!lookupSchemeCode(schemeMap, name) && returnScopeIncludesInstrument(name);
+      });
 
       var seRows = getSheetRows("stocksetf");
       var seMappingTable = buildStockMappingTable();
@@ -4797,6 +4872,7 @@
           Object.keys(seTxns).forEach(function (instrument) {
             var mapping = seMappingTable[normalizeText(instrument)];
             if (!mapping) return;
+            if (!returnScopeIncludesInstrument(instrument)) return;
             var sorted = (seTxns[instrument] || []).filter(function (t) { return !!t.date; }).sort(function (a, b) { return a.date - b.date; });
             if (!sorted.length) return;
             var running = 0;
@@ -7076,7 +7152,11 @@
         if (!txn.date || !txn.units || !txn.price) return; // price 0 = corporate action
         var rate = isUsd ? ((usdMap && usdMap[formatDateISO(txn.date)]) || usdToday || 1) : 1;
         var amt = txn.units * txn.price * rate;
-        out.push({ date: txn.date, amount: txn.type === "buy" ? -amt : amt });
+        // The instrument travels with the flow so consumers can gate it by
+        // Instrument Category later (the return cards do — see
+        // returnScopeIncludesInstrument). Without it these are anonymous rupees
+        // and the only way to filter them is to rebuild the FX conversion.
+        out.push({ date: txn.date, amount: txn.type === "buy" ? -amt : amt, instrument: instrument });
       });
     });
     out.sort(function (a, b) { return a.date - b.date; });
@@ -7183,7 +7263,11 @@
     setChartXWindow(chart, min, max);
   }
 
-  function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter) {
+  // `nameFilter`, when given, is called with each row's Instrument Name and must
+  // return true to keep the row. Used by the return cards to keep only the
+  // instruments the exclusion in force leaves on screen — flows and terminal have
+  // to cover the same holdings or the XIRR reads money as vanished.
+  function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter, nameFilter) {
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
     var portfolioIdx = header.indexOf("portfolio name");
@@ -7194,12 +7278,14 @@
     var dateIdx = header.indexOf("transaction date");
     if (portfolioIdx === -1 || typeIdx === -1 || unitsIdx === -1 || priceIdx === -1 || dateIdx === -1) return [];
     if (instrumentFilter && instrumentIdx === -1) return [];
+    if (nameFilter && instrumentIdx === -1) return [];
 
     var flows = [];
     rows.slice(1).forEach(function (row) {
       var portfolio = (row[portfolioIdx] || "").trim();
       if (portfolioFilter !== "all" && normalizeText(portfolio) !== normalizeText(portfolioFilter)) return;
       if (instrumentFilter && normalizeText((row[instrumentIdx] || "").trim()) !== normalizeText(instrumentFilter)) return;
+      if (nameFilter && !nameFilter((row[instrumentIdx] || "").trim())) return;
 
       var type = normalizeText(row[typeIdx]);
       var isBuy = type.indexOf("buy") !== -1;

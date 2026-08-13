@@ -121,12 +121,17 @@ console.log("\nF. The benchmark card reads the whole-sheet value, not the slice"
      "F1 there is one helper for the whole-sheet MF value");
   ok(/function _ovSeAllCurrent\(\) \{ return _ovSlice\.se\.current \+ _ovSlice\.debtSe\.current \+ _ovSlice\.commSe\.current; \}/.test(SRC),
      "F2 and one for Stocks/ETF");
-  ok(/var periodCurrentVal = _ovMfAllCurrent\(\) \+ result\.seCurrentIncluded;/.test(SRC),
-     "F3 the PERIOD portfolio XIRR (1Y/2Y/3Y/5Y/10Y) marks the whole MF sheet");
-  ok(/var currentVal = _ovMfAllCurrent\(\)/.test(SRC),
-     "F4 so does the all-time fallback terminal");
-  ok(/_ovSeAllCurrent\(\) > 0 \? _ovSeAllCurrent\(\) : 0/.test(SRC),
-     "F5 with the Stocks/ETF side whole as well");
+  // The benchmark card's own terminals moved from "whole sheet" to "whole sheet
+  // MINUS whatever the exclusion in force hides" — the same rule, applied to the
+  // portfolio actually on screen (see section H). Whole-sheet is still what these
+  // helpers return when no exclusion is on, which is the case F1/F2 pin.
+  ok(/var periodCurrentVal = _ovScopedMfCurrent\(\) \+ result\.seCurrentIncluded;/.test(SRC),
+     "F3 the PERIOD portfolio XIRR (1Y/2Y/3Y/5Y/10Y) marks the MF sheet in the scope on screen");
+  ok(/function _ovScopedMfCurrent\(\) \{\s*return \(isEquityExcluded\(\) \? 0 : _ovSlice\.mf\.current\) \+\s*\(isFixedIncomeExcluded\(\) \? 0 : _ovSlice\.debtMf\.current \+ _ovSlice\.commMf\.current\);/.test(SRC),
+     "F4 and that scope is the whole sheet whenever no exclusion is on");
+  ok(/var currentVal = scopedReturnTerminal\(\);/.test(SRC) &&
+     /function scopedReturnTerminal\(\)[\s\S]{0,200}_ovAggregate\(\)\.current/.test(SRC),
+     "F5 the all-time terminal is the Overview's own current value, so both sides agree");
 
   // The opening mark is the other half of the pair: computePortfolioValueAtDate
   // prices every held instrument, so a terminal that dropped a class made the
@@ -143,10 +148,48 @@ console.log("\nG. No terminal is left reading a split slice directly");
   // Any future call site that wants a current value for an XIRR terminal has to
   // go through the helpers; reading _ovSlice.mf.current for that purpose is the
   // exact mistake this suite exists to stop.
-  const direct = SRC.split("\n").filter(function (l) {
+  // _ovScopedMfCurrent is a helper too, so its own body is not a call site —
+  // remove it before looking, rather than loosening the pattern.
+  const scopedHelper = SRC.slice(SRC.indexOf("function _ovScopedMfCurrent()"));
+  const withoutScopedHelper = SRC.replace(scopedHelper.slice(0, scopedHelper.indexOf("\n  }") + 4), "");
+  const direct = withoutScopedHelper.split("\n").filter(function (l) {
     return /_ovSlice\.(mf|se)\.current/.test(l) && !/function _ov(Mf|Se)AllCurrent/.test(l);
   });
   ok(direct.length === 0, "G1 the split slices are read only inside the helpers", direct.join(" | "));
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nH. Scope is the exclusion on screen, not just the whole sheet");
+{
+  // The same "flows and terminal must cover the same holdings" rule, one level up.
+  // With Exclude Equity on, the Overview header dropped equity while the Benchmark
+  // Comparison card kept valuing the whole equity book — a Portfolio CAGR/XIRR and
+  // an alpha for a portfolio that was not the one being shown. Both sides of the
+  // card now read the scope from Instrument Category, the way the aggregator does.
+  ok(/function returnScopeIncludesInstrument\(name\)/.test(SRC),
+     "H1 there is one gate deciding whether an instrument is in scope");
+  const gate = SRC.slice(SRC.indexOf("function returnScopeIncludesInstrument"));
+  const gateBody = gate.slice(0, gate.indexOf("\n  }"));
+  ok(/buildInstrumentTopCategoryMap\(\)/.test(gateBody) &&
+     /"fixed income" \|\| cat === "commodity"/.test(gateBody) &&
+     /isFixedIncomeExcluded\(\)/.test(gateBody) && /isEquityExcluded\(\)/.test(gateBody),
+     "H2 it gates by Instrument Category, honouring both exclusions");
+
+  const flows = SRC.slice(SRC.indexOf("function buildScopedReturnFlows"));
+  const flowsBody = flows.slice(0, flows.indexOf("\n  }"));
+  ok((flowsBody.match(/returnScopeIncludesInstrument/g) || []).length >= 3,
+     "H3 the benchmark's flows are gated on both sheet legs, INR flows included");
+  ok(/isFixedIncomeExcluded\(\)/.test(flowsBody),
+     "H4 and fixed income/commodity flows leave with their own exclusion");
+
+  // The CAGR and Rolling Return columns are built from the TWR NAV series, not from
+  // cash flows — they need the same gate or the card disagrees with itself.
+  ["computePortfolioTwrNavSeries", "computeRollingReturns"].forEach(function (fnName, i) {
+    const f = SRC.slice(SRC.indexOf("function " + fnName));
+    const body = f.slice(0, 4000);
+    ok((body.match(/returnScopeIncludesInstrument/g) || []).length >= 2,
+       "H" + (5 + i) + " " + fnName + " is scoped on both the MF and Stocks/ETF legs");
+  });
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");

@@ -118,7 +118,7 @@ Physical gold/silver held in the `fd` sheet (Sub Category = gold/silver, Grams c
 
 ## 9. Charts & Analytics (FR-CH)
 
-- **FR-CH-1 Benchmark Comparison** — portfolio vs a selectable index (Nifty 50 / Next 50 / etc.). Only **equity** (MF + Stocks/ETF + commodity) is considered; Fixed Income is excluded.
+- **FR-CH-1 Benchmark Comparison** — portfolio vs a selectable index (Nifty 50 / Next 50 / etc.), in XIRR or point-to-point CAGR, over All / 1Y / 2Y / 3Y / 5Y / 10Y. Both sides are measured on the portfolio the Overview is showing: the **exclusion in force gates it by Instrument Category**, so Exclude Equity leaves the debt/gold funds, ETFs and fixed income, and Exclude Fixed Income leaves the equity holdings. The index replays the same rupees over the same window, so the alpha stays like-for-like. Deposit-style fixed income (FD/PF/EPF) has no priced history and so contributes to the XIRR but not to the CAGR/rolling series.
 - **FR-CH-2 Growth of ₹100** — indexed portfolio NAV vs the index since inception; the selected index updates the comparison line.
 - **FR-CH-3 Account Value Over Time** — absolute portfolio value timeline (includes all classes when no exclusion is active).
 - **FR-CH-4 Portfolio Split** — invested/current split by portfolio, with per-portfolio category chips (Equity/Fixed Income/Commodity). Toggle to **Region Split** (India/US).

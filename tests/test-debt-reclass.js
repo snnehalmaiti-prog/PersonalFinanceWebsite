@@ -59,7 +59,7 @@ const pieces = [
   "function _buildAllFixedIncomeHoldingsList()",
   "function groupUnitTransactionsByInstrument(rows, portfolioFilter)",
   "function sumUnitBasedBuyInvestment(rows, portfolioFilter)",
-  "function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter)",
+  "function buildXirrCashFlows(rows, portfolioFilter, instrumentFilter, nameFilter)",
 ].map(extract).join("\n\n");
 eval(pieces);
 
