@@ -9762,6 +9762,38 @@
   // renderValueChart's promise chain, so the fixed-income-only path can draw
   // with it too — while it was nested, that path could not reach it and the
   // canvas kept whichever portfolio was drawn last.
+  // ACCOUNT VALUE period picker. "All time" until a month is chosen, and the
+  // choice survives a re-render — the chart is destroyed and rebuilt on every
+  // portfolio switch and data refresh, so state kept on the chart object would
+  // silently reset to All time under the user.
+  var __pvcAllTime = true;
+  var __pvcMonth = null;              // "YYYY-MM"
+  var __pvcApply = null;              // set per render, reads that render's points
+
+  // First and last instant of a month, so the window covers the whole of it
+  // rather than stopping at the last day with a data point.
+  function _pvcMonthBounds(key) {
+    var y = +String(key).slice(0, 4), m = +String(key).slice(5, 7);
+    return { min: new Date(y, m - 1, 1, 0, 0, 0, 0).getTime(),
+             max: new Date(y, m, 0, 23, 59, 59, 999).getTime() };
+  }
+
+  (function bindPvcPeriodOnce() {
+    var allBtn = document.getElementById("pvc-alltime");
+    var sel = document.getElementById("pvc-month");
+    if (!allBtn || !sel || allBtn.dataset.bound) return;
+    allBtn.dataset.bound = "1";
+    allBtn.addEventListener("click", function () {
+      __pvcAllTime = true; __pvcMonth = null;
+      if (__pvcApply) __pvcApply();
+    });
+    sel.addEventListener("change", function () {
+      if (!sel.value) { __pvcAllTime = true; __pvcMonth = null; }
+      else { __pvcAllTime = false; __pvcMonth = sel.value; }
+      if (__pvcApply) __pvcApply();
+    });
+  }());
+
   function _renderPortfolioValueChart(points, netPoints) {
     var canvas2 = document.getElementById("portfolio-value-chart");
     if (!canvas2 || typeof Chart === "undefined") return;
@@ -9958,6 +9990,54 @@
     });
     wireChartXDrag(canvas2, function () { return window.__wfPortfolioValueChart; },
       pvcXMin, pvcXMax, updatePvcReadout);
+
+    // --- Period picker -------------------------------------------------
+    // Options are the months the data actually spans, newest first. Built from
+    // the points rather than from a calendar, so there is never a month to pick
+    // that would show an empty chart.
+    (function syncPvcPeriod() {
+      var allBtn = document.getElementById("pvc-alltime");
+      var sel = document.getElementById("pvc-month");
+      if (!sel || !allBtn) return;
+      var seen = {}, months = [];
+      points.forEach(function (p) {
+        var k = formatDateISO(p.x).slice(0, 7);
+        if (!seen[k]) { seen[k] = true; months.push(k); }
+      });
+      months.sort().reverse();
+      var want = '<option value="">All time</option>' + months.map(function (k) {
+        return '<option value="' + k + '">' +
+          NWM_MONTHS[+k.slice(5, 7) - 1] + " " + k.slice(0, 4) + "</option>";
+      }).join("");
+      if (sel.innerHTML !== want) sel.innerHTML = want;
+      // A month that has dropped out of range — a portfolio switch can do it —
+      // falls back to All time rather than leaving the picker naming a period
+      // the chart is not showing.
+      if (__pvcMonth && months.indexOf(__pvcMonth) === -1) {
+        __pvcMonth = null; __pvcAllTime = true;
+      }
+      sel.value = __pvcMonth || "";
+
+      __pvcApply = function () {
+        var chart = window.__wfPortfolioValueChart;
+        allBtn.classList.toggle("active", __pvcAllTime);
+        sel.value = __pvcMonth || "";
+        if (!chart) return;
+        if (__pvcAllTime || !__pvcMonth) {
+          resetChartXWindow(chart, pvcXMin, pvcXMax);
+        } else {
+          var b = _pvcMonthBounds(__pvcMonth);
+          // Clamped to the plotted range: zoom limits are pinned to it, so an
+          // unclamped window on the newest month would ask the chart to show
+          // days past the last point and it would refuse the whole thing.
+          setChartXWindow(chart,
+            Math.max(b.min, pvcXMin == null ? b.min : pvcXMin),
+            Math.min(b.max, pvcXMax == null ? b.max : pvcXMax));
+        }
+        updatePvcReadout();
+      };
+      __pvcApply();
+    }());
 
     // Double-click to reset the zoom back to the full range.
     canvas2.ondblclick = function () {

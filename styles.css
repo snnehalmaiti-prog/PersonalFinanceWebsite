@@ -3665,6 +3665,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 #monthly-invest-cat-card .mic-dropdown-btn,
 #net-worth-monthly-card .mic-dropdown-btn,
 #monthly-cashflow-card .mic-dropdown-btn,
+#portfolio-value-card .mic-dropdown-btn,
 #expense-pie-card .mic-dropdown-btn { padding: 3px 9px; font-size: 0.7rem; gap: 3px; }
 #monthly-invest-cat-card .mic-controls,
 #net-worth-monthly-card .mic-controls,
@@ -3836,6 +3837,15 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 /* Account Value chart redesign — growth-of-100 comparison */
 .avc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px 16px; margin-top: 16px; }
 .avc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: nowrap; margin-bottom: 8px; }
+/* The period picker sits with the eyebrow, not with the legend: it belongs to
+   the title ("ACCOUNT VALUE, for this period"), and the legend opposite it is
+   already a dense row of figures. shrink-0 so a long month never squeezes it. */
+.avc-period { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.avc-period .mic-dropdown-btn { display: inline-flex; align-items: center; gap: 4px; }
+.avc-header > .avc-eyebrow { flex: 0 0 auto; }
+/* Pushes the legend to the far edge so the eyebrow and its picker stay
+   together on the left; space-between alone would strand the picker mid-row. */
+.avc-header > .avc-legend { margin-left: auto; }
 .avc-eyebrow { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
 .avc-legend { display: flex; align-items: center; gap: 18px; flex-wrap: nowrap; white-space: nowrap; }
 .avc-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
