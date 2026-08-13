@@ -679,10 +679,21 @@ const money = (t) => {
       const el = document.querySelector("#" + id + " .mic-exclusion-note");
       return el ? el.textContent.replace(/\s+/g, " ").trim() : null;
     };
-    return { nwm: note("net-worth-monthly-card"), cf: note("monthly-invest-cat-card") };
+    const all = (id) => [...document.querySelectorAll("#" + id + " .mic-exclusion-note")]
+      .map((e) => e.textContent.replace(/\s+/g, " ").trim()).join(" | ");
+    return { nwm: note("net-worth-monthly-card"), cf: note("monthly-invest-cat-card"),
+             nwmAll: all("net-worth-monthly-card"), cfAll: all("monthly-invest-cat-card") };
   });
   ok(/exclusion filters are not applied/i.test(notes.nwm || ""),
      "R8 GAIN · MONTHLY says the exclusion filters do not reach it", notes);
+  ok(/opening and closing/i.test(notes.nwmAll || "") &&
+     /account value/i.test(notes.nwmAll || ""),
+     "R10 and that Opening and Closing are recorded values to be read against " +
+     "the Account Value chart — they come from what the app believed when each " +
+     "snapshot was written, which the chart recomputes", notes.nwmAll);
+  ok(!/opening and closing/i.test(notes.cfAll || ""),
+     "R11 while CASH FLOW does not carry that one — it has no Opening or " +
+     "Closing to qualify", notes.cfAll);
   ok(notes.cf === notes.nwm,
      "R9 and CASH FLOW · MONTHLY says it identically — the two sit one above " +
      "the other, so a difference in wording reads as a difference in meaning",
