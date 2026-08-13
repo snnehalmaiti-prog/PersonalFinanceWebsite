@@ -4347,14 +4347,26 @@
 
   var _indexHistoryCache = null;
 
+  // The index series behind the Benchmark Comparison card.
+  //
+  // A FAILED or EMPTY fetch must never be cached. It used to be: one transient
+  // miss on load — the price fetch losing a race with the network, or a cold
+  // Pages deploy answering 5xx — stored `{}` for the rest of the session, and
+  // every later run (the flows-ready refresh, an index click, a period pill, a
+  // portfolio change) was served that empty object. The card then said "No data
+  // — trigger Fetch Stock Prices" permanently, with an em-dash alpha, and no
+  // amount of interaction could bring it back short of a reload. Same rule the
+  // benchmark memos already follow (see _benchMemoized).
   function fetchIndexHistory() {
     if (_indexHistoryCache) return Promise.resolve(_indexHistoryCache);
     return fetchAllStockPrices().then(function (data) {
-      _indexHistoryCache = (data && data.index_history) || {};
-      return _indexHistoryCache;
+      var hist = (data && data.index_history) || {};
+      // Only a payload that actually carries index series is worth keeping —
+      // otherwise the next call retries the fetch.
+      if (Object.keys(hist).length) _indexHistoryCache = hist;
+      return hist;
     }).catch(function () {
-      _indexHistoryCache = {};
-      return _indexHistoryCache;
+      return {};
     });
   }
 
@@ -5844,8 +5856,16 @@
     // before re-running the benchmark so it has a valid terminal value.
     var _pendingBenchmarkRefresh = false;
     var _benchmarkInitialRefreshDone = false;
-    var _lastBenchmarkHadSe = false; // did the last benchmark run include the SE leg?
-    function _seFlowsPresent() { return !!(_ovFlows.seXirrFlows && _ovFlows.seXirrFlows.length); }
+    // WHICH Stocks/ETF leg the last benchmark run measured — the portfolio those
+    // flows were computed for, plus how many of them there were. A boolean
+    // ("did it have SE flows?") was not enough: it answers yes for the PREVIOUS
+    // portfolio's flows just as happily as for this one's. See the SE-ready
+    // handler below.
+    var _lastBenchmarkSeKey = null;
+    function _seFlowsKey() {
+      var f = _ovFlows.seFlowsINR;
+      return String(_ovFlows.seComputedPortfolio) + "|" + (f ? f.length : -1);
+    }
     document.addEventListener("wf-exclusion-changed", function () {
       _pendingBenchmarkRefresh = true;
     });
@@ -5861,18 +5881,29 @@
       if (_benchmarkInitialRefreshDone && !_pendingBenchmarkRefresh && !portfolioBlank) return;
       _benchmarkInitialRefreshDone = true;
       _pendingBenchmarkRefresh = false;
-      _lastBenchmarkHadSe = _seFlowsPresent();
+      _lastBenchmarkSeKey = _seFlowsKey();
       applyBenchmark(currentKey);
     });
     // Stocks/ETF cash flows resolve on their own async path (renderStockEtfHoldingsTable).
-    // If the benchmark already ran WITHOUT them (SE finished after the overview's
-    // first flows-ready), re-run it exactly once now that the SE leg is present —
-    // otherwise the portfolio XIRR/alpha permanently omits the Stocks/ETF slice.
+    // If the benchmark ran against a DIFFERENT SE leg than the one now in hand —
+    // no leg at all on first load, or the previous portfolio's — re-run it now
+    // that the current one has landed. Otherwise the portfolio XIRR and the alpha
+    // permanently describe the wrong Stocks/ETF slice.
+    //
+    // Portfolio navigation is why this compares a key rather than a boolean.
+    // Selecting a portfolio clears _ovFlows.seFlowsINR (updateDashboardStats) and
+    // kicks off a fresh SE render, so the flows-ready refresh that follows
+    // measures the benchmark with NO Stocks/ETF flows for the new portfolio. The
+    // old "had SE flows once" flag was still set from the previous portfolio, so
+    // this handler returned early and the card was left showing a portfolio XIRR
+    // with the entire Stocks/ETF book missing until a full reload.
     document.addEventListener("wf-se-xirr-ready", function () {
-      if (!_benchmarkInitialRefreshDone || _lastBenchmarkHadSe || !_seFlowsPresent()) return;
+      if (!_benchmarkInitialRefreshDone) return;
+      var seKey = _seFlowsKey();
+      if (seKey === _lastBenchmarkSeKey) return;
       var currentKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
       if (!currentKey) return;
-      _lastBenchmarkHadSe = true;
+      _lastBenchmarkSeKey = seKey;
       applyBenchmark(currentKey);
     });
   }

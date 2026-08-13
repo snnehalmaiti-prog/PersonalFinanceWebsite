@@ -122,5 +122,47 @@ console.log("\nE. Both modes name the window they actually measured");
      "E4 saying so in words, beside the figure it qualifies");
 }
 
+console.log("\nF. A failed index-history fetch does not stick for the session");
+{
+  // The card's index leg comes from stock_prices.json. One transient miss on
+  // load used to store `{}` in the module-level cache, and every later run — the
+  // flows-ready refresh, an index click, a period pill, a portfolio change — was
+  // served that empty object. The index column read "No data — trigger Fetch
+  // Stock Prices" and the alpha an em-dash, permanently, until a full reload.
+  const from = SRC.indexOf("function fetchIndexHistory()");
+  ok(from !== -1, "F1 fetchIndexHistory is where the series are cached");
+  const body = SRC.slice(from, SRC.indexOf("\n  }", from));
+  ok(!/catch\(function \(\) \{\s*_indexHistoryCache = \{\};/.test(body),
+     "F2 a rejection is no longer remembered as an empty history");
+  ok(/catch\(function \(\) \{\s*return \{\};/.test(body),
+     "F3 it degrades to no index for this call only");
+  ok(/if \(Object\.keys\(hist\)\.length\) _indexHistoryCache = hist;/.test(body),
+     "F4 and an empty payload is not cached either, so the next call retries");
+}
+
+console.log("\nG. Portfolio navigation re-measures the Stocks/ETF leg");
+{
+  // Selecting a portfolio clears _ovFlows.seFlowsINR and starts a fresh SE
+  // render, so the wf-overview-flows-ready refresh that follows measures the
+  // benchmark with NO Stocks/ETF flows for the new portfolio. The old guard was
+  // a boolean — "has the card ever seen SE flows?" — still true from the
+  // PREVIOUS portfolio, so the wf-se-xirr-ready handler returned early and the
+  // card kept a portfolio XIRR (and alpha) with the whole Stocks/ETF book
+  // missing until a reload.
+  const from = SRC.indexOf("function initBenchmarkCard()");
+  const body = SRC.slice(from, SRC.indexOf("\n  function buildCommodityHoldingsList", from));
+  ok(!/_lastBenchmarkHadSe/.test(body), "G1 the ever-seen-SE boolean is gone");
+  ok(/function _seFlowsKey\(\)/.test(body) &&
+     /_ovFlows\.seComputedPortfolio\) \+ "\|" \+/.test(body),
+     "G2 replaced by a key naming WHICH portfolio's flows were measured");
+  ok(/_lastBenchmarkSeKey = _seFlowsKey\(\);\s*\n\s*applyBenchmark\(currentKey\);/.test(body),
+     "G3 recorded on the flows-ready refresh");
+  const se = body.slice(body.indexOf('addEventListener("wf-se-xirr-ready"'));
+  ok(/if \(seKey === _lastBenchmarkSeKey\) return;/.test(se),
+     "G4 and the SE-ready re-run is skipped only when the leg is unchanged");
+  ok(/_lastBenchmarkSeKey = seKey;\s*\n\s*applyBenchmark\(currentKey\);/.test(se),
+     "G5 otherwise the card re-runs against the leg that just landed");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
