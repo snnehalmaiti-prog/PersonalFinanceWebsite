@@ -2148,7 +2148,6 @@
   // Cash-flow bookkeeping for the XIRR/benchmark cards. Deliberately NOT part of
   // a slice: these are flow arrays and scope tags, not values the Overview sums.
   var _ovFlows = {
-    overviewBaseFlows: null,
     seXirrFlows: [],
     seFlowsINR: [],
     seComputedPortfolio: null,
@@ -2215,6 +2214,11 @@
   function _ovScopedMfCurrent() {
     return (isEquityExcluded() ? 0 : _ovSlice.mf.current) +
            (isFixedIncomeExcluded() ? 0 : _ovSlice.debtMf.current + _ovSlice.commMf.current);
+  }
+  // The Stocks/ETF mirror of the above — same rule, other sheet.
+  function _ovScopedSeCurrent() {
+    return (isEquityExcluded() ? 0 : _ovSlice.se.current) +
+           (isFixedIncomeExcluded() ? 0 : _ovSlice.debtSe.current + _ovSlice.commSe.current);
   }
   function _ovSeAllCurrent() { return _ovSlice.se.current + _ovSlice.debtSe.current + _ovSlice.commSe.current; }
 
@@ -2463,7 +2467,6 @@
     // Reset accumulator so stale tab values don't persist across portfolio changes
     _ovApply("mf", { invested: 0, current: 0, unrealized: 0, realized: 0 }, "updateDashboardStats:reset");
     _ovApply("se", { invested: 0, realized: 0 }, "updateDashboardStats:reset");
-    _ovFlows.overviewBaseFlows = null;
     // The live Stocks/ETF current value (seCurrent/Unrealized/DayChange/XirrFlows)
     // is populated ASYNCHRONOUSLY by renderStockEtfHoldingsTable, which
     // updateDashboardStats does NOT trigger. Zeroing them here on every call
@@ -2649,6 +2652,11 @@
         realized: commodityRealizedProfit
       }, "updateEpfStats", selected);
       renderOverview();
+      // The commodity slice this block just published is part of the Overview
+      // XIRR's terminal whenever Fixed Income/Commodity is on screen, and it
+      // resolves on its own async path — refresh so the header's return doesn't
+      // sit on a terminal that is missing physical gold.
+      refreshScopedOverviewXirr();
 
       if (xirrEl) {
         var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
@@ -4425,6 +4433,61 @@
     return isFinite(cur) && cur > 0 ? cur : 0;
   }
 
+  // The Overview header's XIRR, over exactly the holdings the exclusion in force
+  // leaves on screen — the same scope rule the Benchmark Comparison card, the
+  // Portfolio CAGR and the Rolling Returns already follow:
+  //
+  //   No Exclusion                        Equity + Fixed Income + Commodity
+  //   Exclude Equity                      Fixed Income + Commodity
+  //   Exclude Fixed Income and Commodity  Equity
+  //
+  // It used to be assembled from the whole Mutual Fund and Stocks/ETF sheets with
+  // commodity added unconditionally, so "Exclude Equity" still reported the equity
+  // book's XIRR and "Exclude Fixed Income and Commodity" still had gold in it —
+  // the header's value and the header's return described different portfolios.
+  //
+  // The terminal that PAYS OUT exactly the flows buildScopedReturnFlows produced,
+  // scoped the same way. Deliberately NOT scopedReturnTerminal(): the Overview's
+  // aggregate current value also carries Savings/Investment Corpus and the EPF
+  // sheet, whose balance updates are never XIRR cash-flow events — money would
+  // come back that never went in, and the XIRR would read as pure profit.
+  function scopedOverviewXirrTerminal(selected) {
+    var total = _ovScopedMfCurrent() + _ovScopedSeCurrent();
+    if (!isFixedIncomeExcluded()) {
+      // Physical gold plus the deposit-style fixed income the flows above cover.
+      total += _ovSlice.comm.current;
+      var fdRows = getSheetRows("fd");
+      if (fdRows) {
+        total += (sumFdActiveCurrentValue(fdRows, selected) || 0)
+               + (sumProvidentFundCurrentValue(fdRows, selected) || 0);
+      }
+    }
+    return isFinite(total) && total > 0 ? total : 0;
+  }
+
+  // Returns { ready, xirr }. `ready:false` means the slices behind the terminal
+  // haven't resolved yet (or have just been reset for a re-render) — pairing live
+  // flows with a zero payout would flash a ~-100% return, so the caller leaves the
+  // element alone and a later refresh (SE-ready, commodity-ready) fills it in.
+  // Genuinely empty scopes ARE ready, with a null XIRR, so they render "—".
+  function computeScopedOverviewXirr() {
+    var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var flows = buildScopedReturnFlows(selected);
+    if (!flows.length) return { ready: true, xirr: null };
+    var terminal = scopedOverviewXirrTerminal(selected);
+    if (terminal <= 0) return { ready: false, xirr: null };
+    var withTerminal = flows.slice();
+    withTerminal.push({ date: new Date(), amount: terminal });
+    return { ready: true, xirr: calculateXIRR(withTerminal) };
+  }
+
+  function refreshScopedOverviewXirr() {
+    var el = document.getElementById("overview-xirr");
+    if (!el) return;
+    var res = computeScopedOverviewXirr();
+    if (res.ready) setXirr(el, res.xirr);
+  }
+
   // periodYears: number of years to look back (null = all time)
   function computeBenchmarkXirr(indexKey, periodYears) {
     var selected = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
@@ -5317,7 +5380,7 @@
     if (savedKey) applyBenchmark(savedKey);
 
     // When exclusion changes, updateDashboardStats is async. Wait for the next
-    // wf-overview-flows-ready (fired once _ovFlows.overviewBaseFlows is populated)
+    // wf-overview-flows-ready (fired once the Overview's own flows have resolved)
     // before re-running the benchmark so it has a valid terminal value.
     var _pendingBenchmarkRefresh = false;
     var _benchmarkInitialRefreshDone = false;
@@ -6856,23 +6919,11 @@
     var equityRows = getSheetRows("equity");
     var transactionsByInstrumentForInvestment = groupUnitTransactionsByInstrument(equityRows, selected) || {};
 
-    function overviewXirrCashFlows(equityFlows, goldPrice, commodityFlows) {
-      var flows = equityFlows.slice();
-      if (!isFixedIncomeExcluded()) {
-        var fdRows = getSheetRows("fd");
-        // Savings/Investment Holding (Investment Corpus/Savings Account) is always excluded
-        // from XIRR — its running-balance updates aren't real cash-flow events.
-        var pfCurrentValue = fdRows ? sumProvidentFundCurrentValue(fdRows, selected) : 0;
-        var fixedIncomeCurrentValue = (fdRows ? sumFdActiveCurrentValue(fdRows, selected) : 0) + pfCurrentValue;
-        flows = flows
-          .concat(fdRows ? buildFdMaturedXirrCashFlows(fdRows, selected) : [])
-          .concat(fdRows ? buildProvidentFundXirrCashFlows(fdRows, selected) : []);
-        if (fixedIncomeCurrentValue > 0) flows.push({ date: new Date(), amount: fixedIncomeCurrentValue });
-      }
-      // Commodity is always included in XIRR regardless of Fixed Income exclusion
-      if (commodityFlows && commodityFlows.length) flows = flows.concat(commodityFlows);
-      return flows;
-    }
+    // The Overview XIRR is assembled by computeScopedOverviewXirr from the same
+    // scoped flows + aggregator terminal the Benchmark/CAGR/Rolling cards use, so
+    // there is no sheet-shaped flow builder here any more. What this function
+    // still owns is publishing the inputs that helper reads — the commodity flows
+    // (_ovFlows.commodityXirrFlows) and the slice values behind the terminal.
 
     var loadingMsg = "Fetching AMFI NAV data… this can take up to 30s the first time.";
     if (equityEl) { equityEl.textContent = "…"; equityEl.title = loadingMsg; }
@@ -6942,9 +6993,7 @@
         setUnrealizedReturn(equityReturnEl, equityPctEl, 0, 0);
         var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
         var xirrNoValue = calculateXIRR(xirrCashFlows);
-        var ovBaseFlows = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
-        _ovFlows.overviewBaseFlows = ovBaseFlows;
-        setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows.concat(_ovFlows.seXirrFlows)));
+        refreshScopedOverviewXirr();
         setXirr(equityXirrEl, xirrNoValue);
         setDayChange(equityDayChangeEl, 0);
         document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
@@ -7082,9 +7131,7 @@
           var xirrCashFlows = buildXirrCashFlows(equityRows, selected);
           if (mfXirrTerminal > UNITS_EPSILON) xirrCashFlows.push({ date: new Date(), amount: mfXirrTerminal });
           var xirr = calculateXIRR(xirrCashFlows);
-          var ovBaseFlows2 = overviewXirrCashFlows(xirrCashFlows, null, commodityFlows);
-          _ovFlows.overviewBaseFlows = ovBaseFlows2;
-          setXirr(overviewXirrEl, calculateXIRR(ovBaseFlows2.concat(_ovFlows.seXirrFlows)));
+          refreshScopedOverviewXirr();
           setXirr(equityXirrEl, xirr);
           document.dispatchEvent(new CustomEvent("wf-overview-flows-ready"));
         });
@@ -16800,15 +16847,10 @@
               seXirrEl.textContent = "—";
             }
           }
-          // Refresh overview XIRR now that SE flows are available.
-          // _ovFlows.overviewBaseFlows is set by updateTotalCurrentValue (equity+FI+commodity flows).
-          // If it's already been computed, we can recompute overview XIRR without re-fetching.
-          if (_ovFlows.overviewBaseFlows) {
-            var overviewXirrEl = document.getElementById("overview-xirr");
-            if (overviewXirrEl) {
-              setXirr(overviewXirrEl, calculateXIRR(_ovFlows.overviewBaseFlows.concat(_ovFlows.seXirrFlows)));
-            }
-          }
+          // Refresh the Overview XIRR now that the Stocks/ETF leg is available: it
+          // is recomputed from scratch (scoped flows + aggregator terminal), so no
+          // re-fetch is needed and no stale base-flow list has to be kept around.
+          refreshScopedOverviewXirr();
           // Stocks/ETF flows arrive on a separate async path than the overview's
           // wf-overview-flows-ready. Notify the benchmark card so its portfolio
           // XIRR/alpha re-runs once with the SE leg included — otherwise it stays

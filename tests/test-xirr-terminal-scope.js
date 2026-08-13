@@ -148,11 +148,17 @@ console.log("\nG. No terminal is left reading a split slice directly");
   // Any future call site that wants a current value for an XIRR terminal has to
   // go through the helpers; reading _ovSlice.mf.current for that purpose is the
   // exact mistake this suite exists to stop.
-  // _ovScopedMfCurrent is a helper too, so its own body is not a call site —
-  // remove it before looking, rather than loosening the pattern.
-  const scopedHelper = SRC.slice(SRC.indexOf("function _ovScopedMfCurrent()"));
-  const withoutScopedHelper = SRC.replace(scopedHelper.slice(0, scopedHelper.indexOf("\n  }") + 4), "");
-  const direct = withoutScopedHelper.split("\n").filter(function (l) {
+  // _ovScopedMfCurrent/_ovScopedSeCurrent are helpers too, so their own bodies
+  // are not call sites — remove them before looking, rather than loosening the
+  // pattern.
+  let withoutScopedHelpers = SRC;
+  ["_ovScopedMfCurrent", "_ovScopedSeCurrent"].forEach(function (name) {
+    const from = withoutScopedHelpers.indexOf("function " + name + "()");
+    if (from === -1) return;
+    const rest = withoutScopedHelpers.slice(from);
+    withoutScopedHelpers = withoutScopedHelpers.replace(rest.slice(0, rest.indexOf("\n  }") + 4), "");
+  });
+  const direct = withoutScopedHelpers.split("\n").filter(function (l) {
     return /_ovSlice\.(mf|se)\.current/.test(l) && !/function _ov(Mf|Se)AllCurrent/.test(l);
   });
   ok(direct.length === 0, "G1 the split slices are read only inside the helpers", direct.join(" | "));
@@ -190,6 +196,51 @@ console.log("\nH. Scope is the exclusion on screen, not just the whole sheet");
     ok((body.match(/returnScopeIncludesInstrument/g) || []).length >= 2,
        "H" + (5 + i) + " " + fnName + " is scoped on both the MF and Stocks/ETF legs");
   });
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nI. The Overview header's XIRR follows the exclusion in force");
+{
+  // The last XIRR on the page that didn't. It was assembled from the WHOLE Mutual
+  // Fund and Stocks/ETF sheets with commodity concatenated unconditionally, so:
+  //   * Exclude Equity still reported the equity book's return, and
+  //   * Exclude Fixed Income and Commodity still had gold in it.
+  // The header's value and the header's return described different portfolios.
+  // It is now built from the same scoped flows + a matching terminal as the
+  // Benchmark/CAGR/Rolling cards, which gives the three rules:
+  //   No Exclusion  → Equity + Fixed Income + Commodity
+  //   Exclude Equity → Fixed Income + Commodity
+  //   Exclude Fixed Income and Commodity → Equity
+  ok(/function computeScopedOverviewXirr\(\)/.test(SRC),
+     "I1 there is one helper computing the Overview XIRR");
+  const f = SRC.slice(SRC.indexOf("function computeScopedOverviewXirr"));
+  const body = f.slice(0, f.indexOf("\n  }"));
+  ok(/buildScopedReturnFlows\(selected\)/.test(body),
+     "I2 its flows are the scoped ones, gated by Instrument Category");
+  ok(/scopedOverviewXirrTerminal\(selected\)/.test(body),
+     "I3 and it is closed with a terminal marked in that same scope");
+
+  const t = SRC.slice(SRC.indexOf("function scopedOverviewXirrTerminal"));
+  const tBody = t.slice(0, t.indexOf("\n  }"));
+  ok(/_ovScopedMfCurrent\(\)/.test(tBody) && /_ovScopedSeCurrent\(\)/.test(tBody),
+     "I4 the terminal takes both sheet legs in the scope on screen");
+  ok(/isFixedIncomeExcluded\(\)/.test(tBody) &&
+     /sumFdActiveCurrentValue/.test(tBody) && /sumProvidentFundCurrentValue/.test(tBody) &&
+     /_ovSlice\.comm\.current/.test(tBody),
+     "I5 fixed income + physical gold are paid back only when they are on screen");
+  // Savings/Investment Corpus and the EPF sheet have no XIRR cash flows at all —
+  // paying them out would be money returning that never went in.
+  ok(!/sumFdCurrentValueAtPar|_ovAggregate\(\)/.test(tBody),
+     "I6 and the flow-less balances are never paid back");
+
+  // The old sheet-shaped builder must be gone, not left beside the new path.
+  ok(!/function overviewXirrCashFlows/.test(SRC),
+     "I7 the unscoped Overview flow builder is removed");
+  ok(!/overviewBaseFlows/.test(SRC),
+     "I8 along with the stale base-flow cache it fed");
+  // Every leg resolves on its own async path, so each has to refresh the header.
+  ok((SRC.match(/refreshScopedOverviewXirr\(\)/g) || []).length >= 4,
+     "I9 each async leg (MF, Stocks/ETF, commodity) refreshes the header");
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
