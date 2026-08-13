@@ -17933,12 +17933,82 @@
   function _nwmInterestByMonth(fromMonth, portfolio) {
     var out = {};
     var rows = getSheetRows("fd");
-    if (!rows || rows.length < 2) return out;
+    // The Provident Fund (EPF) sheet is a SECOND source of fixed-income interest,
+    // and this function used to read only the first. Its Interest rows raise the
+    // recorded fixed_income value — buildEpfValueEvents accumulates deposits AND
+    // interest, and that series is what the snapshot stores — while
+    // buildMonthlyInvestCatData counts only its Deposit rows as contributions,
+    // correctly. Nothing then named the interest, so the market residual absorbed
+    // it: EPF credits at the financial year end, so Fixed Income showed a "market
+    // gain" every March, of roughly a year's interest, in an asset class that has
+    // no market to speak of.
+    //
+    // This is the same fault already fixed for the PF rows in the fd sheet (see
+    // the provident-fund branch below); the standalone sheet was never given the
+    // same treatment.
+    var epfRows = getSheetRows("fixedincome");
+    var haveFd = !!(rows && rows.length >= 2);
+    var haveEpf = !!(epfRows && epfRows.length >= 2);
+    if (!haveFd && !haveEpf) return out;
+
+    // Interest recorded on the EPF sheet, cumulative to a date, keyed by holding.
+    // Read straight from the rows rather than through a holdings builder: what is
+    // wanted is exactly "interest booked so far", which is what those rows ARE.
+    // Nothing is inferred or rated, so this can never attribute more than the
+    // sheet records — across all of history it sums to precisely the gain the
+    // Fixed Income holdings table shows for these instruments.
+    var epfIdx = null;
+    if (haveEpf) {
+      var eh = epfRows[0].map(normalizeText);
+      epfIdx = {
+        portfolio: eh.indexOf("portfolio name"),
+        instrument: eh.indexOf("instrument name"),
+        sub: eh.indexOf("instrument sub category"),
+        category: eh.indexOf("instrument category"),
+        type: eh.indexOf("transaction type"),
+        amount: eh.indexOf("amount"),
+        date: eh.findIndex(function (h) { return h.indexOf("date") !== -1; })
+      };
+      if (epfIdx.type === -1 || epfIdx.amount === -1 || epfIdx.date === -1) { haveEpf = false; epfIdx = null; }
+    }
+    function epfInterestTo(d, into) {
+      if (!epfIdx) return;
+      epfRows.slice(1).forEach(function (row) {
+        var pf = epfIdx.portfolio !== -1 ? (row[epfIdx.portfolio] || "").trim() : "";
+        if ((portfolio || "all") !== "all" && normalizeText(pf) !== normalizeText(portfolio)) return;
+        // Same category gate buildEpfValueEvents applies, so the two agree on
+        // which rows are fixed income at all.
+        if (epfIdx.category !== -1 && normalizeText(row[epfIdx.category]) !== "fixed income") return;
+        var type = normalizeText(row[epfIdx.type] || "");
+        var isInterest = type.indexOf("interest") !== -1;
+        var isDeposit = type.indexOf("deposit") !== -1;
+        if (!isInterest && !isDeposit) return;
+        var dt = parseFlexibleDate(row[epfIdx.date]);
+        if (!dt || dt > d) return;
+        var k = "epf|" + normalizeText(pf) + "|" +
+                (epfIdx.instrument !== -1 ? normalizeText(row[epfIdx.instrument]) : "") + "|" +
+                (epfIdx.sub !== -1 ? normalizeText(row[epfIdx.sub]) : "");
+        // A DEPOSIT contributes nothing to interest, but it must still open the
+        // key: accruedBetween only counts keys present in BOTH valuations, so a
+        // holding whose key first appeared on the month its interest landed would
+        // have that first credit silently dropped — and every later one measured
+        // from the wrong base.
+        if (!(k in into)) into[k] = 0;
+        if (isInterest) into[k] += parseNumber(row[epfIdx.amount]);
+      });
+    }
+
     var earliest = null, today = new Date();
     try {
-      var hs = buildFdHoldingsList(rows, portfolio || "all", _nwmIsAccruing) || [];
+      var hs = haveFd ? (buildFdHoldingsList(rows, portfolio || "all", _nwmIsAccruing) || []) : [];
       hs.forEach(function (h) { if (h.startDate && (!earliest || h.startDate < earliest)) earliest = h.startDate; });
     } catch (e) { return out; }
+    if (haveEpf && epfIdx) {
+      epfRows.slice(1).forEach(function (row) {
+        var dt = parseFlexibleDate(row[epfIdx.date]);
+        if (dt && (!earliest || dt < earliest)) earliest = dt;
+      });
+    }
     if (!earliest) return out;
 
     // Key by identity + start date so two deposits at the same bank are not
@@ -17953,6 +18023,8 @@
     // market residual twice over.
     function valuedAt(d) {
       var m = {};
+      epfInterestTo(d, m);
+      if (!haveFd) return m;
       // Term deposits: compounded quarterly at their own rate.
       (buildFdHoldingsList(rows, portfolio || "all", _fiIsTermDeposit, d) || []).forEach(function (h) {
         // Defensive: buildFdHoldingsList currently values a not-yet-opened

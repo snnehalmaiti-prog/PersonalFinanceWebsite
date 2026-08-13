@@ -25,6 +25,16 @@
 const { chromium } = require("./_launch");
 const PORT = process.env.PORT || 8098;
 
+// A recognisable EPF interest credit, dated into the month the drill-down opens
+// on (the most recent filled bar) so the panel is asked about it directly.
+const EPF_CREDIT = 47000;
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// Last month, not this one: the drill-down opens on a bar the backfill has
+// actually recorded, and the month in progress may not be one yet.
+const EPF_CREDIT_DATE = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d; })();
+const dmyToday = () => `15-${MON[EPF_CREDIT_DATE.getMonth()]}-${EPF_CREDIT_DATE.getFullYear()}`;
+const EPF_MONTH_LABEL = `${MON[EPF_CREDIT_DATE.getMonth()]} ${EPF_CREDIT_DATE.getFullYear()}`;
+
 const TXN = ["Transaction Date", "Portfolio Name", "Instrument Name", "Transaction Type", "Units", "Price"];
 const FDH = ["Transaction Date", "Portfolio Name", "Bank", "Instrument Name", "Instrument Category",
              "Instrument Sub Category", "Transaction Type", "Invested Amount",
@@ -45,7 +55,17 @@ const SHEETS = {
     ["1-Jan-2024", "Snnehal", "HDFC", "FD-1", "Fixed Income", "Fixed Deposit", "Buy", "100000", "1-Jan-2027", "7%", ""],
     ["1-Jan-2024", "Trisha", "EPFO", "PF-1", "Fixed Income", "Provident Fund", "Buy", "50000", "", "", ""],
     ["1-Jan-2024", "Snnehal", "—", "Physical Gold", "Commodity", "Gold", "Buy", "", "", "", "10"]],
-  "wf-fixedincome-data": [["Transaction Date", "Portfolio Name", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Amount"]],
+  // The standalone Provident Fund (EPF) sheet — a SECOND source of fixed-income
+  // interest, and one the Interest column used to be blind to. Its Interest rows
+  // raise the recorded fixed_income value (buildEpfValueEvents accumulates
+  // deposits and interest alike) while only its Deposits count as contributions,
+  // so an unnamed credit landed in the market residual. EPF credits at the
+  // financial year end, which is why Fixed Income grew a "market gain" every
+  // March. The credit here is dated into the month the drill-down opens on.
+  "wf-fixedincome-data": [["Transaction Date", "Portfolio Name", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Amount"],
+    ["1-Jan-2024", "Snnehal", "EPF", "Fixed Income", "Provident Fund", "Deposit", "60000"],
+    ["1-Feb-2024", "Snnehal", "EPF", "Fixed Income", "Provident Fund", "Deposit", "60000"],
+    [dmyToday(), "Snnehal", "EPF", "Fixed Income", "Provident Fund", "Interest", String(EPF_CREDIT)]],
 };
 
 // WEEKDAYS ONLY, because that is what NAV and stock history actually are.
@@ -242,6 +262,33 @@ const money = (t) => {
   const eq = (drill.rows || []).find((r) => r[0] === "Equity");
   const fi = (drill.rows || []).find((r) => r[0] === "Fixed Income");
   ok(eq && eq[4] === "—", "D7 Equity never carries interest — it is Fixed Income by definition", eq);
+
+  // The month the EPF credit was booked in, asked about directly. It used to fall
+  // through to the market residual, because the Interest column read only the
+  // FD/PF sheet and never the standalone Provident Fund one — which is how an
+  // asset class with no market to speak of grew a market gain every March.
+  const epfDrill = await p.evaluate((wanted) => {
+    const c = window.__wfNwmChart;
+    if (!c) return { err: "no chart" };
+    const idx = c.data.labels.findIndex((l) => String(l).indexOf(wanted) !== -1);
+    if (idx < 0) return { err: "no bar for " + wanted, labels: c.data.labels };
+    c.options.onClick({}, [{ index: idx, datasetIndex: 0 }], c);
+    return {
+      label: c.data.labels[idx],
+      rows: [...document.querySelectorAll("#nwm-drill-body tbody tr")]
+        .map((tr) => [...tr.children].map((td) => td.textContent.trim())),
+    };
+  }, EPF_MONTH_LABEL);
+  const efi = (epfDrill.rows || []).find((r) => r[0] === "Fixed Income");
+  ok(!epfDrill.err && efi, "D7b the credit's own month can be drilled", epfDrill);
+  ok(efi && money(efi[4]) >= EPF_CREDIT,
+     "D7c the EPF sheet's interest credit is reported as Interest",
+     { month: epfDrill.label, interest: efi && efi[4], credit: EPF_CREDIT });
+  // And it must not ALSO be sitting in market: naming it has to take it out of
+  // the residual, not be added beside it.
+  ok(efi && money(efi[6]) < EPF_CREDIT,
+     "D7d and is gone from that month's market figure, not double-counted",
+     { market: efi && efi[6], credit: EPF_CREDIT });
   ok(fi && money(fi[4]) > 0, "D8 while Fixed Income does", fi);
 
   // A loss has to LOOK like a loss. The table styles .num.pos / .num.out; the
