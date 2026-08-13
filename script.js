@@ -17357,7 +17357,7 @@
     // Invested and Withdrawn are shown separately, and Invested means exactly
     // what it means on CASH FLOW \u00b7 MONTHLY \u2014 money in, before any sales. The
     // net of the two is what the Market column has been reduced by.
-    var html = '<table class="mic-txn-table"><thead><tr>' +
+    var html = '<table class="mic-txn-table mic-txn-table--wide"><thead><tr>' +
       "<th>Category</th><th class=\"num\">Opening</th><th class=\"num\">Invested</th>" +
       "<th class=\"num\">Withdrawn</th>" +
       "<th class=\"num\">Interest</th><th class=\"num\">Idle cash</th>" +
@@ -17387,7 +17387,27 @@
         cell(r.interest) + cell(r.idle) + cell(r.market) +
         '<td class="num">' + formatCurrency(r.closing) + "</td></tr>";
     });
-    html += "</tbody></table>";
+    // Totals, every column. Not decoration: opening + invested − withdrawn +
+    // interest + idle + market has to come out at closing, and a row that
+    // states both ends lets the reader check the arithmetic they are being
+    // asked to accept instead of taking it on trust.
+    var T = { opening: 0, bought: 0, sold: 0, interest: 0, idle: 0, market: 0, closing: 0 };
+    res.rows.forEach(function (r) {
+      Object.keys(T).forEach(function (k) { T[k] += Number(r[k]) || 0; });
+    });
+    var footCell = function (v) {
+      if (!v) return '<td class="num">—</td>';
+      return '<td class="num ' + (v < 0 ? "out" : "pos") + '">' + _nwmSigned(v) + "</td>";
+    };
+    html += "</tbody><tfoot><tr>" +
+      "<td>Total</td>" +
+      '<td class="num">' + formatCurrency(T.opening) + "</td>" +
+      '<td class="num">' + (T.bought ? _nwmSigned(T.bought) : "—") + "</td>" +
+      (T.sold ? '<td class="num out">' + _nwmSigned(-T.sold) + "</td>"
+              : '<td class="num">—</td>') +
+      footCell(T.interest) + footCell(T.idle) + footCell(T.market) +
+      '<td class="num">' + formatCurrency(T.closing) + "</td>" +
+      "</tr></tfoot></table>";
     // Should be zero: the categories and the total are recorded in the same
     // write. Shown when it is not, because a breakdown that quietly disagrees
     // with the bar above it is worse than one that says so.

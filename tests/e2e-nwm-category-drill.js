@@ -353,6 +353,114 @@ const money = (t) => {
   });
   await p.waitForTimeout(2500);
 
+  // Totals, and the ability to actually reach them.
+  //
+  // Opened explicitly rather than relying on the panel still being up from an
+  // earlier step. It was not: every measurement below was being taken on a
+  // hidden element, where every width is 0 and "nothing is truncated" is true
+  // of nothing at all.
+  const opened = await p.evaluate(() => {
+    const c = window.__wfNwmChart;
+    let i = -1; for (let k = c.data.labels.length - 1; k >= 0; k--) {
+      if (c.data.datasets.some((d) => d.data[k] != null)) { i = k; break; } }
+    c.options.onClick({}, [{ index: i, datasetIndex: 0 }], c);
+    const ov = document.getElementById("nwm-drill-overlay");
+    return { hidden: ov.hidden, rows: document.querySelectorAll("#nwm-drill-body tbody tr").length };
+  });
+  ok(opened.hidden === false && opened.rows > 0,
+     "T0 the panel is open, so the measurements below are of something on " +
+     "screen rather than of a hidden element with no dimensions", opened);
+
+  const foot = await p.evaluate(() => {
+    const body = document.getElementById("nwm-drill-body");
+    const tf = body.querySelector("tfoot tr");
+    const tbl = body.querySelector("table");
+    const rows = [...body.querySelectorAll("tbody tr")]
+      .map((tr) => [...tr.children].map((td) => td.textContent.trim()));
+    return {
+      cells: tf ? [...tf.children].map((td) => td.textContent.trim()) : null,
+      rows: rows,
+      // Reachability: the scrollport is .mic-txn-body, and the table is allowed
+      // to be wider than it.
+      scrollable: body.scrollWidth > body.clientWidth + 1,
+      overflowX: getComputedStyle(body).overflowX,
+      // Does the last column actually come into view when scrolled right?
+      // A cell whose content is wider than the cell is being clipped — which is
+      // what "make sure the user can view the entire data" is about.
+      truncated: [...body.querySelectorAll("td, th")]
+        .filter((c) => c.scrollWidth > c.clientWidth + 1)
+        .map((c) => c.textContent.trim()),
+      firstStickyLeft: getComputedStyle(tbl.querySelector("tbody td")).position,
+    };
+  });
+  ok(foot.cells && foot.cells.length === 8 && /total/i.test(foot.cells[0]),
+     "T1 a totals row spans every column", foot.cells);
+  const col = (i) => (foot.rows || []).reduce((a, r) => a + money(r[i]), 0);
+  ok(Math.abs(money(foot.cells[1]) - col(1)) <= Math.max(2, Math.abs(col(1)) * 0.002),
+     "T2 Opening totals the column above it", { foot: foot.cells[1], rows: col(1) });
+  ok(Math.abs(money(foot.cells[6]) - col(6)) <= Math.max(2, Math.abs(col(6)) * 0.002),
+     "T3 and so does Market", { foot: foot.cells[6], rows: col(6) });
+  // The property the row exists to let a reader check.
+  const recon = money(foot.cells[1]) + money(foot.cells[2]) + money(foot.cells[3]) +
+                money(foot.cells[4]) + money(foot.cells[5]) + money(foot.cells[6]);
+  ok(Math.abs(recon - money(foot.cells[7])) <= Math.max(5, Math.abs(money(foot.cells[7])) * 0.002),
+     "T4 and opening + invested − withdrawn + interest + idle + market comes " +
+     "out at closing — the row states both ends, so the arithmetic can be " +
+     "checked rather than taken on trust",
+     { computed: recon, closing: money(foot.cells[7]) });
+  ok(!foot.truncated.length,
+     "T5 no figure is truncated to make the columns fit — the table is sized to " +
+     "its content, so eight currency columns push the panel wider instead of " +
+     "compressing until a number is unreadable", foot.truncated.slice(0, 3));
+
+  // Force the narrow case. The fixture's figures are small enough to fit a
+  // 760px modal; real balances run to lakhs and do not, which is what the
+  // report showed. Narrowing the MODAL reproduces that exactly, and unlike
+  // narrowing the viewport it does not drag the mobile stylesheet in and change
+  // what is on screen at the same time.
+  const narrow = await p.evaluate(() => {
+    document.querySelector("#nwm-drill-overlay .mic-txn-modal").style.width = "340px";
+    const body = document.getElementById("nwm-drill-body");
+
+    const tbl = body.querySelector("table");
+    body.scrollLeft = 0;
+    const before = tbl.querySelector("tbody tr:last-child td:last-child")
+      .getBoundingClientRect().right - body.getBoundingClientRect().right;
+    body.scrollLeft = body.scrollWidth;
+    const last = tbl.querySelector("tbody tr:last-child td:last-child");
+    const lr = last.getBoundingClientRect(), br = body.getBoundingClientRect();
+    const firstCell = tbl.querySelector("tbody td").getBoundingClientRect();
+    return {
+      scrollable: body.scrollWidth > body.clientWidth + 1,
+      offscreenBefore: before > 1,
+      reachable: lr.right <= br.right + 1 && lr.left >= br.left - 1,
+      categoryStillVisible: firstCell.left >= br.left - 1 && firstCell.width > 0,
+      truncated: [...body.querySelectorAll("td, th")]
+        .filter((c) => c.scrollWidth > c.clientWidth + 1).length,
+      _dbg: { ovHidden: document.getElementById("nwm-drill-overlay").hidden,
+              bodyW: body.clientWidth, scrollW: body.scrollWidth,
+              tblW: tbl ? Math.round(tbl.getBoundingClientRect().width) : null,
+              tblCss: tbl ? getComputedStyle(tbl).width : null,
+              rows: body.querySelectorAll("tbody tr").length },
+    };
+  });
+  ok(narrow.scrollable && narrow.offscreenBefore,
+     "T6 in a narrow window the last column starts off-screen", narrow);
+  ok(narrow.reachable,
+     "T6b and scrolling right brings it fully into view — the point of the ask",
+     narrow);
+  ok(narrow.categoryStillVisible,
+     "T6c with the category column still pinned in place while it does", narrow);
+  ok(narrow.truncated === 0,
+     "T6d and still nothing truncated at that width — it scrolls rather than " +
+     "squeezing, which is the difference between reachable and lost", narrow);
+  await p.evaluate(() => {
+    document.querySelector("#nwm-drill-overlay .mic-txn-modal").style.width = "";
+  });
+  ok(foot.firstStickyLeft === "sticky",
+     "T7 while the category stays pinned, so scrolling right does not cost you " +
+     "the row you are reading", foot.firstStickyLeft);
+
   // Closing to the reader, three ways.
   await p.evaluate(() => document.getElementById("nwm-drill-close").click());
   ok(await p.evaluate(() => document.getElementById("nwm-drill-overlay").hidden),
