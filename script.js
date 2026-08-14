@@ -1752,6 +1752,8 @@
 
   function _clearBenchmarkMemos() {
     _benchMemo = { twr: null, rolling: null, valueAt: {} };
+    // The scoped flow list is built from the sheets, so it goes with them.
+    _scopedFlowsMemo = { se: undefined, cg: undefined, by: {} };
   }
 
   // A rejected promise must not be cached: one transient failure would otherwise
@@ -4511,7 +4513,37 @@
   // that: it has no gold price at the cutoff, so gold can be given a terminal but
   // no opening mark, which reads as pure profit. Both sides of the period window
   // drop it instead.
+  // Memoized. A single load asked for this list NINE times — computeBenchmarkXirr
+  // takes it twice (all-time, then again with physical gold omitted for the period
+  // window), and the card ran three times over. Each call re-walks the Mutual Fund,
+  // Stocks/ETF, FD and PF sheets from row 1, and those walks are where the load
+  // spends its CPU: normalizeText, parseNumber and parseFlexibleDate were the top
+  // three entries in a load profile, all of them reached from here.
+  //
+  // Keyed on everything the result depends on — portfolio, exclusion and the price
+  // stamp, via _benchMemoKey — plus the physical-gold flag, and dropped wholesale
+  // when the sheets change (_clearBenchmarkMemos).
+  var _scopedFlowsMemo = { se: undefined, cg: undefined, by: {} };
+
   function buildScopedReturnFlows(selected, omitPhysicalGold) {
+    // Identity, not length. The Overview replaces these arrays when the selected
+    // portfolio changes, and the replacement can be exactly as long as the one it
+    // replaced — a hit keyed on size would then serve the previous portfolio's
+    // Stocks/ETF leg, which is the bug the _lastBenchmarkSeKey comment below
+    // records having already been fixed once.
+    var seRef = _ovFlows.seFlowsINR || null;
+    var cgRef = _ovFlows.commodityXirrFlows || null;
+    if (_scopedFlowsMemo.se !== seRef || _scopedFlowsMemo.cg !== cgRef) {
+      _scopedFlowsMemo = { se: seRef, cg: cgRef, by: {} };
+    }
+    var memoKey = _benchMemoKey(selected) + "|" + (omitPhysicalGold ? 1 : 0);
+    var memoHit = _scopedFlowsMemo.by[memoKey];
+    // A copy on the way out. Every caller today happens to slice before pushing,
+    // so nothing currently depends on this — it is here so that the first one that
+    // forgets gets a fresh array instead of silently growing the cache entry, which
+    // would show up as a portfolio XIRR drifting on each recompute.
+    if (memoHit) return memoHit.slice();
+
     var fdRows = getSheetRows("fd");
     var seRows = getSheetRows("stocksetf");
     var flows = buildXirrCashFlows(getSheetRows("equity"), selected, null, returnScopeIncludesInstrument);
@@ -4540,7 +4572,8 @@
         flows = flows.concat((_ovFlows.commodityXirrFlows || []).filter(function (f) { return !f._terminal; }));
       }
     }
-    return flows;
+    _scopedFlowsMemo.by[memoKey] = flows;
+    return flows.slice();
   }
 
   // The terminal for those flows — the one the Overview header's own XIRR uses, so
@@ -5846,10 +5879,50 @@
       });
     }
 
+    // ─── One compute per load, not three ──────────────────────────────────────
+    // The card used to run three times on every load: once here at init, once on
+    // wf-overview-flows-ready, and once on wf-se-xirr-ready. The first two run
+    // BEFORE the Stocks/ETF leg has resolved, so they measure a portfolio with its
+    // entire stock book missing — a figure that is wrong by construction and is
+    // replaced a few hundred milliseconds later. Each of those runs rebuilt the
+    // scoped flow list, re-solved both XIRR legs over the whole book and rebuilt
+    // the TWR NAV series, so the user waited for three passes to see the one that
+    // counts. On a real book that is most of the card's load time.
+    //
+    // Two changes below. Load-time triggers go through _scheduleBenchmark, which
+    // coalesces a burst into a single run — flows-ready and se-ready land within
+    // milliseconds of each other, so that alone folds two runs into one. And the
+    // init run is dropped in favour of parking the card on "Calculating…" until
+    // the data it needs arrives.
+    //
+    // User-initiated recomputes (index click, period pill) still call
+    // applyBenchmark directly: those must feel instant, and the generation guard
+    // inside it already handles overlap.
+    var _benchSchedule = null;
+    function _scheduleBenchmark(key) {
+      if (_benchSchedule) clearTimeout(_benchSchedule);
+      _benchSchedule = setTimeout(function () {
+        _benchSchedule = null;
+        applyBenchmark(key);
+      }, 200);
+    }
+
     // Restore saved mode, period and selection
     setMode(_mode);
     setPeriod(_period);
-    if (savedKey) applyBenchmark(savedKey);
+    if (savedKey) {
+      statusEl.hidden = false;
+      statusEl.textContent = "Calculating…";
+      resultEl.hidden = true;
+      // A portfolio that fires neither readiness event — an empty book, or a sheet
+      // fetch that failed outright — would otherwise sit on "Calculating…" for
+      // ever. Compute once anyway if nothing has driven the card by then.
+      setTimeout(function () {
+        if (_benchmarkInitialRefreshDone || _benchSchedule) return;
+        _benchmarkInitialRefreshDone = true;
+        applyBenchmark(savedKey);
+      }, 6000);
+    }
 
     // When exclusion changes, updateDashboardStats is async. Wait for the next
     // wf-overview-flows-ready (fired once the Overview's own flows have resolved)
@@ -5882,7 +5955,7 @@
       _benchmarkInitialRefreshDone = true;
       _pendingBenchmarkRefresh = false;
       _lastBenchmarkSeKey = _seFlowsKey();
-      applyBenchmark(currentKey);
+      _scheduleBenchmark(currentKey);
     });
     // Stocks/ETF cash flows resolve on their own async path (renderStockEtfHoldingsTable).
     // If the benchmark ran against a DIFFERENT SE leg than the one now in hand —
@@ -5904,7 +5977,7 @@
       var currentKey = localStorage.getItem(BENCH_KEY) || "NIFTY50";
       if (!currentKey) return;
       _lastBenchmarkSeKey = seKey;
-      applyBenchmark(currentKey);
+      _scheduleBenchmark(currentKey);
     });
   }
 
