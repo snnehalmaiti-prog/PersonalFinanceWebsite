@@ -8289,6 +8289,93 @@
     refreshBtn.addEventListener("click", function () { resyncSheetPrefixFromCloud(prefix, refreshBtn); });
   });
 
+  // ─── Cloud settings arriving after the app has already read them ──────────
+  // dashboard.html dispatches "wf-cloud-settings-loaded" once the cloud copy of
+  // the settings has landed in localStorage, with a comment promising a
+  // recompute so stale local numbers get replaced. Nothing listened for it —
+  // the whole repo held exactly one reference to that name, the dispatch — so
+  // the recompute never happened.
+  //
+  // It matters because the boot path gives up waiting after four seconds and
+  // starts the app anyway (dashboard.html's `setTimeout(go, 4000)`). On a cold
+  // mobile connection, or a slow Supabase response, script.js therefore reads
+  // stale or absent sheet URLs, liabilities, EPF rates and exclusions — and the
+  // designed recovery was this event. Every tab rendered wrong numbers and
+  // stayed wrong until a manual reload.
+  //
+  // The settings that reach this page from the cloud, and what each one moves:
+  //   *-sheets            which Google Sheets are read at all
+  //   wf-liabilities      the net-worth deduction
+  //   wf-epf-interest-rates  PF/EPF accrual, so fixed-income value and returns
+  // (Expense templates and recurring payments belong to the Expense tab, which
+  // reads them on its own render; the GitHub keys move no number on screen.)
+  var CLOUD_SETTINGS_KEYS = [
+    "wf-equity-sheets", "wf-stocksetf-sheets", "wf-fd-sheets",
+    "wf-mfmapping-sheets", "wf-stocksetfmapping-sheets",
+    "wf-liabilities", "wf-epf-interest-rates"
+  ];
+
+  function _cloudSettingsFingerprint() {
+    var out = "";
+    for (var i = 0; i < CLOUD_SETTINGS_KEYS.length; i++) {
+      var v = null;
+      try { v = localStorage.getItem(CLOUD_SETTINGS_KEYS[i]); } catch (e) {}
+      out += CLOUD_SETTINGS_KEYS[i] + "=" + (v == null ? " " : v) + "";
+    }
+    return out;
+  }
+
+  // Taken at startup, i.e. AFTER script.js has read these values, so the
+  // comparison below answers exactly the right question: did the cloud copy
+  // differ from what this page was built with?
+  var _cloudSettingsSeen = _cloudSettingsFingerprint();
+
+  document.addEventListener("wf-cloud-settings-loaded", function () {
+    var now = _cloudSettingsFingerprint();
+    // The common case is that the sync landed before script.js ran and the cloud
+    // agrees with what is already on screen. Re-rendering there would undo the
+    // work that got this page down to one compute per load, for no change in a
+    // single displayed figure — so compare first and do nothing when they match.
+    if (now === _cloudSettingsSeen) return;
+    _cloudSettingsSeen = now;
+
+    // settings.html loads this same file and fires the same event — but it has no
+    // charts, no holdings tables and no Overview header to recompute. The sheet
+    // cards and the GitHub panel there listen for the event themselves; this
+    // fan-out is the dashboard's, so gate it on the dashboard actually being here.
+    if (!document.getElementById("value-chart")) return;
+
+    // Sheet configs may now point somewhere else, and every derived cache is
+    // downstream of that.
+    ["equity", "fixedincome", "fd", "stocksetf", "mfmapping", "stocksetfmapping"]
+      .forEach(function (p) { try { _invalidateSheetRows(p); } catch (e) {} });
+    try { _clearBenchmarkMemos(); } catch (e) {}
+
+    // The same fan-out a sheet resync runs, which is the one place that already
+    // knows the full set of things a settings change can move.
+    try {
+      updateDashboardStats();
+      populatePortfolioSelect();
+      renderValueChart();
+      renderMonthlyInvestmentByCategory();
+      renderEquityHoldingsTable();
+      renderMarketSegmentChart();
+      renderMutualFundPortfolioSplitChart();
+      renderAllFixedIncomeHoldingsTable();
+      renderCommodityHoldingsTable();
+      renderStockEtfHoldingsTable();
+      renderInvestmentSplitChart();
+      renderInstrumentSplitChart();
+      renderProfitByCategoryCard();
+      renderMonthlyCashFlow();
+    } catch (e) { dbg("[CloudSettings] recompute failed", e); }
+
+    // Tells the Benchmark card and the Rolling Returns card to re-measure, the
+    // same signal an exclusion change sends.
+    document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
+    document.dispatchEvent(new CustomEvent("wf-sync-complete"));
+  });
+
   // Refresh a single mapping sheet (stored raw, no canonical realignment) and
   // re-render the holdings that depend on it.
   function resyncMappingFromCloud(prefix) {
@@ -9464,6 +9551,32 @@
       addRow();
     }
 
+    // Sheet links arriving from the cloud AFTER this card was built. On
+    // settings.html that used to be every link on a fresh device: the page never
+    // synced before script.js ran, so the card rendered one blank row and the
+    // user's configured sheets were invisible. Rebuild from the values that just
+    // landed — but only when this card is still showing what it was built with,
+    // so a late sync cannot discard an edit in progress.
+    document.addEventListener("wf-cloud-settings-loaded", function () {
+      var incoming = loadSheetConfigs(prefix);
+      // Links only. Comparing whole config objects treats the BLANK starter row
+      // that addRow() puts up when nothing is configured as an unsaved edit, so
+      // the exact case this exists for — a fresh device with no local config —
+      // bailed out and left the card empty.
+      var links = function (list) {
+        return (list || []).map(function (c) { return (c && c.link) || ""; })
+                           .filter(function (l) { return !!l; }).join("|");
+      };
+      var built = links(savedConfigs);
+      if (links(incoming) === built) return;              // nothing new to show
+      if (links(readRowConfigs()) !== built) return;      // user is mid-edit; leave it alone
+      savedConfigs = incoming;
+      listEl.innerHTML = "";
+      if (incoming.length) incoming.forEach(function (c) { addRow(c); });
+      else addRow();
+      if (incoming.length) syncAll();
+    });
+
     if (addBtn) {
       addBtn.addEventListener("click", function () { addRow(); autoSaveConfigs(); });
     }
@@ -9578,11 +9691,36 @@
   var ghSaveBtn  = document.getElementById("gh-save-btn");
   var ghSaveStatus = document.getElementById("gh-save-status");
   if (ghOwnerEl && ghRepoEl && ghBranchEl && ghTokenEl && ghSaveBtn) {
-    // Pre-fill from localStorage
-    ghOwnerEl.value  = localStorage.getItem("wf-gh-owner")  || "";
-    ghRepoEl.value   = localStorage.getItem("wf-gh-repo")   || "";
-    ghBranchEl.value = localStorage.getItem("wf-gh-branch") || "";
-    ghTokenEl.value  = localStorage.getItem("wf-gh-token")  || "";
+    // Pre-fill from localStorage.
+    //
+    // On settings.html this used to be the ONLY fill, and settings.html never
+    // synced the cloud row before script.js ran — so arriving here directly on a
+    // fresh device (bookmark, PWA shortcut, pasted URL) rendered all four fields
+    // EMPTY while the cloud held them, and Save then wrote the blanks back. The
+    // page now runs the same pre-sync the dashboard does, and refills here when
+    // the values land after the fact.
+    function fillGhFields() {
+      ghOwnerEl.value  = localStorage.getItem("wf-gh-owner")  || "";
+      ghRepoEl.value   = localStorage.getItem("wf-gh-repo")   || "";
+      ghBranchEl.value = localStorage.getItem("wf-gh-branch") || "";
+      // The token is deliberately NOT part of the cloud row — it stays on this
+      // device only — so it is filled once here and never refilled from a sync.
+      ghTokenEl.value  = localStorage.getItem("wf-gh-token")  || "";
+    }
+    fillGhFields();
+    // Refill only fields the user has not started editing, so a late sync cannot
+    // overwrite what they are in the middle of typing.
+    document.addEventListener("wf-cloud-settings-loaded", function () {
+      [[ghOwnerEl, "wf-gh-owner"], [ghRepoEl, "wf-gh-repo"], [ghBranchEl, "wf-gh-branch"]]
+        .forEach(function (pair) {
+          var el = pair[0];
+          if (el === document.activeElement || el._wfTouched) return;
+          el.value = localStorage.getItem(pair[1]) || "";
+        });
+    });
+    [ghOwnerEl, ghRepoEl, ghBranchEl, ghTokenEl].forEach(function (el) {
+      el.addEventListener("input", function () { el._wfTouched = true; });
+    });
     ghSaveBtn.addEventListener("click", function () {
       localStorage.setItem("wf-gh-owner",  ghOwnerEl.value.trim());
       localStorage.setItem("wf-gh-repo",   ghRepoEl.value.trim());

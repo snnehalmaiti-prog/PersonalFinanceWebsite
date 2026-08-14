@@ -20,10 +20,23 @@
 <link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
 <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
   <script src="supabase-client.js?v=__ASSET_VERSION__"></script>
+  <script src="wf-boot.js?v=__ASSET_VERSION__"></script>
 <script>
   if (!window.WfAuth || !WfAuth.isLoggedIn()) {
     window.location.replace("index.html");
   }
+  // Start pulling the cloud settings NOW — before anything on this page reads
+  // localStorage. This page used to skip the sync entirely and render from
+  // whatever happened to be cached, so a fresh device (bookmark, PWA shortcut,
+  // pasted URL — any route that does not pass through the dashboard first) showed
+  // every sheet URL and the whole GitHub section blank, and Save then wrote those
+  // blanks back to the cloud on every device.
+  //
+  // The page still renders immediately rather than blocking on the network; when
+  // the row lands, "wf-cloud-settings-loaded" tells the sheet cards and the GitHub
+  // panel to refill (script.js), and until it lands saveSettingsToCloud refuses to
+  // push an empty value over a column it has never read (supabase-client.js).
+  window.__wfCloudSync = (window.WfBoot ? WfBoot.cloudSync() : Promise.resolve());
 </script>
   <style>
     .wf-card-grid { display: grid; gap: 10px; }
@@ -675,11 +688,25 @@
     </div>
   </main>
 
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <!-- The one third-party script still executing on this origin. SheetJS is not
+       published to npm at this version, so its bytes cannot be fetched and hashed
+       from a registry the way the chart libraries in vendor/ were — Subresource
+       Integrity here would mean pasting in a hash nobody can reproduce, and a
+       wrong one blocks the script outright. Version is pinned, and 0.20.3 is past
+       the CVE-2023-30533 prototype-pollution range. See vendor/README.md. -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
   <script src="wf-math.js?v=__ASSET_VERSION__"></script>
   <script src="wf-overview.js?v=__ASSET_VERSION__"></script>
   <script src="script.js?v=__ASSET_VERSION__"></script>
   <script src="expense.js?v=__ASSET_VERSION__"></script>
+  <script>
+    // The sync was kicked off in <head>; announce it here, after script.js has
+    // built the sheet cards and the GitHub panel, so they can refill with values
+    // that were not in localStorage when they were built.
+    (window.__wfCloudSync || Promise.resolve()).then(function () {
+      document.dispatchEvent(new Event("wf-cloud-settings-loaded"));
+    });
+  </script>
   <script>
     // Expense left-nav panel switching
     (function () {

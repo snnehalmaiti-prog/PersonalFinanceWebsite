@@ -225,6 +225,12 @@
 
   // ── Settings sync ──────────────────────────────────────────────────────────
 
+  // Has this page actually READ the cloud settings row in this session? Until it
+  // has, an empty localStorage value means "we never knew", not "the user cleared
+  // it" — and the difference decides whether saving is allowed to blank a column
+  // that holds real configuration. See saveSettingsToCloud.
+  var _cloudSettingsSeen = false;
+
   function loadSettingsFromCloud() {
     return getValidToken().then(function (token) {
       if (!token) return null;
@@ -232,8 +238,24 @@
       if (!uid) return null;
       return fetch(SUPABASE_URL + "/rest/v1/user_settings?user_id=eq." + uid + "&select=*", {
         headers: authHeaders(token)
-      }).then(function (r) { return r.json(); }).then(function (rows) {
-        if (!rows || !rows.length) return null;
+      }).then(function (r) {
+        // r.ok, and an ARRAY body. PostgREST answers a successful select with a
+        // JSON array; an error answers with a JSON object and a 4xx/5xx. Parsing
+        // alone is not evidence of a read — a 500 whose body is valid JSON parses
+        // perfectly well, and treating that as "we have seen the row" is exactly
+        // the case the flag below exists to catch.
+        return r.json().catch(function () { return null; }).then(function (body) {
+          return { ok: r.ok, rows: body };
+        });
+      }).then(function (res) {
+        if (!res.ok || !Array.isArray(res.rows)) return null;
+        // A successful read is what earns this page the right to overwrite with
+        // an empty value later — see _cloudSettingsSeen in saveSettingsToCloud.
+        // Recorded even when the user has no row yet: an empty array is a real
+        // answer, and it says nothing is being clobbered.
+        _cloudSettingsSeen = true;
+        var rows = res.rows;
+        if (!rows.length) return null;
         var row = rows[0];
         SYNC_KEYS.forEach(function (lsKey) {
           var col = KEY_TO_COL[lsKey];
@@ -258,6 +280,24 @@
         var col = KEY_TO_COL[lsKey];
         var raw = localStorage.getItem(lsKey);
         if (raw == null) return;
+        // An EMPTY value from a page that never read the cloud row is not an
+        // edit — it is ignorance, and pushing it wipes real configuration.
+        //
+        // How that happened: settings.html used to read whatever localStorage
+        // held and never sync first, so opening Settings directly on a fresh
+        // device (bookmark, PWA shortcut, no dashboard visit) rendered every
+        // sheet URL and the whole GitHub section BLANK. script.js:9399 then
+        // wrote `.value.trim()` — "" — straight back on Save. Empty strings are
+        // not null, so they survived the `raw == null` skip above and
+        // resolution=merge-duplicates overwrote those columns. One Save press
+        // wiped the user's config out of the cloud, on every device.
+        //
+        // settings.html now runs the same pre-sync the dashboard does, which
+        // removes the cause. This is the guard that means a future page which
+        // forgets to cannot do it again. It deliberately does NOT block a
+        // genuine clear: once the row has been read, the user has seen the real
+        // value, and emptying a field is a real edit that must reach the cloud.
+        if (raw === "" && !_cloudSettingsSeen) return;
         // Try parsing JSON; if it fails treat as plain string
         try { payload[col] = JSON.parse(raw); } catch (e) { payload[col] = raw; }
       });
