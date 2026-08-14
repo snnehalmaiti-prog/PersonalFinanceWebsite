@@ -620,12 +620,27 @@
     document.dispatchEvent(new CustomEvent("wf-exclusion-changed"));
   }
 
+  // Memoized for the same reason normalizeText is, and on the same evidence: the
+  // third-largest entry in a real load profile at 187 ms, spent on a trim and two
+  // regexes over sheet cells whose values repeat heavily — unit counts, prices and
+  // amounts drawn from a small set across thousands of rows.
+  //
+  // Keyed on the RAW value, not the trimmed one, so the key needs no work to
+  // compute. Numbers key as their own string form, which is what the cache wants:
+  // parseNumber(1000) and parseNumber("1000") share an entry and the same answer.
+  // Cache on the function object — see normalizeText for why.
   function parseNumber(value) {
-    var raw = String(value == null ? "" : value).trim();
+    var memo = parseNumber._memo || (parseNumber._memo = { map: Object.create(null), size: 0 });
+    var key = value == null ? "" : String(value);
+    var hit = memo.map[key];
+    if (hit !== undefined) return hit;
+    var raw = key.trim();
     var isParenNegative = /^\(.*\)$/.test(raw);
     var cleaned = raw.replace(/[^0-9.-]/g, "");
     var parsed = parseFloat(cleaned) || 0;
-    return isParenNegative ? -Math.abs(parsed) : parsed;
+    var out = isParenNegative ? -Math.abs(parsed) : parsed;
+    if (memo.size < 50000) { memo.map[key] = out; memo.size++; }
+    return out;
   }
 
   // Percentage-formatted Google Sheets cells come through gvizRowsFromResponse as the raw
@@ -649,8 +664,30 @@
     return { ok: true, reason: "" };
   }
 
+  // Memoized. This was the single largest CPU cost on a real load — 547 ms of a
+  // 3.4 s profile, more than twice the next entry — because it is called per cell
+  // per pass over every sheet, and the same few hundred strings (instrument names,
+  // portfolio names, category labels, header cells) come back millions of times.
+  // The work itself is a regex, a trim and a case fold; none of it is expensive
+  // once, all of it is expensive repeated.
+  //
+  // Null-prototype map so a cell reading "constructor" or "__proto__" is a cache
+  // key like any other rather than an inherited function. Capped because the keys
+  // are ultimately sheet-derived and an unbounded cache on a 19k-line page that
+  // already fights a localStorage quota is not a trade worth making; past the cap
+  // it simply stops memoizing and keeps returning correct answers.
+  // The cache hangs off the function object rather than a sibling `var` so the
+  // function stays self-contained: tests/test-sheet-pipeline.js and friends lift
+  // these helpers out of this file by signature and eval them standalone, and a
+  // memo declared beside the function would be left behind.
   function normalizeText(value) {
-    return String(value == null ? "" : value).replace(/\s+/g, " ").trim().toLowerCase();
+    var memo = normalizeText._memo || (normalizeText._memo = { map: Object.create(null), size: 0 });
+    var raw = value == null ? "" : String(value);
+    var hit = memo.map[raw];
+    if (hit !== undefined) return hit;
+    var out = raw.replace(/\s+/g, " ").trim().toLowerCase();
+    if (memo.size < 50000) { memo.map[raw] = out; memo.size++; }
+    return out;
   }
 
   // Resolve the app's standard sheet column positions from a NORMALIZED header row
@@ -4372,17 +4409,95 @@
     });
   }
 
+  // Resolving a flow date to an index price was the second-largest CPU cost on a
+  // real load — 367 ms of a 3.4 s profile. Two compounding reasons:
+  //
+  //   Index prices exist on TRADING days only, so every weekend, holiday and
+  //   month-start flow misses the exact match and walks back up to five days —
+  //   and each step built a Date and called toISOString(). Five allocations and
+  //   five formatting passes per miss, with misses being the common case, not
+  //   the exception.
+  //
+  //   The same dates repeat relentlessly. An SIP lands on the same day of the
+  //   month for years, and the card replays the whole flow list against the
+  //   index — so the identical walk is redone thousands of times for an answer
+  //   that cannot have changed.
+  //
+  // So: step the ISO string arithmetically instead of through Date, and remember
+  // what each date resolved to, per price series. Keyed on the prices object
+  // itself through a WeakMap, so a refreshed payload is a different object and
+  // gets a fresh cache — a stale price can't survive a refresh, and nothing is
+  // retained once the payload is dropped.
+  // Everything the function needs lives inside it or on it: tests/test-index-xirr.js
+  // lifts lookupIndexPrice out of this file by signature and evals it standalone,
+  // so a sibling helper or a sibling `var` would simply be missing there — and the
+  // back-walk below is exactly the branch that suite exercises.
   function lookupIndexPrice(prices, dateStr) {
-    // exact match
-    if (prices[dateStr] !== undefined) return prices[dateStr];
-    // search up to 5 trading days back for a price on or before this date
-    var d = new Date(dateStr);
-    for (var i = 1; i <= 5; i++) {
-      d.setDate(d.getDate() - 1);
-      var s = d.toISOString().slice(0, 10);
-      if (prices[s] !== undefined) return prices[s];
+    // exact match. hasOwnProperty, not a bare read: a lookup for "__proto__" or
+    // "constructor" on a plain object walks the prototype chain and comes back
+    // with a FUNCTION or an OBJECT, which is `!== undefined` and was returned as
+    // though it were a price. Unreachable today — every caller passes
+    // formatDateISO output, and an ISO day can never spell either — but the
+    // non-ISO branch below exists precisely for callers that do not, and
+    // returning Object.prototype as a price is not a failure mode worth keeping
+    // one property read away.
+    var own = Object.prototype.hasOwnProperty;
+    if (own.call(prices, dateStr)) return prices[dateStr];
+
+    // Anything not in plain YYYY-MM-DD keeps the original Date-based walk: the
+    // string arithmetic below is only correct for that shape. Every caller passes
+    // formatDateISO output today, so this is a guard, not a path.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      var dt = new Date(dateStr);
+      if (isNaN(dt)) return null;
+      for (var k = 1; k <= 5; k++) {
+        dt.setDate(dt.getDate() - 1);
+        var ds = dt.toISOString().slice(0, 10);
+        if (own.call(prices, ds)) return prices[ds];
+      }
+      return null;
     }
-    return null;
+
+    // Step an ISO day back without building a Date or formatting one. The old walk
+    // did `new Date(...)` once and `toISOString()` up to five times PER CALL, and
+    // since index prices exist on trading days only, every weekend, holiday and
+    // month-start flow took that path — misses are the common case here, not the
+    // exception.
+    function prevDay(s) {
+      var y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10) - 1;
+      if (d < 1) {
+        m -= 1;
+        if (m < 1) { m = 12; y -= 1; }
+        var leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+        d = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+      }
+      return y + "-" + (m < 10 ? "0" : "") + m + "-" + (d < 10 ? "0" : "") + d;
+    }
+
+    // And remember the answer per price series. The same dates repeat relentlessly
+    // — an SIP lands on the same day of the month for years, and the card replays
+    // the whole flow list against the index — so the identical five-step walk was
+    // being redone thousands of times for an answer that cannot have changed.
+    //
+    // Keyed on the prices object itself through a WeakMap: a refreshed payload is a
+    // different object and gets a fresh cache, so a stale price cannot survive a
+    // refresh, and nothing is retained once the payload is dropped.
+    var memos = lookupIndexPrice._memo || (lookupIndexPrice._memo = new WeakMap());
+    var memo = memos.get(prices);
+    if (!memo) { memo = Object.create(null); memos.set(prices, memo); }
+    // undefined means "never resolved"; a stored null means "resolved to nothing",
+    // which is worth keeping precisely because the misses are the expensive ones.
+    var hit = memo[dateStr];
+    if (hit !== undefined) return hit;
+
+    // search up to 5 trading days back for a price on or before this date
+    var s = dateStr, out = null;
+    for (var i = 1; i <= 5; i++) {
+      s = prevDay(s);
+      if (own.call(prices, s)) { out = prices[s]; break; }
+    }
+    memo[dateStr] = out;
+    return out;
   }
 
   function buildIndexXirrCashFlows(allCashFlows, indexPrices) {
