@@ -247,5 +247,96 @@ console.log("\nG. Flows are priced on their own LOCAL calendar day");
      "G4 and the date comes from formatDateISO, as everywhere else in the file");
 }
 
+{
+  console.log("\nH. The back-walk to the previous trading day");
+  // Index prices exist on trading days only, so a flow dated on a weekend, a
+  // holiday or the 1st of a month MISSES and has to walk back. That walk used to
+  // build a Date and call toISOString() up to five times per call; it is now ISO
+  // string arithmetic with a per-series memo. This block is the only cover that
+  // branch has — before it, every assertion in this file landed on an exact match.
+  const P = { "2024-02-29": 100, "2024-03-01": 110, "2023-12-29": 90, "2024-05-31": 120 };
+
+  ok(lookupIndexPrice(P, "2024-03-01") === 110, "H1 an exact match still short-circuits");
+  ok(lookupIndexPrice(P, "2024-03-02") === 110, "H2 one day back");
+  ok(lookupIndexPrice(P, "2024-03-06") === 110, "H3 five days back — the furthest it reaches",
+     lookupIndexPrice(P, "2024-03-06"));
+  ok(lookupIndexPrice(P, "2024-03-07") === null, "H4 six days back is out of reach",
+     lookupIndexPrice(P, "2024-03-07"));
+
+  // Boundaries the old Date walk got for free and string arithmetic must earn.
+  ok(lookupIndexPrice(P, "2024-03-01") === 110 && lookupIndexPrice(P, "2024-03-02") === 110,
+     "H5 crossing into February");
+  ok(lookupIndexPrice({ "2024-02-29": 100 }, "2024-03-01") === 100,
+     "H6 lands on 29 Feb in a leap year rather than skipping it",
+     lookupIndexPrice({ "2024-02-29": 100 }, "2024-03-01"));
+  ok(lookupIndexPrice({ "2023-02-28": 55 }, "2023-03-02") === 55,
+     "H7 and on 28 Feb in a non-leap year",
+     lookupIndexPrice({ "2023-02-28": 55 }, "2023-03-02"));
+  ok(lookupIndexPrice(P, "2024-01-02") === 90, "H8 crossing a year boundary",
+     lookupIndexPrice(P, "2024-01-02"));
+  // Century years, tested so they DISCRIMINATE. Asking for a price one day back
+  // passes under a naive "divisible by 4" rule too — the walk just takes one extra
+  // step and still lands inside its five-day reach. So ask from five days out,
+  // where spending a step on a day that does not exist is the difference between
+  // finding the price and returning null.
+  ok(lookupIndexPrice({ "2000-02-29": 7 }, "2000-03-04") === 7,
+     "H9 2000 IS a leap year (divisible by 400), so 29 Feb is a real step",
+     lookupIndexPrice({ "2000-02-29": 7 }, "2000-03-04"));
+  ok(lookupIndexPrice({ "1900-02-28": 7 }, "1900-03-05") === 7,
+     "H10 1900 is NOT (divisible by 100, not 400), so the walk must not spend a step on 29 Feb",
+     lookupIndexPrice({ "1900-02-28": 7 }, "1900-03-05"));
+  ok(lookupIndexPrice({ "2100-02-28": 7 }, "2100-03-05") === 7,
+     "H10b and neither is 2100",
+     lookupIndexPrice({ "2100-02-28": 7 }, "2100-03-05"));
+  ok(lookupIndexPrice(P, "2024-06-02") === 120, "H11 stepping back over a 31-day month",
+     lookupIndexPrice(P, "2024-06-02"));
+
+  // Exhaustive equivalence with the Date walk this replaced, over 30 years.
+  let drift = 0, checked = 0;
+  for (let t = Date.UTC(1890, 0, 1); t <= Date.UTC(2110, 11, 31); t += 86400000) {
+    const iso = new Date(t).toISOString().slice(0, 10);
+    const d = new Date(iso); d.setDate(d.getDate() - 1);
+    const expect = d.toISOString().slice(0, 10);
+    // One-entry series placed exactly one day back: the walk must find it.
+    const got = lookupIndexPrice({ [expect]: 42 }, iso);
+    checked++;
+    if (got !== 42) drift++;
+  }
+  ok(drift === 0, "H12 matches the Date-based walk on all " + checked + " days from 1890 to 2110 — spanning 1900, 2000 and 2100", drift);
+
+  console.log("\nI. The memo cannot serve a stale or foreign price");
+  // A miss is cached as null — the misses are the expensive ones — so the cache
+  // must not turn "no price then" into "no price ever" for a refreshed payload.
+  const first = { "2024-03-01": 110 };
+  ok(lookupIndexPrice(first, "2024-03-09") === null, "I1 a genuine miss resolves to null");
+  first["2024-03-08"] = 999;
+  ok(lookupIndexPrice(first, "2024-03-09") === null,
+     "I2 mutating the SAME object in place keeps the cached answer — documented, not accidental",
+     lookupIndexPrice(first, "2024-03-09"));
+  ok(lookupIndexPrice({ "2024-03-01": 110, "2024-03-08": 999 }, "2024-03-09") === 999,
+     "I3 but a REFRESHED payload is a different object, so it re-resolves");
+  // Two series must never share a cache.
+  const a = { "2024-03-01": 1 }, b = { "2024-03-01": 2 };
+  ok(lookupIndexPrice(a, "2024-03-02") === 1 && lookupIndexPrice(b, "2024-03-02") === 2,
+     "I4 two index series keep separate caches",
+     [lookupIndexPrice(a, "2024-03-02"), lookupIndexPrice(b, "2024-03-02")]);
+  // A date literally named "__proto__" must be a key, not the prototype.
+  // A bare `prices[dateStr] !== undefined` returns Object.prototype here, and
+  // Object.prototype is not a price. Unreachable from formatDateISO, but the
+  // non-ISO branch exists for callers that do not use it.
+  ok(lookupIndexPrice({ "2024-03-01": 5 }, "__proto__") === null,
+     "I5 an inherited property is not mistaken for a price",
+     lookupIndexPrice({ "2024-03-01": 5 }, "__proto__"));
+  ok(lookupIndexPrice({ "2024-03-01": 5 }, "constructor") === null,
+     "I6 nor is an inherited function",
+     lookupIndexPrice({ "2024-03-01": 5 }, "constructor"));
+
+  const src = lookupIndexPrice.toString();
+  ok(/lookupIndexPrice\._memo/.test(src) && /WeakMap/.test(src),
+     "I7 the cache is on the function and keyed weakly, so it survives extraction and leaks nothing");
+  ok(!/toISOString/.test(src.slice(src.indexOf("function prevDay"))),
+     "I8 the hot path formats no dates");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
