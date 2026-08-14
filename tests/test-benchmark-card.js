@@ -155,13 +155,39 @@ console.log("\nG. Portfolio navigation re-measures the Stocks/ETF leg");
   ok(/function _seFlowsKey\(\)/.test(body) &&
      /_ovFlows\.seComputedPortfolio\) \+ "\|" \+/.test(body),
      "G2 replaced by a key naming WHICH portfolio's flows were measured");
-  ok(/_lastBenchmarkSeKey = _seFlowsKey\(\);\s*\n\s*applyBenchmark\(currentKey\);/.test(body),
+  // The re-run goes through the coalescing scheduler now (see H), but the
+  // ordering this guards is unchanged: the key naming the leg being measured is
+  // recorded BEFORE the run is requested, so the SE-ready handler below can tell
+  // "already measured" from "not measured yet".
+  ok(/_lastBenchmarkSeKey = _seFlowsKey\(\);\s*\n\s*_?(?:schedule|apply)Benchmark\(currentKey\);/i.test(body),
      "G3 recorded on the flows-ready refresh");
   const se = body.slice(body.indexOf('addEventListener("wf-se-xirr-ready"'));
   ok(/if \(seKey === _lastBenchmarkSeKey\) return;/.test(se),
      "G4 and the SE-ready re-run is skipped only when the leg is unchanged");
-  ok(/_lastBenchmarkSeKey = seKey;\s*\n\s*applyBenchmark\(currentKey\);/.test(se),
+  ok(/_lastBenchmarkSeKey = seKey;\s*\n\s*_?(?:schedule|apply)Benchmark\(currentKey\);/i.test(se),
      "G5 otherwise the card re-runs against the leg that just landed");
+
+  console.log("\nH. The card computes once per load, not three times");
+  // Init, wf-overview-flows-ready and wf-se-xirr-ready each used to drive a full
+  // applyBenchmark. The first two run before the Stocks/ETF leg resolves, so they
+  // measure a portfolio missing its entire stock book and are replaced a few
+  // hundred ms later — three passes over the sheets to show the third one.
+  ok(/function _scheduleBenchmark\(key\)/.test(body),
+     "H1 there is a scheduler between the readiness events and the compute");
+  ok(/clearTimeout\(_benchSchedule\)/.test(body),
+     "H2 a second trigger cancels the pending run rather than adding to it");
+  const initTail = body.slice(body.indexOf("// Restore saved mode, period and selection"));
+  ok(!/^\s*if \(savedKey\) applyBenchmark\(savedKey\);/m.test(initTail),
+     "H3 init no longer computes against a Stocks/ETF leg that has not landed");
+  ok(/statusEl\.textContent = "Calculating…"/.test(initTail),
+     "H4 it parks the card on Calculating instead");
+  ok(/_benchmarkInitialRefreshDone \|\| _benchSchedule\) return;/.test(initTail),
+     "H5 with a fallback run for a book that fires neither readiness event");
+  // The user-driven paths must stay immediate — a 200ms debounce on a click reads
+  // as lag, and the generation guard inside applyBenchmark already covers overlap.
+  const pills = body.slice(body.indexOf("// Period pill buttons"), body.indexOf("// \u2500\u2500\u2500 One compute per load"));
+  ok(/applyBenchmark\(currentKey\);/.test(pills) && !/_scheduleBenchmark/.test(pills),
+     "H6 the period pills still recompute immediately");
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
