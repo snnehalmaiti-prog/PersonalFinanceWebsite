@@ -20,7 +20,6 @@
 <link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
 <!-- Preconnect so the chart libs (loaded at body-end, below) start their TLS
      handshake early without blocking first paint. -->
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <!-- script.js is injected later (after the first-of-session cloud settings sync)
      rather than declared with the other scripts, so preload it here: the download
      runs in parallel with everything else and the injected tag hits the preload
@@ -4233,54 +4232,29 @@
   </main>
 
   <script src="supabase-client.js?v=__ASSET_VERSION__"></script>
+  <script src="wf-boot.js?v=__ASSET_VERSION__"></script>
   <script>
     if (!window.WfAuth || !WfAuth.isLoggedIn()) {
       window.location.replace("index.html");
     }
-    // First page load per session: sync Supabase settings into localStorage, then
-    // reload once so script.js reads the fresh values. Session flag prevents loops.
-    (function () {
-      if (!window.WfAuth || !WfAuth.isLoggedIn()) return;
-      if (sessionStorage.getItem("wf-cloud-synced") === "1") return;
-
-      // Cloud-first seed of the sheet-data cache. Google Sheets stays the source of
-      // truth; this table is a synced cache so a fresh device/browser sees the same
-      // rows without re-entering URLs. Fail-safe: a bad/empty/mis-shaped blob is
-      // SKIPPED (never clobbers good local data), each prefix is isolated, and any
-      // failure falls back to whatever is already in localStorage.
-      function seedSheetDataFromCloud() {
-        if (!WfAuth.loadAllSheetData) return Promise.resolve();
-        return WfAuth.loadAllSheetData().then(function (list) {
-          if (!Array.isArray(list)) return;
-          list.forEach(function (entry) {
-            try {
-              if (!entry || !entry.prefix) return;
-              var rows = entry.rows;
-              // shape guard: skip null / empty / non-array — keeps local for that prefix
-              if (!Array.isArray(rows) || rows.length === 0) return;
-              localStorage.setItem("wf-" + entry.prefix + "-data", JSON.stringify(rows));
-            } catch (e) { /* one bad prefix never blocks the others */ }
-          });
-        }).catch(function () { /* offline / error → keep local cache */ });
-      }
-
-      // Publish the sync as a promise instead of reloading the page once it lands.
-      // The reload was a second FULL page load per session — HTML, CSS, the 687 KB
-      // script.js, all four expense tables and the market JSON, all fetched and
-      // parsed twice. On a phone that doubled the load. script.js is injected once
-      // this resolves (see below), so it reads the synced values on its first and
-      // only run.
-      window.__wfCloudSync = WfAuth.loadSettingsFromCloud().catch(function () {})
-        .then(seedSheetDataFromCloud)
-        .then(function () { sessionStorage.setItem("wf-cloud-synced", "1"); })
-        .catch(function () { /* a failed sync must never block the app */ });
-    })();
+    // Cloud settings are pulled into localStorage before script.js runs. Both
+    // this page and settings.html use the same module so they cannot drift —
+    // settings.html used to skip it entirely (see wf-boot.js).
+    window.__wfCloudSync = WfBoot.cloudSync();
   </script>
   <!-- Chart libs moved out of <head> so they don't block first paint; they load
-       here (in order) before script.js, which is the first code that uses Chart. -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+       here (in order) before script.js, which is the first code that uses Chart.
+
+       Served from this origin, not jsDelivr. These execute with full access to
+       the origin holding the Supabase session and the GitHub PAT, so a hijacked
+       CDN had the same blast radius as a stored-XSS bug — and Subresource
+       Integrity could not close it, because jsDelivr minifies on the fly and the
+       bytes it served for chart.umd.min.js exist in no published package. The
+       files in vendor/ are verbatim npm tarball contents with their hashes
+       recorded in vendor/README.md. -->
+  <script src="vendor/chart.umd-4.4.4.js?v=__ASSET_VERSION__"></script>
+  <script src="vendor/chartjs-adapter-date-fns.bundle-3.0.0.min.js?v=__ASSET_VERSION__"></script>
+  <script src="vendor/chartjs-plugin-zoom-2.0.1.min.js?v=__ASSET_VERSION__"></script>
   <script src="wf-math.js?v=__ASSET_VERSION__"></script>
   <script src="wf-overview.js?v=__ASSET_VERSION__"></script>
   <script src="wf-snapshots.js?v=__ASSET_VERSION__"></script>
@@ -4289,29 +4263,22 @@
     // first-of-session cloud settings sync without a page reload. The <link
     // rel="preload"> in <head> means the download already ran in parallel, so this
     // waits on the sync only — the bytes are in the preload cache by then.
-    (function () {
-      var pending = window.__wfCloudSync || Promise.resolve();
-      function inject() {
-        var el = document.createElement("script");
-        el.src = "script.js?v=__ASSET_VERSION__";
-        el.onload = function () { document.dispatchEvent(new Event("wf-app-ready")); };
-        el.onerror = function () { document.dispatchEvent(new Event("wf-app-ready")); };
-        document.head.appendChild(el);
-      }
-      // A sync that hangs must not strand the app: cap the wait and load anyway.
-      var done = false;
-      function go() { if (done) return; done = true; inject(); }
-      pending.then(go, go);
-      setTimeout(go, 4000);
-    })();
+    WfBoot.injectAfterSync("script.js?v=__ASSET_VERSION__");
   </script>
   <script>
     document.addEventListener("wf-app-ready", function () {
       if (!window.WfAuth) return;
-      if (WfAuth.isLoggedIn()) {
+      // Only when the boot timed out and the app was built from localStorage the
+      // cloud had not confirmed. If the sync finished first, script.js already
+      // read the cloud values and a second read is a wasted authenticated round
+      // trip on every single page load.
+      //
+      // script.js listens for "wf-cloud-settings-loaded" and recomputes when what
+      // arrives differs from what it was built with. For a long time nothing
+      // listened at all — the entire repo held one reference to that name, this
+      // dispatch — so the recovery this comment describes never actually ran.
+      if (WfAuth.isLoggedIn() && WfBoot.startedOnTimeout()) {
         WfAuth.loadSettingsFromCloud().then(function (row) {
-          // After cloud settings land in localStorage, trigger a recompute so
-          // any stale local numbers get replaced.
           if (row) document.dispatchEvent(new Event("wf-cloud-settings-loaded"));
         }).catch(function () {});
       }

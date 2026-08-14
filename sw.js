@@ -58,6 +58,9 @@ var BYPASS_HOSTS = [
   "api.github.com"
 ];
 
+// jsDelivr no longer serves any SCRIPT to these pages — the chart libraries moved
+// to vendor/ on this origin — but script.js still fetches the gold-price JSON from
+// it, and settings.html still loads SheetJS from cdn.sheetjs.com.
 var CDN_HOSTS = ["cdn.jsdelivr.net", "cdn.sheetjs.com"];
 
 // ── Install: precache the shell ─────────────────────────────────────────────
