@@ -479,7 +479,28 @@
         }
       });
     });
-    var rows = [], attributed = 0;
+    // Is either end of this change a RECONSTRUCTION rather than a record? A
+    // backfilled month's per-category opening/closing were computed after the
+    // fact from the transaction history and price data — the same "may not be
+    // accurate" values the card footnotes.
+    //
+    // It matters for Fixed Income specifically. The reconstruction values a
+    // deposit's / provident fund's accrual with one calculation; the interest
+    // engine that fills the Interest column names it with another; and market is
+    // the leftover, (close − open) − contributions − interest. When the two
+    // accrual calculations disagree — most visibly in March, when a year of PF
+    // interest is credited at once — the gap has nowhere to go but that leftover,
+    // and it surfaces as a "market gain" in an asset class that barely has a
+    // market. On a reconstructed month that figure is not a real gain; it is the
+    // distance between two ways of counting the same accrual.
+    //
+    // So on reconstructed months the Fixed Income market is zeroed and the
+    // dropped amount is reported separately, for a footnote. Equity and Commodity
+    // are untouched — they DO have markets — and live recorded months are
+    // untouched too, so a genuine tradeable-bond move still shows where the value
+    // is real.
+    var estimated = !!(row.backfilled || prevRow.backfilled);
+    var rows = [], attributed = 0, fiMarketDropped = 0;
     CATS.forEach(function (c) {
       var open = Number(prevRow[c.key]) || 0;
       var close = Number(row[c.key]) || 0;
@@ -491,18 +512,39 @@
       var con = round2(f.in - f.out);
       var mkt = round2((close - open) - con - inc - idl);
       if (!open && !close && !f.in && !f.out && !inc && !idl) return;   // nothing here at all
+      // Reconstructed Fixed Income market is not a real market movement — drop it
+      // rather than inflate the Interest column with an amount the data can't
+      // split. Recorded, not netted into interest, so the panel can say exactly
+      // how much was set aside and why.
+      if (estimated && c.key === "fixed_income" && mkt) {
+        fiMarketDropped = round2(fiMarketDropped + mkt);
+        mkt = 0;
+      }
       rows.push({ category: c.label, opening: round2(open), closing: round2(close),
                   bought: round2(f.in), sold: round2(f.out), contributions: con,
                   interest: round2(inc), idle: round2(idl), market: mkt });
       attributed += mkt;
     });
     attributed = round2(attributed);
-    var market = row.market == null ? null : round2(row.market);
+    // The whole-bar residual as recorded. When a Fixed Income market has been
+    // dropped, the honest headline market is the sum of what the panel actually
+    // shows (Equity + Commodity), not this — otherwise the badge would name a
+    // total the rows below it no longer add up to.
+    var barMarket = row.market == null ? null : round2(row.market);
+    var market = fiMarketDropped ? attributed : barMarket;
+    // Unreconciled means "the categories don't sum to the recorded total" — an
+    // error worth flagging. The dropped Fixed Income market is not that: it is a
+    // deliberate, reported omission, so it must not masquerade as unreconciled.
+    var residual = barMarket == null ? null
+                 : fiMarketDropped ? 0
+                 : round2(barMarket - attributed);
     return {
       rows: rows,
       attributed: attributed,
       market: market,
-      residual: market == null ? null : round2(market - attributed),
+      residual: residual,
+      fiMarketDropped: fiMarketDropped,
+      estimated: estimated,
       missing: []
     };
   }

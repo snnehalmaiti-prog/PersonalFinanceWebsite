@@ -18731,6 +18731,19 @@
         "the total \u2014 so a figure here means one of the two months' columns " +
         "does not sum to its own recorded total." + "</p>";
     }
+    // Reconstructed Fixed Income market was dropped (see categoryChange). Say so,
+    // and by how much, since it is why the Totals row no longer sums Opening \u2192
+    // Closing on this month.
+    if (Math.abs(res.fiMarketDropped || 0) >= 1) {
+      html += '<p class="muted small" style="margin:10px 0 0;">' +
+        "This month's Opening and Closing were reconstructed, not recorded. " +
+        "Fixed Income has no real market, so a " + _nwmSigned(res.fiMarketDropped) +
+        " difference between how the reconstruction and the interest calculation " +
+        "value its accrual is not shown as a market gain \u2014 it is set aside here " +
+        "rather than counted. Because of that, the Totals row does not add up " +
+        "exactly from Opening to Closing for this month. Refer to the Account " +
+        "Value chart for the figure to trust." + "</p>";
+    }
     // Snapshots are recorded unfiltered, on purpose — recorded history does not
     // change because of what is hidden on screen. So with an exclusion on, the
     // Account Value chart and these figures are deliberately different totals,
