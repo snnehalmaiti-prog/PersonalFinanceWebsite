@@ -653,12 +653,49 @@
     return parseNumber(raw);
   }
 
-  function validateNumericCell(value) {
+  // Does this cell hold a number, as a WHOLE value?
+  //
+  // parseNumber strips every character outside [0-9.-] and hands the remainder to
+  // parseFloat, which stops at the first thing it cannot read rather than
+  // rejecting. Embedded separators therefore survive the strip and truncate
+  // silently:
+  //
+  //     "2024-01-15"  →  2024        a date in an Amount column
+  //     "1.2.3"       →  1.2
+  //     "12-34"       →  12
+  //
+  // A date landing in an Amount column became ₹2,024 of invested capital, and
+  // "has a digit in it" — the old test here — waves all three straight through.
+  //
+  // This is deliberately a DIAGNOSTIC and not a change to what parseNumber
+  // returns. Around thirty money call sites read that value straight into
+  // arithmetic, and each needs its own answer to "treat as zero or refuse the
+  // row?"; getting one of them wrong moves a number on the user's dashboard with
+  // nothing to show for it. Being told which cell is malformed, by row and
+  // column, is the part that has to exist first. The worst case here is a
+  // spurious warning about a format nobody anticipated — never a wrong figure.
+  function numericShape(value) {
     var raw = String(value == null ? "" : value).trim();
     if (!raw) return { ok: false, reason: "is blank" };
-    var hasDigit = /[0-9]/.test(raw);
-    if (!hasDigit) return { ok: false, reason: "is not a number (\"" + raw + "\")" };
-    var parsed = parseNumber(raw);
+    // Strip the decorations a money cell legitimately carries. Accounting
+    // parentheses first, since they wrap everything else.
+    var body = raw.replace(/^\((.*)\)$/, "-$1")
+                  .replace(/[\u20B9$\u20AC\u00A3\u00A5]/g, "")
+                  .replace(/\b(?:INR|USD|EUR|GBP|JPY|Rs)\b\.?/gi, "")
+                  .replace(/,/g, "")
+                  .replace(/\s+/g, "")
+                  .replace(/%$/, "")
+                  .replace(/\/-$/, "");
+    if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(body)) {
+      return { ok: false, reason: "is not a number (\"" + raw + "\")" };
+    }
+    return { ok: true, reason: "" };
+  }
+
+  function validateNumericCell(value) {
+    var shape = numericShape(value);
+    if (!shape.ok) return shape;
+    var parsed = parseNumber(value);
     if (parsed === 0) return { ok: false, reason: "is zero" };
     if (parsed < 0) return { ok: false, reason: "is negative (" + parsed + ")" };
     return { ok: true, reason: "" };
@@ -722,7 +759,12 @@
   // names, etc.) before interpolating into innerHTML. The dashboard origin holds
   // the Supabase session + GitHub PAT in localStorage, so an unescaped sheet cell
   // like <img src=x onerror=...> would be a real stored-XSS vector.
+  // One implementation, in wf-esc.js — see the note there on why five of these
+  // existed and why that is a bug waiting for its sixth call site. The local
+  // fallback keeps this file usable on its own: several suites lift functions out
+  // of it by signature and eval them with no page around them.
   function escapeHtml(value) {
+    if (window.WfEsc) return window.WfEsc(value);
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
@@ -8445,7 +8487,7 @@
       // Trigger AMFI NAV and ISIN Map workflows via GitHub API if credentials are saved
       var gh = loadGhSettings();
       if (gh.owner && gh.repo && gh.token) {
-        var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/actions/workflows/";
+        var apiBase = ghRepoApiBase(gh) + "/actions/workflows/";
         var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
         var branch = gh.branch || "main";
         var body = JSON.stringify({ ref: branch });
@@ -8510,7 +8552,7 @@
 
       var gh = loadGhSettings();
       if (gh.owner && gh.repo && gh.token) {
-        var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/actions/workflows/";
+        var apiBase = ghRepoApiBase(gh) + "/actions/workflows/";
         var headers = { "Authorization": "Bearer " + gh.token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" };
         var body = JSON.stringify({ ref: gh.branch || "main" });
         fetch(apiBase + "fetch_stock_prices.yml/dispatches", { method: "POST", headers: headers, body: body })
@@ -9618,6 +9660,31 @@
     };
   }
 
+  // The repos/{owner}/{repo} prefix, with the two user-supplied segments encoded.
+  // They came straight from Settings with no encoding at all, while the ?ref=
+  // query param one line below them WAS encoded — an inconsistency rather than a
+  // decision. Self-inflicted only (it is the user's own token and repo), but a
+  // repo name containing "/" or ".." produced a confusing 404 instead of saying
+  // the name was wrong.
+  function ghRepoApiBase(gh) {
+    return "https://api.github.com/repos/" +
+      encodeURIComponent(gh.owner) + "/" + encodeURIComponent(gh.repo);
+  }
+
+  // UTF-8 → base64 without unescape(), which is deprecated (Annex B). btoa takes
+  // a binary string, so the bytes have to be produced explicitly; TextEncoder is
+  // the non-deprecated way to get them.
+  function utf8ToBase64(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = "";
+    // Chunked: String.fromCharCode.apply on a large array overflows the argument
+    // limit, and a mapping sheet is easily large enough to reach it.
+    for (var i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+
   // Visible, non-console status for the GitHub mapping push so users can see
   // success/failure without opening DevTools (esp. on mobile).
   function showGhToast(msg, ok) {
@@ -9644,9 +9711,9 @@
       showGhToast("GitHub push skipped: set owner, repo & token in Settings.", false);
       return; // not configured
     }
-    var content = btoa(unescape(encodeURIComponent(JSON.stringify(rows))));
+    var content = utf8ToBase64(JSON.stringify(rows));
     var file = fileName || "stocksetf_mapping.json";
-    var apiBase = "https://api.github.com/repos/" + gh.owner + "/" + gh.repo + "/contents/" + file;
+    var apiBase = ghRepoApiBase(gh) + "/contents/" + encodeURIComponent(file);
     var headers = { "Authorization": "Bearer " + gh.token, "Content-Type": "application/json", "Accept": "application/vnd.github+json" };
     // GET current SHA (needed for update)
     fetch(apiBase + (gh.branch ? "?ref=" + encodeURIComponent(gh.branch) : ""), { headers: headers })
@@ -13237,7 +13304,12 @@
       barEl.innerHTML = entries.map(function (e, i) {
         var pct = (e.value / total) * 100;
         var col = PALETTE[i % PALETTE.length];
-        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + col.bar + ';" title="' + e.name.replace(/"/g, '&quot;') + '"></span>';
+        // escapeHtml, not a lone quote-replace. The sibling call 150 lines below
+        // already uses it for the identical attribute; this one escaped only `"`,
+        // so an ampersand in a portfolio name rendered mangled — and the weakest
+        // of the escapers being the one reached for is how the next call site
+        // ends up using it somewhere `<` is not inert.
+        return '<span class="isc-bar-seg" style="flex:' + pct + ' 0 0;background:' + col.bar + ';" title="' + escapeHtml(e.name) + '"></span>';
       }).join("");
 
       // Portfolio rows

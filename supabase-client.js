@@ -184,6 +184,14 @@
       // No longer written, but old installs still carry it — and while it was
       // set it suppressed the backfill entirely.
       localStorage.removeItem("wf-snapshot-backfill-done");
+      // Per-USER expense markers. These are keyed by uid, so they are not in the
+      // fixed SYNC_KEYS list and used to survive sign-out: the previous user's
+      // UUID stayed readable on a shared device, and if that user signed back in
+      // after their categories had been reset server-side, the stale "already
+      // seeded" marker skipped the reseed and left them with none.
+      Object.keys(localStorage).forEach(function (k) {
+        if (/^wf-exp-(icons-cleared|seeded)-/.test(k)) localStorage.removeItem(k);
+      });
       sessionStorage.removeItem("wf-cloud-synced");
     } catch (e) {}
     // Drop the cached expense snapshot too. It holds this user's transaction

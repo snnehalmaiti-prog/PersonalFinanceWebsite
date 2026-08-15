@@ -135,5 +135,61 @@ console.log("\nD. Guards: neither hot function may go back to per-call construct
      "D5 the memo is bounded, so pathological input cannot grow it without limit");
 }
 
+{
+  console.log("\nF. A malformed money cell is reported, not silently truncated");
+  // parseNumber strips everything outside [0-9.-] and hands the rest to
+  // parseFloat, which STOPS at the first thing it cannot read instead of
+  // rejecting. Embedded separators survive the strip, so a date in an Amount
+  // column became a plausible-looking rupee figure:
+  //     "2024-01-15" -> 2024,  "1.2.3" -> 1.2,  "12-34" -> 12
+  // The old validator asked only "does it contain a digit", which all three pass.
+  eval(extract("function numericShape("));
+  eval(extract("function parseNumber("));
+  eval(extract("function validateNumericCell("));
+
+  // Formats a real money column legitimately carries. A false reject here is a
+  // spurious warning shown to the user about a perfectly good row, so the list is
+  // deliberately generous.
+  [["1234", "a bare integer"],
+   ["1,234.56", "thousands separators"],
+   ["₹1,234", "a rupee sign"],
+   ["$1,234.00", "a dollar sign"],
+   ["(500)", "accounting parentheses"],
+   ["-500", "a leading minus"],
+   ["+42", "a leading plus"],
+   ["8%", "a trailing percent"],
+   [".5", "a bare decimal"],
+   ["  500  ", "surrounding whitespace"],
+   ["Rs 500", "an Rs prefix"],
+   ["Rs. 1,000", "Rs. with a dot"],
+   ["INR 250", "a currency code"],
+   ["500/-", "a trailing /-"]].forEach(function (c, i) {
+    ok(numericShape(c[0]).ok, "F" + (i + 1) + " accepts " + c[1] + ": " + JSON.stringify(c[0]),
+       numericShape(c[0]).reason);
+  });
+
+  // The truncations. Each of these used to pass validation AND parse to a
+  // plausible number.
+  [["2024-01-15", 2024], ["1.2.3", 1.2], ["12-34", 12]].forEach(function (c, i) {
+    ok(!numericShape(c[0]).ok,
+       "F20" + i + " rejects " + JSON.stringify(c[0]) + ", which parseNumber turns into " + c[1]);
+    ok(parseNumber(c[0]) === c[1],
+       "F21" + i + "   (and parseNumber really does still return " + c[1] + " — the value contract is unchanged)",
+       parseNumber(c[0]));
+    ok(!validateNumericCell(c[0]).ok && /is not a number/.test(validateNumericCell(c[0]).reason),
+       "F22" + i + "   so the row is reported to the user",
+       validateNumericCell(c[0]).reason);
+  });
+
+  ok(!numericShape("").ok && numericShape("").reason === "is blank",
+     "F30 a blank cell keeps its own distinct message");
+  ok(!numericShape("abc").ok, "F31 and a non-numeric string is still rejected");
+  ok(validateNumericCell("0").ok === false && validateNumericCell("0").reason === "is zero",
+     "F32 zero and negative keep their existing messages", validateNumericCell("0").reason);
+  ok(validateNumericCell("-5").reason.indexOf("is negative") === 0,
+     "F33 as does a negative", validateNumericCell("-5").reason);
+  ok(validateNumericCell("1,234.56").ok, "F34 and a good value still validates");
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

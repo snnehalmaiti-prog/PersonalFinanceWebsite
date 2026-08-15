@@ -55,8 +55,8 @@
     return "₹" + v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
   }
   function el(id) { return document.getElementById(id); }
-  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  // wf-esc.js. This copy escaped & < > but not the apostrophe.
+  var esc = window.WfEsc;
 
   // ── Sub-tab navigation within the Expense panel ─────────────────────────────
   var SUBTABS = [
@@ -78,7 +78,30 @@
   }
 
   // ── Data loading + first-run seeding ────────────────────────────────────────
+  // loadData() calls itself twice — once after the icon/colour migration, once
+  // after seedDefaults(). Both re-entries are gated by a localStorage marker, so
+  // in practice it terminates. But those marker writes are
+  // `try { localStorage.setItem(...) } catch (e) {}`, and under private browsing
+  // the write ALWAYS fails: termination then rests entirely on the database
+  // side-effect having taken. If seedDefaults() resolves without actually
+  // inserting — a partial RLS failure, say — the recursion never ends and hammers
+  // Supabase.
+  //
+  // An in-memory depth counter makes termination independent of both the storage
+  // write and the network. Two is the real maximum (migration, then seed); the
+  // third is the bug.
+  var _loadDepth = 0;
+  var LOAD_MAX_DEPTH = 3;
+
   function loadData() {
+    if (_loadDepth >= LOAD_MAX_DEPTH) {
+      // Render what we have rather than returning a blank page: the data from the
+      // last successful read is in `state` and is the best answer available.
+      _loadDepth = 0;
+      try { renderAccounts(); renderCategories(); renderPaymentMethods(); } catch (e) {}
+      return Promise.resolve();
+    }
+    _loadDepth++;
     var accStatus = el("exp-accounts-status");
     var catStatus = el("exp-categories-status");
     if (accStatus) accStatus.textContent = "Loading…";
@@ -126,10 +149,15 @@
           return loadData();
         });
       }
+      // A load that reaches the render is finished, so the recursion budget goes
+      // back — the counter bounds one CHAIN of re-entries, not the number of
+      // times the page may ever load its data.
+      _loadDepth = 0;
       renderAccounts();
       renderCategories();
       renderPaymentMethods();
     }).catch(function (err) {
+      _loadDepth = 0;
       if (accStatus) accStatus.textContent = "Could not load: " + err.message;
       if (catStatus) catStatus.textContent = "Could not load: " + err.message;
       if (pmStatus) pmStatus.textContent = "Could not load: " + err.message;
@@ -170,12 +198,17 @@
 
   // Generic BudgetBakers-style row: circular icon, name, optional meta, chevron, kebab.
   function rowHtml(opts) {
-    return '<div class="exp-row"' + (opts.clickable ? ' data-nav="' + opts.id + '"' : "") + '>' +
+    // opts.id and opts.kebab are escaped like everything else here. They are
+    // server-generated UUIDs and internal string literals today, so this is not
+    // exploitable — but they were the one gap in an otherwise uniform pattern,
+    // and the gap is what makes the next id that becomes user-influenced a bug
+    // rather than a non-event.
+    return '<div class="exp-row"' + (opts.clickable ? ' data-nav="' + esc(opts.id) + '"' : "") + '>' +
       '<span class="exp-row-name">' + esc(opts.name) +
         (opts.sub ? '<span class="exp-row-sub">' + esc(opts.sub) + '</span>' : "") + '</span>' +
       (opts.meta ? '<span class="exp-row-meta">' + esc(opts.meta) + '</span>' : "") +
       (opts.chevron ? '<span class="exp-row-chevron">›</span>' : "") +
-      '<button type="button" class="exp-kebab" data-kebab="' + opts.kebab + '" data-id="' + opts.id + '" aria-label="More">⋮</button>' +
+      '<button type="button" class="exp-kebab" data-kebab="' + esc(opts.kebab) + '" data-id="' + esc(opts.id) + '" aria-label="More">⋮</button>' +
       '</div>';
   }
 

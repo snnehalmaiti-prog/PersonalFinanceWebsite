@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
+<script src="wf-esc.js?v=__ASSET_VERSION__"></script>
 <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
   <script src="supabase-client.js?v=__ASSET_VERSION__"></script>
   <script src="wf-boot.js?v=__ASSET_VERSION__"></script>
@@ -114,7 +115,7 @@
         <span class="logo-text">Kosha</span>
       </a>
       <div class="header-actions">
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
@@ -130,7 +131,7 @@
             <button type="button" class="user-menu-item" id="user-menu-signout">Sign out</button>
           </div>
         </div>
-        <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
+        <button type="button" id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
           <span></span><span></span><span></span>
         </button>
       </div>
@@ -783,7 +784,8 @@
     function loadTemplatesRaw() { return _wfLoadListRaw(TEMPLATE_KEY); }
     function loadTemplates() { return loadTemplatesRaw().filter(function (t) { return t && !t._deleted; }); }
     function saveTemplates(list) { return _wfPersistList(TEMPLATE_KEY, list); }
-    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    // wf-esc.js. This copy escaped & < > but not the apostrophe.
+    var esc = window.WfEsc;
     function tplTypeStyle(type) {
       if (type === "income")  return { bg: "#ecfdf5", fg: "#047857", icon: "↓" };
       if (type === "budget")  return { bg: "#eff6ff", fg: "#1d4ed8", icon: "◎" };
@@ -1671,7 +1673,7 @@
       var statusEl = document.getElementById("epf-status");
       var listEl = document.getElementById("epf-list");
       if (!addBtn || !listEl) return;
-      function escLocal(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+      var escLocal = window.WfEsc;   // wf-esc.js
       function loadRates() {
         try { var a = JSON.parse(localStorage.getItem(EPF_KEY)); return Array.isArray(a) ? a : []; }
         catch (e) { return []; }
