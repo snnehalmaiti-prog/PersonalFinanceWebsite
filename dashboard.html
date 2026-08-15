@@ -27,6 +27,7 @@
 <link rel="preload" as="script" href="script.js?v=__ASSET_VERSION__">
 <!-- wf-idb is 3 KB and the expense cache paint (far earlier in the body than the
      other script tags) needs it, so load it in <head> rather than at the bottom. -->
+<script src="wf-esc.js?v=__ASSET_VERSION__"></script>
 <script src="wf-idb.js?v=__ASSET_VERSION__"></script>
 </head>
 <body>
@@ -35,20 +36,20 @@
   <nav id="left-drawer" class="left-drawer" aria-label="Section navigation" hidden>
     <div class="left-drawer-header">
       <span class="left-drawer-title">Navigation</span>
-      <button id="left-drawer-close" class="left-drawer-close" aria-label="Close navigation">
+      <button type="button" id="left-drawer-close" class="left-drawer-close" aria-label="Close navigation">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <ul class="left-drawer-nav">
-      <li class="hide-mobile"><button class="left-drawer-item active" data-tab="overview">
+      <li class="hide-mobile"><button type="button" class="left-drawer-item active" data-tab="overview">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Dashboard
       </button></li>
-      <li class="hide-mobile"><button class="left-drawer-item" data-tab="investment">
+      <li class="hide-mobile"><button type="button" class="left-drawer-item" data-tab="investment">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         Investment
       </button></li>
-      <li><button class="left-drawer-item" data-tab="expense">
+      <li><button type="button" class="left-drawer-item" data-tab="expense">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
         Expense
       </button></li>
@@ -65,7 +66,7 @@
   <header class="site-header">
     <div class="container header-inner">
       <div class="header-left">
-        <button id="left-drawer-toggle" class="left-drawer-toggle show-mobile" aria-label="Open navigation" aria-expanded="false" aria-controls="left-drawer">
+        <button type="button" id="left-drawer-toggle" class="left-drawer-toggle show-mobile" aria-label="Open navigation" aria-expanded="false" aria-controls="left-drawer">
           <span></span><span></span><span></span>
         </button>
         <a href="index.html" class="logo" aria-label="Kosha home">
@@ -88,7 +89,7 @@
         <button type="button" id="header-refresh" class="header-refresh show-mobile" aria-label="Refresh data">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
         </button>
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
@@ -104,7 +105,7 @@
           </div>
         </div>
         <a href="index.html" class="btn btn-primary hide-mobile" id="sign-in-btn" hidden>Log in</a>
-        <button id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
+        <button type="button" id="menu-toggle" class="menu-toggle show-mobile" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
           <span></span><span></span><span></span>
         </button>
       </div>
@@ -1276,11 +1277,7 @@
               sel.parentNode.insertBefore(wrap, sel);
               sel.__wfCheckWrap = wrap;
             }
-            var _escHtml = function (s) {
-              return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
-              });
-            };
+            var _escHtml = window.WfEsc;   // wf-esc.js; this copy omitted the apostrophe
             var opts = Array.prototype.slice.call(sel.options);
             wrap.innerHTML = opts.map(function (o) {
               var checked = o.selected ? " checked" : "";
@@ -1548,8 +1545,7 @@
         var v = Number(n) || 0;
         return "₹" + _inrFmt.format(Math.round(v));
       }
-      function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+      var esc = window.WfEsc;   // wf-esc.js
 
       // One pass over the records for ALL accounts, cached on the records array and
       // the current month. computeAccountMonthly used to scan every record once per
@@ -3443,7 +3439,7 @@
                 '<div class="rec-item-amount" style="color:' + color + ';">' + sign + fmtMoney(r.amount) + '</div>' +
                 (timeStr ? '<div class="rec-item-time">' + timeStr + '</div>' : '') +
               '</div>' +
-              '<button class="rec-item-more" data-rec-id="' + esc(r.id) + '" title="More">···</button>' +
+              '<button type="button" class="rec-item-more" data-rec-id="' + esc(r.id) + '" title="More">···</button>' +
             '</div>';
           }).join("");
           var addRow = '<div class="rec-day-add" data-add-date="' + esc(date) + '">+ Add record to ' + _dayShortFmt.format(d) + '</div>';

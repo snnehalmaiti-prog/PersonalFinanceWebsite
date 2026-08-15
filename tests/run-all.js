@@ -47,6 +47,7 @@ const guards = [
   { name: "value-chart render generation guard", cmd: "node", args: [path.join(TESTS_DIR, "check-render-generation-guard.js")] },
   { name: "holdings Open/Closed toggles", cmd: "node", args: [path.join(TESTS_DIR, "check-holdings-toggles.js")] },
   { name: "dashboard load path", cmd: "node", args: [path.join(TESTS_DIR, "check-load-path.js")] },
+  { name: "P3 hygiene", cmd: "node", args: [path.join(TESTS_DIR, "check-p3-hygiene.js")] },
   { name: "service worker routes", cmd: "node", args: [path.join(TESTS_DIR, "check-sw-routes.js")] },
   { name: "browser suites runnable in CI", cmd: "node", args: [path.join(TESTS_DIR, "check-browser-suites.js")] },
   { name: "gold premium default parity", cmd: "node", args: [path.join(TESTS_DIR, "check-gold-premium-default.js")] },

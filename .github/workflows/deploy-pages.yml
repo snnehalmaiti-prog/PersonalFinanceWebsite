@@ -45,6 +45,23 @@ jobs:
       # drifted (index.html served a different script.js version than dashboard.html).
       - name: Stamp asset versions
         run: node tools/stamp-assets.js
+      # The artifact used to be the whole repo. Nothing in it is secret — the SQL
+      # is schema-only and the Supabase anon key is correctly public — but it
+      # shipped the defect register, every fetch script, both schema files, 80+
+      # test files and docs/ to a public site that needs none of them. Dead weight
+      # on every deploy and a larger public surface than the app requires.
+      #
+      # A deny-list rather than an allow-list, deliberately: the site needs the
+      # market-data JSON blobs, icons/, vendor/ and the PWA files, and a missed
+      # allow-list entry is a broken deploy while a missed deny-list entry is only
+      # an extra file. The listing at the end puts what actually ships in the
+      # workflow log, so a mistake either way is visible rather than silent.
+      - name: Prune non-site files from the artifact
+        run: |
+          rm -rf tests docs tools __pycache__ node_modules .github
+          rm -f ./*.py ./*.sql ./*.xlsx ./*.md ./vendor/*.md
+          echo "--- files being deployed ---"
+          find . -type f -not -path "./.git/*" | sort
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
