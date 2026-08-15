@@ -694,6 +694,47 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
   eq(other.rows[0].contributions, 10000,
      "CC38 an unrecognised category folds into Equity, matching the walk");
   eq(other.residual, 0, "CC39 leaving nothing to be called a market gain");
+
+  // Reconstructed months: Fixed Income has no real market, so the leftover from
+  // two different accrual calculations disagreeing is dropped, not shown as a
+  // gain. A backfilled endpoint marks the month; the fixture mirrors March 2019,
+  // where fixed income "gained" far more than a year's interest.
+  const bf = (d, e, f, c, mkt, backfilled) => ({ date: d, month: d.slice(0, 7),
+    equity: e, fixed_income: f, commodity: c, market: mkt, backfilled: !!backfilled });
+  // Equity +6,891 real market; fixed income "up" 1,33,155 beyond its named
+  // interest; the FI residual works out to 1,37,069. Either end backfilled.
+  const recon = S.categoryChange(
+    bf("2019-03-31", 95423, 1182155, 0, 140046, true),
+    bf("2019-02-28", 88532, 988290, 0, null, false),
+    {}, 56796, 0);
+  const fiRow = recon.rows.find((r) => r.category === "Fixed Income");
+  const eqRow = recon.rows.find((r) => r.category === "Equity");
+  eq(fiRow.market, 0, "CC40 reconstructed Fixed Income shows no market gain");
+  ok(Math.abs(recon.fiMarketDropped - 137069) < 2,
+     "CC41 the dropped amount is reported for the footnote", recon.fiMarketDropped);
+  ok(Math.abs(eqRow.market - 6891) < 2,
+     "CC42 Equity's real market is untouched — only Fixed Income is dropped", eqRow.market);
+  ok(Math.abs(recon.market - 6891) < 2,
+     "CC43 the headline market is what the rows now show, not the old whole-bar figure",
+     recon.market);
+  eq(recon.residual, 0,
+     "CC44 the drop is a deliberate omission, not an Unreconciled error");
+  eq(recon.fiMarketDropped !== 0, true, "CC45 and the month is flagged as adjusted");
+
+  // Interest is NOT inflated by the drop — the leftover is set aside, not moved.
+  eq(fiRow.interest, 56796, "CC46 Fixed Income interest is exactly what was named, unchanged");
+
+  // A LIVE recorded month with the identical numbers keeps its Fixed Income
+  // market: only reconstructed months are adjusted, so a real tradeable-bond
+  // move still shows where the value is trustworthy.
+  const live = S.categoryChange(
+    bf("2019-03-31", 95423, 1182155, 0, 140046, false),
+    bf("2019-02-28", 88532, 988290, 0, null, false),
+    {}, 56796, 0);
+  const liveFi = live.rows.find((r) => r.category === "Fixed Income");
+  ok(Math.abs(liveFi.market - 137069) < 2,
+     "CC47 a recorded month is left exactly as before — no suppression", liveFi.market);
+  eq(live.fiMarketDropped, 0, "CC48 and nothing is flagged as dropped");
 }
 
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
