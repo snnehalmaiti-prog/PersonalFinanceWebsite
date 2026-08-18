@@ -19359,6 +19359,20 @@
         __nwmDrillCtx.allRows = _nwmBuilt.slice().sort(function (x, y) {
           return String(x.month).localeCompare(String(y.month));
         });
+        var allAsc = __nwmDrillCtx.allRows;
+        for (var bi = 0; bi < allAsc.length; bi++) {
+          var bar = allAsc[bi];
+          if (!bar.estimated || bar.delta == null) continue;
+          var prev = WfSnapshots.previousRecorded
+            ? WfSnapshots.previousRecorded(allAsc, bi) : (bi > 0 ? allAsc[bi - 1] : null);
+          if (!prev) continue;
+          var cc = WfSnapshots.categoryChange(
+            bar, prev, __nwmDrillCtx.contribByCat || {},
+            bar.interest || 0, bar.idle || 0);
+          if (cc && cc.fiMarketDropped) {
+            bar.market = Math.round((bar.market - cc.fiMarketDropped) * 100) / 100;
+          }
+        }
         _nwmRender(_nwmBuilt);
       })
       .catch(function (e) {
