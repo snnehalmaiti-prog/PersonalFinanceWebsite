@@ -18745,13 +18745,12 @@
     // Closing on this month.
     if (Math.abs(res.fiMarketDropped || 0) >= 1) {
       html += '<p class="muted small" style="margin:10px 0 0;">' +
-        "This month's Opening and Closing were reconstructed, not recorded. " +
-        "Fixed Income has no real market, so a " + _nwmSigned(res.fiMarketDropped) +
-        " difference between how the reconstruction and the interest calculation " +
-        "value its accrual is not shown as a market gain \u2014 it is set aside here " +
-        "rather than counted. Because of that, the Totals row does not add up " +
-        "exactly from Opening to Closing for this month. Refer to the Account " +
-        "Value chart for the figure to trust." + "</p>";
+        "Opening and Closing were reconstructed, not recorded. The " +
+        _nwmSigned(res.fiMarketDropped) +
+        " difference between the reconstruction\u2019s and the interest engine\u2019s " +
+        "FI accrual is set aside \u2014 not shown as market gain. Totals may not " +
+        "reconcile exactly; refer to the Account Value chart for the " +
+        "authoritative figure." + "</p>";
     }
     // Snapshots are recorded unfiltered, on purpose — recorded history does not
     // change because of what is hidden on screen. So with an exclusion on, the
