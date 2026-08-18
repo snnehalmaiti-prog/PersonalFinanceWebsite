@@ -2505,6 +2505,7 @@
     // the exact same total into the chart's last point instead of letting the
     // chart snap once (and lag when FI/commodity arrive later).
     syncAccountValueTail(totalCurrent);
+    updateOverviewMonthChange();
   }
 
   // The liability deduction needs the expense accounts to know whose debt is
@@ -7542,6 +7543,14 @@
     var total = _ovAggregate().dayChange;
     dbg("[Overview dayChange] mf=" + Math.round(mf) + " se=" + Math.round(se) + " comm=" + Math.round(comm) + " total=" + Math.round(total));
     setDayChange(el, total);
+  }
+
+  function updateOverviewMonthChange() {
+    var el = document.getElementById("overview-month-change");
+    if (!el || _prevMonthEndTotal == null) return;
+    var current = _ovAggregate().current;
+    var change = Math.round((current - _prevMonthEndTotal) * 100) / 100;
+    setDayChange(el, change);
   }
 
   function previous_nav_for(navHistory) {
@@ -18796,6 +18805,7 @@
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null;
   var _nwmAllRows = [];
+  var _prevMonthEndTotal = null;
   // Always from the FULL set. Passing the year's slice back in would make it the
   // new "all rows" and the picker would lose every other year on the first use.
   function _nwmRerender() { _nwmRender(_nwmAllRows); }
@@ -19373,6 +19383,10 @@
             bar.market = Math.round((bar.market - cc.fiMarketDropped) * 100) / 100;
           }
         }
+        var lastComplete = allAsc.length ? allAsc[allAsc.length - 1] : null;
+        _prevMonthEndTotal = lastComplete && lastComplete.total != null
+          ? lastComplete.total : null;
+        updateOverviewMonthChange();
         _nwmRender(_nwmBuilt);
       })
       .catch(function (e) {
