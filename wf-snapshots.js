@@ -604,7 +604,14 @@
   // Account together. Its own term rather than part of contributions: money
   // moved into a savings account is not investing, but it IS in net worth, so it
   // has to be named and subtracted or the market would be credited for it.
-  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey, idleByMonth) {
+  // contribByCatByMonth is optional. When supplied, each estimated (reconstructed)
+  // bar's whole-bar market is corrected the same way the drill-down panel is: the
+  // Fixed Income "market" on a reconstructed month is not a real gain (it is the
+  // gap between two ways of counting the same accrual), so it is dropped here too,
+  // via categoryChange — the ONE place that decides how much FI market to drop.
+  // The bar therefore agrees with the panel by construction, instead of the
+  // renderer subtracting the amount again in a second pass that could drift.
+  function buildMonthlyChange(rows, contribByMonth, interestByMonth, todayKey, idleByMonth, contribByCatByMonth) {
     var series = monthEndSeries(rows, todayKey);
     var contrib = contribByMonth || {};
     var interest = interestByMonth || {};
@@ -617,7 +624,7 @@
         fixed_income: row.fixed_income, commodity: row.commodity,
         by_portfolio: row.by_portfolio, backfilled: row.backfilled,
         delta: null, contributions: null, interest: null, idle: null, market: null,
-        estimated: false, gapMonths: 0
+        estimated: false, gapMonths: 0, fiMarketDropped: 0
       };
       if (!prev) return o;
       o.delta = round2(row.total - prev.total);
@@ -636,6 +643,18 @@
       o.idle = round2(idl);
       o.market = round2(o.delta - c - inc - idl);
       o.estimated = row.backfilled || prev.backfilled;
+      // Drop the phantom Fixed Income market on reconstructed months from the
+      // whole-bar figure, using the same categoryChange the panel uses. Only when
+      // the per-category contributions are supplied and both endpoints carry
+      // category columns (categoryChange returns `missing` otherwise, leaving the
+      // bar as the raw residual — which is right when it cannot be attributed).
+      if (o.estimated && contribByCatByMonth) {
+        var cc = categoryChange(row, prev, contribByCatByMonth, o.interest, o.idle);
+        if (cc && cc.fiMarketDropped) {
+          o.fiMarketDropped = cc.fiMarketDropped;
+          o.market = round2(o.market - cc.fiMarketDropped);
+        }
+      }
       return o;
     });
     return out.reverse();

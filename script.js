@@ -19623,10 +19623,14 @@
         // Kept for the drill-down: the same per-category flows these bars are
         // built from, so the panel cannot disagree with the chart it opens off.
         __nwmDrillCtx = { contribByCat: from ? _nwmContribByCategory(pf) : {} };
+        // Pass the per-category contributions so buildMonthlyChange drops the
+        // phantom Fixed Income market on reconstructed months itself — the bar's
+        // market and the drill panel now come from the one categoryChange call,
+        // instead of a second pass here re-subtracting the amount.
         var _nwmBuilt = WfSnapshots.buildMonthlyChange(list,
           from ? _nwmContributionsByMonth(pf) : {},
           from ? _nwmInterestByMonth(from, pf) : {},
-          null, cash);
+          null, cash, __nwmDrillCtx.contribByCat || {});
         // Every month, oldest first — NOT just the ones the year filter shows.
         // January's opening is December's close, and with a year selected
         // December is not on the chart, so the drill-down had nothing to measure
@@ -19634,21 +19638,6 @@
         __nwmDrillCtx.allRows = _nwmBuilt.slice().sort(function (x, y) {
           return String(x.month).localeCompare(String(y.month));
         });
-        var allAsc = __nwmDrillCtx.allRows;
-        for (var bi = 0; bi < allAsc.length; bi++) {
-          var bar = allAsc[bi];
-          if (!bar.estimated || bar.delta == null) continue;
-          var prev = WfSnapshots.previousRecorded
-            ? WfSnapshots.previousRecorded(allAsc, bi) : (bi > 0 ? allAsc[bi - 1] : null);
-          if (!prev) continue;
-          var cc = WfSnapshots.categoryChange(
-            bar, prev, __nwmDrillCtx.contribByCat || {},
-            bar.interest || 0, bar.idle || 0);
-          if (cc && cc.fiMarketDropped) {
-            bar.market = Math.round((bar.market - cc.fiMarketDropped) * 100) / 100;
-          }
-        }
-        var lastComplete = allAsc.length ? allAsc[allAsc.length - 1] : null;
         _nwmRender(_nwmBuilt);
       })
       .catch(function (e) {
