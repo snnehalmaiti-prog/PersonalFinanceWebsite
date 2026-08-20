@@ -224,7 +224,7 @@ def main():
 
     print("  AMFI blocked; 1st fallback — api.mfapi.in for held funds …",
           file=sys.stderr)
-    fresh = {}  # TEMP-YAHOO-TEST: skip mfapi to exercise the Yahoo fallback live
+    fresh = fetch_from_mfapi([code for _, code in funds]) if funds else {}
     mfapi_n = len(fresh)
 
     missing = [(isin, code) for isin, code in funds if code not in fresh]
