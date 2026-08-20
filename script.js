@@ -6442,6 +6442,9 @@
   // saw undefined and threw whenever the first render had no holdings.
   var MFH_STATE = { showClosed: false, sort: "pnl-desc", portfolio: "all" };
   var DBTH_STATE = { showClosed: false, sort: "pnl-desc", portfolio: "all" };
+  // Electronic Commodity (gold ETFs / commodity funds), a sub-section of the
+  // Commodity Holding card. Its own view state so it filters independently.
+  var ELEC_STATE = { showClosed: false, sort: "pnl-desc", portfolio: "all" };
 
   var SEH_STATE = {
     sort: { india: "pnl-desc", us: "pnl-desc" },
@@ -6712,18 +6715,79 @@
     try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) {}
   }
 
+  // Electronic Commodity: commodity funds from the equity sheet plus commodity
+  // ETFs (gold ETFs and the like) from the Stocks/ETF sheet, normalised onto the
+  // Mutual Fund row shape so the shared renderer draws them with the same
+  // features as the India holdings list. A sub-section of the Commodity Holding
+  // card, below the Physical Commodity list.
+  function renderElectronicCommodityHoldings() {
+    var wrap = document.getElementById("cmh-elec-wrap");
+    var mfRows = window.__mfCommodityRows || [];
+    var seRows = (window.__seCommodityRows || []).map(function (r) {
+      return {
+        instrument: r.instrument,
+        units: r.units,
+        _portfolio: r._portfolio || "",
+        // The list prints avg cost and LTP as ₹ figures, so US rows use their INR
+        // values here rather than native USD — the same adaptation Debt uses.
+        avgNav: r.avgCostINR || 0,
+        currNav: r.ltpINR,
+        invested: r.investedINR || 0,
+        current: r.currentINR || 0,
+        pnl: r.pnl || 0,
+        pnlPct: r.pnlPct || 0,
+        dayChgPct: (r.dayChangeINR != null && r.currentINR && (r.currentINR - r.dayChangeINR) > 0)
+          ? (r.dayChangeINR / (r.currentINR - r.dayChangeINR)) * 100 : null,
+        dayChgINR: r.dayChangeINR != null ? r.dayChangeINR : null,
+        xirrPct: r.xirrPct
+      };
+    });
+    var all = mfRows.concat(seRows);
+
+    // Hide the whole sub-section when there is nothing electronic to show, so the
+    // Commodity card is just the Physical list for a portfolio that holds no ETF.
+    if (wrap) wrap.hidden = all.length === 0;
+
+    var pfBox = document.getElementById("cmh-elec-portfolio-toggle");
+    if (pfBox && !pfBox.dataset.bound) {
+      pfBox.dataset.bound = "1";
+      pfBox.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-dbth-portfolio]");
+        if (!btn || btn.disabled || btn.dataset.dbthPortfolio === ELEC_STATE.portfolio) return;
+        ELEC_STATE.portfolio = btn.dataset.dbthPortfolio;
+        renderElectronicCommodityHoldings();
+      });
+    }
+    var statusEl = document.getElementById("cmh-elec-status");
+    if (statusEl) {
+      statusEl.textContent = all.length ? "" :
+        "No commodity funds or ETFs found. Mark an instrument's Instrument Category " +
+        "as \"Commodity\" in the Mutual Fund or Stocks/ETF mapping sheet.";
+    }
+    try {
+      renderMfHoldingsCardList(all, {
+        listId: "cmh-elec-list", eyebrowId: "cmh-elec-eyebrow", state: ELEC_STATE,
+        toggleId: "cmh-elec-open-toggle", portfolioToggleId: "cmh-elec-portfolio-toggle"
+      });
+    } catch (e) {}
+  }
+
   function renderStocksEtfRedesign(rowsData, usdInrToday) {
     // Debt ETFs belong to Debt ETF/Mutual Fund, not the India/US equity lists — an
     // instrument must appear in exactly one holdings table or its value reads
     // twice. Split before anything downstream consumes these rows.
     var _seCat = buildInstrumentTopCategoryMap();
-    window.__seDebtRows = rowsData.filter(function (r) {
-      return normalizeText(_seCat[normalizeText(r.instrument || "")] || "") === "fixed income";
-    });
+    function _seCatOf(r) { return normalizeText(_seCat[normalizeText(r.instrument || "")] || ""); }
+    window.__seDebtRows = rowsData.filter(function (r) { return _seCatOf(r) === "fixed income"; });
+    // Commodity ETFs (gold ETFs and the like) go to the Commodity Holding card's
+    // Electronic sub-section, not the India/US equity lists — one table each.
+    window.__seCommodityRows = rowsData.filter(function (r) { return _seCatOf(r) === "commodity"; });
     rowsData = rowsData.filter(function (r) {
-      return normalizeText(_seCat[normalizeText(r.instrument || "")] || "") !== "fixed income";
+      var c = _seCatOf(r);
+      return c !== "fixed income" && c !== "commodity";
     });
     try { renderDebtHoldings(); } catch (e) {}
+    try { renderElectronicCommodityHoldings(); } catch (e) {}
     // Portfolio Cards / Geography / Market-cap panels ALWAYS reflect the
     // OPEN positions regardless of the Open/Closed toggle. Holdings lists
     // filter independently per region below.
@@ -7435,7 +7499,7 @@
     container.querySelectorAll(".isc-toggle-btn").forEach(function (b) {
       var wants = b.getAttribute("data-seh-open") || b.getAttribute("data-dbth-open") ||
                   b.getAttribute("data-mfh-open") || b.getAttribute("data-fih-oc") ||
-                  b.getAttribute("data-cmh-oc");
+                  b.getAttribute("data-cmh-oc") || b.getAttribute("data-elec-open");
       var isClosedSeg = wants === "closed";
       b.classList.toggle("active", isClosedSeg === !!showClosed);
       b.setAttribute("aria-pressed", String(isClosedSeg === !!showClosed));
@@ -16245,10 +16309,17 @@
           function _isDebt(name) {
             return normalizeText(_dbtCat[normalizeText(name || "")] || "") === "fixed income";
           }
-          // Two filters over the one per-portfolio build. Both tables therefore hold
-          // every portfolio and both sides, and their pills are pure view state.
-          var mfOnlyRows = _allRows.filter(function (r) { return !_isDebt(r.instrument); });
+          // Commodity funds (gold funds and the like) belong to the Commodity
+          // Holding card's Electronic sub-section, not the Mutual Fund list —
+          // same one-table rule as debt, or the value reads twice.
+          function _isCommodity(name) {
+            return normalizeText(_dbtCat[normalizeText(name || "")] || "") === "commodity";
+          }
+          // Three filters over the one per-portfolio build. Every table holds every
+          // portfolio and both sides, and their pills are pure view state.
+          var mfOnlyRows = _allRows.filter(function (r) { return !_isDebt(r.instrument) && !_isCommodity(r.instrument); });
           window.__mfDebtRows = _allRows.filter(function (r) { return _isDebt(r.instrument); });
+          window.__mfCommodityRows = _allRows.filter(function (r) { return _isCommodity(r.instrument); });
           window.__mfAllRows = mfOnlyRows;
           // Cached for the allocation toggle to re-render from. It holds the
           // debt-EXCLUDED rows so a later repaint can't reintroduce debt funds
@@ -16256,6 +16327,7 @@
           window.__mfLastRowsData = mfOnlyRows;
           try { renderMfHoldingsCardList(mfOnlyRows); } catch (e) {}
           try { renderDebtHoldings(); } catch (e) {}
+          try { renderElectronicCommodityHoldings(); } catch (e) {}
           // Portfolio cards + allocation + performance are top-level summaries
           // and must NOT shift when the user filters the Holdings list to a
           // specific portfolio via the holdings pill toggle.
@@ -16904,6 +16976,20 @@
         DBTH_STATE.showClosed = wantClosed;
         _setOpenClosedPill(dbtBox, wantClosed);
         try { renderDebtHoldings(); } catch (e) {}
+      });
+    }
+    // Electronic Commodity sub-section — its own Open/Closed state.
+    var elecBox = document.getElementById("cmh-elec-open-toggle");
+    if (elecBox) {
+      _setOpenClosedPill(elecBox, ELEC_STATE.showClosed);
+      elecBox.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-elec-open]");
+        if (!btn) return;
+        var wantClosed = btn.getAttribute("data-elec-open") === "closed";
+        if (wantClosed === !!ELEC_STATE.showClosed) return;
+        ELEC_STATE.showClosed = wantClosed;
+        _setOpenClosedPill(elecBox, wantClosed);
+        try { renderElectronicCommodityHoldings(); } catch (e) {}
       });
     }
     if (openBtn) {
