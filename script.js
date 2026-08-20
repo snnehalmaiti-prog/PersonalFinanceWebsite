@@ -13261,6 +13261,13 @@
       var totalEl = document.getElementById("isc-total-value");
       var labelEl = document.getElementById("isc-total-label");
       if (!barEl || !listEl || !totalEl) return;
+      // This card shares #isc-list between Portfolio and Region mode. Portfolio's
+      // per-portfolio CURRENT pass resolves asynchronously, so a draw scheduled
+      // while the card was in Portfolio mode can land AFTER a switch to Region —
+      // overwriting the region rows with portfolio ones and leaving the card
+      // showing the wrong split entirely. Paint only if Portfolio is still the
+      // live mode; otherwise the Region render owns the list.
+      if (getIscMode() !== "portfolio") return;
 
       // Use per-portfolio CURRENT values once resolved; invested until then.
       var valueByName = currentByName || investedByName;
@@ -13463,6 +13470,10 @@
     };
 
     function draw() {
+      // Mirror of drawSplitPie's guard: the region CURRENT pass is async too, so
+      // a draw scheduled in Region mode must not paint #isc-list after a switch
+      // back to Portfolio. Paint only while Region is the live mode.
+      if (getIscMode() !== "region") return;
       // True per-region CURRENT once resolved; invested placeholder until then.
       // No rescaling to getOverviewCurrentTotal — that follows the Overview's
       // SELECTED portfolio and assumes both regions earned the blended return

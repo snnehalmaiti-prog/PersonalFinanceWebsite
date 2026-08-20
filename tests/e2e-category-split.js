@@ -117,17 +117,36 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
   // the only signal here that means "every source has landed", and it bakes in
   // no expected value, so it cannot paper over a wrong figure — a card that
   // settles on the wrong number still fails the assertions below.
-  const rowsReady = async (listId, totalId) => {
+  //
+  // gate is an optional MODE guard, not a value guard. In Region mode the card
+  // first paints the Portfolio breakdown (a "Snnehal" row) from cached data and
+  // only THEN swaps in the Region rows once _renderRegionSplit runs — so under
+  // CI load the portfolio paint can go quiescent and be read before the region
+  // swap ever happens, which is exactly how this suite failed in CI while
+  // passing locally (the list showed "Snnehal", India scored ₹0, and that reads
+  // identically to the double-count bug). Passing gate=/India|US/ holds the
+  // settle off until the region view is on screen. It keys on the row NAME the
+  // mode produces, never on an amount, so a wrong figure — a double-counted
+  // India of ₹104,000, or a genuine failure to render that leaves India at ₹0
+  // (times out, then fails) — still fails the assertions below.
+  const rowsReady = async (listId, totalId, gate) => {
     const read = () => p.evaluate(([lid, tid]) => {
       const l = document.getElementById(lid), t = document.getElementById(tid);
       return (l ? l.textContent.replace(/\s+/g, " ").trim() : "") +
              " | " + (t ? t.textContent.trim() : "");
     }, [listId, totalId]);
     let prev = null, stable = 0;
-    for (let i = 0; i < 70; i++) {                       // ~35s ceiling
+    // ~50s ceiling. A settled card returns in the first second or two, so this
+    // bound only bites when a source is genuinely slow — a loaded CI runner
+    // resolving the region breakdown behind the initial portfolio paint — and
+    // the extra headroom there is what keeps a slow-but-correct render from
+    // being scored as a missing row.
+    for (let i = 0; i < 100; i++) {
       const cur = await read();
-      // A figure has to be on screen: an empty card is trivially unchanging.
-      if (cur === prev && /\d/.test(cur)) { if (++stable >= 2) return; }
+      // A figure has to be on screen: an empty card is trivially unchanging. And
+      // when a mode gate is given, the mode's content has to be up first.
+      const ready = /\d/.test(cur) && (!gate || gate.test(cur));
+      if (cur === prev && ready) { if (++stable >= 2) return; }
       else stable = 0;
       prev = cur;
       await p.waitForTimeout(500);
@@ -177,7 +196,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
   await p.goto(`http://127.0.0.1:${PORT}/dashboard.html?nosw=1`, { waitUntil: "load" });
   await p.waitForTimeout(Number(process.env.WAIT || 10000));
 
-  await rowsReady("isc-list", "isc-total-value");
+  await rowsReady("isc-list", "isc-total-value", /India|US/);
   const region = await p.evaluate(() => {
     const out = { total: (document.getElementById("isc-total-value") || {}).textContent, rows: {} };
     document.querySelectorAll("#isc-list .isc-row").forEach((r) => {
