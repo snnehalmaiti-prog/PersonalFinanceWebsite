@@ -120,7 +120,7 @@
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
-  var AMFI_NAV_MAP_CACHE_KEY = "wf-amfi-nav-map";
+  var AMFI_NAV_MAP_CACHE_KEY = "wf-amfi-nav-map-v2";
   var AMFI_NAV_MAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
   var AMFI_NAV_MAP_STATIC_FILE = "amfi_nav.json";
   var lastAmfiFetchFailures = [];
