@@ -6386,6 +6386,12 @@
       list.innerHTML = '<p class="muted small" style="padding:16px;text-align:center;">No ' + (COMH_STATE.showClosed ? "closed (sold)" : "open") + ' commodity holdings.</p>';
       return;
     }
+    // Labelled group for the holdings, which come from the Fixed Income sheet's
+    // commodity-category rows (physical gold and the like) — as opposed to any
+    // commodity ETF, which lives in the Stocks/ETF sheet and its own card.
+    var subHead = '<div class="mfh-subsection-head">' +
+      '<span class="mfh-subsection-title">Physical Commodity</span>' +
+      '<span class="mfh-subsection-note">from the Fixed Income sheet</span></div>';
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
       '<span>Instrument</span><span>Sub-Cat</span><span class="mfh-col-num">Rate</span><span class="mfh-col-num">Gms</span>' +
       '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
@@ -6423,7 +6429,7 @@
       '<div class="mfh-col-num mfh-num-day ' + (Math.abs(_subDay) < 0.01 ? "mfh-muted" : (_subDay >= 0 ? "mfh-positive" : "mfh-negative")) + '">' + (Math.abs(_subDay) < 0.01 ? "—" : ((_subDay >= 0 ? "+" : "") + formatCurrency(_subDay))) + '</div>' +
       '<div class="mfh-col-num mfh-num-xirr ' + (_subPct > 0 ? "mfh-positive" : _subPct < 0 ? "mfh-negative" : "mfh-muted") + '">' + (_subPct > 0 ? "+" : "") + _subPct.toFixed(2) + '%</div>' +
       '</div>';
-    list.innerHTML = header + body + footer;
+    list.innerHTML = subHead + header + body + footer;
     try { applyHoldingsFold("cmh-list"); } catch (e) {}
   }
 
