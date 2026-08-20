@@ -10178,7 +10178,11 @@
         var liveTs = row.updated_at ? Date.parse(row.updated_at) : 0;
         if (!chosen || liveTs >= chosenTs) { chosen = row.data; src = "supabase"; srcTs = row.updated_at || null; dbg("[AMFI] using live Supabase", marketKey, row.updated_at); }
       }
-      if (src) _marketSource[marketKey] = { source: src, at: srcTs };
+      // dataSource names WHERE the NAV values came from — AMFI, mfapi.in or
+      // Yahoo Finance — as recorded by the fetch script in the static payload.
+      // It rides on the static file (always fetched here) even when the map
+      // itself is served from Supabase, because both are written by the same run.
+      if (src) _marketSource[marketKey] = { source: src, at: srcTs, dataSource: sp && sp.source ? sp.source : null };
       return chosen;
     });
   }
@@ -16087,14 +16091,21 @@
     var today = new Date();
     var isStale = (today - latestDate) > (1000 * 60 * 60 * 24 * 3);
     var dateStr = latestDate.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
-    // Live-source indicator: green "Live" when the AMFI NAV map came from Supabase
-    // (deploy-free live feed), otherwise a muted "File" for the static JSON.
+    // Badge names the DATA source — where the NAV values came from (AMFI, its
+    // mirror api.mfapi.in, or Yahoo Finance) — coloured by the DELIVERY channel:
+    // green when served live from Supabase, muted when read from the static
+    // JSON on Pages. Falls back to the old Live/File wording if the fetch
+    // script did not record a source (older data).
     var src = getMarketSource("amfi_nav");
-    var badge = src && src.source === "supabase"
-      ? ' <span style="color:#10B981;font-weight:700;" title="Live from Supabase">&#9679; Live</span>'
-      : (src && src.source === "static"
-        ? ' <span style="color:var(--muted);font-weight:600;" title="From the static JSON on Pages">&#9679; File</span>'
-        : '');
+    var live = src && src.source === "supabase";
+    var label = (src && src.dataSource) || (live ? "Live" : (src && src.source === "static" ? "File" : ""));
+    var title = (src && src.dataSource)
+      ? ("NAV source: " + src.dataSource + (live ? " (live via Supabase)" : " (from file on Pages)"))
+      : (live ? "Live from Supabase" : "From the static JSON on Pages");
+    var badge = label
+      ? ' <span style="color:' + (live ? "#10B981" : "var(--muted)") + ';font-weight:' + (live ? "700" : "600") +
+        ';" title="' + escapeHtml(title) + '">&#9679; ' + escapeHtml(label) + '</span>'
+      : '';
     asOfTextEl.innerHTML = "NAV Data: " + dateStr + badge;
     asOfEl.classList.toggle("stale", isStale);
     asOfEl.hidden = false;
