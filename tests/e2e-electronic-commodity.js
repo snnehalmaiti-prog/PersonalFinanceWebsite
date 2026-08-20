@@ -128,6 +128,24 @@ function ok(cond, name, detail) {
              footer: card.textContent || "" };
   });
 
+  // The SPLIT card: default tab is Fixed Income-Commodity Split. This book has no
+  // fixed income, so the split is 100% Commodity (= 82,000).
+  const split = await p.evaluate(() => ({
+    tabs: document.querySelectorAll("#fisplit-card [data-fisplit-mode]").length,
+    rows: (document.getElementById("fisplit-rows") || {}).textContent || "",
+    summary: (document.getElementById("fisplit-summary") || {}).textContent || "",
+  }));
+  // Switch to the Interest-Bearing Split tab and confirm the view changes. This
+  // book has no fixed income, so that split is empty — the commodity rows must
+  // simply be gone and the interest tab active.
+  await p.evaluate(() => { const b = document.querySelector('#fisplit-card [data-fisplit-mode="interest"]'); if (b) b.click(); });
+  await p.waitForTimeout(800);
+  const splitInterest = await p.evaluate(() => ({
+    rows: (document.getElementById("fisplit-rows") || {}).textContent || "",
+    interestActive: !!(document.querySelector('#fisplit-card [data-fisplit-mode="interest"]') || {}).classList
+      && document.querySelector('#fisplit-card [data-fisplit-mode="interest"]').classList.contains("active"),
+  }));
+
   const view = await p.evaluate(() => ({
     elecWrapShown: !!(document.getElementById("cmh-elec-wrap") && !document.getElementById("cmh-elec-wrap").hidden),
     elecList: (document.getElementById("cmh-elec-list") || {}).textContent || "",
@@ -164,6 +182,13 @@ function ok(cond, name, detail) {
      "E11 the Fixed Income/Commodity Combined card folds commodity into Current Value", combinedCur);
   ok(/75,600/.test(fiCards.footer),
      "E12 and into Invested (physical + ETF + fund cost = 75,600)", fiCards.footer.replace(/\s+/g, " ").slice(0, 160));
+  ok(split.tabs === 2, "E13 the SPLIT card has two tabs", split.tabs);
+  ok(/Fixed Income/.test(split.rows) && /Commodity/.test(split.rows),
+     "E14 Fixed Income-Commodity Split shows both category rows", split.rows.replace(/\s+/g, " ").slice(0, 160));
+  ok(/82,000/.test(split.rows), "E15 with the commodity total (82,000)", split.rows.replace(/\s+/g, " ").slice(0, 160));
+  ok(splitInterest.interestActive && !/82,000/.test(splitInterest.rows),
+     "E16 switching to the Interest-Bearing Split tab changes the view (commodity rows gone)",
+     splitInterest.rows.replace(/\s+/g, " ").slice(0, 120));
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   console.log("RESULT: " + pass + " passed, " + fail + " failed");

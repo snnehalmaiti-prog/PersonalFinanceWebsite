@@ -792,7 +792,13 @@
           <div class="mfalloc-list" id="fialloc-list"></div>
         </div>
         <div class="mfmid-card" id="fisplit-card">
-          <div class="mfmid-eyebrow">INTEREST-BEARING SPLIT</div>
+          <div class="mfmid-eyebrow-row">
+            <div class="mfmid-eyebrow">SPLIT</div>
+            <div class="isc-toggle" role="group" aria-label="Split mode" style="flex-wrap:wrap;">
+              <button type="button" class="isc-toggle-btn active" data-fisplit-mode="commodity">Fixed Income-Commodity Split</button>
+              <button type="button" class="isc-toggle-btn" data-fisplit-mode="interest">Interest-Bearing Split</button>
+            </div>
+          </div>
           <div class="mfalloc-single-bar" id="fisplit-bar" style="margin-top:10px;"></div>
           <div class="mfalloc-rows" id="fisplit-rows" style="margin-top:12px;"></div>
           <p class="muted small" id="fisplit-summary" style="margin:12px 0 0;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:0.72rem;"></p>
