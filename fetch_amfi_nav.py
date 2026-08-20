@@ -193,6 +193,7 @@ def fetch_from_yahoo(funds):
             nav = _yahoo_latest_nav(symbol)
             if nav:
                 out[str(code)] = nav
+                print(f"  YDATE {isin} {symbol} -> {nav['date']} = {nav['nav']}", file=sys.stderr)
         except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
             print(f"  yahoo: {isin} failed ({exc})", file=sys.stderr)
     return out
@@ -224,7 +225,7 @@ def main():
 
     print("  AMFI blocked; 1st fallback — api.mfapi.in for held funds …",
           file=sys.stderr)
-    fresh = fetch_from_mfapi([code for _, code in funds]) if funds else {}
+    fresh = {}  # TEMP-YAHOO-DATECHECK: skip mfapi to read Yahoo dates
     mfapi_n = len(fresh)
 
     missing = [(isin, code) for isin, code in funds if code not in fresh]
