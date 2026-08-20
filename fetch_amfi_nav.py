@@ -14,6 +14,7 @@ Usage:
 import json
 import sys
 import time
+from datetime import datetime, timezone
 
 import requests
 
@@ -92,8 +93,14 @@ MFAPI_MAP_FILE = "amfi_isin_map.json"
 MFAPI_HOLDINGS_FILE = "mfmapping.json"
 
 
-def _held_scheme_codes():
-    """Scheme codes for the mutual funds in mfmapping.json, via the ISIN map."""
+def _held_funds():
+    """(ISIN, scheme code) for each held mutual fund, via the ISIN map.
+
+    The ISIN comes straight from mfmapping.json; the scheme code (the key both
+    api.mfapi.in and amfi_nav.json use) is resolved through amfi_isin_map.json.
+    Both are carried because the fallbacks key differently — mfapi by scheme
+    code, Yahoo by ISIN — while the output file is always keyed by scheme code.
+    """
     try:
         with open(MFAPI_HOLDINGS_FILE) as f:
             rows = json.load(f)
@@ -102,14 +109,14 @@ def _held_scheme_codes():
     except (OSError, ValueError) as exc:
         print(f"  fallback: cannot read holdings/ISIN map ({exc})", file=sys.stderr)
         return []
-    codes, seen = [], set()
+    funds, seen = [], set()
     for row in rows[1:] if isinstance(rows, list) else []:
         isin = (row[6].strip().upper() if len(row) > 6 and row[6] else "")
         code = isin_map.get(isin)
         if code and code not in seen:
             seen.add(code)
-            codes.append(code)
-    return codes
+            funds.append((isin, str(code)))
+    return funds
 
 
 def fetch_from_mfapi(codes):
@@ -132,6 +139,65 @@ def fetch_from_mfapi(codes):
     return out
 
 
+# ── Second fallback: Yahoo Finance ─────────────────────────────────────────
+# When AMFI blocks AND api.mfapi.in cannot supply a held fund, resolve the fund
+# on Yahoo BY ITS ISIN — the same identifier already in mfmapping.json — via
+# Yahoo's search endpoint, then read the latest NAV from the chart endpoint.
+# Plain HTTP (no yfinance) so this workflow keeps installing only `requests`.
+# Output is keyed by AMFI scheme code, like every other source, so the merge
+# and the dashboard's ISIN→code→NAV lookup are unaffected.
+YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+YAHOO_HEADERS = {
+    "User-Agent": REQUEST_HEADERS["User-Agent"],
+    "Accept": "application/json,text/plain,*/*",
+}
+
+
+def _yahoo_symbol_for_isin(isin):
+    r = requests.get(YAHOO_SEARCH_URL,
+                     params={"q": isin, "quotesCount": 1, "newsCount": 0},
+                     headers=YAHOO_HEADERS, timeout=30)
+    r.raise_for_status()
+    quotes = r.json().get("quotes") or []
+    return quotes[0].get("symbol") if quotes else None
+
+
+def _yahoo_latest_nav(symbol):
+    r = requests.get(YAHOO_CHART_URL.format(symbol=symbol),
+                     params={"range": "1mo", "interval": "1d"},
+                     headers=YAHOO_HEADERS, timeout=30)
+    r.raise_for_status()
+    result = ((r.json().get("chart") or {}).get("result") or [None])[0]
+    if not result:
+        return None
+    ts = result.get("timestamp") or []
+    closes = (((result.get("indicators") or {}).get("quote") or [{}])[0]).get("close") or []
+    # Walk back to the most recent non-null close — a fund's latest published NAV.
+    for i in range(len(closes) - 1, -1, -1):
+        if closes[i] is not None and i < len(ts):
+            date = datetime.fromtimestamp(ts[i], tz=timezone.utc).strftime("%d-%m-%Y")
+            return {"date": date, "nav": f"{float(closes[i]):.5f}"}
+    return None
+
+
+def fetch_from_yahoo(funds):
+    """Latest NAV for each (isin, code) from Yahoo. Keyed by scheme code."""
+    out = {}
+    for isin, code in funds:
+        try:
+            symbol = _yahoo_symbol_for_isin(isin)
+            if not symbol:
+                print(f"  yahoo: no symbol for {isin}", file=sys.stderr)
+                continue
+            nav = _yahoo_latest_nav(symbol)
+            if nav:
+                out[str(code)] = nav
+        except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
+            print(f"  yahoo: {isin} failed ({exc})", file=sys.stderr)
+    return out
+
+
 def _load_existing_data():
     try:
         with open(OUTPUT_FILE) as f:
@@ -151,18 +217,32 @@ def main():
         print(f"Saved {len(scheme_to_nav)} scheme NAVs to {OUTPUT_FILE}")
         return
 
-    # AMFI blocked every attempt. Try the mirror for the held funds only, and
-    # merge onto the existing snapshot rather than shrinking it.
-    print("  AMFI blocked; trying api.mfapi.in for held funds …", file=sys.stderr)
-    codes = _held_scheme_codes()
-    fresh = fetch_from_mfapi(codes) if codes else {}
+    # AMFI blocked every attempt. Fall back for the held funds only and merge
+    # onto the existing snapshot rather than shrinking it. Two fallbacks, in
+    # order: api.mfapi.in first, then Yahoo Finance for anything mfapi missed.
+    funds = _held_funds()
 
-    # Never overwrite good data with an empty map — if both AMFI and the mirror
-    # come back empty, fail loudly instead of quietly publishing "data": {}.
+    print("  AMFI blocked; 1st fallback — api.mfapi.in for held funds …",
+          file=sys.stderr)
+    fresh = fetch_from_mfapi([code for _, code in funds]) if funds else {}
+    mfapi_n = len(fresh)
+
+    missing = [(isin, code) for isin, code in funds if code not in fresh]
+    yahoo_n = 0
+    if missing:
+        print(f"  api.mfapi.in supplied {mfapi_n}; 2nd fallback — Yahoo Finance "
+              f"for {len(missing)} remaining …", file=sys.stderr)
+        yahoo = fetch_from_yahoo(missing)
+        yahoo_n = len(yahoo)
+        fresh.update(yahoo)
+
+    # Never overwrite good data with an empty map — if AMFI, api.mfapi.in AND
+    # Yahoo all come back empty, fail loudly instead of publishing "data": {}.
     if not fresh:
         raise RuntimeError(
-            "AMFI returned no NAV rows and the api.mfapi.in fallback also yielded "
-            "nothing; refusing to overwrite %s with empty data" % OUTPUT_FILE
+            "AMFI returned no NAV rows and both fallbacks (api.mfapi.in, Yahoo "
+            "Finance) yielded nothing; refusing to overwrite %s with empty data"
+            % OUTPUT_FILE
         )
 
     merged = _load_existing_data()
@@ -171,7 +251,8 @@ def main():
     with open(OUTPUT_FILE, "w") as f:
         json.dump(payload, f, indent=2)
     print(f"Saved {len(merged)} scheme NAVs to {OUTPUT_FILE} "
-          f"({len(fresh)} refreshed from api.mfapi.in, held funds only)")
+          f"(held funds refreshed: {mfapi_n} via api.mfapi.in, "
+          f"{yahoo_n} via Yahoo Finance)")
 
 
 if __name__ == "__main__":
