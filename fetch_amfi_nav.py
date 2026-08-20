@@ -155,12 +155,27 @@ YAHOO_HEADERS = {
 
 
 def _yahoo_symbol_for_isin(isin):
-    r = requests.get(YAHOO_SEARCH_URL,
-                     params={"q": isin, "quotesCount": 1, "newsCount": 0},
-                     headers=YAHOO_HEADERS, timeout=30)
-    r.raise_for_status()
-    quotes = r.json().get("quotes") or []
-    return quotes[0].get("symbol") if quotes else None
+    # Ask for several matches, not one: Yahoo does not always rank the fund
+    # first for an ISIN, and quotesCount=1 then hands back a row with no symbol
+    # (or the wrong instrument) — which is how a fund as common as Parag Parikh
+    # Flexi Cap came back "no symbol". Prefer an explicit mutual-fund hit, then
+    # any quote that carries a symbol. One empty retry covers a transient blank
+    # response under the burst of per-fund lookups.
+    for attempt in (1, 2):
+        r = requests.get(YAHOO_SEARCH_URL,
+                         params={"q": isin, "quotesCount": 10, "newsCount": 0},
+                         headers=YAHOO_HEADERS, timeout=30)
+        r.raise_for_status()
+        quotes = r.json().get("quotes") or []
+        for q in quotes:
+            if q.get("quoteType") == "MUTUALFUND" and q.get("symbol"):
+                return q["symbol"]
+        for q in quotes:
+            if q.get("symbol"):
+                return q["symbol"]
+        if attempt == 1:
+            time.sleep(1)
+    return None
 
 
 def _yahoo_latest_nav(symbol):
