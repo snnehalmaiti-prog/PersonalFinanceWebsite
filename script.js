@@ -3298,9 +3298,10 @@
     // The portfolio cards cover the whole tab — Fixed Income AND Commodity — so
     // they get the commodity holdings folded in. Allocation / interest split /
     // the holdings list stay Fixed-Income-only.
-    renderFiPortfolioCards(active.concat(_buildCommodityCardHoldings()));
+    var commodityHoldings = _buildCommodityCardHoldings();
+    renderFiPortfolioCards(active.concat(commodityHoldings));
     renderFiAllocation(active);
-    renderFiInterestSplit(active);
+    renderFiSplit(active, commodityHoldings);
     // Debt funds/ETFs count toward the FI totals above, but they have their own
     // Debt ETF/Mutual Fund table — listing them here too would show them twice.
     renderFiHoldingsCardList(holdings.filter(function (h) {
@@ -3613,6 +3614,85 @@
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
         FIALLOC_MODE.mode = btn.dataset.fiallocMode;
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        renderAllFixedIncomeHoldingsTable();
+      });
+    });
+  })();
+
+  // The SPLIT card has two tabs: the Fixed Income vs Commodity breakdown, and
+  // the interest-bearing split. Defaults to the former.
+  var FISPLIT_MODE = { mode: "commodity" };
+  function renderFiSplit(fiHoldings, commodityHoldings) {
+    if (FISPLIT_MODE.mode === "interest") { renderFiInterestSplit(fiHoldings); return; }
+    renderFiCommoditySplit(fiHoldings, commodityHoldings);
+  }
+
+  // Fixed Income vs Commodity, each broken down by portfolio. Two category rows
+  // (Fixed Income, Commodity) with a portfolio chip strip under each, mirroring
+  // the ALLOCATION card's Portfolio view.
+  function renderFiCommoditySplit(fiHoldings, commodityHoldings) {
+    var bar = document.getElementById("fisplit-bar");
+    var rows = document.getElementById("fisplit-rows");
+    var summary = document.getElementById("fisplit-summary");
+    if (!bar || !rows) return;
+    var FI_COL = "#3B82F6", COMM_COL = "#D4A017";
+    var PORT_PAL = ["#10B981", "#F59E0B", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16", "#6366F1", "#E8623A"];
+    function agg(holds) {
+      var total = 0, byPort = {};
+      (holds || []).forEach(function (h) {
+        var v = h.current || 0; total += v;
+        var p = (h.portfolio || "Unassigned").trim() || "Unassigned";
+        byPort[p] = (byPort[p] || 0) + v;
+      });
+      return { total: total, byPort: byPort };
+    }
+    var fi = agg(fiHoldings), comm = agg(commodityHoldings);
+    var grand = fi.total + comm.total;
+    if (grand <= 0) {
+      bar.innerHTML = "";
+      rows.innerHTML = '<p class="muted small">No Fixed Income or Commodity holdings.</p>';
+      if (summary) summary.textContent = "";
+      return;
+    }
+    var fiPct = (fi.total / grand) * 100, commPct = (comm.total / grand) * 100;
+    bar.innerHTML =
+      '<span class="mfalloc-seg" style="flex:' + fiPct + ' 0 0;background:' + FI_COL + ';" title="Fixed Income"></span>' +
+      '<span class="mfalloc-seg" style="flex:' + commPct + ' 0 0;background:' + COMM_COL + ';" title="Commodity"></span>';
+    function portChips(byPort, total) {
+      var names = Object.keys(byPort).filter(function (n) { return byPort[n] > 0.01; })
+        .sort(function (a, b) { return byPort[b] - byPort[a]; });
+      return names.map(function (n, i) {
+        var sp = total > 0 ? (byPort[n] / total) * 100 : 0;
+        return '<span class="isc-cat-chip"><span class="isc-cat-dot" style="background:' + PORT_PAL[i % PORT_PAL.length] + '"></span>' +
+          escapeHtml(n) + ' ' + Math.round(sp) + '%</span>';
+      }).join("");
+    }
+    function catRow(label, col, val, pct, chips) {
+      return '<div class="mfalloc-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;">' +
+        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">' +
+          '<span class="mfalloc-name"><span class="mfalloc-dot" style="background:' + col + ';"></span>' + label + '</span>' +
+          '<span class="mfalloc-nums"><span class="mfalloc-amount">' + formatCurrency(val) + '</span>' +
+            '<span class="mfalloc-pct" style="color:' + col + ';">' + Math.round(pct) + '%</span></span>' +
+        '</div>' +
+        (chips ? '<div class="isc-cat-sub">' + chips + '</div>' : '') +
+      '</div>';
+    }
+    rows.innerHTML =
+      catRow("Fixed Income", FI_COL, fi.total, fiPct, portChips(fi.byPort, fi.total)) +
+      catRow("Commodity", COMM_COL, comm.total, commPct, portChips(comm.byPort, comm.total));
+    if (summary) {
+      summary.innerHTML = '<strong>' + Math.round(fiPct) + '%</strong> Fixed Income &middot; ' +
+        '<strong>' + Math.round(commPct) + '%</strong> Commodity, of ' + formatCurrency(grand) + ' total.';
+    }
+  }
+
+  // Wire the SPLIT card's Fixed Income-Commodity ⇄ Interest-Bearing toggle.
+  (function wireFiSplitToggle() {
+    var buttons = document.querySelectorAll("[data-fisplit-mode]");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        FISPLIT_MODE.mode = btn.dataset.fisplitMode;
         buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
         renderAllFixedIncomeHoldingsTable();
       });
