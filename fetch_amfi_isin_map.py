@@ -25,16 +25,22 @@ REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-    )
+    ),
+    "Accept": "text/plain,text/html;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.amfiindia.com/",
 }
 
+# AMFI serves the real file only INTERMITTENTLY and otherwise returns a 200-OK
+# anti-bot page with no rows, so an empty parse is retried rather than treated
+# as terminal — see fetch_amfi_nav.py for the full rationale.
+MAX_ATTEMPTS = 8
+RETRY_DELAYS = [5, 10, 20, 30, 45, 60, 60]  # seconds between attempts
 
-def fetch_isin_to_scheme_code():
-    response = requests.get(AMFI_NAV_URL, headers=REQUEST_HEADERS, timeout=30)
-    response.raise_for_status()
 
+def _parse_isin(text):
     isin_to_code = {}
-    for line in response.text.splitlines():
+    for line in text.splitlines():
         parts = line.split(";")
         if len(parts) < 6:
             continue
@@ -45,6 +51,23 @@ def fetch_isin_to_scheme_code():
             if isin and isin.upper() != "NA":
                 isin_to_code[isin.upper()] = scheme_code
     return isin_to_code
+
+
+def fetch_isin_to_scheme_code():
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        response = requests.get(AMFI_NAV_URL, headers=REQUEST_HEADERS, timeout=30)
+        response.raise_for_status()
+        isin_to_code = _parse_isin(response.text)
+        if isin_to_code:
+            if attempt > 1:
+                print(f"  got {len(isin_to_code)} rows on attempt {attempt}")
+            return isin_to_code
+        if attempt < MAX_ATTEMPTS:
+            delay = RETRY_DELAYS[min(attempt - 1, len(RETRY_DELAYS) - 1)]
+            print(f"  attempt {attempt}: 0 rows (AMFI block page?), retrying in {delay}s",
+                  file=sys.stderr)
+            time.sleep(delay)
+    return {}
 
 
 def main():

@@ -26,16 +26,25 @@ REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-    )
+    ),
+    "Accept": "text/plain,text/html;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.amfiindia.com/",
 }
 
+# A browser-like User-Agent is not enough on its own: AMFI serves the real file
+# only INTERMITTENTLY and otherwise returns a 200-OK anti-bot page with no rows.
+# The proof is that the ISIN-map job hits the exact same URL and succeeds on the
+# attempts this one gets a block page. So an empty parse is retried rather than
+# treated as terminal — one of the attempts gets the real feed. Delays escalate
+# and are capped; the job runs rarely, so a slow success beats a spurious wipe.
+MAX_ATTEMPTS = 8
+RETRY_DELAYS = [5, 10, 20, 30, 45, 60, 60]  # seconds between attempts
 
-def fetch_scheme_code_to_nav():
-    response = requests.get(AMFI_NAV_URL, headers=REQUEST_HEADERS, timeout=30)
-    response.raise_for_status()
 
+def _parse_nav(text):
     scheme_to_nav = {}
-    for line in response.text.splitlines():
+    for line in text.splitlines():
         parts = line.split(";")
         if len(parts) < 6:
             continue
@@ -50,6 +59,23 @@ def fetch_scheme_code_to_nav():
             continue
         scheme_to_nav[scheme_code] = {"date": date, "nav": nav}
     return scheme_to_nav
+
+
+def fetch_scheme_code_to_nav():
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        response = requests.get(AMFI_NAV_URL, headers=REQUEST_HEADERS, timeout=30)
+        response.raise_for_status()
+        scheme_to_nav = _parse_nav(response.text)
+        if scheme_to_nav:
+            if attempt > 1:
+                print(f"  got {len(scheme_to_nav)} rows on attempt {attempt}")
+            return scheme_to_nav
+        if attempt < MAX_ATTEMPTS:
+            delay = RETRY_DELAYS[min(attempt - 1, len(RETRY_DELAYS) - 1)]
+            print(f"  attempt {attempt}: 0 rows (AMFI block page?), retrying in {delay}s",
+                  file=sys.stderr)
+            time.sleep(delay)
+    return {}
 
 
 def main():
