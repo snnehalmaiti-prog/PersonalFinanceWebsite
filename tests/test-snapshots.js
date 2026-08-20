@@ -737,5 +737,40 @@ const R = (date, total, extra) => Object.assign({ snapshot_date: date, total, me
   eq(live.fiMarketDropped, 0, "CC48 and nothing is flagged as dropped");
 }
 
+// ── buildMonthlyChange drops the FI market itself, from the one categoryChange ──
+// The bar and the drill panel must derive market from a single place, so the bar
+// can never disagree with the breakdown it opens. buildMonthlyChange takes the
+// per-category contributions and does the drop internally — no second pass.
+{
+  const snap = (d, e, f, backfilled) => ({ snapshot_date: d, total: e + f,
+    equity: e, fixed_income: f, commodity: 0, meta: { backfilled: !!backfilled } });
+  // Feb backfilled → March is an estimated bar (mirrors the CC40 fixture).
+  const rows = [snap("2019-02-28", 88532, 988290, true), snap("2019-03-31", 95423, 1182155, false)];
+  const interestByMonth = { "2019-03": 56796 };
+
+  // Without per-category contributions the bar keeps the FI-inflated residual
+  // (delta 200,756 − interest 56,796 = 143,960): backward-compatible, unchanged.
+  const raw = S.buildMonthlyChange(rows, {}, interestByMonth, "2019-05-01", {})
+    .find((b) => b.month === "2019-03");
+  ok(Math.abs(raw.market - 143960) < 2,
+     "CC49 without contribByCat the bar market is the raw whole-bar residual", raw.market);
+  eq(raw.fiMarketDropped, 0, "CC50 and nothing is dropped");
+
+  // With them, the builder drops the phantom FI market — and the bar equals what
+  // categoryChange (the drill panel) reports for the same month.
+  const bar = S.buildMonthlyChange(rows, {}, interestByMonth, "2019-05-01", {}, {})
+    .find((b) => b.month === "2019-03");
+  const panel = S.categoryChange(
+    { date: "2019-03-31", month: "2019-03", equity: 95423, fixed_income: 1182155, commodity: 0, backfilled: false },
+    { date: "2019-02-28", month: "2019-02", equity: 88532, fixed_income: 988290, commodity: 0, backfilled: true },
+    {}, 56796, 0);
+  ok(Math.abs(bar.market - 6891) < 2, "CC51 with contribByCat the bar drops the FI market", bar.market);
+  ok(Math.abs(bar.fiMarketDropped - 137069) < 2, "CC52 and records the dropped amount", bar.fiMarketDropped);
+  ok(Math.abs(bar.market - panel.market) < 2,
+     "CC53 the bar market equals the drill panel's headline market (single source)", [bar.market, panel.market]);
+  ok(Math.abs(bar.fiMarketDropped - panel.fiMarketDropped) < 2,
+     "CC54 and the dropped amounts agree", [bar.fiMarketDropped, panel.fiMarketDropped]);
+}
+
 console.log("\nRESULT: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
