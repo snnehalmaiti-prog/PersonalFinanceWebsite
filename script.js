@@ -6390,8 +6390,7 @@
     // commodity-category rows (physical gold and the like) — as opposed to any
     // commodity ETF, which lives in the Stocks/ETF sheet and its own card.
     var subHead = '<div class="mfh-subsection-head">' +
-      '<span class="mfh-subsection-title">Physical Commodity</span>' +
-      '<span class="mfh-subsection-note">from the Fixed Income sheet</span></div>';
+      '<span class="mfh-subsection-title">Physical Commodity</span></div>';
     var header = '<div class="mfh-list-header" style="grid-template-columns: minmax(180px, 1.8fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.8fr;">' +
       '<span>Instrument</span><span>Sub-Cat</span><span class="mfh-col-num">Rate</span><span class="mfh-col-num">Gms</span>' +
       '<span class="mfh-col-num">Invested</span><span class="mfh-col-num">Current</span><span class="mfh-col-num">Day Chg</span><span class="mfh-col-num">Return %</span></div>';
