@@ -875,6 +875,27 @@
         </div>
         <p class="muted small" id="commodity-holdings-status">Loading holdings…</p>
         <div class="mfh-list" id="cmh-list"></div>
+
+        <!-- Electronic Holding sub-section: commodity funds/ETFs from the MF and
+             Stocks/ETF mapping sheets, with the same features as India holdings. -->
+        <div id="cmh-elec-wrap" hidden style="margin-top:22px;">
+          <div class="mfh-header" style="margin-bottom:6px;">
+            <div class="mfh-header-left">
+              <span class="mfh-eyebrow" id="cmh-elec-eyebrow"></span>
+              <div class="mfh-subsection-title" style="margin-top:2px;">Electronic Holding</div>
+            </div>
+            <div class="mfh-header-right">
+              <div class="mfh-portfolio-toggle" id="cmh-elec-portfolio-toggle" role="group" aria-label="Portfolio filter"></div>
+              <div id="cmh-elec-open-toggle"><div class="isc-toggle" role="group" aria-label="Show open or closed holdings">
+                <button type="button" class="isc-toggle-btn active" data-elec-open="open">Open</button>
+                <button type="button" class="isc-toggle-btn" data-elec-open="closed">Closed</button>
+              </div></div>
+            </div>
+          </div>
+          <p class="muted small" id="cmh-elec-status"></p>
+          <div class="mfh-list" id="cmh-elec-list"></div>
+        </div>
+
         <div id="commodity-holdings-table-wrap" hidden>
           <table id="commodity-holdings-table" class="holdings-table">
             <thead>
