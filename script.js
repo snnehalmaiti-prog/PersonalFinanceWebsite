@@ -3295,7 +3295,10 @@
     // Aggregate cards/allocation/split reflect only ACTIVE (open) holdings — a
     // matured FD is closed, so it's excluded from these like a sold stock is.
     var active = holdings.filter(function (h) { return !h.matured; });
-    renderFiPortfolioCards(active);
+    // The portfolio cards cover the whole tab — Fixed Income AND Commodity — so
+    // they get the commodity holdings folded in. Allocation / interest split /
+    // the holdings list stay Fixed-Income-only.
+    renderFiPortfolioCards(active.concat(_buildCommodityCardHoldings()));
     renderFiAllocation(active);
     renderFiInterestSplit(active);
     // Debt funds/ETFs count toward the FI totals above, but they have their own
@@ -3481,6 +3484,20 @@
           if (s.indexOf("debt") !== 0) return;
           if (p.isCombined || normalizeText(h.portfolio) === normalizeText(p.name)) terminal += (h.current || 0);
         });
+        // Commodity — physical gold plus commodity funds/ETFs — so the card's
+        // XIRR covers everything its value covers. Current goes into the terminal;
+        // the electronic buy/sell flows come from the sheets (like debt), the
+        // physical gold flows from the Commodity card's stash (built once the
+        // gold price resolved, terminal already stripped).
+        holdings.forEach(function (h) {
+          if ((h.subCategory || "").toLowerCase() !== "commodity") return;
+          if (p.isCombined || normalizeText(h.portfolio) === normalizeText(p.name)) terminal += (h.current || 0);
+        });
+        ["equity", "stocksetf"].forEach(function (prefix) {
+          var cRows = onlyCommodityRows(getSheetRows(prefix), _fiCatMap);
+          if (cRows && cRows.length > 1) flows = flows.concat(buildXirrCashFlows(cRows, pName) || []);
+        });
+        flows = flows.concat(((window.__commodityCardData || {}).physFlowsByPf || {})[pName] || []);
         if (terminal > 0) flows.push({ date: new Date(), amount: terminal });
         var x = calculateXIRR(flows);
         if (x != null && isFinite(x)) xirrPct = x * 100;
@@ -3992,6 +4009,43 @@
     return [rows[0]].concat(rows.slice(1).filter(function (r) {
       return isFixedIncomeInstrument(r[iIdx], m);
     }));
+  }
+
+  // Keeps ONLY the commodity transactions of a sheet (header preserved). The
+  // sibling of onlyFixedIncomeRows, used to gather the commodity fund/ETF cash
+  // flows for the Fixed Income/Commodity portfolio cards' XIRR.
+  function onlyCommodityRows(rows, catMap) {
+    if (!rows || rows.length < 2) return rows;
+    var iIdx = rows[0].map(normalizeText).indexOf("instrument name");
+    if (iIdx === -1) return [rows[0]];
+    var m = catMap || buildInstrumentTopCategoryMap();
+    return [rows[0]].concat(rows.slice(1).filter(function (r) {
+      return normalizeText(m[normalizeText(r[iIdx] || "")] || "") === "commodity";
+    }));
+  }
+
+  // Commodity holdings for the Fixed Income/Commodity portfolio cards: physical
+  // gold (stashed by the Commodity card once the gold price resolves) plus the
+  // electronic commodity funds/ETFs. Shaped like a Fixed Income holding so the
+  // cards' aggregation can sum them straight in. Open positions only.
+  function _buildCommodityCardHoldings() {
+    var out = [];
+    var physByPf = (window.__commodityCardData || {}).physByPf || {};
+    Object.keys(physByPf).forEach(function (nm) {
+      out.push({ portfolio: nm, instrument: "Physical Commodity", subCategory: "Commodity",
+                 invested: physByPf[nm].invested, current: physByPf[nm].current });
+    });
+    (window.__mfCommodityRows || []).forEach(function (r) {
+      if ((r.units || 0) < UNITS_EPSILON) return;
+      out.push({ portfolio: r._portfolio || "", instrument: r.instrument, subCategory: "Commodity",
+                 invested: r.invested || 0, current: r.current || 0 });
+    });
+    (window.__seCommodityRows || []).forEach(function (r) {
+      if ((r.units || 0) < UNITS_EPSILON || r.isClosed) return;
+      out.push({ portfolio: r._portfolio || "", instrument: r.instrument, subCategory: "Commodity",
+                 invested: r.investedINR || 0, current: r.currentINR || 0 });
+    });
+    return out;
   }
 
   function buildStockMappingTable() {
@@ -6317,6 +6371,30 @@
         : "";
       tableWrap.hidden = true;
       try { renderCmHoldingsCardList(allHoldings, goldPrice, goldDayChangePerGram, rateDate); } catch (e) {}
+
+      // Feed the Fixed Income/Commodity portfolio cards: physical commodity per
+      // portfolio, with its XIRR flows (both need the gold price just resolved),
+      // then repaint those cards so they cover the whole tab, not just FI.
+      try {
+        var physByPf = {};
+        allHoldings.forEach(function (h) {
+          if (h.isSold) return;
+          var k = (h.portfolio || "").trim() || "Unassigned";
+          if (!physByPf[k]) physByPf[k] = { invested: 0, current: 0 };
+          physByPf[k].invested += h.invested; physByPf[k].current += h.current;
+        });
+        var pfNames = Object.keys(physByPf).concat(["all"]);
+        Promise.all(pfNames.map(function (nm) {
+          return buildCommodityXirrCashFlows(rows, nm, goldPrice)
+            .then(function (fl) { return { nm: nm, flows: (fl || []).filter(function (f) { return !f._terminal; }) }; })
+            .catch(function () { return { nm: nm, flows: [] }; });
+        })).then(function (res) {
+          var physFlowsByPf = {};
+          res.forEach(function (r) { physFlowsByPf[r.nm] = r.flows; });
+          window.__commodityCardData = { physByPf: physByPf, physFlowsByPf: physFlowsByPf };
+          try { renderFiRedesign(_buildAllFixedIncomeHoldingsList()); } catch (e) {}
+        });
+      } catch (e) {}
     });
   }
 

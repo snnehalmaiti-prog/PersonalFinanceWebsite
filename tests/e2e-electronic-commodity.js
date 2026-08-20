@@ -107,6 +107,27 @@ function ok(cond, name, detail) {
     await p.waitForTimeout(500);
   }
 
+  // The Fixed Income/Commodity portfolio cards must fold commodity in. This
+  // book has NO fixed income, so the Combined card's value is purely commodity:
+  // physical 50,000 + GOLDBEES 27,000 + Gold Fund 5,000 = 82,000.
+  const money = (t) => Number(String(t || "").replace(/[^0-9.]/g, "")) || 0;
+  let combinedCur = 0;
+  for (let i = 0; i < 40; i++) {
+    combinedCur = await p.evaluate(() => {
+      const card = document.querySelector("#fipc-row .mfpc-combined") || document.querySelector("#fipc-row .mfpc-card");
+      const v = card && card.querySelector(".mfpc-current-value");
+      return v ? v.textContent : "";
+    }).then((t) => Number(String(t).replace(/[^0-9.]/g, "")) || 0);
+    if (Math.abs(combinedCur - 82000) < 1000) break;
+    await p.waitForTimeout(500);
+  }
+  const fiCards = await p.evaluate(() => {
+    const card = document.querySelector("#fipc-row .mfpc-combined") || document.querySelector("#fipc-row .mfpc-card");
+    if (!card) return { cur: "", footer: "" };
+    return { cur: (card.querySelector(".mfpc-current-value") || {}).textContent || "",
+             footer: card.textContent || "" };
+  });
+
   const view = await p.evaluate(() => ({
     elecWrapShown: !!(document.getElementById("cmh-elec-wrap") && !document.getElementById("cmh-elec-wrap").hidden),
     elecList: (document.getElementById("cmh-elec-list") || {}).textContent || "",
@@ -139,6 +160,10 @@ function ok(cond, name, detail) {
   ok(view.elecPills >= 1, "E8 Electronic Holding has a portfolio pill", view.elecPills);
   ok(/HOLDINGS/.test(view.elecEyebrow), "E9 and a holdings-count eyebrow", view.elecEyebrow);
   ok(/%/.test(view.goldbeesXirr), "E10 the merged (multi-portfolio) row shows an XIRR, not a dash", view.goldbeesXirr);
+  ok(Math.abs(combinedCur - 82000) < 1000,
+     "E11 the Fixed Income/Commodity Combined card folds commodity into Current Value", combinedCur);
+  ok(/75,600/.test(fiCards.footer),
+     "E12 and into Invested (physical + ETF + fund cost = 75,600)", fiCards.footer.replace(/\s+/g, " ").slice(0, 160));
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   console.log("RESULT: " + pass + " passed, " + fail + " failed");
