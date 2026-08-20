@@ -257,7 +257,8 @@ def main():
     scheme_to_nav = fetch_scheme_code_to_nav()
 
     if scheme_to_nav:
-        payload = {"fetchedAt": int(time.time() * 1000), "data": scheme_to_nav}
+        payload = {"fetchedAt": int(time.time() * 1000), "source": "AMFI",
+                   "data": scheme_to_nav}
         with open(OUTPUT_FILE, "w") as f:
             json.dump(payload, f, indent=2)
         print(f"Saved {len(scheme_to_nav)} scheme NAVs to {OUTPUT_FILE}")
@@ -291,9 +292,20 @@ def main():
             % OUTPUT_FILE
         )
 
+    # Name the source(s) that actually refreshed the held funds, for the
+    # dashboard's NAV-Data badge. AMFI is skipped here (it was blocked); the
+    # label is whichever fallback(s) supplied data this run.
+    parts = []
+    if mfapi_n:
+        parts.append("mfapi.in")
+    if yahoo_n:
+        parts.append("Yahoo Finance")
+    source = " + ".join(parts) if parts else "fallback"
+
     merged = _load_existing_data()
     merged.update(fresh)
-    payload = {"fetchedAt": int(time.time() * 1000), "data": merged}
+    payload = {"fetchedAt": int(time.time() * 1000), "source": source,
+               "data": merged}
     with open(OUTPUT_FILE, "w") as f:
         json.dump(payload, f, indent=2)
     print(f"Saved {len(merged)} scheme NAVs to {OUTPUT_FILE} "
