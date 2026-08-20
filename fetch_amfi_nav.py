@@ -19,6 +19,14 @@ from datetime import datetime, timezone
 import requests
 
 AMFI_NAV_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
+# Same file, different host. When the www edge is serving anti-bot pages the
+# portal edge is sometimes still handing out the real feed (and vice versa), so
+# both are tried each round.
+AMFI_NAV_URLS = [
+    "https://www.amfiindia.com/spages/NAVAll.txt",
+    "https://portal.amfiindia.com/spages/NAVAll.txt",
+]
+AMFI_HOME = "https://www.amfiindia.com/"
 OUTPUT_FILE = "amfi_nav.json"
 
 # AMFI serves a 200-OK HTML block page to requests without a browser-like
@@ -62,15 +70,38 @@ def _parse_nav(text):
     return scheme_to_nav
 
 
+def _prime_session():
+    """A browser-like session that has first visited AMFI's homepage.
+
+    AMFI's anti-bot gate lets a request through far more often when it arrives
+    with the cookies the site hands out on a normal page view — a plain
+    requests.get for NAVAll.txt has none, which is a large part of why the
+    header-only approach kept getting block pages. So open a Session, load the
+    homepage to collect its cookies, and reuse them for the data request.
+    """
+    session = requests.Session()
+    session.headers.update(REQUEST_HEADERS)
+    try:
+        session.get(AMFI_HOME, timeout=30)
+    except requests.RequestException:
+        pass
+    return session
+
+
 def fetch_scheme_code_to_nav():
+    session = _prime_session()
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        response = requests.get(AMFI_NAV_URL, headers=REQUEST_HEADERS, timeout=30)
-        response.raise_for_status()
-        scheme_to_nav = _parse_nav(response.text)
-        if scheme_to_nav:
-            if attempt > 1:
-                print(f"  got {len(scheme_to_nav)} rows on attempt {attempt}")
-            return scheme_to_nav
+        for url in AMFI_NAV_URLS:
+            try:
+                response = session.get(url, timeout=30)
+                response.raise_for_status()
+                scheme_to_nav = _parse_nav(response.text)
+            except requests.RequestException as exc:
+                print(f"  attempt {attempt} {url}: {exc}", file=sys.stderr)
+                continue
+            if scheme_to_nav:
+                print(f"  got {len(scheme_to_nav)} rows on attempt {attempt} from {url}")
+                return scheme_to_nav
         if attempt < MAX_ATTEMPTS:
             delay = RETRY_DELAYS[min(attempt - 1, len(RETRY_DELAYS) - 1)]
             print(f"  attempt {attempt}: 0 rows (AMFI block page?), retrying in {delay}s",
