@@ -20,7 +20,11 @@ const SHEETS = {
   "wf-mfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Scheme Code", "ISIN"],
     ["Fund A", "Equity", "Flexi Cap", "100001", "INFA"],
     ["Gold Fund", "Commodity", "Gold", "100002", "INFG"]],
-  "wf-stocksetf-data": [TXN, ["1-Jan-2024", "Snnehal", "GOLDBEES", "Buy", String(ETF_UNITS), "80"]],
+  // Two portfolios hold GOLDBEES so the "All" view MERGES them — the case where
+  // a merged row must still recompute XIRR from the combined flows.
+  "wf-stocksetf-data": [TXN,
+    ["1-Jan-2024", "Snnehal", "GOLDBEES", "Buy", "170", "80"],
+    ["1-Jan-2024", "Trisha", "GOLDBEES", "Buy", "100", "80"]],
   "wf-stocksetfmapping-data": [["Instrument Name", "Instrument Category", "Instrument Sub Category", "Market Segment", "Region", "Identifier", "Sector"],
     ["GOLDBEES", "Commodity", "Gold", "ETF", "India", "GOLDBEES", "Gold"]],
   "wf-fd-data": [["Transaction Date", "Portfolio Name", "Bank", "Instrument Name", "Instrument Category", "Instrument Sub Category", "Transaction Type", "Invested Amount", "Maturity Date/Sell Date", "Rate of Return", "Grams"],
@@ -110,6 +114,17 @@ function ok(cond, name, detail) {
     indiaList: (document.getElementById("seh-india-list") || {}).textContent || "",
     mfList: (document.getElementById("mfh-list") || {}).textContent || "",
     elecEyebrow: (document.getElementById("cmh-elec-eyebrow") || {}).textContent || "",
+    // XIRR cell text of the GOLDBEES row (merged across Snnehal + Trisha).
+    goldbeesXirr: (function () {
+      var rows = document.querySelectorAll("#cmh-elec-list .mfh-row");
+      for (var i = 0; i < rows.length; i++) {
+        if (/GOLDBEES/.test(rows[i].textContent)) {
+          var cells = rows[i].querySelectorAll(".mfh-col-num");
+          return cells.length ? cells[cells.length - 1].textContent.trim() : "";
+        }
+      }
+      return "";
+    })(),
     elecPills: document.querySelectorAll("#cmh-elec-portfolio-toggle [data-dbth-portfolio]").length,
     elecOpenBtns: document.querySelectorAll("#cmh-elec-open-toggle [data-elec-open]").length,
   }));
@@ -123,6 +138,7 @@ function ok(cond, name, detail) {
   ok(view.elecOpenBtns === 2, "E7 Electronic Holding has an Open/Closed toggle (India-holdings feature)", view.elecOpenBtns);
   ok(view.elecPills >= 1, "E8 Electronic Holding has a portfolio pill", view.elecPills);
   ok(/HOLDINGS/.test(view.elecEyebrow), "E9 and a holdings-count eyebrow", view.elecEyebrow);
+  ok(/%/.test(view.goldbeesXirr), "E10 the merged (multi-portfolio) row shows an XIRR, not a dash", view.goldbeesXirr);
   ok(errs.length === 0, "Z1 no page errors", errs.slice(0, 3));
 
   console.log("RESULT: " + pass + " passed, " + fail + " failed");

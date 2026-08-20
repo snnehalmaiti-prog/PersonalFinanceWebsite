@@ -6739,7 +6739,11 @@
         dayChgPct: (r.dayChangeINR != null && r.currentINR && (r.currentINR - r.dayChangeINR) > 0)
           ? (r.dayChangeINR / (r.currentINR - r.dayChangeINR)) * 100 : null,
         dayChgINR: r.dayChangeINR != null ? r.dayChangeINR : null,
-        xirrPct: r.xirrPct
+        xirrPct: r.xirrPct,
+        // Carried so that merging one ETF across portfolios (the "All" view)
+        // recomputes a real XIRR from the combined flows — without it the merged
+        // row has none and the XIRR column shows a dash.
+        _xirrFlows: r._xirrFlows
       };
     });
     var all = mfRows.concat(seRows);
