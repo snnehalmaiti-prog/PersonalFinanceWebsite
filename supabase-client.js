@@ -437,6 +437,19 @@
     }).catch(function () { return null; });
   }
 
+  // Same row, updated_at ONLY — a tiny (~50-byte) response used to revalidate a
+  // cached market-data map without pulling the whole ~750 KB payload. Lets the
+  // client trust a long local cache TTL yet still notice within one request when
+  // a workflow has published fresher data. Returns { updated_at } or null.
+  function loadMarketDataMeta(key) {
+    return fetch(SUPABASE_URL + "/rest/v1/market_data?key=eq." + encodeURIComponent(key) + "&select=updated_at", {
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY }
+    }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json().then(function (rows) { return (rows && rows[0]) ? rows[0] : null; }).catch(function () { return null; });
+    }).catch(function () { return null; });
+  }
+
   // ── Generic per-user table CRUD (used by the Expense manager) ───────────────
   // All helpers scope to the signed-in user; RLS enforces it server-side too.
 
@@ -544,6 +557,7 @@
     saveSheetData: saveSheetData,
     loadAllSheetData: loadAllSheetData,
     loadMarketData: loadMarketData,
+    loadMarketDataMeta: loadMarketDataMeta,
     requireAuth: function (redirectTo) {
       if (!getAccessToken()) {
         window.location.href = redirectTo || "index.html";
