@@ -10438,8 +10438,19 @@
     var parts = String(d || "").trim().split("-");
     if (parts.length !== 3) return null;
     var month = months[parts[1].toLowerCase().slice(0, 3)];
-    if (month === undefined) return null;
-    return new Date(Number(parts[2]), month, Number(parts[0]));
+    if (month === undefined) {
+      // AMFI writes the month as a name (DD-Mon-YYYY); the fallback sources
+      // (api.mfapi.in, Yahoo Finance) write it numerically (DD-MM-YYYY). Accept
+      // both — otherwise a fallback-sourced NAV parses to null here and is
+      // silently dropped by withAmfiNavOverride, so the dashboard keeps showing
+      // an older date even though a fresher NAV is in the map.
+      var mnum = Number(parts[1]);
+      if (!(mnum >= 1 && mnum <= 12)) return null;
+      month = mnum - 1;
+    }
+    var year = Number(parts[2]), day = Number(parts[0]);
+    if (!isFinite(year) || !isFinite(day)) return null;
+    return new Date(year, month, day);
   }
 
   function fetchStaticAmfiNavMap() {
