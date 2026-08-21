@@ -64,7 +64,8 @@ def with_mapping(rows):
 HEADER = ["Instrument Name", "Instrument Category", "Instrument Sub Category", "Scheme Code", "ISIN"]
 
 got = with_mapping([HEADER, ["Fund A", "Equity", "Flexi Cap", "100033", "INF1"]])
-ok(got == [{"code": "100033", "name": "Fund A"}], "M1 a mapped fund is picked up", got)
+ok(got == [{"code": "100033", "name": "Fund A", "isin": "INF1"}],
+   "M1 a mapped fund is picked up (ISIN carried for the Yahoo gap-fill)", got)
 
 got = with_mapping([HEADER,
                     ["Fund A", "Equity", "Flexi Cap", "100033", "INF1"],
@@ -81,7 +82,7 @@ ok([g["code"] for g in got] == ["100033"],
 # Column order is not guaranteed — the sheet is user-edited.
 REORDERED = ["Scheme Code", "Instrument Name", "ISIN"]
 got = with_mapping([REORDERED, ["100033", "Fund A", "INF1"]])
-ok(got == [{"code": "100033", "name": "Fund A"}],
+ok(got == [{"code": "100033", "name": "Fund A", "isin": "INF1"}],
    "M4 columns are found by name, not position", got)
 
 got = with_mapping([["Instrument Name", "ISIN"], ["Fund A", "INF1"]])
