@@ -120,7 +120,7 @@
   var AMFI_ISIN_MAP_CACHE_KEY = "wf-amfi-isin-map";
   var AMFI_ISIN_MAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var AMFI_ISIN_MAP_STATIC_FILE = "amfi_isin_map.json";
-  var AMFI_NAV_MAP_CACHE_KEY = "wf-amfi-nav-map-v2";
+  var AMFI_NAV_MAP_CACHE_KEY = "wf-amfi-nav-map-v3";
   var AMFI_NAV_MAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
   var AMFI_NAV_MAP_STATIC_FILE = "amfi_nav.json";
   var lastAmfiFetchFailures = [];
@@ -10407,13 +10407,15 @@
       if (sp && sp.data && Object.keys(sp.data).length) { chosen = sp.data; chosenTs = sp.fetchedAt || 0; src = "static"; srcTs = sp.fetchedAt || null; }
       if (row && row.data && Object.keys(row.data).length) {
         var liveTs = row.updated_at ? Date.parse(row.updated_at) : 0;
-        if (!chosen || liveTs >= chosenTs) { chosen = row.data; src = "supabase"; srcTs = row.updated_at || null; dbg("[AMFI] using live Supabase", marketKey, row.updated_at); }
+        if (!chosen || liveTs >= chosenTs) { chosen = row.data; chosenTs = liveTs; src = "supabase"; srcTs = row.updated_at || null; dbg("[AMFI] using live Supabase", marketKey, row.updated_at); }
       }
       // dataSource names WHERE the NAV values came from — AMFI, mfapi.in or
       // Yahoo Finance — as recorded by the fetch script in the static payload.
       // It rides on the static file (always fetched here) even when the map
       // itself is served from Supabase, because both are written by the same run.
-      if (src) _marketSource[marketKey] = { source: src, at: srcTs, dataSource: sp && sp.source ? sp.source : null };
+      // atMs is the resolved source's timestamp in epoch-ms, used to revalidate
+      // the local cache against Supabase's updated_at.
+      if (src) _marketSource[marketKey] = { source: src, at: srcTs, dataSource: sp && sp.source ? sp.source : null, atMs: chosenTs > 0 ? chosenTs : 0 };
       return chosen;
     });
   }
@@ -10465,19 +10467,20 @@
 
     var p = _blobCacheGet(AMFI_NAV_MAP_CACHE_KEY, AMFI_NAV_MAP_MAX_AGE_MS).then(function (cached) {
       if (cached && cached.data && Object.keys(cached.data).length) {
-        if (cached.source) _marketSource["amfi_nav"] = cached.source; // restore source for the indicator
-        return cached.data;
+        // The cache is within its TTL, but a workflow may have published fresher
+        // NAVs minutes ago. Revalidate against Supabase's updated_at with a tiny
+        // metadata query before trusting it — the TTL only bounds how long a
+        // Supabase-unavailable session keeps serving the cache, not how long a
+        // fresh publish stays invisible.
+        return _amfiNavCacheIsFresh(cached).then(function (fresh) {
+          if (fresh) {
+            if (cached.source) _marketSource["amfi_nav"] = cached.source; // restore source for the indicator
+            return cached.data;
+          }
+          return _refetchAmfiNavMap();
+        });
       }
-      return _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
-        if (staticData && Object.keys(staticData).length) {
-          _blobCacheSet(AMFI_NAV_MAP_CACHE_KEY, { data: staticData, source: _marketSource["amfi_nav"] || null });
-          return staticData;
-        }
-        // Empty result (both sources unavailable): don't pin it — let the next
-        // caller retry so a transient miss doesn't freeze an empty map all session.
-        _amfiNavMapSessionPromise = null;
-        return {};
-      });
+      return _refetchAmfiNavMap();
     }, function (err) {
       _amfiNavMapSessionPromise = null;
       throw err;
@@ -10485,6 +10488,38 @@
 
     _amfiNavMapSessionPromise = p;
     return p;
+  }
+
+  // True if the cached NAV map is still current — i.e. Supabase has nothing
+  // newer than what the cache was built from. A cheap updated_at-only query
+  // decides. Any uncertainty (no live channel yet, Supabase unreachable, missing
+  // timestamps) resolves to TRUE so the cache is trusted and the load stays fast
+  // and offline-tolerant; only a definitively-newer Supabase row forces a refetch.
+  function _amfiNavCacheIsFresh(cached) {
+    if (!(window.WfAuth && WfAuth.loadMarketDataMeta)) return Promise.resolve(true);
+    var cachedTs = cached && cached.updatedAt ? Number(cached.updatedAt) : 0;
+    return WfAuth.loadMarketDataMeta("amfi_nav").then(function (meta) {
+      var liveTs = (meta && meta.updated_at) ? Date.parse(meta.updated_at) : 0;
+      if (!liveTs) return true;              // Supabase unavailable → trust cache
+      return liveTs <= cachedTs;             // stale only if Supabase is strictly newer
+    }).catch(function () { return true; });
+  }
+
+  function _refetchAmfiNavMap() {
+    return _fetchAmfiMapHybrid(AMFI_NAV_MAP_STATIC_FILE, "amfi_nav").then(function (staticData) {
+      if (staticData && Object.keys(staticData).length) {
+        _blobCacheSet(AMFI_NAV_MAP_CACHE_KEY, {
+          data: staticData,
+          source: _marketSource["amfi_nav"] || null,
+          updatedAt: (_marketSource["amfi_nav"] && _marketSource["amfi_nav"].atMs) || 0
+        });
+        return staticData;
+      }
+      // Empty result (both sources unavailable): don't pin it — let the next
+      // caller retry so a transient miss doesn't freeze an empty map all session.
+      _amfiNavMapSessionPromise = null;
+      return {};
+    });
   }
 
   var _amfiIsinMapPromise = null;
