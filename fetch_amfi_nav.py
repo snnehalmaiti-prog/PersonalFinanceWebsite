@@ -111,7 +111,8 @@ def fetch_scheme_code_to_nav():
 
 
 # ── Fallback source: api.mfapi.in ──────────────────────────────────────────
-# When AMFI blocks the runner outright, fall back to api.mfapi.in — a
+# Used as the 2nd fallback (after Yahoo Finance), for any held fund Yahoo could
+# not supply. api.mfapi.in is a
 # programmatic mirror of the same AMFI NAV data, keyed by the identical scheme
 # code, that (unlike AMFI's own site) is built to be called from servers. It is
 # per-scheme, not bulk, so we fetch only the funds actually held — the ISINs in
@@ -170,9 +171,9 @@ def fetch_from_mfapi(codes):
     return out
 
 
-# ── Second fallback: Yahoo Finance ─────────────────────────────────────────
-# When AMFI blocks AND api.mfapi.in cannot supply a held fund, resolve the fund
-# on Yahoo BY ITS ISIN — the same identifier already in mfmapping.json — via
+# ── First fallback: Yahoo Finance ──────────────────────────────────────────
+# When AMFI blocks the runner, resolve each held fund on Yahoo BY ITS ISIN —
+# the same identifier already in mfmapping.json — via
 # Yahoo's search endpoint, then read the latest NAV from the chart endpoint.
 # Plain HTTP (no yfinance) so this workflow keeps installing only `requests`.
 # Output is keyed by AMFI scheme code, like every other source, so the merge
@@ -266,40 +267,41 @@ def main():
 
     # AMFI blocked every attempt. Fall back for the held funds only and merge
     # onto the existing snapshot rather than shrinking it. Two fallbacks, in
-    # order: api.mfapi.in first, then Yahoo Finance for anything mfapi missed.
+    # order: Yahoo Finance first, then api.mfapi.in for anything Yahoo missed.
     funds = _held_funds()
 
-    print("  AMFI blocked; 1st fallback — api.mfapi.in for held funds …",
+    print("  AMFI blocked; 1st fallback — Yahoo Finance for held funds …",
           file=sys.stderr)
-    fresh = fetch_from_mfapi([code for _, code in funds]) if funds else {}
-    mfapi_n = len(fresh)
+    fresh = fetch_from_yahoo(funds) if funds else {}
+    yahoo_n = len(fresh)
 
     missing = [(isin, code) for isin, code in funds if code not in fresh]
-    yahoo_n = 0
+    mfapi_n = 0
     if missing:
-        print(f"  api.mfapi.in supplied {mfapi_n}; 2nd fallback — Yahoo Finance "
+        print(f"  Yahoo Finance supplied {yahoo_n}; 2nd fallback — api.mfapi.in "
               f"for {len(missing)} remaining …", file=sys.stderr)
-        yahoo = fetch_from_yahoo(missing)
-        yahoo_n = len(yahoo)
-        fresh.update(yahoo)
+        mfapi = fetch_from_mfapi([code for _, code in missing])
+        mfapi_n = len(mfapi)
+        fresh.update(mfapi)
 
-    # Never overwrite good data with an empty map — if AMFI, api.mfapi.in AND
-    # Yahoo all come back empty, fail loudly instead of publishing "data": {}.
+    # Never overwrite good data with an empty map — if AMFI, Yahoo AND
+    # api.mfapi.in all come back empty, fail loudly instead of publishing
+    # "data": {}.
     if not fresh:
         raise RuntimeError(
-            "AMFI returned no NAV rows and both fallbacks (api.mfapi.in, Yahoo "
-            "Finance) yielded nothing; refusing to overwrite %s with empty data"
-            % OUTPUT_FILE
+            "AMFI returned no NAV rows and both fallbacks (Yahoo Finance, "
+            "api.mfapi.in) yielded nothing; refusing to overwrite %s with empty "
+            "data" % OUTPUT_FILE
         )
 
     # Name the source(s) that actually refreshed the held funds, for the
     # dashboard's NAV-Data badge. AMFI is skipped here (it was blocked); the
     # label is whichever fallback(s) supplied data this run.
     parts = []
-    if mfapi_n:
-        parts.append("mfapi.in")
     if yahoo_n:
         parts.append("Yahoo Finance")
+    if mfapi_n:
+        parts.append("mfapi.in")
     source = " + ".join(parts) if parts else "fallback"
 
     merged = _load_existing_data()
@@ -309,8 +311,8 @@ def main():
     with open(OUTPUT_FILE, "w") as f:
         json.dump(payload, f, indent=2)
     print(f"Saved {len(merged)} scheme NAVs to {OUTPUT_FILE} "
-          f"(held funds refreshed: {mfapi_n} via api.mfapi.in, "
-          f"{yahoo_n} via Yahoo Finance)")
+          f"(held funds refreshed: {yahoo_n} via Yahoo Finance, "
+          f"{mfapi_n} via api.mfapi.in)")
 
 
 if __name__ == "__main__":
