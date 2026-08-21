@@ -19,6 +19,13 @@ Fund Mapping sheet is synced — exactly how stocksetf_mapping.json feeds the st
 job. A fund the file has not caught up with yet is not a problem: the client
 falls back to api.mfapi.in for anything missing from the bundle.
 
+Sources
+-------
+api.mfapi.in is the primary source. Yahoo Finance is merged in as a gap-fill
+(resolved per fund by ISIN): it supplies only the NAV dates mfapi is missing, so
+the history keeps advancing even when mfapi lags AMFI or lacks a fund outright.
+mfapi stays authoritative for the dates it does provide.
+
 Format
 ------
     {"updated": "...", "mf_history": {"<schemeCode>": {"YYYY-MM-DD": nav, ...}}}
@@ -97,18 +104,22 @@ def scheme_codes_from_mapping():
         code = ""
         if code_idx is not None and code_idx < len(row):
             code = str(row[code_idx] or "").strip()
-        if not code.isdigit() and isin_idx is not None and isin_idx < len(row):
+        # The ISIN is captured for every row (not only when the scheme code is
+        # missing) because it doubles as the Yahoo Finance lookup key for the
+        # gap-fill pass below.
+        isin = ""
+        if isin_idx is not None and isin_idx < len(row):
             isin = str(row[isin_idx] or "").strip().upper()
-            if isin:
-                code = str(isin_map.get(isin) or "").strip()
-                if not code.isdigit():
-                    unresolved.append(isin)
+        if not code.isdigit() and isin:
+            code = str(isin_map.get(isin) or "").strip()
+            if not code.isdigit():
+                unresolved.append(isin)
         # Scheme codes are numeric; anything else is a blank row or a stray note.
         if not code.isdigit() or code in seen:
             continue
         seen.add(code)
         name = str(row[name_idx] or "").strip() if name_idx is not None and name_idx < len(row) else ""
-        out.append({"code": code, "name": name or code})
+        out.append({"code": code, "name": name or code, "isin": isin})
     if unresolved:
         print(f"{len(unresolved)} identifier(s) had no scheme code in the ISIN map, "
               f"e.g. {unresolved[:3]}")
@@ -163,6 +174,84 @@ def fetch_one(code, name):
     return None, last_err
 
 
+# ── Gap-fill source: Yahoo Finance ─────────────────────────────────────────
+# api.mfapi.in is the primary history source, but it can lag AMFI by days and
+# occasionally lacks a fund entirely. When that happens the persistent history
+# stalls — and if AMFI is also blocking the daily amfi_nav.json job, the only
+# fresh point the client sees is the single Yahoo tail it appends in the browser,
+# leaving the in-between days missing. So resolve each fund on Yahoo by its ISIN
+# (the same identifier and endpoints fetch_amfi_nav.py already uses) and merge
+# any NAV dates mfapi did not supply — extending the recent tail and, for a fund
+# mfapi failed outright, supplying the whole series. mfapi stays authoritative
+# for the dates it does provide; Yahoo only fills the holes.
+YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+YAHOO_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+    "Accept": "application/json,text/plain,*/*",
+}
+
+
+def _yahoo_symbol_for_isin(isin):
+    # Ask for several matches, not one: Yahoo does not always rank the fund first
+    # for an ISIN, and quotesCount=1 can hand back a row with no symbol. Prefer an
+    # explicit mutual-fund hit, then any quote that carries a symbol. One empty
+    # retry covers a transient blank response.
+    for attempt in (1, 2):
+        try:
+            r = requests.get(YAHOO_SEARCH_URL,
+                             params={"q": isin, "quotesCount": 10, "newsCount": 0},
+                             headers=YAHOO_HEADERS, timeout=TIMEOUT)
+            r.raise_for_status()
+            quotes = r.json().get("quotes") or []
+        except Exception:  # noqa: BLE001 - a bad lookup must not fail the run
+            quotes = []
+        for q in quotes:
+            if q.get("quoteType") == "MUTUALFUND" and q.get("symbol"):
+                return q["symbol"]
+        for q in quotes:
+            if q.get("symbol"):
+                return q["symbol"]
+        if attempt == 1:
+            time.sleep(1)
+    return None
+
+
+def fetch_yahoo_history(isin):
+    """Full daily NAV history for a fund from Yahoo, by ISIN. {iso: nav} or {}."""
+    if not isin:
+        return {}
+    symbol = _yahoo_symbol_for_isin(isin)
+    if not symbol:
+        return {}
+    try:
+        r = requests.get(YAHOO_CHART_URL.format(symbol=symbol),
+                         params={"range": "10y", "interval": "1d"},
+                         headers=YAHOO_HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        result = ((r.json().get("chart") or {}).get("result") or [None])[0]
+    except Exception:  # noqa: BLE001
+        return {}
+    if not result:
+        return {}
+    ts = result.get("timestamp") or []
+    closes = (((result.get("indicators") or {}).get("quote") or [{}])[0]).get("close") or []
+    series = {}
+    for i in range(min(len(ts), len(closes))):
+        c = closes[i]
+        if c is None:
+            continue
+        try:
+            nav = float(c)
+        except (TypeError, ValueError):
+            continue
+        if nav > 0:
+            iso = datetime.fromtimestamp(ts[i], tz=timezone.utc).strftime("%Y-%m-%d")
+            series[iso] = nav
+    return series
+
+
 def main():
     schemes = scheme_codes_from_mapping()
     if not schemes:
@@ -175,9 +264,26 @@ def main():
     history, failures = {}, []
     for i, s in enumerate(schemes):
         series, err = fetch_one(s["code"], s["name"])
+
+        # Merge Yahoo's history over the mfapi result: mfapi keeps every date it
+        # supplied; Yahoo adds only the dates mfapi is missing (recent tail while
+        # mfapi lags, or the entire series when mfapi failed).
+        yseries = fetch_yahoo_history(s.get("isin"))
+        yahoo_added = 0
+        if yseries:
+            merged = dict(series or {})
+            for iso, nav in yseries.items():
+                if iso not in merged:
+                    merged[iso] = nav
+                    yahoo_added += 1
+            if merged:
+                series = merged
+
         if series:
             history[s["code"]] = series
-            print(f"  {s['name']} ({s['code']}): {len(series)} NAVs")
+            extra = f" (+{yahoo_added} from Yahoo)" if yahoo_added else ""
+            note = " [mfapi failed: " + err + "]" if err and yahoo_added else ""
+            print(f"  {s['name']} ({s['code']}): {len(series)} NAVs{extra}{note}")
         else:
             failures.append(f"{s['name']} ({s['code']}): {err}")
             print(f"  WARNING: {s['name']} ({s['code']}) failed: {err}")
