@@ -10027,6 +10027,21 @@
       localStorage.setItem("wf-gh-token",  ghTokenEl.value.trim());
       document.dispatchEvent(new CustomEvent("wf-settings-saved"));
       if (ghSaveStatus) { ghSaveStatus.textContent = "Saved."; setTimeout(function () { ghSaveStatus.textContent = ""; }, 2000); }
+      // Push any mapping already synced/uploaded on this device right away.
+      // The mapping->repo push otherwise only fires on the NEXT sheet sync
+      // (afterSync), so credentials entered AFTER an upload — or a column added
+      // to a sheet that was synced before the token existed — never reach the
+      // repo (and the workflows) until something re-triggers a sync. Pushing on
+      // Save closes that gap, and pushMappingToGitHub already skips a no-op
+      // commit when the file is unchanged.
+      if (ghOwnerEl.value.trim() && ghRepoEl.value.trim() && ghTokenEl.value.trim()) {
+        try {
+          var mfRows = getSheetRows("mfmapping");
+          if (mfRows && mfRows.length > 1) pushMappingToGitHub(mfRows, "mfmapping.json");
+          var seRows = getSheetRows("stocksetfmapping");
+          if (seRows && seRows.length > 1) pushMappingToGitHub(seRows, "stocksetf_mapping.json");
+        } catch (e) {}
+      }
     });
   }
 
