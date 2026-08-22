@@ -10558,12 +10558,40 @@
     return schemeMap[instrumentName] || schemeMap[normalizeText(instrumentName)];
   }
 
+  // A "Scheme Code" column in the Mutual Fund Mapping sheet resolves an
+  // instrument to its AMFI scheme code directly, with no dependency on the
+  // AMFI-built ISIN map. Preferred when present; the ISIN path fills the rest.
+  function buildInstrumentDirectSchemeMap() {
+    var rows = getSheetRows("mfmapping");
+    var map = {};
+    if (!rows || !rows.length) return map;
+    var header = rows[0].map(normalizeText);
+    var instrumentIdx = header.indexOf("instrument name");
+    var codeIdx = header.findIndex(function (h) { return h.indexOf("scheme code") !== -1; });
+    if (instrumentIdx === -1 || codeIdx === -1) return map;
+    rows.slice(1).forEach(function (row) {
+      var instrument = (row[instrumentIdx] || "").trim();
+      var code = String(row[codeIdx] == null ? "" : row[codeIdx]).trim();
+      if (instrument && /^\d+$/.test(code)) {
+        map[instrument] = code;
+        map[normalizeText(instrument)] = code;
+      }
+    });
+    return map;
+  }
+
   function buildInstrumentSchemeMap() {
     var isinMap = buildInstrumentIsinMap();
+    var directCodes = buildInstrumentDirectSchemeMap();
     lastSchemeMapDiagnostic = null;
     return fetchAmfiIsinToSchemeMap().then(function (isinToCode) {
       var map = {};
+      // 1. Prefer a scheme code carried directly in the mapping sheet.
+      Object.keys(directCodes).forEach(function (k) { map[k] = directCodes[k]; });
+      // 2. Fall back to ISIN -> code via the AMFI map for instruments the sheet
+      //    did not carry a scheme code for.
       Object.keys(isinMap).forEach(function (instrument) {
+        if (map[instrument]) return;
         var isin = isinMap[instrument];
         var code = isinToCode[isin];
         if (code) {
