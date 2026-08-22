@@ -9945,6 +9945,13 @@
     }
     var content = utf8ToBase64(JSON.stringify(rows));
     var file = fileName || "stocksetf_mapping.json";
+    // Diagnostic descriptor shown in the toast: which file, how many data rows,
+    // and whether it carries a Scheme Code column. Makes a silent "already up to
+    // date" actionable — it tells the user whether THIS browser's mapping has the
+    // column at all, which is the usual reason a push seems to do nothing.
+    var _hdr = (rows[0] || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+    var _hasCode = _hdr.some(function (h) { return h.indexOf("scheme code") !== -1; });
+    var _desc = file + ": " + Math.max(0, rows.length - 1) + " rows, Scheme Code " + (_hasCode ? "✓" : "✗");
     var apiBase = ghRepoApiBase(gh) + "/contents/" + encodeURIComponent(file);
     var headers = { "Authorization": "Bearer " + gh.token, "Content-Type": "application/json", "Accept": "application/vnd.github+json" };
     // GET current SHA (needed for update)
@@ -9955,7 +9962,7 @@
         // (and the Pages deploy + price-fetch run it would trigger) on every load.
         if (existing && typeof existing.content === "string" &&
             existing.content.replace(/\s/g, "") === content) {
-          showGhToast("✓ Mapping already up to date.", true);
+          showGhToast("✓ Already up to date — " + _desc, true);
           return null;
         }
         var body = { message: "chore: update " + file, content: content };
@@ -9966,8 +9973,8 @@
       .then(function (r) {
         if (r === null) return; // no push needed (already up to date)
         if (r && (r.status === 200 || r.status === 201)) {
-          dbg("stocksetf_mapping.json pushed to GitHub successfully.");
-          showGhToast("✓ Mapping pushed to GitHub.", true);
+          dbg(file + " pushed to GitHub successfully.");
+          showGhToast("✓ Pushed to GitHub — " + _desc, true);
         } else {
           console.warn("GitHub push returned status", r && r.status);
           showGhToast("GitHub push failed: HTTP " + (r && r.status) +
