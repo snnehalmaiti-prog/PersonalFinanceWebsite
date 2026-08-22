@@ -126,12 +126,16 @@ MFAPI_HOLDINGS_FILE = "mfmapping.json"
 
 
 def _held_funds():
-    """(ISIN, scheme code) for each held mutual fund, via the ISIN map.
+    """(ISIN, scheme code) for each held mutual fund.
 
-    The ISIN comes straight from mfmapping.json; the scheme code (the key both
-    api.mfapi.in and amfi_nav.json use) is resolved through amfi_isin_map.json.
-    Both are carried because the fallbacks key differently — mfapi by scheme
-    code, Yahoo by ISIN — while the output file is always keyed by scheme code.
+    The scheme code (the key both api.mfapi.in and amfi_nav.json use) is taken
+    from a "Scheme Code" column in mfmapping.json when the mapping sheet carries
+    one — which removes any dependency on AMFI for resolution — and otherwise
+    resolved from the ISIN through amfi_isin_map.json. Columns are located by
+    header name rather than fixed position, so adding the Scheme Code column
+    does not shift the ISIN read. The ISIN is still carried alongside because the
+    Yahoo fallback keys on it, while the output file is always keyed by scheme
+    code.
     """
     try:
         with open(MFAPI_HOLDINGS_FILE) as f:
@@ -141,13 +145,29 @@ def _held_funds():
     except (OSError, ValueError) as exc:
         print(f"  fallback: cannot read holdings/ISIN map ({exc})", file=sys.stderr)
         return []
+    if not isinstance(rows, list) or len(rows) < 2:
+        return []
+    header = [str(c or "").strip().lower() for c in rows[0]]
+    code_idx = next((i for i, h in enumerate(header) if "scheme code" in h), None)
+    isin_idx = next((i for i, h in enumerate(header)
+                     if "isin" in h or "identifier" in h), None)
     funds, seen = [], set()
-    for row in rows[1:] if isinstance(rows, list) else []:
-        isin = (row[6].strip().upper() if len(row) > 6 and row[6] else "")
-        code = isin_map.get(isin)
-        if code and code not in seen:
+    for row in rows[1:]:
+        isin = ""
+        if isin_idx is not None and isin_idx < len(row) and row[isin_idx]:
+            isin = str(row[isin_idx]).strip().upper()
+        code = ""
+        # Prefer a scheme code carried directly in the mapping sheet; fall back
+        # to the AMFI ISIN map only when the sheet has no code for this row.
+        if code_idx is not None and code_idx < len(row) and row[code_idx]:
+            c = str(row[code_idx]).strip()
+            if c.isdigit():
+                code = c
+        if not code and isin:
+            code = str(isin_map.get(isin) or "").strip()
+        if code.isdigit() and code not in seen:
             seen.add(code)
-            funds.append((isin, str(code)))
+            funds.append((isin, code))
     return funds
 
 
