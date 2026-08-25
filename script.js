@@ -13466,7 +13466,6 @@
     }
 
     var investedByName = {};
-    var commodityByName = {}; // per-portfolio commodity invested (joins asynchronously)
     // Once per-portfolio CURRENT values resolve (async), these hold each portfolio's
     // actual current total and its {equity,fixedIncome,commodity} current breakdown.
     // While null, the card shows the fast invested-based render; the current pass
@@ -13527,11 +13526,6 @@
       }
     });
 
-    // US Stocks/ETF INR-conversion delta per portfolio — populated
-    // asynchronously by applyStocksEtfInrConversion(). portfolioCatSubline
-    // adds it to Equity so chip percentages line up with the row total.
-    var _seInrDeltaByName = {};
-
     // Instrument-category breakdown for one portfolio → sub-line under its name.
     // Uses CURRENT breakdown once it has resolved; falls back to invested until then.
     function portfolioCatSubline(name) {
@@ -13541,7 +13535,7 @@
         var cb = currentCatByName[name];
         eq = cb.equity; fi = cb.fixedIncome; comm = cb.commodity;
       } else {
-        eq = computeTotalInvestment(name, ["equity", "stocksetf"]) + (_seInrDeltaByName[name] || 0);
+        eq = computeTotalInvestment(name, ["equity", "stocksetf"]);
         var nonEq = _nonEquityFromEquitySources(name);
         var extraComm = nonEq["commodity"] || 0;
         var extraFi = nonEq["fixed income"] || 0;
@@ -13552,7 +13546,7 @@
         // INTO, never the sheet they came from — a gold fund in the equity sheet
         // goes with Commodity.
         fi = fiExcluded ? 0 : (computeTotalInvestment(name, ["fixedincome", "fd"]) + extraFi);
-        comm = fiExcluded ? 0 : ((commodityByName[name] || 0) + extraComm);
+        comm = fiExcluded ? 0 : extraComm;
       }
       var parts = [
         { label: "Equity", value: eq, color: "#10B981" },
@@ -14015,8 +14009,12 @@
         var pc = (byName[n] / sum) * 100;
         var pcStr = (pc < 1 ? pc.toFixed(1) : String(Math.round(pc))) + "%";
         var color = portfolioColor[n] || "#94A3B8";
-        return '<span class="isc-cat-chip" title="' + n + ' ₹' + Math.round(byName[n]).toLocaleString("en-IN") + '"><span class="isc-cat-dot" style="background:' + color + '"></span>' +
-          n + ' ' + pcStr + '</span>';
+        // escapeHtml the portfolio name in both the title attribute and the chip
+        // text: it is user data, and an unescaped '&'/'<'/'"' rendered mangled or
+        // broke the markup — the same reason the sibling bar/rows escape it.
+        var nEsc = escapeHtml(n);
+        return '<span class="isc-cat-chip" title="' + nEsc + ' ₹' + Math.round(byName[n]).toLocaleString("en-IN") + '"><span class="isc-cat-dot" style="background:' + color + '"></span>' +
+          nEsc + ' ' + pcStr + '</span>';
       }).join("");
     }
 
