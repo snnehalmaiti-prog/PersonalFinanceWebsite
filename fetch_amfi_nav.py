@@ -14,6 +14,7 @@ Usage:
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import requests
@@ -111,8 +112,8 @@ def fetch_scheme_code_to_nav():
 
 
 # ── Fallback source: api.mfapi.in ──────────────────────────────────────────
-# Used as the 2nd fallback (after Yahoo Finance), for any held fund Yahoo could
-# not supply. api.mfapi.in is a
+# One of the two fallbacks queried in parallel when AMFI is blocked; per fund
+# the newer NAV date wins (see main). api.mfapi.in is a
 # programmatic mirror of the same AMFI NAV data, keyed by the identical scheme
 # code, that (unlike AMFI's own site) is built to be called from servers. It is
 # per-scheme, not bulk, so we fetch only the funds actually held — the ISINs in
@@ -191,9 +192,10 @@ def fetch_from_mfapi(codes):
     return out
 
 
-# ── First fallback: Yahoo Finance ──────────────────────────────────────────
-# When AMFI blocks the runner, resolve each held fund on Yahoo BY ITS ISIN —
-# the same identifier already in mfmapping.json — via
+# ── Fallback source: Yahoo Finance ─────────────────────────────────────────
+# The other of the two fallbacks queried in parallel when AMFI is blocked; per
+# fund the newer NAV date wins (see main). Resolve each held fund on Yahoo BY
+# ITS ISIN — the same identifier already in mfmapping.json — via
 # Yahoo's search endpoint, then read the latest NAV from the chart endpoint.
 # Plain HTTP (no yfinance) so this workflow keeps installing only `requests`.
 # Output is keyed by AMFI scheme code, like every other source, so the merge
@@ -273,6 +275,25 @@ def _load_existing_data():
         return {}
 
 
+def _nav_date_key(entry):
+    """Sortable (y, m, d) for a fallback NAV entry, or None.
+
+    Both fallbacks emit the date as DD-MM-YYYY (Yahoo via strftime, mfapi as it
+    is served), so one parser covers both and lets the two be compared to pick
+    the fresher NAV.
+    """
+    if not entry or not entry.get("date"):
+        return None
+    parts = str(entry["date"]).split("-")
+    if len(parts) != 3:
+        return None
+    try:
+        d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+        return (y, m, d)
+    except ValueError:
+        return None
+
+
 def main():
     print("Fetching AMFI NAVAll.txt …")
     scheme_to_nav = fetch_scheme_code_to_nav()
@@ -286,23 +307,39 @@ def main():
         return
 
     # AMFI blocked every attempt. Fall back for the held funds only and merge
-    # onto the existing snapshot rather than shrinking it. Two fallbacks, in
-    # order: Yahoo Finance first, then api.mfapi.in for anything Yahoo missed.
+    # onto the existing snapshot rather than shrinking it. Query BOTH Yahoo
+    # Finance and api.mfapi.in concurrently and, per fund, keep whichever
+    # returned the NEWER NAV date — either source can lag the other on any given
+    # day, so picking the freshest per fund beats a fixed source order.
     funds = _held_funds()
 
-    print("  AMFI blocked; 1st fallback — Yahoo Finance for held funds …",
-          file=sys.stderr)
-    fresh = fetch_from_yahoo(funds) if funds else {}
-    yahoo_n = len(fresh)
+    yahoo, mfapi = {}, {}
+    if funds:
+        print("  AMFI blocked; querying Yahoo Finance and api.mfapi.in in "
+              "parallel; newest NAV date wins per fund …", file=sys.stderr)
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fy = ex.submit(fetch_from_yahoo, funds)
+            fm = ex.submit(fetch_from_mfapi, [code for _, code in funds])
+            yahoo = fy.result() or {}
+            mfapi = fm.result() or {}
 
-    missing = [(isin, code) for isin, code in funds if code not in fresh]
-    mfapi_n = 0
-    if missing:
-        print(f"  Yahoo Finance supplied {yahoo_n}; 2nd fallback — api.mfapi.in "
-              f"for {len(missing)} remaining …", file=sys.stderr)
-        mfapi = fetch_from_mfapi([code for _, code in missing])
-        mfapi_n = len(mfapi)
-        fresh.update(mfapi)
+    fresh, yahoo_n, mfapi_n = {}, 0, 0
+    for _, code in funds:
+        y, m = yahoo.get(code), mfapi.get(code)
+        yk, mk = _nav_date_key(y), _nav_date_key(m)
+        if yk is not None and (mk is None or yk > mk):
+            # Yahoo strictly newer (mfapi missing or older).
+            fresh[code] = y
+            yahoo_n += 1
+        elif mk is not None:
+            # mfapi newer, or the two tie (mfapi mirrors AMFI's official NAV, so
+            # it wins ties), or only mfapi has a value.
+            fresh[code] = m
+            mfapi_n += 1
+        elif y:
+            # Neither carried a parseable date but Yahoo returned something.
+            fresh[code] = y
+            yahoo_n += 1
 
     # Never overwrite good data with an empty map — if AMFI, Yahoo AND
     # api.mfapi.in all come back empty, fail loudly instead of publishing
@@ -314,9 +351,8 @@ def main():
             "data" % OUTPUT_FILE
         )
 
-    # Name the source(s) that actually refreshed the held funds, for the
-    # dashboard's NAV-Data badge. AMFI is skipped here (it was blocked); the
-    # label is whichever fallback(s) supplied data this run.
+    # Name the source(s) that actually won for the held funds this run, for the
+    # dashboard's NAV-Data badge. AMFI is skipped here (it was blocked).
     parts = []
     if yahoo_n:
         parts.append("Yahoo Finance")
@@ -331,8 +367,8 @@ def main():
     with open(OUTPUT_FILE, "w") as f:
         json.dump(payload, f, indent=2)
     print(f"Saved {len(merged)} scheme NAVs to {OUTPUT_FILE} "
-          f"(held funds refreshed: {yahoo_n} via Yahoo Finance, "
-          f"{mfapi_n} via api.mfapi.in)")
+          f"(held funds by newest date: {yahoo_n} from Yahoo Finance, "
+          f"{mfapi_n} from api.mfapi.in)")
 
 
 if __name__ == "__main__":
