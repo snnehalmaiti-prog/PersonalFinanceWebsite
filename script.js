@@ -9198,10 +9198,68 @@
     return values;
   }
 
+  // ── Friendly label over a pasted Google-Sheets link ────────────────────────
+  // A share link is an opaque /spreadsheets/d/<id>/… URL — long and unreadable,
+  // and it carries no file name (and Google exposes none over JSONP/CORS). So
+  // rather than show the raw URL, overlay a compact chip when the field is not
+  // focused. The chip is purely cosmetic: input.value stays the real URL, so
+  // every sync/save read is unaffected; focusing (or clicking the chip) hides it
+  // and reveals the URL to edit. Only Google-Sheets URLs get a chip.
+  function _googleSheetId(url) {
+    var m = /\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec(String(url || ""));
+    return m ? m[1] : null;
+  }
+  function _sheetChipLabel(url) {
+    var id = _googleSheetId(url);
+    if (!id) return null;
+    return "📊 Google Sheet · …" + (id.length > 6 ? id.slice(-6) : id);
+  }
+  function attachSheetLinkChip(input) {
+    if (!input || input._wfChip || !input.parentNode) return;
+    var wrap = document.createElement("span");
+    wrap.className = "sheet-link-chipwrap";
+    wrap.style.cssText = "position:relative;display:block;flex:1 1 auto;min-width:0;";
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    input.style.width = "100%";
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "sheet-link-chip";
+    chip.style.cssText = "position:absolute;inset:0;display:none;align-items:center;width:100%;" +
+      "margin:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" +
+      "border:1px solid transparent;cursor:text;box-sizing:border-box;";
+    wrap.appendChild(chip);
+    input._wfChip = chip;
+    function render() {
+      if (document.activeElement === input) { chip.style.display = "none"; return; }
+      var label = _sheetChipLabel(input.value);
+      if (!label) { chip.style.display = "none"; return; }
+      var cs = getComputedStyle(input);
+      var bg = cs.backgroundColor;
+      if (!bg || bg === "rgba(0, 0, 0, 0)" || bg === "transparent") bg = "var(--card, #fff)";
+      chip.style.padding = cs.padding;
+      chip.style.font = cs.font;
+      chip.style.borderRadius = cs.borderRadius;
+      chip.style.background = bg;
+      chip.style.color = cs.color;
+      chip.textContent = label;
+      chip.title = input.value;
+      chip.style.display = "flex";
+    }
+    input._wfChipRefresh = render;
+    input.addEventListener("focus", function () { chip.style.display = "none"; });
+    input.addEventListener("blur", render);
+    input.addEventListener("input", function () { chip.style.display = "none"; });
+    chip.addEventListener("click", function () { input.focus(); });
+    render();
+    setTimeout(render, 0); // re-read computed styles once layout has settled
+  }
+
   function initSheetCard(prefix, options, afterSync) {
     options = options || {};
     var sheetLinkInput = document.getElementById(prefix + "-sheet-link");
     if (!sheetLinkInput) return;
+    attachSheetLinkChip(sheetLinkInput);
 
     var sheetSyncBtn = document.getElementById(prefix + "-sheet-sync");
     var sheetStatus = document.getElementById(prefix + "-sheet-status");
@@ -9254,6 +9312,7 @@
           _localData = rows;
           try { localStorage.setItem(localDataKey, JSON.stringify(rows)); } catch (e) {}
           sheetLinkInput.value = "📎 " + file.name;
+          if (sheetLinkInput._wfChipRefresh) sheetLinkInput._wfChipRefresh();
           localStorage.setItem(storageKey, sheetLinkInput.value);
           // Mirror the uploaded config (incl. parsed rows) into the synced array form
           // and notify Settings so it uploads — lets a file-based mapping round-trip.
@@ -9453,6 +9512,7 @@
     if (savedHeaderRow && headerRowInput) headerRowInput.value = savedHeaderRow;
     if (savedLink) {
       sheetLinkInput.value = savedLink;
+      if (sheetLinkInput._wfChipRefresh) sheetLinkInput._wfChipRefresh();
       // Backfill the array mirror for existing users whose config predates mapping
       // settings-sync. If it wasn't already present, upload it now so the mapping
       // config reaches the cloud without waiting for a manual re-sync.
@@ -9633,6 +9693,7 @@
         parseLocalFile(file, config.headerRow || "1", function (rows) {
           row._localData = rows;
           linkInput.value = "📎 " + file.name;
+          if (linkInput._wfChipRefresh) linkInput._wfChipRefresh();
           row.querySelector(".sheet-row-link").type = "text";
           autoSaveConfigs();
           document.dispatchEvent(new CustomEvent("wf-file-uploaded"));
@@ -9684,6 +9745,7 @@
       var fields = document.createElement("div");
       fields.className = "equity-link-row sheet-row-fields";
       fields.appendChild(linkInput);
+      attachSheetLinkChip(linkInput);
       fields.appendChild(uploadBtn);
       fields.appendChild(numberRow);
 
