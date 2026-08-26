@@ -9198,23 +9198,15 @@
     return values;
   }
 
-  // ── Friendly label over a pasted Google-Sheets link ────────────────────────
-  // A share link is an opaque /spreadsheets/d/<id>/… URL — long and unreadable,
-  // and it carries no file name (and Google exposes none over JSONP/CORS). So
-  // rather than show the raw URL, overlay a compact chip when the field is not
-  // focused. The chip is purely cosmetic: input.value stays the real URL, so
+  // ── Display-name label over a pasted link ──────────────────────────────────
+  // A share link is a long, unreadable /spreadsheets/d/<id>/… URL. When the user
+  // gives a sheet a Display name, overlay a compact '📊 <name>' chip over the
+  // link field while it is not focused, so the field reads as the name instead
+  // of the URL. The chip is purely cosmetic: input.value stays the real URL, so
   // every sync/save read is unaffected; focusing (or clicking the chip) hides it
-  // and reveals the URL to edit. Only Google-Sheets URLs get a chip.
-  function _googleSheetId(url) {
-    var m = /\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec(String(url || ""));
-    return m ? m[1] : null;
-  }
-  function _sheetChipLabel(url) {
-    var id = _googleSheetId(url);
-    if (!id) return null;
-    return "📊 Google Sheet · …" + (id.length > 6 ? id.slice(-6) : id);
-  }
-  function attachSheetLinkChip(input) {
+  // and reveals the URL to edit. No name → no chip (the raw URL shows).
+  // labelFn() returns the current Display name (or "" for none).
+  function attachSheetLinkChip(input, labelFn) {
     if (!input || input._wfChip || !input.parentNode) return;
     var wrap = document.createElement("span");
     wrap.className = "sheet-link-chipwrap";
@@ -9232,8 +9224,8 @@
     input._wfChip = chip;
     function render() {
       if (document.activeElement === input) { chip.style.display = "none"; return; }
-      var label = _sheetChipLabel(input.value);
-      if (!label) { chip.style.display = "none"; return; }
+      var name = (labelFn && labelFn()) || "";
+      if (!name || !input.value) { chip.style.display = "none"; return; }
       var cs = getComputedStyle(input);
       var bg = cs.backgroundColor;
       if (!bg || bg === "rgba(0, 0, 0, 0)" || bg === "transparent") bg = "var(--card, #fff)";
@@ -9242,7 +9234,7 @@
       chip.style.borderRadius = cs.borderRadius;
       chip.style.background = bg;
       chip.style.color = cs.color;
-      chip.textContent = label;
+      chip.textContent = "📊 " + name;
       chip.title = input.value;
       chip.style.display = "flex";
     }
@@ -9259,7 +9251,29 @@
     options = options || {};
     var sheetLinkInput = document.getElementById(prefix + "-sheet-link");
     if (!sheetLinkInput) return;
-    attachSheetLinkChip(sheetLinkInput);
+    var nameKey = "wf-" + prefix + "-sheet-name";
+    // Optional Display name — shown as a chip in place of the raw link.
+    var sheetNameInput = document.createElement("input");
+    sheetNameInput.type = "text";
+    sheetNameInput.className = "sheet-name-input";
+    sheetNameInput.placeholder = "Display name (optional)";
+    sheetNameInput.value = localStorage.getItem(nameKey) || "";
+    sheetNameInput.style.cssText = "margin-bottom:8px;max-width:280px;display:block;";
+    if (sheetLinkInput.parentNode && sheetLinkInput.parentNode.parentNode) {
+      sheetLinkInput.parentNode.parentNode.insertBefore(sheetNameInput, sheetLinkInput.parentNode);
+    }
+    attachSheetLinkChip(sheetLinkInput, function () { return sheetNameInput.value.trim(); });
+    function _saveSheetName() {
+      var nm = sheetNameInput.value.trim();
+      if (nm) localStorage.setItem(nameKey, nm); else localStorage.removeItem(nameKey);
+      writeSheetsMirror(sheetLinkInput.value.trim(), headerRowInput ? headerRowInput.value : "1");
+      document.dispatchEvent(new CustomEvent("wf-settings-saved"));
+      if (sheetLinkInput._wfChipRefresh) sheetLinkInput._wfChipRefresh();
+    }
+    sheetNameInput.addEventListener("input", function () {
+      if (sheetLinkInput._wfChipRefresh) sheetLinkInput._wfChipRefresh();
+    });
+    sheetNameInput.addEventListener("change", _saveSheetName);
 
     var sheetSyncBtn = document.getElementById(prefix + "-sheet-sync");
     var sheetStatus = document.getElementById(prefix + "-sheet-status");
@@ -9285,6 +9299,8 @@
       try {
         if (!url) { localStorage.removeItem(sheetsKey); return; }
         var entry = { link: url, headerRow: headerRow || "1" };
+        var _nm = (sheetNameInput && sheetNameInput.value.trim()) || "";
+        if (_nm) entry.name = _nm;
         // File uploads have no fetchable URL, so carry the parsed rows in the mirror
         // (exactly like the multi-sheet cards) — otherwise the file can't round-trip
         // to other devices. Mapping files are small; cap defensively regardless.
@@ -9487,6 +9503,12 @@
       if (Array.isArray(arr) && arr[0] && arr[0].link) {
         savedLink = arr[0].link;
         savedHeaderRow = arr[0].headerRow || localStorage.getItem(headerRowKey);
+        // Cross-device Display name rides in the mirror; prefer it over the
+        // device-local copy so a name set elsewhere shows here too.
+        if (arr[0].name && sheetNameInput) {
+          sheetNameInput.value = arr[0].name;
+          try { localStorage.setItem(nameKey, arr[0].name); } catch (e) {}
+        }
         // Rehydrate an uploaded file's parsed rows so a file-based mapping
         // reconnects on a fresh device without re-uploading.
         if (arr[0].localData && arr[0].localData.length > 1) {
@@ -9683,6 +9705,18 @@
       linkInput.value = config.link || "";
       linkInput.addEventListener("change", function () { row._localData = null; autoSaveConfigs(); });
 
+      // Optional Display name — shown as a chip in place of the raw link.
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "sheet-row-name";
+      nameInput.placeholder = "Display name (optional)";
+      nameInput.value = config.name || "";
+      nameInput.style.cssText = "margin-bottom:6px;max-width:280px;display:block;";
+      nameInput.addEventListener("input", function () {
+        if (linkInput._wfChipRefresh) linkInput._wfChipRefresh();
+      });
+      nameInput.addEventListener("change", autoSaveConfigs);
+
       var fileInput = document.createElement("input");
       fileInput.type = "file";
       fileInput.accept = ".xlsx,.xls,.csv";
@@ -9745,7 +9779,7 @@
       var fields = document.createElement("div");
       fields.className = "equity-link-row sheet-row-fields";
       fields.appendChild(linkInput);
-      attachSheetLinkChip(linkInput);
+      attachSheetLinkChip(linkInput, function () { return nameInput.value.trim(); });
       fields.appendChild(uploadBtn);
       fields.appendChild(numberRow);
 
@@ -9778,6 +9812,7 @@
       rowMeta.appendChild(dotSep2);
       rowMeta.appendChild(rowOpenLink);
 
+      row.appendChild(nameInput);
       row.appendChild(fields);
       row.appendChild(rowMeta);
       listEl.appendChild(row);
@@ -9785,8 +9820,10 @@
 
     function readRowConfigs() {
       return Array.prototype.slice.call(listEl.querySelectorAll(".sheet-row")).map(function (row) {
+        var nameEl = row.querySelector(".sheet-row-name");
         return {
           link: row.querySelector(".sheet-row-link").value.trim(),
+          name: nameEl ? nameEl.value.trim() : "",
           headerRow: row.querySelector(".sheet-row-header-row").value || "1",
           localData: row._localData || null
         };
