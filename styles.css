@@ -1474,6 +1474,25 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-size: 0.92rem;
 }
 .equity-link-row input:focus { outline: 2px solid var(--sky); border-color: transparent; }
+
+/* Optional Display-name field for a sheet link (Transaction + Mapping cards).
+   Created in JS, so it has no card-input class — style it to match the app's
+   inputs, theme-aware via tokens, instead of falling back to the UA default. */
+.sheet-name-input,
+.sheet-row-name {
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+.sheet-name-input::placeholder,
+.sheet-row-name::placeholder { color: var(--muted); font-weight: 400; }
+.sheet-name-input:focus,
+.sheet-row-name:focus { outline: 2px solid var(--sky); border-color: transparent; }
 .equity-link-row input.header-row-input {
   flex: 0 0 auto;
   width: 76px;
