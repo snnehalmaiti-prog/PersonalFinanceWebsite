@@ -4022,14 +4022,37 @@
         document.getElementById("rec-payment-method").innerHTML = pmOpts;
         fillRecCategories();
       }
+      // Rank the current type's top-level categories by how often past records
+      // used them, returning the ids of the three most-used (most first). Ties
+      // and unused categories are simply left out.
+      function topUsedCategoryIds(cats, t) {
+        var allowed = {};
+        cats.forEach(function (c) { allowed[c.id] = true; });
+        var counts = {};
+        (dashExpState.records || []).forEach(function (r) {
+          if (r.type !== t || !r.category_id || !allowed[r.category_id]) return;
+          counts[r.category_id] = (counts[r.category_id] || 0) + 1;
+        });
+        return Object.keys(counts)
+          .sort(function (a, b) { return counts[b] - counts[a]; })
+          .slice(0, 3);
+      }
       function fillRecCategories() {
         var t = dashExpState.recType;
         var cats = dashExpState.categories.filter(function (c) {
           return c.type === t && !c.parent_id;
         });
-        var opts = '<option value="">— choose —</option>' + cats.map(function (c) {
-          return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+        var catById = {};
+        cats.forEach(function (c) { catById[c.id] = c; });
+        var recommended = topUsedCategoryIds(cats, t);
+        var recOpts = recommended.map(function (id) {
+          return '<option value="' + id + '">' + esc(catById[id].name) + '</option>';
         }).join("");
+        var opts = '<option value="">— choose —</option>'
+          + (recOpts ? '<optgroup label="Most used">' + recOpts + '</optgroup>' : '')
+          + '<optgroup label="All categories">' + cats.map(function (c) {
+          return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+        }).join("") + '</optgroup>';
         var sel = document.getElementById("rec-category");
         if (sel) {
           sel.innerHTML = opts;
