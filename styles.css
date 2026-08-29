@@ -3467,6 +3467,11 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 .wf-yp-head { display: grid; grid-template-columns: 24px 1fr 24px; align-items: center; margin-bottom: 8px; }
 .wf-yp-range { text-align: center; font-size: 0.86rem; font-weight: 700; color: var(--text);
   font-variant-numeric: tabular-nums; }
+/* The header year, clickable in month mode to drill up to a year grid. Looks
+   like the range label but reads as a button (hover affordance). */
+.wf-yp-yearbtn { border: 0; background: transparent; cursor: pointer; padding: 2px 8px;
+  border-radius: 6px; }
+.wf-yp-yearbtn:hover { background: var(--surface-alt); }
 .wf-yp-nav { border: 0; background: transparent; cursor: pointer; color: var(--muted);
   font-size: 1rem; line-height: 1; padding: 4px; border-radius: 6px; }
 .wf-yp-nav:hover { background: var(--surface-alt); color: var(--text); }

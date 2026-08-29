@@ -12898,17 +12898,30 @@
     // positioned popover would be cut off at the card edge. Placement happens
     // after it is in the DOM, once its real size is known — see _wfYpPlace.
 
+    // In month mode the header year is itself a button: clicking it drills UP to
+    // a decade-of-years grid (view "year"), and picking a year drops back to that
+    // year's months (view "month"). Non-month pickers keep their single decade
+    // grid. availYears is the set of years that have at least one usable month.
+    var view = "month";
+    var availYears = {};
+    if (monthMode) {
+      available.forEach(function (v) { if (String(v).length === 7) availYears[String(v).slice(0, 4)] = true; });
+      decade = Math.floor(year / 10) * 10;
+    }
+
     function paint() {
+      var yearGrid = !monthMode || view === "year";   // both show a decade of years
       var head = '<div class="wf-yp-head">' +
         '<button type="button" class="wf-yp-nav" data-yp-nav="-1" aria-label="' +
-          (monthMode ? "Previous year" : "Previous decade") + '">&lsaquo;</button>' +
-        '<span class="wf-yp-range">' +
-          (monthMode ? year : decade + " &ndash; " + (decade + 9)) + '</span>' +
+          (yearGrid ? "Previous decade" : "Previous year") + '">&lsaquo;</button>' +
+        (monthMode && view === "month"
+          ? '<button type="button" class="wf-yp-range wf-yp-yearbtn" data-yp-toyear="1" aria-label="Choose year">' + year + '</button>'
+          : '<span class="wf-yp-range">' + decade + " &ndash; " + (decade + 9) + '</span>') +
         '<button type="button" class="wf-yp-nav" data-yp-nav="1" aria-label="' +
-          (monthMode ? "Next year" : "Next decade") + '">&rsaquo;</button>' +
+          (yearGrid ? "Next decade" : "Next year") + '">&rsaquo;</button>' +
         '</div>';
       var cells = "";
-      if (monthMode) {
+      if (monthMode && view === "month") {
         for (var m = 1; m <= 12; m++) {
           var key = year + "-" + (m < 10 ? "0" : "") + m;
           var hasM = available.indexOf(key) !== -1;
@@ -12916,6 +12929,17 @@
             (hasM ? "" : " is-disabled") + (key === current ? " is-selected" : "") + '"' +
             (hasM ? ' data-yp-year="' + key + '"' : ' disabled aria-disabled="true"') +
             '>' + WF_YP_MONTHS[m - 1] + '</button>';
+        }
+      } else if (monthMode) {
+        // Year sub-grid: clicking a year navigates to its months (it does not
+        // pick a value yet). Years with no usable month are disabled.
+        for (var yr = decade; yr <= decade + 9; yr++) {
+          var yrs = String(yr);
+          var hasY = !!availYears[yrs];
+          cells += '<button type="button" class="wf-yp-year' +
+            (hasY ? "" : " is-disabled") + (yr === year ? " is-selected" : "") + '"' +
+            (hasY ? ' data-yp-goyear="' + yrs + '"' : ' disabled aria-disabled="true"') +
+            '>' + yrs + '</button>';
         }
       } else {
         for (var y = decade; y <= decade + 9; y++) {
@@ -12931,8 +12955,17 @@
       Array.prototype.forEach.call(pop.querySelectorAll("[data-yp-nav]"), function (b) {
         b.addEventListener("click", function () {
           var step = Number(b.getAttribute("data-yp-nav"));
-          if (monthMode) year += step; else decade += step * 10;
+          if (yearGrid) decade += step * 10; else year += step;
           paint();
+        });
+      });
+      var toYear = pop.querySelector("[data-yp-toyear]");
+      if (toYear) toYear.addEventListener("click", function () {
+        decade = Math.floor(year / 10) * 10; view = "year"; paint();
+      });
+      Array.prototype.forEach.call(pop.querySelectorAll("[data-yp-goyear]"), function (b) {
+        b.addEventListener("click", function () {
+          year = Number(b.getAttribute("data-yp-goyear")); view = "month"; paint();
         });
       });
       Array.prototype.forEach.call(pop.querySelectorAll("[data-yp-year]"), function (b) {
