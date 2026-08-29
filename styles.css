@@ -1493,6 +1493,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .sheet-row-name::placeholder { color: var(--muted); font-weight: 400; }
 .sheet-name-input:focus,
 .sheet-row-name:focus { outline: 2px solid var(--sky); border-color: transparent; }
+
+/* ACCOUNT VALUE range picker: a start/end month pair shown when Range is on. */
+.pvc-range-controls { display: inline-flex; align-items: center; gap: 6px; }
+.pvc-range-sep { color: var(--muted); font-size: 0.8rem; }
 .equity-link-row input.header-row-input {
   flex: 0 0 auto;
   width: 76px;
