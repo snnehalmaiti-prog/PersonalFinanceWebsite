@@ -351,6 +351,30 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
   ok(afterAll.allActive && afterAll.rcHidden,
      "R6 All time exits range mode and hides its controls", afterAll);
 
+  // ── The month grid's year header drills up to a decade grid ──────────────
+  const drill = await p.evaluate(() => {
+    const btn = document.getElementById("pvc-month").__wfYpBtn;
+    btn.click();                                              // open month grid
+    const yearHeader = document.querySelector(".wf-yp-pop .wf-yp-yearbtn");
+    const hadYearBtn = !!yearHeader;
+    yearHeader.click();                                       // drill up to year grid
+    const yearCells = [...document.querySelectorAll(".wf-yp-pop [data-yp-goyear]")].map((b) => b.textContent.trim());
+    const rangeLabel = (document.querySelector(".wf-yp-pop .wf-yp-range") || {}).textContent || "";
+    const target = document.querySelector(".wf-yp-pop [data-yp-goyear]");
+    const pickedYear = target.getAttribute("data-yp-goyear");
+    target.click();                                           // back to that year's months
+    const monthCells = [...document.querySelectorAll(".wf-yp-pop [data-yp-year]")].map((b) => b.textContent.trim());
+    const headerAfter = (document.querySelector(".wf-yp-pop .wf-yp-yearbtn") || {}).textContent || "";
+    if (window.WfYearPicker) WfYearPicker.close();
+    return { hadYearBtn, yearCells, rangeLabel, pickedYear, monthCells, headerAfter };
+  });
+  ok(drill.hadYearBtn, "Y1 the month grid's year header is a button", drill);
+  ok(drill.yearCells.length > 0 && /\d{4}\s*.\s*\d{4}/.test(drill.rangeLabel),
+     "Y2 clicking it shows a decade grid of years", drill);
+  ok(drill.monthCells.length >= 1 && /^[A-Z][a-z]{2}$/.test(drill.monthCells[0]) &&
+     drill.headerAfter === drill.pickedYear,
+     "Y3 picking a year returns to that year's month grid", drill);
+
   ok(errs.length === 0, "no page errors", errs.slice(0, 3));
 
   await b.close();
