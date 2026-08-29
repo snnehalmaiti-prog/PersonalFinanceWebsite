@@ -310,6 +310,47 @@ const ok = (c, n, d) => { if (c) { pass++; console.log("  PASS  " + n); }
      "prices run out — that fall is what dropping it looks like, and it would " +
      "be reported as a market loss and then an equal market gain", edge);
 
+  // ── Range mode: a start/end month pair windows the chart to that span ─────
+  const rangeState = await p.evaluate(() => {
+    document.getElementById("pvc-range").click();
+    const rc = document.getElementById("pvc-range-controls");
+    const startSel = document.getElementById("pvc-range-start");
+    const endSel = document.getElementById("pvc-range-end");
+    const opts = [...startSel.options].map((o) => o.value);   // newest first
+    const start = opts[opts.length - 1];                       // earliest
+    const end = opts[Math.floor((opts.length - 1) / 2)];       // a middle month
+    startSel.value = start; startSel.dispatchEvent(new Event("change", { bubbles: true }));
+    endSel.value = end; endSel.dispatchEvent(new Event("change", { bubbles: true }));
+    const c = window.__wfPortfolioValueChart;
+    const mb = (k) => { const y = +k.slice(0, 4), m = +k.slice(5, 7);
+      return { min: new Date(y, m - 1, 1).getTime(), max: new Date(y, m, 0, 23, 59, 59, 999).getTime() }; };
+    const monthBtn = document.getElementById("pvc-month").__wfYpBtn;
+    return {
+      rangeVisible: !rc.hidden,
+      rangeActive: document.getElementById("pvc-range").classList.contains("active"),
+      allActive: document.getElementById("pvc-alltime").classList.contains("active"),
+      monthHidden: !monthBtn || monthBtn.style.display === "none",
+      start, end, sMin: mb(start).min, sMax: mb(start).max, eMin: mb(end).min, eMax: mb(end).max,
+      min: c.scales.x.min, max: c.scales.x.max,
+      sub: (document.getElementById("pvc-period") || {}).textContent || "",
+    };
+  });
+  ok(rangeState.rangeVisible, "R1 the Range toggle reveals a start/end month pair", rangeState);
+  ok(rangeState.rangeActive && !rangeState.allActive, "R2 Range becomes the active mode", rangeState);
+  ok(rangeState.monthHidden, "R3 the single-month picker is hidden in range mode", rangeState);
+  ok(rangeState.min >= rangeState.sMin - 1 && rangeState.min <= rangeState.sMax + 1 &&
+     rangeState.max >= rangeState.eMin - 1 && rangeState.max <= rangeState.eMax + 1,
+     "R4 the chart window spans the chosen start-to-end months", rangeState);
+  ok(/^FROM .+ TO .+$/.test(rangeState.sub), "R5 the subtitle names the start and end months", rangeState);
+
+  const afterAll = await p.evaluate(() => {
+    document.getElementById("pvc-alltime").click();
+    return { rcHidden: document.getElementById("pvc-range-controls").hidden,
+             allActive: document.getElementById("pvc-alltime").classList.contains("active") };
+  });
+  ok(afterAll.allActive && afterAll.rcHidden,
+     "R6 All time exits range mode and hides its controls", afterAll);
+
   ok(errs.length === 0, "no page errors", errs.slice(0, 3));
 
   await b.close();

@@ -11309,8 +11309,10 @@
   // choice survives a re-render — the chart is destroyed and rebuilt on every
   // portfolio switch and data refresh, so state kept on the chart object would
   // silently reset to All time under the user.
-  var __pvcAllTime = true;
-  var __pvcMonth = null;              // "YYYY-MM"
+  var __pvcMode = "all";              // "all" | "month" | "range"
+  var __pvcMonth = null;              // "YYYY-MM" (single-month mode)
+  var __pvcStart = null;              // "YYYY-MM" (range mode, start)
+  var __pvcEnd = null;                // "YYYY-MM" (range mode, end)
   var __pvcApply = null;              // set per render, reads that render's points
 
   // First and last instant of a month, so the window covers the whole of it
@@ -11323,20 +11325,40 @@
 
   (function bindPvcPeriodOnce() {
     var allBtn = document.getElementById("pvc-alltime");
+    var rangeBtn = document.getElementById("pvc-range");
     var sel = document.getElementById("pvc-month");
+    var startSel = document.getElementById("pvc-range-start");
+    var endSel = document.getElementById("pvc-range-end");
     if (!allBtn || !sel || allBtn.dataset.bound) return;
     allBtn.dataset.bound = "1";
     allBtn.addEventListener("click", function () {
-      // A toggle, not a one-way switch: pressing it while it is on reveals the
-      // month picker, which is the only way to reach a month once it is hidden.
-      __pvcAllTime = !__pvcAllTime;
-      if (__pvcAllTime) __pvcMonth = null;
+      // A toggle, not a one-way switch: pressing "All time" while it is already
+      // on reveals the single-month picker (the only way to reach a month once
+      // it is hidden); pressing it from any other mode returns to All time.
+      __pvcMode = (__pvcMode === "all") ? "month" : "all";
+      if (__pvcMode === "all") __pvcMonth = null;
+      if (__pvcApply) __pvcApply();
+    });
+    if (rangeBtn) rangeBtn.addEventListener("click", function () {
+      // Enter range mode (start/end default to the full span, set in __pvcApply),
+      // or leave it back to All time.
+      __pvcMode = (__pvcMode === "range") ? "all" : "range";
+      if (__pvcMode === "all") __pvcMonth = null;
       if (__pvcApply) __pvcApply();
     });
     sel.addEventListener("change", function () {
-      // Reaching the picker at all means All time is already off, and every
-      // option in it is a month.
-      if (sel.value) { __pvcAllTime = false; __pvcMonth = sel.value; }
+      if (sel.value) { __pvcMode = "month"; __pvcMonth = sel.value; }
+      if (__pvcApply) __pvcApply();
+    });
+    if (startSel) startSel.addEventListener("change", function () {
+      if (startSel.value) __pvcStart = startSel.value;
+      // Keep start ≤ end so the window never inverts.
+      if (__pvcEnd && __pvcStart > __pvcEnd) __pvcEnd = __pvcStart;
+      if (__pvcApply) __pvcApply();
+    });
+    if (endSel) endSel.addEventListener("change", function () {
+      if (endSel.value) __pvcEnd = endSel.value;
+      if (__pvcStart && __pvcEnd < __pvcStart) __pvcStart = __pvcEnd;
       if (__pvcApply) __pvcApply();
     });
   }());
@@ -11426,7 +11448,7 @@
         };
         if (full) {
           pvcPeriodEl.textContent = "OVER TIME";
-        } else if (!__pvcAllTime && __pvcMonth) {
+        } else if (__pvcMode === "month" && __pvcMonth) {
           // The calendar month, not the first and last point that happen to
           // exist: a month whose 1st is a Sunday still began on the 1st.
           var _b = _pvcMonthBounds(__pvcMonth);
@@ -11436,6 +11458,11 @@
           // repeating either is noise on a line this short.
           pvcPeriodEl.textContent = ("FROM " + _ord(_s) + " " + _long.format(_s) +
             " TO " + _ord(_e) + " " + _long.format(_e) + " " + _e.getFullYear()).toUpperCase();
+        } else if (__pvcMode === "range" && __pvcStart && __pvcEnd) {
+          // Range mode names the chosen start and end months directly.
+          var _mf = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
+          pvcPeriodEl.textContent = ("FROM " + _mf.format(new Date(_pvcMonthBounds(__pvcStart).min)) +
+            " TO " + _mf.format(new Date(_pvcMonthBounds(__pvcEnd).min))).toUpperCase();
         } else {
           pvcPeriodEl.textContent =
             "FROM " + (firstVis ? firstVis.x : new Date(lo)).getFullYear() +
@@ -11566,14 +11593,18 @@
     // that would show an empty chart.
     (function syncPvcPeriod() {
       var allBtn = document.getElementById("pvc-alltime");
+      var rangeBtn = document.getElementById("pvc-range");
       var sel = document.getElementById("pvc-month");
+      var startSel = document.getElementById("pvc-range-start");
+      var endSel = document.getElementById("pvc-range-end");
+      var rangeControls = document.getElementById("pvc-range-controls");
       if (!sel || !allBtn) return;
       var seen = {}, months = [];
       points.forEach(function (p) {
         var k = formatDateISO(p.x).slice(0, 7);
         if (!seen[k]) { seen[k] = true; months.push(k); }
       });
-      months.sort().reverse();
+      months.sort().reverse();   // newest first
       // Months only. "All time" is the BUTTON beside this, and having it in
       // here as well put the words on screen twice — once on the toggle and
       // once as the picker's own label.
@@ -11581,30 +11612,52 @@
         return '<option value="' + k + '">' + k + "</option>";
       }).join("");
       if (sel.innerHTML !== want) sel.innerHTML = want;
+      if (startSel && startSel.innerHTML !== want) startSel.innerHTML = want;
+      if (endSel && endSel.innerHTML !== want) endSel.innerHTML = want;
       // A month that has dropped out of range — a portfolio switch can do it —
       // falls back to All time rather than leaving the picker naming a period
       // the chart is not showing.
-      if (__pvcMonth && months.indexOf(__pvcMonth) === -1) {
-        __pvcMonth = null; __pvcAllTime = true;
+      if (__pvcMode === "month" && __pvcMonth && months.indexOf(__pvcMonth) === -1) {
+        __pvcMonth = null; __pvcMode = "all";
       }
       sel.value = __pvcMonth || "";
 
       __pvcApply = function () {
         var chart = window.__wfPortfolioValueChart;
-        allBtn.classList.toggle("active", __pvcAllTime);
-        // The picker names the month it will show, and is hidden entirely while
-        // All time is on — the same two-control arrangement NET WORTH · MONTHLY
-        // uses, so the header reads the same way on both cards.
+        allBtn.classList.toggle("active", __pvcMode === "all");
+        if (rangeBtn) rangeBtn.classList.toggle("active", __pvcMode === "range");
+
+        // Single-month picker: named and visible only in month mode.
         if (!__pvcMonth && months.length) sel.value = months[0];
         else if (__pvcMonth) sel.value = __pvcMonth;
         if (window.WfYearPicker) {
           WfYearPicker.attach(sel);
-          WfYearPicker.setHidden(sel, __pvcAllTime);
+          WfYearPicker.setHidden(sel, __pvcMode !== "month");
         }
+
+        // Range selects: default to the full span the first time range is
+        // entered, and re-clamp to still-available months after a data change.
+        if (__pvcMode === "range" && months.length) {
+          if (!__pvcStart || months.indexOf(__pvcStart) === -1) __pvcStart = months[months.length - 1];
+          if (!__pvcEnd || months.indexOf(__pvcEnd) === -1) __pvcEnd = months[0];
+          if (__pvcStart > __pvcEnd) { var _t = __pvcStart; __pvcStart = __pvcEnd; __pvcEnd = _t; }
+        }
+        if (startSel) startSel.value = __pvcStart || "";
+        if (endSel) endSel.value = __pvcEnd || "";
+        if (window.WfYearPicker) {
+          if (startSel) WfYearPicker.attach(startSel);
+          if (endSel) WfYearPicker.attach(endSel);
+        }
+        if (rangeControls) rangeControls.hidden = (__pvcMode !== "range");
+
         if (!chart) return;
-        if (__pvcAllTime || !__pvcMonth) {
-          resetChartXWindow(chart, pvcXMin, pvcXMax);
-        } else {
+        if (__pvcMode === "range" && __pvcStart && __pvcEnd) {
+          var bs = _pvcMonthBounds(__pvcStart), be = _pvcMonthBounds(__pvcEnd);
+          var lo = Math.min(bs.min, be.min), hi = Math.max(bs.max, be.max);
+          setChartXWindow(chart,
+            Math.max(lo, pvcXMin == null ? lo : pvcXMin),
+            Math.min(hi, pvcXMax == null ? hi : pvcXMax));
+        } else if (__pvcMode === "month" && __pvcMonth) {
           var b = _pvcMonthBounds(__pvcMonth);
           // Clamped to the plotted range: zoom limits are pinned to it, so an
           // unclamped window on the newest month would ask the chart to show
@@ -11612,6 +11665,8 @@
           setChartXWindow(chart,
             Math.max(b.min, pvcXMin == null ? b.min : pvcXMin),
             Math.min(b.max, pvcXMax == null ? b.max : pvcXMax));
+        } else {
+          resetChartXWindow(chart, pvcXMin, pvcXMax);
         }
         updatePvcReadout();
       };

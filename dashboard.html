@@ -334,7 +334,15 @@
           <button id="pvc-alltime" type="button" class="mic-dropdown-btn active">All time
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
           </button>
+          <button id="pvc-range" type="button" class="mic-dropdown-btn">Range</button>
           <select id="pvc-month" class="mic-dropdown-btn mic-year-sel" data-yp-mode="month" aria-label="Select month"></select>
+          <!-- Range mode: pick a start and end month; the chart shows that span.
+               Hidden until the Range toggle is on. -->
+          <span id="pvc-range-controls" class="pvc-range-controls" hidden>
+            <select id="pvc-range-start" class="mic-dropdown-btn mic-year-sel" data-yp-mode="month" aria-label="Start month"></select>
+            <span class="pvc-range-sep">to</span>
+            <select id="pvc-range-end" class="mic-dropdown-btn mic-year-sel" data-yp-mode="month" aria-label="End month"></select>
+          </span>
         </div>
         <p class="muted small" id="pvc-status" hidden></p>
         <div class="avc-chart-wrap">
