@@ -4652,3 +4652,63 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
   color: var(--muted);
   font-weight: 500;
 }
+
+/* ── Email → Expense inbox ──────────────────────────────────────────────── */
+.exp-inbox-badge {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.exp-inbox-wrap { padding: 4px 2px 24px; }
+.exp-inbox-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.exp-inbox-title { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+.exp-inbox-head p { margin: 2px 0 0; max-width: 60ch; }
+.exp-inbox-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.exp-inbox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.exp-inbox-item-main { min-width: 0; }
+.exp-inbox-item-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.exp-inbox-amt { font-size: 1.02rem; font-weight: 700; color: var(--text); }
+.exp-inbox-type {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-alt);
+}
+.exp-inbox-date { font-size: 0.75rem; color: var(--muted); }
+.exp-inbox-merchant { margin-top: 4px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-inbox-subject,
+.exp-inbox-from { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-inbox-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.exp-inbox-file { padding: 6px 14px; font-size: 0.82rem; }
+@media (max-width: 620px) {
+  .exp-inbox-item { flex-direction: column; align-items: stretch; }
+  .exp-inbox-actions { justify-content: flex-end; }
+}
