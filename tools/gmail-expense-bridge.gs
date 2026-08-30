@@ -15,15 +15,23 @@
  * cashback / deposit) are skipped, so only money-out alerts become pending
  * transactions.
  *
+ * ── The mail flow ──────────────────────────────────────────────────────────
+ * Bank/card alerts arrive at snnehalmaiti@gmail.com and are AUTO-FORWARDED to
+ * maitisnnehal@gmail.com. Install this script in maitisnnehal@gmail.com — the
+ * inbox that RECEIVES the forwarded alerts, which is also your Kosha login — so
+ * it reads them there and files them to your account. Because the script runs
+ * in the same Gmail you log into Kosha with, OWNER_EMAIL can stay "".
+ *
  * ── One-time setup ─────────────────────────────────────────────────────────
- * 1. Open https://script.google.com  (signed in as the inbox you want read —
- *    e.g. snnehalmaiti@gmail.com), New project, paste this file.
+ * 1. Open https://script.google.com  signed in as maitisnnehal@gmail.com (the
+ *    forwarding destination + your Kosha login). New project, paste this file.
  * 2. Fill in the CONFIG block below:
  *      FUNCTION_URL   your project's function URL
  *      INBOUND_SECRET the INBOUND_EMAIL_SECRET you set on the Edge Function
- *      OWNER_EMAIL    your Kosha login email (leave "" to use this account's
- *                     own address, which is correct when you log into Kosha
- *                     with the same Gmail this script runs in)
+ *      OWNER_EMAIL    leave "" — the active account (maitisnnehal@gmail.com) is
+ *                     your Kosha login, which is exactly the attribution address
+ *                     the Edge Function needs. Only set it if you ever run this
+ *                     script from a DIFFERENT Gmail than you log into Kosha with.
  *      SEARCH_QUERY   the Gmail search that selects your bank/card alerts
  * 3. Run `installTrigger` once (authorise it when prompted). It schedules
  *    `syncExpenses` to run every 15 minutes.
