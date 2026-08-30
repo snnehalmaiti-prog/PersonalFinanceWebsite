@@ -161,16 +161,17 @@ Deno.serve(async (req) => {
     });
   }
 
-  const blob = `${email.subject}\n${email.text}`;
+  // Parse from the CLEANED body, not the raw email: forwarding headers and
+  // tracking URLs carry stray numbers that otherwise get picked up as the amount.
+  const cleaned = cleanBody(email.text || "");
+  const blob = `${email.subject}\n${cleaned}`;
   const row = {
     user_id: userId,
     from_email: fromAddr,
     subject: email.subject.slice(0, 300),
-    // Full readable body — the card shows it so the user reads merchant/account
-    // off the email itself. Amount + date are the only parsed fields we rely on.
-    body_snippet: cleanBody(email.text || "").slice(0, 4000),
+    body_snippet: cleaned.slice(0, 4000),
     amount: parseAmount(blob),
-    merchant: parseMerchant(email.text, email.subject),
+    merchant: parseMerchant(cleaned, email.subject),
     txn_date: parseDate(blob),
     suggested_type: guessType(blob),
     source_account: parseSource(blob),

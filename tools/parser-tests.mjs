@@ -32,6 +32,20 @@ import {
   console.log("✓ cleanBody strips forwarding headers + tracking URL");
 }
 
+// Amount must come from the CLEANED body: a forwarded header time / tracking URL
+// carries stray numbers ("at 20:41", "...Rs9x...") that must not win over the
+// real "Rs.140.00". Parsing raw text here would wrongly yield 9.
+{
+  const raw = "---------- Forwarded message --------- From: Me <a@b.com> Date: Sun, 30 Aug 2026 at 20:41 Subject: Fwd: UPI txn To: <c@d.com> https://trkt.x/rs9zz?k=8 Dear Customer, Greetings from HDFC Bank! Rs.140.00 is debited from your account ending 0037 towards VPA paytm.s2f";
+  const rawAmount = parseAmount(raw);
+  const cleanAmount = parseAmount(cleanBody(raw));
+  if (cleanAmount !== 140) {
+    console.error(`✗ amount from cleaned body: expected 140, got ${cleanAmount}`);
+    process.exit(1);
+  }
+  console.log(`✓ amount from cleaned body = 140 (raw would give ${rawAmount})`);
+}
+
 // Each case: a real-world email body + only the fields we want to assert.
 // Omit a field to skip asserting it (e.g. merchant we don't fully trust yet).
 const CASES = [
