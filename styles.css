@@ -4703,6 +4703,18 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
   background: var(--surface-alt);
 }
 .exp-inbox-date { font-size: 0.75rem; color: var(--muted); }
+/* Soft "already recorded?" hint on a pending item that matches an existing
+   expense by amount + date. Amber, so it reads as a caution, not an error. */
+.exp-inbox-dup {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+  color: #9a6a00; background: #fbeecb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .exp-inbox-dup { color: #f0c869; background: #3a2f14; }
+}
+:root[data-theme="dark"] .exp-inbox-dup { color: #f0c869; background: #3a2f14; }
+.exp-inbox-item.is-dup { border-color: #e7c877; }
 .exp-inbox-merchant { margin-top: 4px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .exp-inbox-subject,
 .exp-inbox-from { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -4339,18 +4339,44 @@
           badge.hidden = n === 0;
         }
 
+        // A soft "already recorded?" hint: an existing expense record with the
+        // same amount and a txn date within a day of this pending item. It only
+        // flags — the user still decides — so an approximate match is fine, and
+        // matching on amount+date (not the bank's merchant string, which rarely
+        // equals the user's own note) keeps it from missing real duplicates.
+        var DAY_MS = 24 * 60 * 60 * 1000;
+        function isLikelyDuplicate(it) {
+          var amt = Number(it.amount);
+          if (!(amt > 0)) return false;
+          var d = it.txn_date || (it.received_at ? String(it.received_at).slice(0, 10) : "");
+          var dt = d ? new Date(d + "T00:00:00").getTime() : null;
+          var recs = dashExpState.records || [];
+          for (var i = 0; i < recs.length; i++) {
+            var r = recs[i];
+            if (Math.abs((Number(r.amount) || 0) - amt) > 0.01) continue;
+            if (dt != null && r.txn_date) {
+              var rt = new Date(String(r.txn_date) + "T00:00:00").getTime();
+              if (isFinite(rt) && Math.abs(rt - dt) > DAY_MS) continue;
+            }
+            return true;
+          }
+          return false;
+        }
+
         function itemHtml(it) {
           var when = it.txn_date || (it.received_at ? String(it.received_at).slice(0, 10) : "");
           var title = it.merchant || it.subject || "(no description)";
           var amt = it.amount != null ? money(it.amount) : "—";
           var typeTag = it.suggested_type === "income" ? "Income" : "Expense";
+          var dup = isLikelyDuplicate(it);
           return '' +
-            '<div class="exp-inbox-item" data-inbox-id="' + esc(it.id) + '">' +
+            '<div class="exp-inbox-item' + (dup ? " is-dup" : "") + '" data-inbox-id="' + esc(it.id) + '">' +
               '<div class="exp-inbox-item-main">' +
                 '<div class="exp-inbox-item-top">' +
                   '<span class="exp-inbox-amt">' + esc(amt) + '</span>' +
                   '<span class="exp-inbox-type">' + esc(typeTag) + '</span>' +
                   (when ? '<span class="exp-inbox-date">' + esc(when) + '</span>' : "") +
+                  (dup ? '<span class="exp-inbox-dup" title="An expense with this amount and date is already recorded. Dismiss this if it is the same one.">Already recorded?</span>' : "") +
                 '</div>' +
                 '<div class="exp-inbox-merchant">' + esc(title) + '</div>' +
                 (it.subject && it.subject !== title ? '<div class="exp-inbox-subject">' + esc(it.subject) + '</div>' : "") +
