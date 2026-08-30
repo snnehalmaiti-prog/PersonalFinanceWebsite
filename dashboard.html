@@ -4378,7 +4378,9 @@
                   (when ? '<span class="exp-inbox-date">' + esc(when) + '</span>' : "") +
                   (dup ? '<span class="exp-inbox-dup" title="An expense with this amount and date is already recorded. Dismiss this if it is the same one.">Already recorded?</span>' : "") +
                 '</div>' +
-                '<div class="exp-inbox-merchant">' + esc(title) + '</div>' +
+                '<div class="exp-inbox-merchant">' + esc(title) +
+                  (it.source_account ? ' <span class="exp-inbox-src">' + esc(it.source_account) + '</span>' : "") +
+                '</div>' +
                 (it.subject && it.subject !== title ? '<div class="exp-inbox-subject">' + esc(it.subject) + '</div>' : "") +
                 (it.from_email ? '<div class="exp-inbox-from">from ' + esc(it.from_email) + '</div>' : "") +
               '</div>' +
@@ -4414,11 +4416,14 @@
           var it = find(id);
           if (!it || typeof openRecModal !== "function") return;
           var today = new Date().toISOString().slice(0, 10);
+          // Note = merchant, plus the source account/card tag ("Account **37").
+          var noteParts = [it.merchant || it.subject || "", it.source_account || ""]
+            .map(function (s) { return String(s).trim(); }).filter(Boolean);
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
             txn_date: it.txn_date || today,
-            note: it.merchant || it.subject || "",
+            note: noteParts.join(" · "),
             account_id: (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
             subcategory_id: "",
