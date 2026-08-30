@@ -939,8 +939,8 @@
         <div class="exp-subtabs" role="tablist" aria-label="Expense sections">
           <button type="button" class="exp-subtab active" data-dash-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
-          <button type="button" class="exp-subtab" data-dash-exp-subtab="inbox" role="tab" aria-selected="false">Inbox<span class="exp-inbox-badge" id="exp-inbox-badge" hidden>0</span></button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
+          <button type="button" class="exp-subtab" data-dash-exp-subtab="inbox" role="tab" aria-selected="false">Pending Transactions<span class="exp-inbox-badge" id="exp-inbox-badge" hidden>0</span></button>
           <button type="button" class="exp-subtab exp-subtab-charts" data-dash-exp-subtab="charts" role="tab" aria-selected="false">Charts</button>
         </div>
         <div class="exp-top-bar-center">
@@ -1111,8 +1111,8 @@
         <div class="exp-inbox-wrap">
           <div class="exp-inbox-head">
             <div>
-              <div class="exp-inbox-title">Email inbox</div>
-              <p class="muted small" id="exp-inbox-sub">Expenses parsed from your forwarded emails. Categorise each one to file it — filed items leave this list.</p>
+              <div class="exp-inbox-title">Pending Transactions</div>
+              <p class="muted small" id="exp-inbox-sub">Expenses read from your Gmail transaction alerts. Categorise each one to file it — filed items leave this list.</p>
             </div>
             <button type="button" class="rec-action-btn" id="exp-inbox-refresh">Refresh</button>
           </div>
@@ -1391,7 +1391,7 @@
             b.classList.toggle("active", active);
             b.setAttribute("aria-selected", String(active));
           });
-          ["accounts", "records", "inbox", "analytics", "charts"].forEach(function (k) {
+          ["accounts", "records", "analytics", "inbox", "charts"].forEach(function (k) {
             var p = document.getElementById("dash-exp-subpanel-" + k);
             if (p) p.hidden = (k !== key);
           });
