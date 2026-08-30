@@ -4404,7 +4404,7 @@
                   (dup ? '<span class="exp-inbox-dup" title="An expense with this amount and date is already recorded. Dismiss this if it is the same one.">Already recorded?</span>' : "") +
                 '</div>' +
                 (subj ? '<div class="exp-inbox-subject">' + esc(subj) + '</div>' : "") +
-                (body ? '<div class="exp-inbox-body">' + esc(body) + '</div>' : "") +
+                (body ? '<div class="exp-inbox-body" title="' + esc(body) + '">' + esc(body) + '</div>' : "") +
                 (it.from_email ? '<div class="exp-inbox-from">from ' + esc(it.from_email) + '</div>' : "") +
               '</div>' +
               '<div class="exp-inbox-actions">' +
