@@ -71,6 +71,19 @@ function parseMerchant(text: string, subject: string): string {
   return (subject || "").trim().slice(0, 80);
 }
 
+// ── Which account / card the money came from, as "Account **37" / "Card **70".
+// Banks mask all but the last few digits ("account 0037", "Credit Card ending
+// 3370", "a/c XXXX1234"); we keep the last two for a short, safe note tag.
+function parseSource(text: string): string {
+  if (!text) return "";
+  // Card first (so "Credit Card" isn't mistaken for an account).
+  let m = text.match(/\b(?:credit|debit)?\s*card\b[^0-9]{0,20}(\d{2,4})/i);
+  if (m) return "Card **" + m[1].slice(-2);
+  m = text.match(/\b(?:account|a\/c|acct)\b[^0-9]{0,15}(\d{2,4})/i);
+  if (m) return "Account **" + m[1].slice(-2);
+  return "";
+}
+
 // ── Credited / received → income; otherwise expense. ─────────────────────────
 function guessType(text: string): "expense" | "income" {
   return /\b(credited|received|refund|deposit|salary|cashback)\b/i.test(text || "")
@@ -191,6 +204,7 @@ Deno.serve(async (req) => {
     merchant: parseMerchant(email.text, email.subject),
     txn_date: parseDate(blob),
     suggested_type: guessType(blob),
+    source_account: parseSource(blob),
     status: "pending",
   };
 

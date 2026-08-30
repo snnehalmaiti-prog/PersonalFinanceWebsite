@@ -20,10 +20,15 @@ CREATE TABLE IF NOT EXISTS expense_email_inbox (
   merchant text DEFAULT '',                -- parsed merchant / payee guess
   txn_date date,                           -- parsed transaction date (NULL → email date)
   suggested_type text DEFAULT 'expense',   -- expense | income (best guess)
+  source_account text DEFAULT '',          -- source acct/card tag, e.g. "Account **37" / "Card **70"
   status text NOT NULL DEFAULT 'pending',  -- pending | filed | dismissed
   record_id uuid REFERENCES expense_records(id) ON DELETE SET NULL, -- set once filed
   created_at timestamptz DEFAULT now()
 );
+
+-- Added after first release — brings existing tables up to date (no-op if present).
+ALTER TABLE expense_email_inbox
+  ADD COLUMN IF NOT EXISTS source_account text DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_expense_email_inbox_user_status
   ON expense_email_inbox(user_id, status, received_at DESC);

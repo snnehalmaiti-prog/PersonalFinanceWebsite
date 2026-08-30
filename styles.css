@@ -4716,6 +4716,7 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 :root[data-theme="dark"] .exp-inbox-dup { color: #f0c869; background: #3a2f14; }
 .exp-inbox-item.is-dup { border-color: #e7c877; }
 .exp-inbox-merchant { margin-top: 4px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-inbox-src { margin-left: 6px; font-size: 0.72rem; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
 .exp-inbox-subject,
 .exp-inbox-from { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .exp-inbox-actions { display: flex; gap: 8px; flex-shrink: 0; }
