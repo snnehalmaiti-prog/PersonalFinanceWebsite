@@ -99,14 +99,20 @@ function parseDate(text: string): string | null {
 
 // ── Pull the email fields out of whatever the provider POSTed. ───────────────
 // Supports multipart/form-data (SendGrid, Mailgun) and JSON payloads.
+//
+// `owner` is an OPTIONAL explicit account email used for attribution. A
+// provider that forwards raw mail leaves it blank and we attribute by sender.
+// A trusted bridge that runs AS the user — e.g. the Gmail Apps Script — sets it
+// to that user's login email, because there the sender is the bank, not them.
 async function readEmail(req: Request): Promise<{
-  from: string; subject: string; text: string;
+  from: string; owner: string; subject: string; text: string;
 }> {
   const ctype = req.headers.get("content-type") || "";
   if (ctype.includes("application/json")) {
     const j = await req.json();
     return {
       from: j.from || j.sender || j.From || "",
+      owner: j.owner || j.account_email || j.accountEmail || "",
       subject: j.subject || j.Subject || "",
       text: j.text || j["body-plain"] || j.plain || j.html || j.body || "",
     };
@@ -116,6 +122,7 @@ async function readEmail(req: Request): Promise<{
   const g = (k: string) => (form.get(k) ? String(form.get(k)) : "");
   return {
     from: g("from") || g("sender") || g("From"),
+    owner: g("owner") || g("account_email"),
     subject: g("subject") || g("Subject"),
     text: g("text") || g("body-plain") || g("stripped-text") || g("html") || g("body-html"),
   };
@@ -141,16 +148,19 @@ Deno.serve(async (req) => {
   }
 
   const fromAddr = extractEmail(email.from);
-  if (!fromAddr) return new Response("No sender", { status: 422 });
+  // Attribution address: the explicit owner (trusted bridge) if given, else the
+  // sender. The real sender is still stored in from_email for context.
+  const ownerAddr = extractEmail(email.owner) || fromAddr;
+  if (!ownerAddr) return new Response("No sender", { status: 422 });
 
   // Attribute the email to the WealthFolio user whose login address matches the
-  // forwarding sender. Paginate defensively for larger user tables.
+  // attribution address. Paginate defensively for larger user tables.
   let userId: string | null = null;
   for (let page = 1; page <= 20 && !userId; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
     if (error) return new Response("User lookup failed", { status: 500 });
     const hit = data.users.find(
-      (u) => (u.email || "").toLowerCase() === fromAddr,
+      (u) => (u.email || "").toLowerCase() === ownerAddr,
     );
     if (hit) userId = hit.id;
     if (data.users.length < 200) break;

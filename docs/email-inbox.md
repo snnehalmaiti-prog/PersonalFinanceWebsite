@@ -7,12 +7,14 @@ real records and disappear from the inbox.
 ## How it works
 
 ```
- bank / card alert email
-        │  (you forward or auto-forward it)
+ bank / card alert email in your inbox
+        │
+        │  Path A: a Gmail Apps Script reads your labelled mail
+        │  Path B: you forward it to an inbound-email provider
         ▼
- inbound-email provider  ──POST──▶  Supabase Edge Function `email-inbox`
- (SendGrid / Mailgun / …)            │  parses amount, merchant, date
-                                     │  matches sender → your user account
+ bridge / provider  ──POST──▶  Supabase Edge Function `email-inbox`
+                                     │  parses amount, merchant, date
+                                     │  matches you → your user account
                                      ▼
                           expense_email_inbox  (status = 'pending')
                                      │
@@ -50,7 +52,32 @@ Its public URL is:
 https://<project-ref>.functions.supabase.co/email-inbox?secret=<INBOUND_EMAIL_SECRET>
 ```
 
-### 3. Point an inbound-email provider at that URL
+### 3. Choose how emails reach the function
+
+You have two paths. **Pick one.**
+
+#### Path A — Gmail as the mailbox (no domain needed) ⭐ simplest
+
+Use a Google Apps Script that runs inside your own Gmail account, finds your
+transaction emails, and POSTs them to the function. No domain, no MX records, no
+inbound-email provider.
+
+1. In Gmail, create a filter that applies a label (e.g. **Expenses**) to your
+   bank / card / UPI alert emails. (Settings → Filters and Blocked Addresses →
+   Create a new filter.)
+2. Open <https://script.google.com> → **New project** → paste
+   [`google-apps-script/wealthfolio-email-inbox.gs`](../google-apps-script/wealthfolio-email-inbox.gs).
+3. Fill in `FUNCTION_URL`, `INBOUND_SECRET`, and `SOURCE_LABEL` at the top.
+4. Run `setup()` once and grant the Gmail permission. It installs a trigger that
+   runs every 10 minutes.
+
+The script sends your Gmail address as the `owner` field, so the function
+attributes each email to your account even though the *sender* is your bank.
+Processed emails get a `WF-Filed` label so they're never sent twice; nothing is
+deleted. **With this path you do not need step 4 below** — you're not forwarding,
+the script reads your labelled mail directly.
+
+#### Path B — an inbound-email provider (needs a domain)
 
 Use any service that turns received email into an HTTP webhook:
 
@@ -60,7 +87,7 @@ Use any service that turns received email into an HTTP webhook:
 
 The function accepts both multipart/form-data (SendGrid, Mailgun) and JSON.
 
-### 4. Forward your transaction emails there
+### 4. Forward your transaction emails there (Path B only)
 
 Give the provider an address (e.g. `receipts@yourdomain.com`) and forward — or
 set a Gmail/Outlook auto-forward filter for — your bank and card alert emails to
