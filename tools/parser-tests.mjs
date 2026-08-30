@@ -16,8 +16,21 @@
 // ============================================================================
 
 import {
-  parseAmount, parseMerchant, parseSource, guessType, parseDate,
+  parseAmount, parseMerchant, parseSource, guessType, parseDate, cleanBody,
 } from "../supabase/functions/email-inbox/parsers.mjs";
+
+// cleanBody: forwarding headers + tracking URL should reduce to the alert text.
+{
+  const noisy = "---------- Forwarded message --------- From: Snnehal Maiti <snnehal.kr.maiti@gmail.com> Date: Sun, 30 Aug 2026 at 20:41 Subject: Fwd: UPI txn To: <maitisnnehal@gmail.com> <https://trkt.aclemails.com/v1/r/GSvohUqYWnGa9?x=1%2B2> Dear Customer, Rs.140.00 is debited from your account ending 0037 towards VPA paytm.s2f";
+  const got = cleanBody(noisy);
+  const want = "Dear Customer, Rs.140.00 is debited from your account ending 0037 towards VPA paytm.s2f";
+  if (got !== want) {
+    console.error("✗ cleanBody");
+    console.error(`    expected ${JSON.stringify(want)}\n    got      ${JSON.stringify(got)}`);
+    process.exit(1);
+  }
+  console.log("✓ cleanBody strips forwarding headers + tracking URL");
+}
 
 // Each case: a real-world email body + only the fields we want to assert.
 // Omit a field to skip asserting it (e.g. merchant we don't fully trust yet).

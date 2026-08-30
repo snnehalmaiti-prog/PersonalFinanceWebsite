@@ -87,6 +87,21 @@ function parseDate(text: string): string | null {
   return null;
 }
 
+// Strip forwarding headers and tracking URLs so we store only the real alert.
+function cleanBody(s: string): string {
+  if (!s) return "";
+  return s
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/-+\s*Forwarded message\s*-+/gi, " ")
+    .replace(/From:[\s\S]*?To:\s*<[^>]*>/gi, " ")
+    .replace(/^\s*(From|To|Date|Subject|Sent|Cc|Reply-To)\s*:.*$/gim, " ")
+    .replace(/[<>]/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
 async function readEmail(req: Request): Promise<{
   from: string; owner: string; subject: string; text: string;
 }> {
@@ -153,8 +168,7 @@ Deno.serve(async (req) => {
     subject: email.subject.slice(0, 300),
     // Full readable body — the card shows it so the user reads merchant/account
     // off the email itself. Amount + date are the only parsed fields we rely on.
-    body_snippet: (email.text || "").replace(/[ \t]+/g, " ")
-      .replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000),
+    body_snippet: cleanBody(email.text || "").slice(0, 4000),
     amount: parseAmount(blob),
     merchant: parseMerchant(email.text, email.subject),
     txn_date: parseDate(blob),
