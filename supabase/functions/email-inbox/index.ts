@@ -118,7 +118,11 @@ Deno.serve(async (req) => {
     user_id: userId,
     from_email: fromAddr,
     subject: email.subject.slice(0, 300),
-    body_snippet: (email.text || "").replace(/\s+/g, " ").trim().slice(0, 1000),
+    // Store the full readable body — the card shows it so the human reads the
+    // merchant/account off the email itself. Amount + date are the only fields
+    // we rely on parsing; merchant/source stay as cheap best-effort hints.
+    body_snippet: (email.text || "").replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000),
     amount: parseAmount(blob),
     merchant: parseMerchant(email.text, email.subject),
     txn_date: parseDate(blob),
