@@ -50,11 +50,13 @@
  */
 
 var CONFIG = {
-  // https://<project-ref>.functions.supabase.co/email-inbox
-  FUNCTION_URL: "https://jotirmhoohsquqvungrm.functions.supabase.co/email-inbox",
+  // Live Kosha Edge Function URL. The function is deployed under the name
+  // `smart-handler` (not `email-inbox`), so the path ends in /smart-handler.
+  FUNCTION_URL: "https://jotirmhoohsquqvungrm.supabase.co/functions/v1/smart-handler",
 
-  // The shared secret you set with:  supabase secrets set INBOUND_EMAIL_SECRET=...
-  INBOUND_SECRET: "PUT-YOUR-INBOUND-EMAIL-SECRET-HERE",
+  // The INBOUND_EMAIL_SECRET set on the Edge Function (Supabase → Edge
+  // Functions → Secrets). Must match exactly.
+  INBOUND_SECRET: "6641219bbb2c7ff830c40f1aa75e2399aa1d35d2b7e6f03f",
 
   // Your Kosha LOGIN email, for attribution. Leave "" to use this Gmail
   // account's own address (correct when they are the same).
