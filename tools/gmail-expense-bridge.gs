@@ -97,10 +97,16 @@ function syncExpenses() {
   }
   var owner = CONFIG.OWNER_EMAIL || Session.getActiveUser().getEmail() || "";
   var label = getOrCreateLabel_(CONFIG.PROCESSED_LABEL);
-  var query = CONFIG.SEARCH_QUERY + ' -label:"' + CONFIG.PROCESSED_LABEL + '"';
 
+  // Dedup at the MESSAGE level, not the thread level. Gmail threads messages by
+  // subject, and every bank alert shares one subject ("A payment was made using
+  // your Credit Card"), so they collapse into a single thread. A thread-label
+  // exclusion would skip every alert after the first. Instead we remember each
+  // sent message's own Gmail id and skip only those.
+  var sentIds = loadSentIds_();
+  var query = CONFIG.SEARCH_QUERY;               // no -label: exclusion
   var threads = GmailApp.search(query, 0, 100);
-  var sent = 0, skipped = 0, failed = 0;
+  var sent = 0, skipped = 0, failed = 0, seen = 0;
 
   for (var i = 0; i < threads.length && sent < CONFIG.MAX_PER_RUN; i++) {
     var thread = threads[i];
@@ -108,12 +114,15 @@ function syncExpenses() {
     var anySent = false;
     for (var m = 0; m < msgs.length; m++) {
       var msg = msgs[m];
+      var id = msg.getId();
+      if (sentIds[id]) { seen++; continue; }      // already pushed this message
+
       var subject = msg.getSubject() || "";
       var body = msg.getPlainBody() || "";
       var blob = subject + "\n" + body;
 
       // Expenses only: drop money-in alerts.
-      if (CONFIG.INCOME_RE.test(blob)) { skipped++; continue; }
+      if (CONFIG.INCOME_RE.test(blob)) { sentIds[id] = 1; skipped++; continue; }
 
       var ok = postEmail_({
         from: msg.getFrom() || "",
@@ -121,16 +130,38 @@ function syncExpenses() {
         subject: subject,
         text: body.slice(0, 8000),
       });
-      if (ok) { sent++; anySent = true; } else { failed++; }
+      if (ok) { sentIds[id] = 1; sent++; anySent = true; } else { failed++; }
       if (sent >= CONFIG.MAX_PER_RUN) break;
     }
-    // Mark the whole thread processed once we've handled its messages, so the
-    // next run's -label: exclusion skips it. (Bank alerts are one-per-thread.)
-    if (anySent || msgs.length) thread.addLabel(label);
+    // Label the thread as a visual "handled" marker (not used for exclusion).
+    if (anySent) thread.addLabel(label);
   }
 
-  Logger.log("syncExpenses: sent=%s skipped(income)=%s failed=%s owner=%s",
-    sent, skipped, failed, owner);
+  saveSentIds_(sentIds);
+  Logger.log("syncExpenses: sent=%s already=%s skipped(income)=%s failed=%s owner=%s",
+    sent, seen, skipped, failed, owner);
+}
+
+// ── Remember which individual messages we've already pushed ──────────────────
+// Stored as a JSON map of Gmail messageId -> 1 in Script Properties, capped so
+// it can't grow without bound (oldest ids are dropped first).
+var _SENT_KEY = "koshaSentMsgIds";
+var _SENT_CAP = 800;
+
+function loadSentIds_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(_SENT_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function saveSentIds_(map) {
+  var ids = Object.keys(map);
+  if (ids.length > _SENT_CAP) {           // keep the most recent _SENT_CAP ids
+    var trimmed = {};
+    ids.slice(ids.length - _SENT_CAP).forEach(function (k) { trimmed[k] = 1; });
+    map = trimmed;
+  }
+  PropertiesService.getScriptProperties().setProperty(_SENT_KEY, JSON.stringify(map));
 }
 
 /** POST one email to the Edge Function. Returns true on 2xx. */
