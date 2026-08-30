@@ -41,3 +41,35 @@ CREATE POLICY "own_select" ON expense_email_inbox FOR SELECT USING (auth.uid() =
 CREATE POLICY "own_insert" ON expense_email_inbox FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "own_update" ON expense_email_inbox FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "own_delete" ON expense_email_inbox FOR DELETE USING (auth.uid() = user_id);
+
+-- ── Retention: keep only the current + previous calendar month ──────────────
+-- The inbox is a transient staging area (categorised rows already live on as
+-- real expense_records), so old parsed emails needn't be kept. This trigger
+-- prunes anything older than the first day of LAST month whenever new rows are
+-- inserted — no pg_cron/extension needed, and inserts happen continuously as
+-- alerts arrive. Cutoff is by received_at (always set), falling back to nothing
+-- since that column defaults to now().
+CREATE OR REPLACE FUNCTION prune_expense_email_inbox()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM expense_email_inbox
+   WHERE received_at < date_trunc('month', now()) - interval '1 month';
+  RETURN NULL;   -- AFTER trigger; return value is ignored
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_prune_expense_email_inbox ON expense_email_inbox;
+CREATE TRIGGER trg_prune_expense_email_inbox
+  AFTER INSERT ON expense_email_inbox
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION prune_expense_email_inbox();
+
+-- Optional stricter variant: prune daily even when NO new emails arrive.
+-- Requires the pg_cron extension (Supabase → Database → Extensions → pg_cron).
+--   CREATE EXTENSION IF NOT EXISTS pg_cron;
+--   SELECT cron.schedule('prune_expense_email_inbox', '20 0 * * *',
+--     $$DELETE FROM expense_email_inbox
+--        WHERE received_at < date_trunc('month', now()) - interval '1 month'$$);
