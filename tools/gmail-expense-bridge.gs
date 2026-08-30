@@ -23,19 +23,26 @@
  * in the same Gmail you log into Kosha with, OWNER_EMAIL can stay "".
  *
  * ── One-time setup ─────────────────────────────────────────────────────────
- * 1. Open https://script.google.com  signed in as maitisnnehal@gmail.com (the
+ * 1. In maitisnnehal@gmail.com, LABEL your forwarded alerts. Gmail →
+ *    Settings → Filters and Blocked Addresses → Create a new filter that
+ *    matches your bank/card alerts (by from:, or subject keywords like
+ *    "debited"/"spent"), tick "Apply the label" → create a label named
+ *    "Expenses". Because this reads by that label, it works no matter which
+ *    account forwarded the mail and ignores everything else. (Tip: also tick
+ *    "Also apply to matching conversations" to label existing ones.)
+ * 2. Open https://script.google.com  signed in as maitisnnehal@gmail.com (the
  *    forwarding destination + your Kosha login). New project, paste this file.
- * 2. Fill in the CONFIG block below:
+ * 3. Fill in the CONFIG block below:
  *      FUNCTION_URL   your project's function URL
  *      INBOUND_SECRET the INBOUND_EMAIL_SECRET you set on the Edge Function
  *      OWNER_EMAIL    leave "" — the active account (maitisnnehal@gmail.com) is
  *                     your Kosha login, which is exactly the attribution address
  *                     the Edge Function needs. Only set it if you ever run this
  *                     script from a DIFFERENT Gmail than you log into Kosha with.
- *      SEARCH_QUERY   the Gmail search that selects your bank/card alerts
- * 3. Run `installTrigger` once (authorise it when prompted). It schedules
+ *      SEARCH_QUERY   leave as 'label:Expenses' to read the label from step 1
+ * 4. Run `installTrigger` once (authorise it when prompted). It schedules
  *    `syncExpenses` to run every 15 minutes.
- * 4. Optional: run `syncExpenses` once by hand to backfill and verify.
+ * 5. Optional: run `syncExpenses` once by hand to backfill and verify.
  *
  * Nothing here stores your data anywhere except the Kosha inbox row it creates;
  * processed emails are marked with a Gmail label so they are never sent twice.
@@ -53,14 +60,14 @@ var CONFIG = {
   // account's own address (correct when they are the same).
   OWNER_EMAIL: "",
 
-  // Which emails are transaction alerts. Tune to your banks/cards. The label
-  // exclusion (added automatically below) keeps already-sent mail out.
-  //   Tips: add senders with  from:(alerts@yourbank.com OR cards@yourbank.com)
-  SEARCH_QUERY:
-    'newer_than:30d ' +
-    '(subject:(debited OR spent OR "you paid" OR purchase OR transaction OR "debit alert") ' +
-    'OR "has been debited" OR "spent on your" OR "was debited") ' +
-    '-subject:(credited OR statement OR OTP OR e-statement OR newsletter)',
+  // Which emails to read. We select by a Gmail LABEL you apply to your
+  // forwarded alerts (see setup step 1) rather than by keywords, so it works no
+  // matter which account forwarded them and ignores all unrelated mail. The
+  // "already-sent" label exclusion is added automatically below.
+  //   Keyword alternative (no label needed):
+  //     'newer_than:30d (subject:(debited OR spent OR "you paid" OR purchase) '
+  //       + 'OR "has been debited" OR "was debited")'
+  SEARCH_QUERY: 'label:Expenses',
 
   // Applied to every processed thread so it is never re-sent.
   PROCESSED_LABEL: "Kosha/Sent",
