@@ -113,17 +113,18 @@ Deno.serve(async (req) => {
     });
   }
 
-  const blob = `${email.subject}\n${email.text}`;
+  // Parse from the CLEANED body, not the raw email: forwarding headers and
+  // tracking URLs carry stray numbers (times, ids) that otherwise get picked up
+  // as the amount. Cleaning first leaves just the real alert text.
+  const cleaned = cleanBody(email.text || "");
+  const blob = `${email.subject}\n${cleaned}`;
   const row = {
     user_id: userId,
     from_email: fromAddr,
     subject: email.subject.slice(0, 300),
-    // Store the full readable body — the card shows it so the human reads the
-    // merchant/account off the email itself. Amount + date are the only fields
-    // we rely on parsing; merchant/source stay as cheap best-effort hints.
-    body_snippet: cleanBody(email.text || "").slice(0, 4000),
+    body_snippet: cleaned.slice(0, 4000),
     amount: parseAmount(blob),
-    merchant: parseMerchant(email.text, email.subject),
+    merchant: parseMerchant(cleaned, email.subject),
     txn_date: parseDate(blob),
     suggested_type: guessType(blob),
     source_account: parseSource(blob),
