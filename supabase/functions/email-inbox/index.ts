@@ -129,9 +129,13 @@ Deno.serve(async (req) => {
     suggested_type: guessType(blob),
     source_account: parseSource(blob),
     status: "pending",
+    // Signature of this alert — a re-post of the identical email produces the
+    // same key and is ignored by the unique (user_id, dedupe_key) index.
+    dedupe_key: `${parseAmount(blob) ?? ""}|${parseDate(blob) ?? ""}|${cleaned.slice(0, 200)}`,
   };
 
-  const { error } = await admin.from("expense_email_inbox").insert(row);
+  const { error } = await admin.from("expense_email_inbox")
+    .upsert(row, { onConflict: "user_id,dedupe_key", ignoreDuplicates: true });
   if (error) return new Response("Insert failed: " + error.message, { status: 500 });
 
   return new Response(JSON.stringify({ ok: true }), {

@@ -30,6 +30,15 @@ CREATE TABLE IF NOT EXISTS expense_email_inbox (
 ALTER TABLE expense_email_inbox
   ADD COLUMN IF NOT EXISTS source_account text DEFAULT '';
 
+-- Dedup guard: the Edge Function sets dedupe_key to a signature of the email
+-- (amount + date + body). A unique (user_id, dedupe_key) index makes a re-posted
+-- identical alert a no-op instead of a second pending card. Multiple NULLs are
+-- allowed, so pre-existing rows (dedupe_key NULL) are unaffected.
+ALTER TABLE expense_email_inbox
+  ADD COLUMN IF NOT EXISTS dedupe_key text;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_expense_email_inbox_dedupe
+  ON expense_email_inbox(user_id, dedupe_key);
+
 CREATE INDEX IF NOT EXISTS idx_expense_email_inbox_user_status
   ON expense_email_inbox(user_id, status, received_at DESC);
 
