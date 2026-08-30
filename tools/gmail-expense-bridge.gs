@@ -79,6 +79,16 @@ var CONFIG = {
 
   // Skip anything that looks like money IN — expenses only.
   INCOME_RE: /\b(credited|refund|deposit|salary|cashback|received|reversal)\b/i,
+
+  // ── Monitoring ─────────────────────────────────────────────────────────────
+  // Where to send alerts / the daily heartbeat. Leave "" to use this account's
+  // own address (the one running the script).
+  ALERT_EMAIL: "",
+  // Email you immediately whenever a run has failures (a POST was rejected).
+  ALERT_ON_FAILURE: true,
+  // Email you ONE summary per day even when all is well, so silence never hides
+  // a broken trigger. Set false to only ever hear about failures.
+  DAILY_HEARTBEAT: true,
 };
 
 /** Schedule syncExpenses to run every 15 minutes. Run this ONCE. */
@@ -138,8 +148,45 @@ function syncExpenses() {
   }
 
   saveSentIds_(sentIds);
-  Logger.log("syncExpenses: sent=%s already=%s skipped(income)=%s failed=%s owner=%s",
+  var summary = Utilities.formatString(
+    "sent=%s already=%s skipped(income)=%s failed=%s owner=%s",
     sent, seen, skipped, failed, owner);
+  Logger.log("syncExpenses: " + summary);
+  notify_(sent, failed, summary);
+}
+
+// ── Monitoring: surface failures and a once-a-day heartbeat by email ──────────
+// A silent trigger (quota hit, auth revoked, deploy broke) is the worst failure
+// because nothing tells you. This makes the pipeline speak up: an email the
+// moment a POST fails, and one "still running" email a day even when quiet.
+function notify_(sent, failed, summary) {
+  try {
+    var to = CONFIG.ALERT_EMAIL || Session.getActiveUser().getEmail();
+    if (!to) return;
+    var props = PropertiesService.getScriptProperties();
+
+    if (failed > 0 && CONFIG.ALERT_ON_FAILURE) {
+      MailApp.sendEmail(to, "⚠️ Kosha expense bridge: " + failed + " failed",
+        "A syncExpenses run could not post " + failed + " alert(s) to Kosha.\n\n" +
+        summary + "\n\nCheck the Apps Script execution log for the HTTP error " +
+        "(often a changed secret or a redeployed function URL).");
+    }
+
+    if (CONFIG.DAILY_HEARTBEAT) {
+      var today = Utilities.formatDate(new Date(),
+        Session.getScriptTimeZone(), "yyyy-MM-dd");
+      if (props.getProperty("koshaHeartbeatDate") !== today) {
+        props.setProperty("koshaHeartbeatDate", today);
+        MailApp.sendEmail(to, "✅ Kosha expense bridge — daily heartbeat",
+          "The Gmail → Pending Transactions bridge ran today.\n\n" +
+          "Most recent run: " + summary + "\n\n" +
+          "You get this once a day so a silent/broken trigger can't hide. " +
+          "Reply-to-self and ignore otherwise.");
+      }
+    }
+  } catch (e) {
+    Logger.log("notify_ error: %s", e);   // never let alerting break the sync
+  }
 }
 
 // ── Remember which individual messages we've already pushed ──────────────────

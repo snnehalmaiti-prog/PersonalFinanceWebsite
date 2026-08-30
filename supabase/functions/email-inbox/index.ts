@@ -23,6 +23,12 @@
 // ============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Pure parsing helpers live in their own module so the same code is covered by
+// the Node test suite (tools/parser-tests.mjs). Keep BOTH files in the deployed
+// function — see parsers.mjs header for the two-file deploy note.
+import {
+  extractEmail, parseAmount, parseMerchant, parseSource, guessType, parseDate,
+} from "./parsers.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,95 +37,6 @@ const INBOUND_SECRET = Deno.env.get("INBOUND_EMAIL_SECRET") || "";
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-
-// ── Extract a single email address from a "Name <addr@x>" style header ───────
-function extractEmail(raw: string): string {
-  if (!raw) return "";
-  const m = raw.match(/<([^>]+)>/) || raw.match(/[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/);
-  const addr = m ? (m[1] || m[0]) : raw;
-  return addr.trim().toLowerCase();
-}
-
-// ── Best-effort amount parse. Handles ₹, Rs, INR, $, commas and decimals. ────
-function parseAmount(text: string): number | null {
-  if (!text) return null;
-  // Prefer amounts that sit next to a currency marker.
-  const cur = text.match(
-    /(?:₹|rs\.?|inr|usd|\$)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i,
-  );
-  const any = cur || text.match(/\b([0-9]{1,3}(?:,[0-9]{2,3})+(?:\.[0-9]{1,2})?)\b/);
-  if (!any) return null;
-  const n = Number(any[1].replace(/,/g, ""));
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-// ── Guess the merchant / payee from common bank-alert phrasings, else subject.
-function parseMerchant(text: string, subject: string): string {
-  if (text) {
-    const patterns = [
-      // "…towards URBANCLAP on 05 Aug…", "…at BIGBAZAAR." — lazy match that stops
-      // before a trailing " on/dated/for <date>", an "@" (UPI handle), or
-      // punctuation, so the date/time never gets swallowed into the name.
-      /(?:towards|paid to|spent at|in favour of|to|at)\s+([A-Z0-9][A-Za-z0-9 &._'-]{2,40}?)(?=\s+on\b|\s+dated\b|\s+for\b|[.,;@]|\s*$)/,
-      // "…for BATA INDIA on Aug 30…"
-      /\bfor\s+([A-Z0-9][A-Za-z0-9 &._'-]{2,40}?)(?=\s+on\b|\s+dated\b|[.,;@]|\s*$)/,
-      /(?:info|desc|narration)[:\-]\s*([A-Za-z0-9 &._'-]{2,40})/i,
-    ];
-    for (const p of patterns) {
-      const m = text.match(p);
-      if (m) return m[1].trim().replace(/\s+/g, " ").slice(0, 60);
-    }
-  }
-  return (subject || "").trim().slice(0, 80);
-}
-
-// ── Which account / card the money came from, as "Account **37" / "Card **70".
-// Banks mask all but the last few digits ("account 0037", "Credit Card ending
-// 3370", "a/c XXXX1234"); we keep the last two for a short, safe note tag.
-function parseSource(text: string): string {
-  if (!text) return "";
-  // Card first (so "Credit Card" isn't mistaken for an account).
-  let m = text.match(/\b(?:credit|debit)?\s*card\b[^0-9]{0,20}(\d{2,4})/i);
-  if (m) return "Card **" + m[1].slice(-2);
-  m = text.match(/\b(?:account|a\/c|acct)\b[^0-9]{0,15}(\d{2,4})/i);
-  if (m) return "Account **" + m[1].slice(-2);
-  return "";
-}
-
-// ── Credited / received → income; otherwise expense. ─────────────────────────
-function guessType(text: string): "expense" | "income" {
-  return /\b(credited|received|refund|deposit|salary|cashback)\b/i.test(text || "")
-    ? "income"
-    : "expense";
-}
-
-// ── Find a yyyy-mm-dd / dd-mm-yyyy / dd Mon yyyy date, else null. ─────────────
-function parseDate(text: string): string | null {
-  if (!text) return null;
-  let m = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
-  if (m) {
-    const yr = m[3].length === 2 ? "20" + m[3] : m[3];
-    const dd = m[1].padStart(2, "0"), mo = m[2].padStart(2, "0");
-    if (Number(mo) <= 12) return `${yr}-${mo}-${dd}`;
-  }
-  const months: Record<string, string> = {
-    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
-  };
-  // "30 Aug 2026" / "05 Aug, 2026" (day-first, optional comma)
-  m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*,?\s+(\d{4})\b/);
-  if (m && months[m[2].toLowerCase()]) {
-    return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2, "0")}`;
-  }
-  // "Aug 30, 2026" / "Aug 30 2026" (month-first, HDFC-style)
-  m = text.match(/\b([A-Za-z]{3})[A-Za-z]*\s+(\d{1,2}),?\s+(\d{4})\b/);
-  if (m && months[m[1].toLowerCase()]) {
-    return `${m[3]}-${months[m[1].toLowerCase()]}-${m[2].padStart(2, "0")}`;
-  }
-  return null;
-}
 
 // ── Pull the email fields out of whatever the provider POSTed. ───────────────
 // Supports multipart/form-data (SendGrid, Mailgun) and JSON payloads.
