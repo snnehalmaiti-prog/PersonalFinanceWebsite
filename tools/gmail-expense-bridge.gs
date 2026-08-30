@@ -86,8 +86,8 @@ function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "syncExpenses") ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger("syncExpenses").timeBased().everyMinutes(15).create();
-  Logger.log("Trigger installed: syncExpenses every 15 minutes.");
+  ScriptApp.newTrigger("syncExpenses").timeBased().everyMinutes(1).create();
+  Logger.log("Trigger installed: syncExpenses every 1 minute.");
 }
 
 /** Main pass: find new alert emails and push each to the Edge Function. */
