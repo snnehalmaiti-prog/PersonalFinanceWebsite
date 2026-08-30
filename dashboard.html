@@ -940,6 +940,7 @@
           <button type="button" class="exp-subtab active" data-dash-exp-subtab="accounts" role="tab" aria-selected="true">Accounts</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="records" role="tab" aria-selected="false">Records</button>
           <button type="button" class="exp-subtab" data-dash-exp-subtab="analytics" role="tab" aria-selected="false">Analytics</button>
+          <button type="button" class="exp-subtab" data-dash-exp-subtab="inbox" role="tab" aria-selected="false">Pending Transactions<span class="exp-inbox-badge" id="exp-inbox-badge" hidden>0</span></button>
           <button type="button" class="exp-subtab exp-subtab-charts" data-dash-exp-subtab="charts" role="tab" aria-selected="false">Charts</button>
         </div>
         <div class="exp-top-bar-center">
@@ -1103,6 +1104,20 @@
             <div id="rec-list"></div>
             <p id="rec-list-footer" class="rec-list-footer"></p>
           </div>
+        </div>
+      </div>
+
+      <div id="dash-exp-subpanel-inbox" class="exp-subpanel" hidden>
+        <div class="exp-inbox-wrap">
+          <div class="exp-inbox-head">
+            <div>
+              <div class="exp-inbox-title">Pending Transactions</div>
+              <p class="muted small" id="exp-inbox-sub">Expenses read from your Gmail transaction alerts. Categorise each one to file it — filed items leave this list.</p>
+            </div>
+            <button type="button" class="rec-action-btn" id="exp-inbox-refresh">Refresh</button>
+          </div>
+          <p class="muted small" id="exp-inbox-status">Loading…</p>
+          <div id="exp-inbox-list" class="exp-inbox-list"></div>
         </div>
       </div>
 
@@ -1376,10 +1391,11 @@
             b.classList.toggle("active", active);
             b.setAttribute("aria-selected", String(active));
           });
-          ["accounts", "records", "analytics", "charts"].forEach(function (k) {
+          ["accounts", "records", "analytics", "inbox", "charts"].forEach(function (k) {
             var p = document.getElementById("dash-exp-subpanel-" + k);
             if (p) p.hidden = (k !== key);
           });
+          if (key === "inbox" && window.WfInbox) window.WfInbox.load();
           var inlinePicker = document.getElementById("rec-period-picker-inline");
           var showPicker = (key === "records" || key === "analytics");
           if (inlinePicker) inlinePicker.style.display = showPicker ? "" : "none";
@@ -3686,9 +3702,11 @@
         opts = opts || {};
         editingTemplateMode = !!opts.template;
         editingTemplateId = opts.templateId || null;
-        editingRecId = (record && !editingTemplateMode) ? record.id : null;
+        editingRecId = (record && !editingTemplateMode && !opts.forceAdd) ? record.id : null;
         document.getElementById("rec-modal-error").textContent = "";
-        var isEdit = !!record && !editingTemplateMode;
+        // forceAdd: prefill from a record-shaped object (e.g. a parsed inbox
+        // email) but save as a brand-new record, not an edit.
+        var isEdit = !!record && !editingTemplateMode && !opts.forceAdd;
         var title = editingTemplateMode ? (editingTemplateId ? "Edit Template" : "Add Template") : (isEdit ? "Edit Record" : "Add Record");
         var saveLbl = editingTemplateMode ? (editingTemplateId ? "Save Template" : "Add Template") : (isEdit ? "Save Changes" : "Add Record");
         document.getElementById("rec-modal-title").textContent = title;
@@ -3753,7 +3771,12 @@
         var mInp = document.getElementById("rec-month"); if (mInp) mInp.value = mo;
         document.getElementById("rec-modal-overlay").hidden = false;
       }
-      function closeRecModal() { document.getElementById("rec-modal-overlay").hidden = true; }
+      function closeRecModal() {
+        document.getElementById("rec-modal-overlay").hidden = true;
+        // Cancelling an inbox categorisation must not leak the pending id into the
+        // next manual Add-record save.
+        window._inboxFilingId = null;
+      }
 
       // ── Custom date+time picker ─────────────────────────────────────────
       var dtState = { view: new Date(), sel: new Date() };
@@ -4196,6 +4219,8 @@
         op.then(function (saved) {
           btn.disabled = false; btn.textContent = origLabel;
           editingRecId = null;
+          // Capture before closeRecModal(), which clears the inbox-filing context.
+          var _inboxFid = window._inboxFilingId;
           closeRecModal();
           // Splice the row the server actually stored into the local snapshot and
           // repaint from that, instead of re-downloading all four expense tables to
@@ -4205,6 +4230,12 @@
           // local splice is as correct as a refetch — and it is the server's own
           // row (Prefer: return=representation), not a guess.
           if (!applySavedRecordLocally(saved)) loadDashAccounts(true);
+          // If this save was filing a parsed email from the Inbox, mark that
+          // inbox row filed so it drops out of the pending list.
+          if (_inboxFid && window.WfInbox) {
+            var savedRow = Array.isArray(saved) ? saved[0] : saved;
+            window.WfInbox.markFiled(_inboxFid, savedRow && savedRow.id);
+          }
         }).catch(function (err) {
           btn.disabled = false; btn.textContent = origLabel;
           document.getElementById("rec-modal-error").textContent = err.message || "Could not save.";
@@ -4281,6 +4312,153 @@
       document.getElementById("rec-modal-overlay").addEventListener("click", function (e) {
         if (e.target === e.currentTarget) closeRecModal();
       });
+
+      // ── Email → Expense inbox ──────────────────────────────────────────────
+      // Pending rows are inserted by the `email-inbox` Edge Function from the
+      // user's forwarded transaction emails. This lists them; categorising one
+      // opens the Add-record modal prefilled, and on save flips the row to
+      // 'filed' so it drops out of the list. Dismiss removes it without filing.
+      (function () {
+        var INBOX = "expense_email_inbox";
+        var pending = [];        // in-memory pending rows
+        var loaded = false;
+
+        function money(n) {
+          if (n == null || n === "") return "";
+          var v = Number(n) || 0;
+          return "₹" + v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+        }
+        function esc(s) { return window.WfEsc ? window.WfEsc(String(s == null ? "" : s)) : String(s == null ? "" : s); }
+        function elx(id) { return document.getElementById(id); }
+
+        function updateBadge() {
+          var badge = elx("exp-inbox-badge");
+          if (!badge) return;
+          var n = pending.length;
+          badge.textContent = String(n);
+          badge.hidden = n === 0;
+        }
+
+        function itemHtml(it) {
+          var when = it.txn_date || (it.received_at ? String(it.received_at).slice(0, 10) : "");
+          var title = it.merchant || it.subject || "(no description)";
+          var amt = it.amount != null ? money(it.amount) : "—";
+          var typeTag = it.suggested_type === "income" ? "Income" : "Expense";
+          return '' +
+            '<div class="exp-inbox-item" data-inbox-id="' + esc(it.id) + '">' +
+              '<div class="exp-inbox-item-main">' +
+                '<div class="exp-inbox-item-top">' +
+                  '<span class="exp-inbox-amt">' + esc(amt) + '</span>' +
+                  '<span class="exp-inbox-type">' + esc(typeTag) + '</span>' +
+                  (when ? '<span class="exp-inbox-date">' + esc(when) + '</span>' : "") +
+                '</div>' +
+                '<div class="exp-inbox-merchant">' + esc(title) + '</div>' +
+                (it.subject && it.subject !== title ? '<div class="exp-inbox-subject">' + esc(it.subject) + '</div>' : "") +
+                (it.from_email ? '<div class="exp-inbox-from">from ' + esc(it.from_email) + '</div>' : "") +
+              '</div>' +
+              '<div class="exp-inbox-actions">' +
+                '<button type="button" class="btn btn-primary exp-inbox-file" data-inbox-act="file">Categorise</button>' +
+                '<button type="button" class="rec-action-btn exp-inbox-dismiss" data-inbox-act="dismiss">Dismiss</button>' +
+              '</div>' +
+            '</div>';
+        }
+
+        function render() {
+          var list = elx("exp-inbox-list");
+          var status = elx("exp-inbox-status");
+          if (!list) return;
+          if (!pending.length) {
+            list.innerHTML = "";
+            if (status) {
+              status.textContent = loaded
+                ? "Inbox zero — no expenses waiting to be categorised."
+                : "Loading…";
+            }
+          } else {
+            if (status) status.textContent = pending.length + " to categorise";
+            list.innerHTML = pending.map(itemHtml).join("");
+          }
+          updateBadge();
+        }
+
+        function find(id) { return pending.find(function (p) { return p.id === id; }); }
+
+        // Categorise → open the record modal prefilled from the parsed email.
+        function categorise(id) {
+          var it = find(id);
+          if (!it || typeof openRecModal !== "function") return;
+          var today = new Date().toISOString().slice(0, 10);
+          var prefill = {
+            type: it.suggested_type === "income" ? "income" : "expense",
+            amount: it.amount != null ? it.amount : "",
+            txn_date: it.txn_date || today,
+            note: it.merchant || it.subject || "",
+            account_id: (dashExpState.accounts[0] || {}).id || "",
+            category_id: "",
+            subcategory_id: "",
+            payment_method_id: ""
+          };
+          window._inboxFilingId = id;
+          openRecModal(prefill, { forceAdd: true });
+        }
+
+        function dismiss(id) {
+          var it = find(id);
+          if (!it) return;
+          pending = pending.filter(function (p) { return p.id !== id; });
+          render();
+          WfDb.update(INBOX, id, { status: "dismissed" }).catch(function () {
+            // Put it back if the server rejected the change.
+            pending.push(it); render();
+          });
+        }
+
+        // Called from saveRec's success handler once the record is stored.
+        function markFiled(id, recordId) {
+          var it = find(id);
+          pending = pending.filter(function (p) { return p.id !== id; });
+          render();
+          WfDb.update(INBOX, id, { status: "filed", record_id: recordId || null })
+            .catch(function () { if (it) { pending.push(it); render(); } });
+        }
+
+        function load() {
+          if (!window.WfDb || !window.WfAuth || !WfAuth.isLoggedIn()) {
+            setTimeout(load, 200);
+            return;
+          }
+          return WfDb.select(INBOX,
+            "status=eq.pending&select=*&order=received_at.desc,created_at.desc"
+          ).then(function (rows) {
+            pending = rows || [];
+            loaded = true;
+            render();
+          }).catch(function () {
+            var status = elx("exp-inbox-status");
+            if (status) status.textContent = "Could not load the inbox. Run supabase-schema-email-inbox.sql if you haven't yet.";
+          });
+        }
+
+        var list = elx("exp-inbox-list");
+        if (list) {
+          list.addEventListener("click", function (e) {
+            var btn = e.target.closest("[data-inbox-act]");
+            if (!btn) return;
+            var host = btn.closest("[data-inbox-id]");
+            if (!host) return;
+            var id = host.getAttribute("data-inbox-id");
+            if (btn.getAttribute("data-inbox-act") === "file") categorise(id);
+            else dismiss(id);
+          });
+        }
+        var refresh = elx("exp-inbox-refresh");
+        if (refresh) refresh.addEventListener("click", load);
+
+        window.WfInbox = { load: load, markFiled: markFiled };
+
+        // Prime the badge count once auth is ready, without switching tabs.
+        setTimeout(load, 800);
+      })();
     </script>
 
   </main>
