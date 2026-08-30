@@ -58,6 +58,9 @@ function parseMerchant(text: string, subject: string): string {
   if (text) {
     const patterns = [
       /(?:at|to|towards|paid to|spent at|in favour of)\s+([A-Z0-9][A-Za-z0-9 &._'-]{2,40})/,
+      // "…for BATA INDIA on Aug 30…" — stop before a trailing " on <date>" or
+      // punctuation so we don't swallow the date into the merchant name.
+      /\bfor\s+([A-Z0-9][A-Za-z0-9 &._'-]{2,40}?)(?=\s+on\b|\s+dated\b|[.,;]|\s*$)/,
       /(?:info|desc|narration)[:\-]\s*([A-Za-z0-9 &._'-]{2,40})/i,
     ];
     for (const p of patterns) {
@@ -90,9 +93,15 @@ function parseDate(text: string): string | null {
     jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
     jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
   };
+  // "30 Aug 2026" (day-first)
   m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\s+(\d{4})\b/);
   if (m && months[m[2].toLowerCase()]) {
     return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2, "0")}`;
+  }
+  // "Aug 30, 2026" / "Aug 30 2026" (month-first, HDFC-style)
+  m = text.match(/\b([A-Za-z]{3})[A-Za-z]*\s+(\d{1,2}),?\s+(\d{4})\b/);
+  if (m && months[m[1].toLowerCase()]) {
+    return `${m[3]}-${months[m[1].toLowerCase()]}-${m[2].padStart(2, "0")}`;
   }
   return null;
 }
