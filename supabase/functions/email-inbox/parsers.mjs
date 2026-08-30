@@ -70,6 +70,22 @@ export function parseSource(text) {
   return "";
 }
 
+// Strip forwarding chrome (one or more "Forwarded message" header blocks) and
+// click-tracking URLs, leaving just the real alert text for display/storage.
+export function cleanBody(s) {
+  if (!s) return "";
+  return String(s)
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/-+\s*Forwarded message\s*-+/gi, " ")
+    .replace(/From:[\s\S]*?To:\s*<[^>]*>/gi, " ")
+    .replace(/^\s*(From|To|Date|Subject|Sent|Cc|Reply-To)\s*:.*$/gim, " ")
+    .replace(/[<>]/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
 // Credited / received → income; otherwise expense.
 export function guessType(text) {
   return /\b(credited|received|refund|deposit|salary|cashback)\b/i.test(text || "")

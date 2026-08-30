@@ -27,7 +27,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // the Node test suite (tools/parser-tests.mjs). Keep BOTH files in the deployed
 // function — see parsers.mjs header for the two-file deploy note.
 import {
-  extractEmail, parseAmount, parseMerchant, parseSource, guessType, parseDate,
+  extractEmail, parseAmount, parseMerchant, parseSource, guessType, parseDate, cleanBody,
 } from "./parsers.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -121,8 +121,7 @@ Deno.serve(async (req) => {
     // Store the full readable body — the card shows it so the human reads the
     // merchant/account off the email itself. Amount + date are the only fields
     // we rely on parsing; merchant/source stay as cheap best-effort hints.
-    body_snippet: (email.text || "").replace(/[ \t]+/g, " ")
-      .replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000),
+    body_snippet: cleanBody(email.text || "").slice(0, 4000),
     amount: parseAmount(blob),
     merchant: parseMerchant(email.text, email.subject),
     txn_date: parseDate(blob),

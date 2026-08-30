@@ -4363,6 +4363,24 @@
           return false;
         }
 
+        // Strip forwarding chrome and tracking URLs so the card shows only the
+        // real alert text. Bank alerts arrive wrapped in one or more "Forwarded
+        // message" blocks (From/Date/Subject/To headers) plus long click-tracking
+        // links; none of that helps the human categorise.
+        function cleanBody(s) {
+          if (!s) return "";
+          return String(s)
+            .replace(/https?:\/\/\S+/gi, " ")               // tracking URLs
+            .replace(/-+\s*Forwarded message\s*-+/gi, " ")  // fwd markers
+            .replace(/From:[\s\S]*?To:\s*<[^>]*>/gi, " ")   // inline header runs
+            .replace(/^\s*(From|To|Date|Subject|Sent|Cc|Reply-To)\s*:.*$/gim, " ")
+            .replace(/[<>]/g, " ")                          // stray angle brackets
+            .replace(/[ \t]+/g, " ")
+            .replace(/\s*\n\s*/g, "\n")
+            .replace(/\n{2,}/g, "\n")
+            .trim();
+        }
+
         function itemHtml(it) {
           var when = it.txn_date || (it.received_at ? String(it.received_at).slice(0, 10) : "");
           var amt = it.amount != null ? money(it.amount) : "—";
@@ -4371,7 +4389,7 @@
           // Amount + date are the parsed fields we trust. Everything else — who
           // the merchant is, which account — the user reads off the full email
           // body shown below, then fills in while categorising.
-          var body = it.body_snippet || "";
+          var body = cleanBody(it.body_snippet || "");
           var subj = it.subject || "";
           var srcHint = it.source_account
             ? '<span class="exp-inbox-src">' + esc(it.source_account) + '</span>' : "";
