@@ -80,9 +80,10 @@ var CONFIG = {
   INCOME_RE: /\b(credited|refund|deposit|salary|cashback|received|reversal)\b/i,
 
   // ── Monitoring ─────────────────────────────────────────────────────────────
-  // Where to send alerts / the daily heartbeat. Leave "" to use this account's
-  // own address (the one running the script).
-  ALERT_EMAIL: "",
+  // Where to send alerts / the daily heartbeat. Set to the address you actually
+  // read — the script runs in the kosha120392 reader inbox, so alerts go to your
+  // main login instead. Leave "" to use the account the script runs in.
+  ALERT_EMAIL: "maitisnnehal@gmail.com",
   // Email you immediately whenever a run has failures (a POST was rejected).
   ALERT_ON_FAILURE: true,
   // Email you ONE summary per day even when all is well, so silence never hides
