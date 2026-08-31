@@ -16,29 +16,27 @@
  * transactions.
  *
  * ── The mail flow ──────────────────────────────────────────────────────────
- * Bank/card alerts arrive at snnehalmaiti@gmail.com and are AUTO-FORWARDED to
- * maitisnnehal@gmail.com. Install this script in maitisnnehal@gmail.com — the
- * inbox that RECEIVES the forwarded alerts, which is also your Kosha login — so
- * it reads them there and files them to your account. Because the script runs
- * in the same Gmail you log into Kosha with, OWNER_EMAIL can stay "".
+ * Bank/card alerts are forwarded to kosha120392@gmail.com (the READING inbox).
+ * Install this script THERE. Your Kosha LOGIN is a DIFFERENT account,
+ * maitisnnehal@gmail.com, so the script files rows to the login account by
+ * setting OWNER_EMAIL to it (see CONFIG). The reading account and the login
+ * account are not the same here — that is why OWNER_EMAIL must be filled in.
  *
  * ── One-time setup ─────────────────────────────────────────────────────────
- * 1. In maitisnnehal@gmail.com, LABEL your forwarded alerts. Gmail →
- *    Settings → Filters and Blocked Addresses → Create a new filter that
+ * 1. In kosha120392@gmail.com (the READING inbox), LABEL your forwarded alerts.
+ *    Gmail → Settings → Filters and Blocked Addresses → Create a new filter that
  *    matches your bank/card alerts (by from:, or subject keywords like
  *    "debited"/"spent"), tick "Apply the label" → create a label named
  *    "Expenses". Because this reads by that label, it works no matter which
  *    account forwarded the mail and ignores everything else. (Tip: also tick
  *    "Also apply to matching conversations" to label existing ones.)
- * 2. Open https://script.google.com  signed in as maitisnnehal@gmail.com (the
- *    forwarding destination + your Kosha login). New project, paste this file.
+ * 2. Open https://script.google.com  signed in as kosha120392@gmail.com (the
+ *    READING inbox). New project, paste this file.
  * 3. Fill in the CONFIG block below:
  *      FUNCTION_URL   your project's function URL
  *      INBOUND_SECRET the INBOUND_EMAIL_SECRET you set on the Edge Function
- *      OWNER_EMAIL    leave "" — the active account (maitisnnehal@gmail.com) is
- *                     your Kosha login, which is exactly the attribution address
- *                     the Edge Function needs. Only set it if you ever run this
- *                     script from a DIFFERENT Gmail than you log into Kosha with.
+ *      OWNER_EMAIL    your Kosha LOGIN, "maitisnnehal@gmail.com" — different from
+ *                     this reading account, so it MUST be set (already filled in).
  *      SEARCH_QUERY   leave as 'label:Expenses' to read the label from step 1
  * 4. Run `installTrigger` once (authorise it when prompted). It schedules
  *    `syncExpenses` to run every 15 minutes.
@@ -58,9 +56,10 @@ var CONFIG = {
   // Functions → Secrets). Must match exactly.
   INBOUND_SECRET: "6641219bbb2c7ff830c40f1aa75e2399aa1d35d2b7e6f03f",
 
-  // Your Kosha LOGIN email, for attribution. Leave "" to use this Gmail
-  // account's own address (correct when they are the same).
-  OWNER_EMAIL: "",
+  // Your Kosha LOGIN email, for attribution. This script runs in the READING
+  // account (kosha120392@gmail.com) but files rows to your LOGIN account, so
+  // this MUST be set to the login address — they are different accounts here.
+  OWNER_EMAIL: "maitisnnehal@gmail.com",
 
   // Which emails to read. We select by a Gmail LABEL you apply to your
   // forwarded alerts (see setup step 1) rather than by keywords, so it works no
