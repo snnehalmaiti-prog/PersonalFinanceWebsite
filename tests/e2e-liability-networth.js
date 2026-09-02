@@ -419,13 +419,17 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
     const c = window.__wfPortfolioValueChart;
     if (!c) return null;
     const ds = c.data.datasets || [];
-    const net = ds[1] ? ds[1].data : null;
+    // The net-of-liabilities line is located by label, not by index: an always-on
+    // "Invested" (cost basis) line now sits between it and the Current-Value line.
+    const netDs = ds.find((d) => d.label === "Net of liabilities") || null;
+    const net = netDs ? netDs.data : null;
     const nonNull = net ? net.filter((d) => d && d.y != null) : [];
     return {
       count: ds.length,
-      label: ds[1] ? ds[1].label : null,
-      dashed: ds[1] ? !!ds[1].borderDash : false,
-      spanGaps: ds[1] ? ds[1].spanGaps : null,
+      hasNet: !!netDs,
+      label: netDs ? netDs.label : null,
+      dashed: netDs ? !!netDs.borderDash : false,
+      spanGaps: netDs ? netDs.spanGaps : null,
       leadingNulls: net ? net.findIndex((d) => d && d.y != null) : -1,
       // Where the net line starts, and what the asset line reads there: the two
       // must coincide, and the very next point must be lower by the debt.
@@ -471,9 +475,9 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
 
   await boot(null, SHEETS_MF);
   const noLine = await chart();
-  ok(noLine && noLine.count === 1,
-     "V1 with no liabilities the chart has one line, as before", noLine);
-  ok(noLine && !noLine.legendShown, "V2 and no second legend entry", noLine);
+  ok(noLine && noLine.count === 2 && !noLine.hasNet,
+     "V1 with no liabilities the chart has the value + invested lines and no net line", noLine);
+  ok(noLine && !noLine.legendShown, "V2 and no net legend entry", noLine);
 
   // Ten monthly instalments of ₹20,000 from 1 Jan 2026; four recorded, so the
   // schedule started four months before next_due.
@@ -483,7 +487,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   await boot(LOAN, SHEETS_MF);
   const withLine = await chart();
   console.log("  net line: " + JSON.stringify(withLine));
-  ok(withLine && withLine.count === 2, "V3 a liability adds a second line", withLine);
+  ok(withLine && withLine.count === 3 && withLine.hasNet, "V3 a liability adds the net line", withLine);
   ok(withLine && withLine.label === "Net of liabilities", "V4 named for what it is", withLine);
   ok(withLine && withLine.dashed && withLine.spanGaps === false,
      "V5 dashed, and not spanning its own gaps — absent before the debt, not " +
@@ -502,7 +506,7 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   ok(withLine && withLine.owedFalls,
      "V7 and the gap between the two lines only ever narrows — a debt being " +
      "paid down cannot grow, even where the assets above it fall", withLine);
-  if (withLine && withLine.count === 2) {
+  if (withLine && withLine.hasNet) {
   ok(withLine.lastNet === withLine.lastAsset - 120000,
      "V8 its last point is the assets less the ₹1,20,000 still owed",
      { net: withLine.lastNet, asset: withLine.lastAsset });
@@ -519,14 +523,14 @@ const num = (s) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   // Portfolio selection drives it, exactly as it drives the figure.
   await pick("Trisha");
   const trLine = await chart();
-  ok(trLine && trLine.count === 1,
-     "V11 a portfolio carrying none of the debt gets no second line", trLine);
+  ok(trLine && trLine.count === 2 && !trLine.hasNet,
+     "V11 a portfolio carrying none of the debt gets no net line", trLine);
   ok(trLine && !trLine.legendShown, "V12 nor its legend entry", trLine);
 
   await pick("Snnehal");
   const snLine = await chart();
   const snStats = await read();
-  ok(snLine && snLine.count === 2, "V13 the one that carries it gets the line back", snLine);
+  ok(snLine && snLine.count === 3 && snLine.hasNet, "V13 the one that carries it gets the net line back", snLine);
   ok(snLine && num(snStats.current) === Math.round(snLine.lastNet),
      "V14 still meeting its own Current figure, for that portfolio",
      { card: snStats.current, line: snLine.lastNet });

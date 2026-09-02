@@ -10878,7 +10878,10 @@
     return events;
   }
 
-  function buildEpfValueEvents(portfolioFilter) {
+  // depositsOnly: when true, drop interest credits and accumulate only the
+  // contributed principal — the cost-basis counterpart used by the ACCOUNT
+  // VALUE chart's "Invested" line.
+  function buildEpfValueEvents(portfolioFilter, depositsOnly) {
     var rows = getSheetRows("fixedincome");
     if (!rows || !rows.length) return [];
     var header = rows[0].map(normalizeText);
@@ -10898,6 +10901,7 @@
       var isDeposit = type.indexOf("deposit") !== -1;
       var isInterest = type.indexOf("interest") !== -1;
       if (!isDeposit && !isInterest) return;
+      if (depositsOnly && isInterest) return;   // cost basis excludes interest
       var date = parseFlexibleDate(row[dateIdx]);
       if (!date) return;
       events.push({ date: date, delta: parseNumber(row[amountIdx]) });
@@ -11255,6 +11259,8 @@
       if (lastEl) lastEl.textContent = "₹—";
       var netLegend = document.getElementById("pvc-net-legend");
       if (netLegend) netLegend.hidden = true;
+      var invLegend = document.getElementById("pvc-invested-legend");
+      if (invLegend) invLegend.hidden = true;
     }
     if (isFixedIncomeExcluded()) { clear(); return; }
 
@@ -11290,14 +11296,26 @@
     });
     if (!points.some(function (p) { return p.y > 0; })) { clear(); return; }
 
+    // Invested (cost basis): principal only — EPF deposits (no interest) plus the
+    // FD/PF/savings principal in fdAt — leaving the accrual (accrAt) out, so the
+    // gap to the value line is the interest earned.
+    var epfDepAt = _ff(buildEpfValueEvents(portfolio, true) || [], timeline, "cumulativeValue");
+    var investedPoints = timeline.map(function (d, i) {
+      return { x: d, y: (epfDepAt[i] || 0) + (fdAt[i] || 0) };
+    });
+
     // Same tail snap the main path does, so this chart ends on the Overview's
     // figure rather than a beat behind it.
     var overviewTotal = (typeof getOverviewCurrentTotal === "function") ? getOverviewCurrentTotal() : null;
     if (overviewTotal > 0 && (localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") === portfolio) {
       points[points.length - 1] = { x: points[points.length - 1].x, y: overviewTotal };
     }
+    var investedTotal = (typeof getOverviewInvestedTotal === "function") ? getOverviewInvestedTotal() : null;
+    if (investedTotal > 0 && (localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") === portfolio) {
+      investedPoints[investedPoints.length - 1] = { x: investedPoints[investedPoints.length - 1].x, y: investedTotal };
+    }
     try {
-      _renderPortfolioValueChart(points, _netOfLiabilityPoints(points, portfolio));
+      _renderPortfolioValueChart(points, _netOfLiabilityPoints(points, portfolio), investedPoints);
     } catch (e) { clear(); }
   }
 
@@ -11363,7 +11381,7 @@
     });
   }());
 
-  function _renderPortfolioValueChart(points, netPoints) {
+  function _renderPortfolioValueChart(points, netPoints, investedPoints) {
     var canvas2 = document.getElementById("portfolio-value-chart");
     if (!canvas2 || typeof Chart === "undefined") return;
     if (window.__wfPortfolioValueChart) window.__wfPortfolioValueChart.destroy();
@@ -11398,6 +11416,25 @@
     }
     showNet(netAtIndex(netPoints ? netPoints.length - 1 : 0));
 
+    // The Invested (cost basis) line's legend entry and readout. It tracks the
+    // same point the green Current-Value figure is reporting, so the two always
+    // describe the same moment.
+    var investedLegendEl = document.getElementById("pvc-invested-legend");
+    var investedValEl = document.getElementById("pvc-invested-value");
+    var hasInvested = !!(investedPoints && investedPoints.length);
+    if (investedLegendEl) investedLegendEl.hidden = !hasInvested;
+    function investedAtIndex(idx) {
+      if (!hasInvested) return null;
+      var i = Math.min(idx, investedPoints.length - 1);
+      if (i < 0) i = 0;
+      return investedPoints[i] ? investedPoints[i].y : null;
+    }
+    function showInvested(v) {
+      if (!investedValEl || !hasInvested) return;
+      investedValEl.textContent = (v == null) ? "—" : "₹" + Math.round(v).toLocaleString("en-IN");
+    }
+    showInvested(investedAtIndex(hasInvested ? investedPoints.length - 1 : 0));
+
     // The readout follows whatever window is on screen. Zoomed out it is the
     // current value; zoomed in — by wheel, pinch, drag, or a range pill — it is
     // the value at the right edge of the view plus the change across it, so
@@ -11425,6 +11462,7 @@
       var startPt = pvcValueAt(lo);
       if (lastEl) lastEl.textContent = "₹" + Math.round(endPt.y).toLocaleString("en-IN");
       showNet(netAtIndex(points.indexOf(endPt)));
+      showInvested(investedAtIndex(points.indexOf(endPt)));
       // The period line under the title already names the window, so the legend
       // label stays a plain noun rather than repeating the month.
       if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
@@ -11499,6 +11537,7 @@
       var pt = points[idx];
       if (lastEl) lastEl.textContent = "₹" + Math.round(pt.y).toLocaleString("en-IN");
       showNet(netAtIndex(idx));
+      showInvested(investedAtIndex(idx));
       if (nameEl) nameEl.textContent = "Value";
       var per = document.getElementById("pvc-period");
       if (per) per.textContent = _pvcDayFmt.format(pt.x).toUpperCase();
@@ -11523,7 +11562,20 @@
           borderWidth: 2,
           pointRadius: 0,
           tension: 0.12
-        }].concat(netPoints ? [{
+        }].concat(hasInvested ? [{
+          // Cumulative invested (cost basis). Solid blue, unfilled: the money put
+          // in, sitting under the green current-value area so the gap reads as
+          // gains. spanGaps true — it is a running total with no genuine holes.
+          label: "Invested",
+          data: investedPoints,
+          borderColor: "#3B82F6",
+          backgroundColor: "transparent",
+          fill: false,
+          borderWidth: 2,
+          pointRadius: 0,
+          spanGaps: true,
+          tension: 0.12
+        }] : []).concat(netPoints ? [{
           // Dashed and unfilled: it is the same assets seen after the debt,
           // not a second quantity to read areas off. spanGaps stays false so
           // the nulls before the first instalment leave the line absent rather
@@ -11721,6 +11773,8 @@
       // For the raw Account Value chart, honour the user's exclusion filters
       // — include fixed-income + savings when the user hasn't excluded them.
       var epfEventsAll = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio);
+      // Deposits-only counterpart (no interest) for the Invested cost-basis line.
+      var epfDepositEventsAll = isFixedIncomeExcluded() ? [] : buildEpfValueEvents(selectedPortfolio, true);
       // FI excluded → drop the whole FD series. Savings/Investment excluded →
       // drop only Investment Corpus + Savings Account (parked cash), keep PF,
       // matching the Overview cards.
@@ -12019,6 +12073,11 @@
         // exclusion applied, and no physical gold (which has no contributions
         // recorded, so its value would read as instant growth).
         var growthValueAt = new Array(timeline.length).fill(0);
+        // Cumulative-invested (cost basis) flow for the "Invested" line: buys add,
+        // sells subtract, each marked at the price it happened at — filtered by the
+        // same exclusions as the value line so the two curves describe the same book.
+        var investedFlowAt = new Array(timeline.length).fill(0);
+        var _prevCommGrams = 0;
 
         var points = timeline.map(function (date, i) {
           // Physical gold is Commodity, so it goes with the Commodity
@@ -12029,6 +12088,11 @@
           var commVal = activeGrams > 0 ? activeGrams * goldPriceAtDate : 0;
           var total = (epfAt[i] || 0) + (fdAt[i] || 0) + commVal;
           var dk = dateKey(date);
+          // Commodity cost basis: the grams bought since the last point, priced at
+          // this point's gold price. Zero under the Commodity/FI exclusion (grams=0).
+          var _gramsDelta = activeGrams - _prevCommGrams;
+          if (_gramsDelta !== 0 && goldPriceAtDate) investedFlowAt[i] += _gramsDelta * goldPriceAtDate;
+          _prevCommGrams = activeGrams;
           for (var mi = 0; mi < mfUnitsByIdx.length; mi++) {
             var units = mfUnitsByIdx[mi][i] || 0;
             var nav = mfNavByIdx[mi][i];
@@ -12044,7 +12108,10 @@
             // is what put a permanent hole in the curve.
             if (!nav) continue;
             var traded = mfTradedByIdx[mi];
-            if (traded && traded[dk]) flowAt[i] += traded[dk] * nav;
+            if (traded && traded[dk]) {
+              flowAt[i] += traded[dk] * nav;
+              if (!mfHiddenByIdx[mi]) investedFlowAt[i] += traded[dk] * nav;
+            }
           }
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
@@ -12079,7 +12146,10 @@
             // exactly the flow that must be counted, or the value would vanish with
             // nothing to explain it and the curve would read it as a total loss.
             var seTraded = meta.traded;
-            if (seTraded && seTraded[dk]) flowAt[i] += seTraded[dk] * priceInr;
+            if (seTraded && seTraded[dk]) {
+              flowAt[i] += seTraded[dk] * priceInr;
+              if (!meta.hidden) investedFlowAt[i] += seTraded[dk] * priceInr;
+            }
           }
           return { x: date, y: total };
         });
@@ -12097,6 +12167,32 @@
           var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0) + (fdAccrAt[i] || 0) + (pfAccrAt[i] || 0);
           return { x: p.x, y: p.y + extra };
         });
+
+        // Cumulative-invested (cost basis) series that parallels pointsAll: the
+        // equity/commodity cost basis accumulated from investedFlowAt, plus the
+        // fixed-income PRINCIPAL (FD/PF/savings principal via fdAllAt, EPF/PF
+        // deposits via the deposits-only EPF events). The interest accrual
+        // series (fdAccrAt/pfAccrAt) and EPF interest credits are deliberately
+        // left out — they are gains, not money put in. The gap between this and
+        // pointsAll is the portfolio's total gain.
+        var epfDepositAllAt = _ff(epfDepositEventsAll, timeline, "cumulativeValue");
+        var _investedRun = 0;
+        var investedAll = points.map(function (p, i) {
+          _investedRun += investedFlowAt[i] || 0;
+          var fiPrincipal = (epfDepositAllAt[i] || 0) + (fdAllAt[i] || 0);
+          return { x: p.x, y: _investedRun + fiPrincipal };
+        });
+        // Tail-snap to the Overview's authoritative Invested total, mirroring the
+        // Current-value snap below so the two legend figures match the cards.
+        (function snapInvestedToOverview() {
+          if (!investedAll.length) return;
+          if ((localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all") !== selectedPortfolio) return;
+          var invTotal = (typeof getOverviewInvestedTotal === "function") ? getOverviewInvestedTotal() : null;
+          if (invTotal && invTotal > 0) {
+            var li = investedAll.length - 1;
+            investedAll[li] = { x: investedAll[li].x, y: invTotal };
+          }
+        })();
 
         // Snap the last point to the Overview's authoritative Current total so
         // the chart's tail equals the Overview card exactly. Using
@@ -12121,7 +12217,7 @@
 
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
         try {
-          _renderPortfolioValueChart(pointsAll, _netOfLiabilityPoints(pointsAll, selectedPortfolio));
+          _renderPortfolioValueChart(pointsAll, _netOfLiabilityPoints(pointsAll, selectedPortfolio), investedAll);
         } catch (e) {}
 
         // Keep the series the snapshot backfill reconstructs history from. Only

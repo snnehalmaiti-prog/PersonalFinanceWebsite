@@ -314,6 +314,14 @@
               <span class="avc-legend-value avc-portfolio-value" id="pvc-current-value">&#8377;—</span>
               <span class="avc-legend-change" id="pvc-range-change" hidden></span>
             </div>
+            <!-- Cumulative invested (cost basis) line. Shown whenever an
+                 invested series is available; the gap to Current Value is gains. -->
+            <div class="avc-legend-item" id="pvc-invested-legend" hidden>
+              <span class="avc-legend-line avc-legend-invested"></span>
+              <span class="avc-legend-name">Invested</span>
+              <span class="avc-legend-sep">&middot;</span>
+              <span class="avc-legend-value" id="pvc-invested-value">&#8377;—</span>
+            </div>
             <!-- Present only while the selected portfolio carries a liability. -->
             <div class="avc-legend-item" id="pvc-net-legend" hidden>
               <span class="avc-legend-line avc-legend-net"></span>
@@ -348,7 +356,7 @@
         <div class="avc-chart-wrap">
           <canvas id="portfolio-value-chart" height="320"></canvas>
         </div>
-        <p class="muted small" style="margin:8px 20px 4px;font-size:0.72rem;font-style:italic;">Total portfolio market value over time; respects the exclusion filter.</p>
+        <p class="muted small" style="margin:8px 20px 4px;font-size:0.72rem;font-style:italic;">Current value and cumulative invested (cost basis) over time; respects the exclusion filter.</p>
       </div>
       </div><!-- /account-value-row -->
       <div class="ov-charts-dots show-mobile" id="ov-charts-dots" aria-hidden="true">
