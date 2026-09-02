@@ -4391,8 +4391,10 @@
           // body shown below, then fills in while categorising.
           var body = cleanBody(it.body_snippet || "");
           var subj = it.subject || "";
+          var mappedName = mapSourceToName(it.source_account);
           var srcHint = it.source_account
-            ? '<span class="exp-inbox-src">' + esc(it.source_account) + '</span>' : "";
+            ? '<span class="exp-inbox-src">' + esc(it.source_account) +
+                (mappedName ? ' · ' + esc(mappedName) : "") + '</span>' : "";
           return '' +
             '<div class="exp-inbox-item' + (dup ? " is-dup" : "") + '" data-inbox-id="' + esc(it.id) + '">' +
               '<div class="exp-inbox-item-main">' +
@@ -4434,22 +4436,27 @@
 
         function find(id) { return pending.find(function (p) { return p.id === id; }); }
 
-        // "Account **37" / "Card **70" → the account id whose name the user mapped
-        // those 2 digits to in Settings → Expense → Account Mapping. Returns ""
-        // when there is no source tag, no mapping, or no matching account.
-        function mapSourceToAccountId(sourceTag) {
+        // The account NAME the user mapped a source tag's last 2 digits to in
+        // Settings → Expense → Account Mapping ("" if none). "Account **37" → "Trisha".
+        function mapSourceToName(sourceTag) {
           var m = String(sourceTag || "").match(/(\d{2})\s*$/);
           if (!m) return "";
-          var last2 = m[1];
           var maps;
           try { maps = JSON.parse(localStorage.getItem("wf-account-map")) || []; }
           catch (e) { return ""; }
           var hit = maps.find(function (x) {
-            return x && !x._deleted && String(x.last2) === last2;
+            return x && !x._deleted && String(x.last2) === m[1];
           });
-          if (!hit) return "";
+          return hit ? (hit.name || "") : "";
+        }
+
+        // The account id whose name matches that mapping ("" when there is no
+        // mapping or no matching account), used to pre-select it on categorise.
+        function mapSourceToAccountId(sourceTag) {
+          var name = mapSourceToName(sourceTag);
+          if (!name) return "";
           var acct = (dashExpState.accounts || []).find(function (a) {
-            return (a.name || "").trim().toLowerCase() === String(hit.name).trim().toLowerCase();
+            return (a.name || "").trim().toLowerCase() === name.trim().toLowerCase();
           });
           return acct ? acct.id : "";
         }
