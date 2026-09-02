@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   recurring_payments jsonb,
   liabilities jsonb,
   epf_interest_rates jsonb,
+  account_map jsonb,
   updated_at timestamptz DEFAULT now()
 );
 
@@ -31,6 +32,10 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS epf_interest_rates jsonb;
 -- client drops this column and retries if it's missing), so this migration only
 -- enables cross-device sync — the tab works locally without it.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS liabilities jsonb;
+-- Account Mapping tab: last-2-digits → account name, used to auto-assign the
+-- account when categorising an email-inbox pending transaction. Sync is resilient
+-- (client drops the column and retries if missing), so this only enables sync.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS account_map jsonb;
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 

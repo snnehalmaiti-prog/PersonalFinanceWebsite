@@ -4719,6 +4719,19 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 .exp-inbox-item.is-dup { border-color: #e7c877; }
 .exp-inbox-merchant { margin-top: 4px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .exp-inbox-src { margin-left: 6px; font-size: 0.72rem; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+/* Account Mapping (Settings → Expense) */
+.exp-acctmap-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 4px; }
+.exp-acctmap-digits { width: 64px; text-align: center; }
+.exp-acctmap-name { flex: 1; min-width: 160px; }
+.exp-acctmap-badge { display: inline-block; min-width: 44px; text-align: center; font-weight: 700; font-size: 0.8rem; color: var(--text); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; padding: 2px 8px; }
+.exp-acctmap-rowname { margin-left: 10px; font-weight: 600; color: var(--text); }
+.exp-acctmap-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 8px; }
+.exp-acctmap-row .exp-row-main { display: flex; align-items: center; min-width: 0; }
+.exp-acctmap-row .exp-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .exp-acctmap-form { gap: 6px; }
+  .exp-acctmap-name { min-width: 0; }
+}
 .exp-inbox-body { margin-top: 5px; font-size: 0.8rem; line-height: 1.45; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .exp-inbox-subject,
 .exp-inbox-from { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
