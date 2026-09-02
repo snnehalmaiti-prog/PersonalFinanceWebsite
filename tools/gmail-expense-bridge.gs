@@ -39,7 +39,7 @@
  *                     this reading account, so it MUST be set (already filled in).
  *      SEARCH_QUERY   leave as 'label:Expenses' to read the label from step 1
  * 4. Run `installTrigger` once (authorise it when prompted). It schedules
- *    `syncExpenses` to run every 15 minutes.
+ *    `syncExpenses` to run every 30 minutes.
  * 5. Optional: run `syncExpenses` once by hand to backfill and verify.
  *
  * Nothing here stores your data anywhere except the Kosha inbox row it creates;
@@ -91,13 +91,13 @@ var CONFIG = {
   DAILY_HEARTBEAT: true,
 };
 
-/** Schedule syncExpenses to run every 15 minutes. Run this ONCE. */
+/** Schedule syncExpenses to run every 30 minutes. Run this ONCE. */
 function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "syncExpenses") ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger("syncExpenses").timeBased().everyMinutes(1).create();
-  Logger.log("Trigger installed: syncExpenses every 1 minute.");
+  ScriptApp.newTrigger("syncExpenses").timeBased().everyMinutes(30).create();
+  Logger.log("Trigger installed: syncExpenses every 30 minutes.");
 }
 
 /** Main pass: find new alert emails and push each to the Edge Function. */
