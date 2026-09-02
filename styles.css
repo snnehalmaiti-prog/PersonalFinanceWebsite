@@ -3883,6 +3883,9 @@ main.container, .settings-main { max-width: 100%; overflow-x: clip; }
 /* The liability-adjusted line: dashed, and amber rather than a second green,
    so it does not read as a second holding. */
 .avc-legend-line.avc-legend-net { border-top-style: dashed; border-top-color: #F59E0B; }
+/* Cumulative invested (cost basis): a solid blue line under the green value
+   line, so the gap between them reads as gains at a glance. */
+.avc-legend-line.avc-legend-invested { border-top-color: #3B82F6; }
 .avc-legend-name { color: var(--text); }
 .avc-legend-sep { color: var(--muted); }
 .avc-legend-value { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700; }
