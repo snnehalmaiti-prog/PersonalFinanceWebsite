@@ -436,6 +436,7 @@
           <button type="button" class="exp-nav-item" data-exp-panel="recurring">Recurring payments</button>
           <button type="button" class="exp-nav-item" data-exp-panel="liability">Liability</button>
           <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="account-map">Account Mapping</button>
         </nav>
 
         <!-- Right detail panels -->
@@ -546,6 +547,29 @@
               <p class="muted small" id="exp-import-progress-label" style="margin:4px 0 0;"></p>
             </div>
             <div id="exp-import-report" style="margin-top:8px;"></div>
+          </div>
+
+          <!-- Account Mapping -->
+          <div class="exp-detail-panel" id="exp-detail-account-map" hidden>
+            <div class="exp-detail-header">
+              <h3>Account Mapping</h3>
+            </div>
+            <p class="muted small equity-desc">
+              Map the <strong>last 2 digits</strong> of an account or card number to an account name.
+              When a bank alert arrives as e.g. <code>Account **37</code>, a pending transaction with that
+              tag is auto-assigned to the matching account when you categorise it.
+            </p>
+            <div class="exp-acctmap-form">
+              <input type="text" id="exp-acctmap-digits" inputmode="numeric" maxlength="2"
+                     placeholder="37" aria-label="Last 2 digits" class="exp-acctmap-digits" />
+              <input type="text" id="exp-acctmap-name" placeholder="Account name (e.g. Trisha)"
+                     aria-label="Account name" class="exp-acctmap-name" />
+              <button type="button" class="btn btn-primary btn-sm" id="exp-acctmap-add">Add</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="exp-acctmap-cancel" hidden>Cancel</button>
+            </div>
+            <p class="muted small" id="exp-acctmap-error" style="color:#EF4444;" hidden></p>
+            <p class="muted small" id="exp-acctmap-status">No mappings yet.</p>
+            <div id="exp-acctmap-list" class="exp-list"></div>
           </div>
 
         </div><!-- /.exp-right-panel -->
@@ -740,6 +764,13 @@
               renderLiabilities();
             }
           }
+          if (panel === "account-map") {
+            if (window.WfAuth && WfAuth.isLoggedIn()) {
+              WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderAccountMap(); });
+            } else {
+              renderAccountMap();
+            }
+          }
         });
       });
     })();
@@ -778,6 +809,119 @@
     function _wfTombstone(list, id) {
       return list.map(function (it) { return it.id === id ? { id: it.id, _deleted: true, updated_at: Date.now() } : it; });
     }
+
+    // ── Account Mapping (last-2-digits → account name) ─────────────────────────
+    // Stored like templates/liabilities: a mergeable synced list in localStorage.
+    // The dashboard's "Pending Transactions" categorise flow reads this to
+    // auto-select an account from a "Account **NN" / "Card **NN" email tag.
+    var ACCOUNT_MAP_KEY = "wf-account-map";
+    var editingAcctMapId = null;
+    function loadAcctMapRaw() { return _wfLoadListRaw(ACCOUNT_MAP_KEY); }
+    function loadAcctMap() { return loadAcctMapRaw().filter(function (m) { return m && !m._deleted; }); }
+    function saveAcctMap(list) { return _wfPersistList(ACCOUNT_MAP_KEY, list); }
+
+    function acctMapResetForm() {
+      editingAcctMapId = null;
+      var d = document.getElementById("exp-acctmap-digits");
+      var n = document.getElementById("exp-acctmap-name");
+      var add = document.getElementById("exp-acctmap-add");
+      var cancel = document.getElementById("exp-acctmap-cancel");
+      var err = document.getElementById("exp-acctmap-error");
+      if (d) d.value = ""; if (n) n.value = "";
+      if (add) add.textContent = "Add";
+      if (cancel) cancel.hidden = true;
+      if (err) err.hidden = true;
+    }
+
+    function renderAccountMap() {
+      var esc = window.WfEsc;
+      var list = document.getElementById("exp-acctmap-list");
+      var status = document.getElementById("exp-acctmap-status");
+      if (!list) return;
+      var rows = loadAcctMap().sort(function (a, b) {
+        return String(a.last2).localeCompare(String(b.last2));
+      });
+      if (status) status.textContent = rows.length
+        ? (rows.length + (rows.length === 1 ? " mapping" : " mappings"))
+        : "No mappings yet.";
+      list.innerHTML = rows.map(function (m) {
+        return '<div class="exp-row exp-acctmap-row" data-id="' + esc(m.id) + '">' +
+          '<div class="exp-row-main">' +
+            '<span class="exp-acctmap-badge">**' + esc(String(m.last2)) + '</span>' +
+            '<span class="exp-acctmap-rowname">' + esc(m.name || "") + '</span>' +
+          '</div>' +
+          '<div class="exp-row-actions">' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-acctmap-edit="' + esc(m.id) + '">Edit</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-acctmap-del="' + esc(m.id) + '">Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    function acctMapSubmit() {
+      var d = document.getElementById("exp-acctmap-digits");
+      var n = document.getElementById("exp-acctmap-name");
+      var err = document.getElementById("exp-acctmap-error");
+      var digits = (d && d.value || "").replace(/\D/g, "").slice(-2);
+      var name = (n && n.value || "").trim();
+      function fail(msg) { if (err) { err.textContent = msg; err.hidden = false; } }
+      if (digits.length !== 2) return fail("Enter the last 2 digits (e.g. 37).");
+      if (!name) return fail("Enter an account name.");
+      var raw = loadAcctMapRaw();
+      var live = raw.filter(function (m) { return m && !m._deleted; });
+      // One name per 2-digit code: block a duplicate code (unless editing it).
+      var clash = live.find(function (m) { return String(m.last2) === digits && m.id !== editingAcctMapId; });
+      if (clash) return fail("**" + digits + " is already mapped to " + clash.name + ".");
+      if (editingAcctMapId) {
+        raw = raw.map(function (m) {
+          return m.id === editingAcctMapId
+            ? { id: m.id, last2: digits, name: name, updated_at: Date.now() } : m;
+        });
+      } else {
+        raw.push({
+          id: "am-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+          last2: digits, name: name, updated_at: Date.now()
+        });
+      }
+      saveAcctMap(raw);
+      acctMapResetForm();
+      renderAccountMap();
+    }
+
+    (function initAccountMap() {
+      var add = document.getElementById("exp-acctmap-add");
+      var cancel = document.getElementById("exp-acctmap-cancel");
+      var listEl = document.getElementById("exp-acctmap-list");
+      var digits = document.getElementById("exp-acctmap-digits");
+      var nameEl = document.getElementById("exp-acctmap-name");
+      if (add) add.addEventListener("click", acctMapSubmit);
+      if (cancel) cancel.addEventListener("click", acctMapResetForm);
+      // Enter in either field submits.
+      [digits, nameEl].forEach(function (inp) {
+        if (inp) inp.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") { e.preventDefault(); acctMapSubmit(); }
+        });
+      });
+      if (listEl) listEl.addEventListener("click", function (e) {
+        var editId = e.target.getAttribute && e.target.getAttribute("data-acctmap-edit");
+        var delId = e.target.getAttribute && e.target.getAttribute("data-acctmap-del");
+        if (editId) {
+          var m = loadAcctMap().find(function (x) { return x.id === editId; });
+          if (m) {
+            editingAcctMapId = m.id;
+            if (digits) digits.value = m.last2;
+            if (nameEl) nameEl.value = m.name || "";
+            if (add) add.textContent = "Save";
+            if (cancel) cancel.hidden = false;
+            if (digits) digits.focus();
+          }
+        } else if (delId) {
+          saveAcctMap(_wfTombstone(loadAcctMapRaw(), delId));
+          if (editingAcctMapId === delId) acctMapResetForm();
+          renderAccountMap();
+        }
+      });
+    })();
 
     // Expense templates (stored in localStorage; edited via dashboard Add Record modal).
     var TEMPLATE_KEY = "wf-expense-templates";

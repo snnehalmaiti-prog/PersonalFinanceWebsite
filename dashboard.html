@@ -4434,6 +4434,26 @@
 
         function find(id) { return pending.find(function (p) { return p.id === id; }); }
 
+        // "Account **37" / "Card **70" → the account id whose name the user mapped
+        // those 2 digits to in Settings → Expense → Account Mapping. Returns ""
+        // when there is no source tag, no mapping, or no matching account.
+        function mapSourceToAccountId(sourceTag) {
+          var m = String(sourceTag || "").match(/(\d{2})\s*$/);
+          if (!m) return "";
+          var last2 = m[1];
+          var maps;
+          try { maps = JSON.parse(localStorage.getItem("wf-account-map")) || []; }
+          catch (e) { return ""; }
+          var hit = maps.find(function (x) {
+            return x && !x._deleted && String(x.last2) === last2;
+          });
+          if (!hit) return "";
+          var acct = (dashExpState.accounts || []).find(function (a) {
+            return (a.name || "").trim().toLowerCase() === String(hit.name).trim().toLowerCase();
+          });
+          return acct ? acct.id : "";
+        }
+
         // Categorise → open the record modal prefilled from the parsed email.
         function categorise(id) {
           var it = find(id);
@@ -4441,12 +4461,15 @@
           var today = new Date().toISOString().slice(0, 10);
           // Only the source tag ("Account **37") seeds the note — the user types
           // the merchant after reading the email body shown on the card.
+          // If the last-2-digits are mapped (Settings → Expense → Account Mapping)
+          // to an account name, pre-select that account instead of the first one.
+          var mappedAccountId = mapSourceToAccountId(it.source_account);
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
             txn_date: it.txn_date || today,
             note: (it.source_account || "").trim(),
-            account_id: (dashExpState.accounts[0] || {}).id || "",
+            account_id: mappedAccountId || (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
             subcategory_id: "",
             payment_method_id: ""

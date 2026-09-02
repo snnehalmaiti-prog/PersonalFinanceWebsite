@@ -17,7 +17,8 @@
     "wf-expense-templates",
     "wf-recurring-payments",
     "wf-liabilities",
-    "wf-epf-interest-rates"
+    "wf-epf-interest-rates",
+    "wf-account-map"
   ];
 
   // DB column name for each localStorage key
@@ -33,7 +34,8 @@
     "wf-expense-templates":      "expense_templates",
     "wf-recurring-payments":     "recurring_payments",
     "wf-liabilities":            "liabilities",
-    "wf-epf-interest-rates":     "epf_interest_rates"
+    "wf-epf-interest-rates":     "epf_interest_rates",
+    "wf-account-map":            "account_map"
   };
 
   // ── Minimal Supabase REST client (no npm, no bundler) ─────────────────────
