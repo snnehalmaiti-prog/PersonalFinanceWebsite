@@ -844,18 +844,21 @@
       if (status) status.textContent = rows.length
         ? (rows.length + (rows.length === 1 ? " mapping" : " mappings"))
         : "No mappings yet.";
-      list.innerHTML = rows.map(function (m) {
-        return '<div class="exp-row exp-acctmap-row" data-id="' + esc(m.id) + '">' +
-          '<div class="exp-row-main">' +
-            '<span class="exp-acctmap-badge">**' + esc(String(m.last2)) + '</span>' +
-            '<span class="exp-acctmap-rowname">' + esc(m.name || "") + '</span>' +
+      list.innerHTML = '<div class="wf-card-grid">' + rows.map(function (m) {
+        return '<div class="wf-item-card">' +
+          '<div class="wf-item-card-head">' +
+            '<div class="wf-item-badge" style="background:var(--surface-alt);color:var(--text);font-size:12px;">**' + esc(String(m.last2)) + '</div>' +
+            '<div class="wf-item-title-wrap">' +
+              '<div class="wf-item-title">' + esc(m.name || "") + '</div>' +
+              '<div class="wf-item-sub"><span>Account / card ending ' + esc(String(m.last2)) + '</span></div>' +
+            '</div>' +
           '</div>' +
-          '<div class="exp-row-actions">' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-acctmap-edit="' + esc(m.id) + '">Edit</button>' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-acctmap-del="' + esc(m.id) + '">Delete</button>' +
+          '<div class="wf-item-actions">' +
+            '<button type="button" class="wf-icon-btn" data-acctmap-edit="' + esc(m.id) + '" title="Edit">✎ Edit</button>' +
+            '<button type="button" class="wf-icon-btn wf-icon-btn-danger" data-acctmap-del="' + esc(m.id) + '" title="Delete">🗑 Delete</button>' +
           '</div>' +
         '</div>';
-      }).join("");
+      }).join("") + '</div>';
     }
 
     function acctMapSubmit() {
