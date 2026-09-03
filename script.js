@@ -886,9 +886,10 @@
         } else lotsF.push(t.amount);
       });
       var invF = lotsF.reduce(function (s, l) { return s + l; }, 0);
-      return { invested: invF, current: invF + intF, realizedProfit: realF, realizedByYear: {} };
+      return { invested: invF, current: invF + intF, realizedProfit: realF, realizedByYear: {}, realizedByMonth: {} };
     }
     var realizedByYear = {};
+    var realizedByMonth = {};   // "YYYY-MM" → realized interest booked that month
 
     // Manual interest per FY (any manual interest in a FY suppresses auto-calc for it).
     var manualByFY = {};
@@ -934,6 +935,8 @@
             realized += ip;
             var wy = String(cur.getFullYear());
             realizedByYear[wy] = (realizedByYear[wy] || 0) + ip;
+            var wmk = cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0");
+            realizedByMonth[wmk] = (realizedByMonth[wmk] || 0) + ip;
             var fromAccrued = Math.min(accrued, ip); accrued -= fromAccrued; credited -= (ip - fromAccrued);
           }
         });
@@ -952,7 +955,7 @@
     var principal = lots.reduce(function (s, l) { return s + l.amount; }, 0);
     // Current value includes the in-progress FY's accrued interest (shown live,
     // not only after 31 Mar); it is not yet moved into `credited`.
-    return { invested: principal, current: principal + credited + accrued, realizedProfit: realized, realizedByYear: realizedByYear };
+    return { invested: principal, current: principal + credited + accrued, realizedProfit: realized, realizedByYear: realizedByYear, realizedByMonth: realizedByMonth };
   }
 
   // Debug logger — off by default so holdings/scheme codes/emails aren't dumped
@@ -1218,6 +1221,36 @@
     return out;
   }
 
+  // Same as fdMaturedRealizedByYear but bucketed by "YYYY-MM" of the maturity
+  // date — for the accurate GAIN · MONTHLY card's combined Realized segment.
+  function fdMaturedRealizedByMonth(rows, portfolioFilter) {
+    var out = {};
+    if (!rows || !rows.length) return out;
+    var header = rows[0].map(normalizeText);
+    var pI = header.indexOf("portfolio name"), cI = header.indexOf("instrument category"),
+        sI = header.indexOf("instrument sub category"), aI = header.indexOf("invested amount"),
+        dI = header.indexOf("transaction date"), rI = header.indexOf("rate of return"),
+        mI = header.indexOf("maturity date/sell date");
+    if (mI === -1) mI = header.indexOf("maturity date");
+    if (pI === -1 || aI === -1 || dI === -1 || sI === -1 || mI === -1 || rI === -1) return out;
+    var todayD = new Date();
+    rows.slice(1).forEach(function (row) {
+      var pf = (row[pI] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(pf) !== normalizeText(portfolioFilter)) return;
+      if (cI !== -1 && normalizeText(row[cI]) !== "fixed income") return;
+      if (!_fiIsTermDeposit(normalizeText(row[sI] || ""))) return;
+      var matD = parseFlexibleDate(row[mI]);
+      if (!(matD && matD < todayD)) return;
+      var principal = parseNumber(row[aI]);
+      var rate = parsePercentRate(row[rI]);
+      var interest = fdMaturityValue(principal, parseFlexibleDate(row[dI]), matD, rate) - principal;
+      if (!interest) return;
+      var mk = matD.getFullYear() + "-" + String(matD.getMonth() + 1).padStart(2, "0");
+      out[mk] = (out[mk] || 0) + interest;
+    });
+    return out;
+  }
+
   // Provident-fund realized interest keyed by WITHDRAWAL year (mirrors the FIFO logic
   // in buildFdFixedIncomeHoldingsList so the total equals sumProvidentFundRealizedProfit).
   function pfRealizedByYear(rows, portfolioFilter) {
@@ -1249,6 +1282,38 @@
       var v = computePfAccountValue(byKey[k], subOfKey === "provident fund" ? rateMap : {}, now);
       Object.keys(v.realizedByYear || {}).forEach(function (yr) {
         out[yr] = (out[yr] || 0) + v.realizedByYear[yr];
+      });
+    });
+    return out;
+  }
+
+  // Provident-fund realized interest keyed by "YYYY-MM" of the withdrawal — the
+  // by-month counterpart of pfRealizedByYear for the GAIN · MONTHLY card.
+  function pfRealizedByMonth(rows, portfolioFilter) {
+    var out = {};
+    if (!rows || !rows.length) return out;
+    var header = rows[0].map(normalizeText);
+    var pI = header.indexOf("portfolio name"), cI = header.indexOf("instrument category"),
+        sI = header.indexOf("instrument sub category"), tI = header.indexOf("transaction type"),
+        aI = header.indexOf("invested amount"), dI = header.indexOf("transaction date"),
+        iI = header.indexOf("instrument name");
+    if (pI === -1 || aI === -1 || dI === -1 || sI === -1) return out;
+    var byKey = {};
+    rows.slice(1).forEach(function (row) {
+      var pf = (row[pI] || "").trim();
+      if (portfolioFilter !== "all" && normalizeText(pf) !== normalizeText(portfolioFilter)) return;
+      if (cI !== -1 && normalizeText(row[cI]) !== "fixed income") return;
+      if (!isProvidentFundSub(normalizeText(row[sI] || ""))) return;
+      var key = normalizeText(pf) + "||" + normalizeText(iI !== -1 ? (row[iI] || "") : "") + "||" + normalizeText(row[sI] || "");
+      (byKey[key] = byKey[key] || []).push({ date: parseFlexibleDate(row[dI]), amount: parseNumber(row[aI]), type: tI !== -1 ? normalizeText(row[tI] || "") : "" });
+    });
+    var rateMap = getEpfRateMap();
+    var now = new Date();
+    Object.keys(byKey).forEach(function (k) {
+      var subOfKey = k.split("||")[2] || "";
+      var v = computePfAccountValue(byKey[k], subOfKey === "provident fund" ? rateMap : {}, now);
+      Object.keys(v.realizedByMonth || {}).forEach(function (mk) {
+        out[mk] = (out[mk] || 0) + v.realizedByMonth[mk];
       });
     });
     return out;
@@ -14687,6 +14752,87 @@
     });
   }
 
+  // Realized profit bucketed by "YYYY-MM", summed across ALL classes — MF +
+  // Stocks/ETF (FIFO), commodity (on sale), and fixed income (FD maturity + PF
+  // withdrawal). One combined total per month; the GAIN · MONTHLY card draws it
+  // as a single Realized segment. Mirrors buildRealizedProfitByCategory's
+  // per-class logic but keyed by month and totalled rather than split.
+  // Returns Promise<{ "YYYY-MM": realizedProfit }>.
+  function buildRealizedTotalByMonth(portfolioFilter) {
+    var fdRows = getSheetRows("fd");
+    var commDates = (fdRows && typeof collectCommodityUniqueDates === "function")
+      ? collectCommodityUniqueDates(fdRows, portfolioFilter) : [];
+    return Promise.all([
+      fetchAllStockPrices().catch(function () { return {}; }),
+      _hasCommodityRows(fdRows, portfolioFilter)
+        ? fetchGoldPriceINRPerGram().catch(function () { return null; })
+        : Promise.resolve(null),
+      Promise.all(commDates.map(function (d) {
+        return fetchXauInrForDate(d).then(function (p) { return { d: d, p: p }; }).catch(function () { return { d: d, p: null }; });
+      }))
+    ]).then(function (res) {
+      var sp = res[0], goldPrice = res[1];
+      var commHist = {};
+      res[2].forEach(function (r) { if (r.p) commHist[r.d] = r.p; });
+      var usdInr = (sp && sp.usd_inr_history) || {};
+      var usdToday = (sp && sp.prices && sp.prices["__USD_INR__"]) ? sp.prices["__USD_INR__"].price : 84;
+      var seMap = buildStockMappingTable();
+      var out = {};
+      function add(mk, amt) { if (!amt || !mk) return; out[mk] = (out[mk] || 0) + amt; }
+
+      // MF ("equity" sheet) + Stocks/ETF: FIFO realized at each sell's month.
+      ["equity", "stocksetf"].forEach(function (prefix) {
+        var rows = getSheetRows(prefix);
+        if (!rows) return;
+        var tx = groupUnitTransactionsByInstrument(rows, portfolioFilter);
+        if (!tx) return;
+        Object.keys(tx).forEach(function (instr) {
+          var norm = normalizeText(instr), isUsd = false;
+          if (prefix === "stocksetf") {
+            var m = seMap[norm];
+            isUsd = !!(m && normalizeText(m.region) === "us");
+          }
+          var lots = [];
+          tx[instr].forEach(function (t) {
+            if (t.type === "buy") {
+              var br = isUsd ? lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday) : 1;
+              lots.push({ units: t.units, cost: t.price * br });
+              return;
+            }
+            var toMatch = t.units, costMatched = 0, matched = 0;
+            while (toMatch > 0 && lots.length) {
+              var l = lots[0], mq = Math.min(toMatch, l.units);
+              costMatched += mq * l.cost; matched += mq; l.units -= mq; toMatch -= mq;
+              if (l.units <= 0) lots.shift();
+            }
+            if (matched <= 0) return;
+            var sr = isUsd ? lookupUsdInrRate(usdInr, formatDateISO(t.date), usdToday) : 1;
+            var mk = t.date ? (t.date.getFullYear() + "-" + String(t.date.getMonth() + 1).padStart(2, "0")) : null;
+            add(mk, (matched * t.price * sr) - costMatched);
+          });
+        });
+      });
+
+      // Commodity: realized profit booked in the sell month.
+      if (fdRows && goldPrice) {
+        (buildCommodityHoldingsList(fdRows, portfolioFilter, goldPrice, commHist) || [])
+          .forEach(function (h) {
+            if (h.realizedProfit && h.sellDateStr) add(h.sellDateStr.slice(0, 7), h.realizedProfit);
+          });
+      }
+
+      // Fixed income: FD maturity interest + PF withdrawal interest, by month.
+      if (fdRows) {
+        var fdM = fdMaturedRealizedByMonth(fdRows, portfolioFilter);
+        Object.keys(fdM).forEach(function (mk) { add(mk, fdM[mk]); });
+        var pfM = pfRealizedByMonth(fdRows, portfolioFilter);
+        Object.keys(pfM).forEach(function (mk) { add(mk, pfM[mk]); });
+      }
+
+      return out;
+    }).catch(function () { return {}; });
+  }
+
   // Year selection now matches EXPENSE BY CATEGORY: a decade-grid picker holding
   // real years only, with "All time" split out into its own toggle. The buckets
   // are still keyed by year plus an "all" bucket, so the lookup key is derived
@@ -20001,26 +20147,6 @@
 
   }
 
-  // Flatten buildRealizedByMonthInstrument's {month:{pf:{instr:{cost,proceeds}}}}
-  // to {month: realizedProfit}. Covers equity + stocks/ETF sells (the classes
-  // that source has); MF / commodity / FD realized-on-withdrawal is not included
-  // yet, so a month with such a withdrawal understates its gain until added.
-  function _nwmRealizedByMonth(nested) {
-    var out = {};
-    Object.keys(nested || {}).forEach(function (mk) {
-      var byPf = nested[mk] || {}, tot = 0;
-      Object.keys(byPf).forEach(function (pf) {
-        var byInstr = byPf[pf] || {};
-        Object.keys(byInstr).forEach(function (instr) {
-          var e = byInstr[instr] || {};
-          tot += (Number(e.proceeds) || 0) - (Number(e.cost) || 0);
-        });
-      });
-      out[mk] = tot;
-    });
-    return out;
-  }
-
   // Build and render the accurate monthly-gain bars from window.__wfGainSeries.
   // Returns true if it took over the card, false to let the snapshot path run.
   function _nwmTryAccurate() {
@@ -20056,11 +20182,12 @@
         _nwmRender(rows);
       }
 
-      // Take over now; fetch realized asynchronously and render (mark-to-market
-      // only if it fails, never falling back to the slower snapshot estimate).
-      if (typeof buildRealizedByMonthInstrument === "function") {
-        buildRealizedByMonthInstrument(pf)
-          .then(function (nested) { renderWith(_nwmRealizedByMonth(nested)); })
+      // Take over now; fetch realized (all classes: MF/Stocks + commodity + FD +
+      // PF) asynchronously and render — mark-to-market only if it fails, never
+      // falling back to the slower snapshot estimate.
+      if (typeof buildRealizedTotalByMonth === "function") {
+        buildRealizedTotalByMonth(pf)
+          .then(function (byMonth) { renderWith(byMonth || {}); })
           .catch(function () { renderWith({}); });
       } else {
         renderWith({});
