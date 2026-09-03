@@ -19485,26 +19485,19 @@
         return '<div class="mic-hs-tot"><span class="mic-hs-tot-label">' +
           escapeHtml(label) + '</span><b class="' + (cls || "") + '">' + val + '</b></div>';
       };
-      var mkt = row.market || 0, intr = row.interest || 0,
-          real = row.realized || 0, tot = row.delta || 0;
+      var mkt = row.market || 0, intr = row.interest || 0, tot = row.delta || 0;
       if (totalsEl) {
         totalsEl.innerHTML =
           tot0(mkt < 0 ? "Market loss" : "Market gain", _nwmSigned(mkt),
                mkt < 0 ? "negative" : "mic-hs-pos") +
           (intr ? tot0("Interest", _nwmSigned(intr),
                        intr < 0 ? "negative" : "mic-hs-pos") : "") +
-          tot0("Total gain", _nwmSigned(tot), tot < 0 ? "negative" : "mic-hs-pos") +
-          // Realized is info only \u2014 a re-labelling of gains already inside the
-          // mark-to-market total. Shown for context, not added.
-          (real ? tot0("Realized (info)", _nwmSigned(real),
-                       real < 0 ? "negative" : "mic-hs-pos") : "");
+          tot0("Total gain", _nwmSigned(tot), tot < 0 ? "negative" : "mic-hs-pos");
       }
       bodyEl.innerHTML =
         '<p class="muted small" style="padding:4px;">' +
         "Gain = Market (equity + commodity) + Interest (fixed income). " +
-        "Realized shows how much of the accumulated gain was locked in this " +
-        "month by a sale/withdrawal \u2014 it is already included in the market " +
-        "line above, not an additional amount." +
+        "Realized profit is shown on CASH FLOW \u00b7 MONTHLY." +
         "</p>";
       ov.hidden = false;
       return;
@@ -20090,11 +20083,10 @@
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
              tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
-             // Realized in accurate mode is INFO-ONLY (it re-labels gains
-             // already inside Market). Snapshot mode still shows it as a term.
-             (st.realized
-                 ? tot(st._accurate ? "Realized (info)" : "Realized",
-                       _nwmSigned(st.realized),
+             // Realized lives on CASH FLOW · MONTHLY — not shown here in
+             // accurate mode. Snapshot mode keeps it if any is present.
+             (!st._accurate && st.realized
+                 ? tot("Realized", _nwmSigned(st.realized),
                        st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
              (st._accurate ? "" : cash("Idle Cash", st.idle));
     }
@@ -20342,16 +20334,9 @@
         _nwmRender(rows);
       }
 
-      // Take over now; fetch realized (all classes: MF/Stocks + commodity + FD +
-      // PF) asynchronously and render — mark-to-market only if it fails, never
-      // falling back to the slower snapshot estimate.
-      if (typeof buildRealizedTotalByMonth === "function") {
-        buildRealizedTotalByMonth(pf)
-          .then(function (byMonth) { renderWith(byMonth || {}); })
-          .catch(function () { renderWith({}); });
-      } else {
-        renderWith({});
-      }
+      // Realized isn't shown on this card — it lives on CASH FLOW · MONTHLY,
+      // and displaying it here as info-only was confusing. Render directly.
+      renderWith({});
       return true;
     } catch (e) {
       dbg && dbg("[nwm] accurate path failed, using snapshots:", e && e.message);
