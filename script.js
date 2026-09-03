@@ -20263,14 +20263,16 @@
       if (!gs || gs.portfolio !== pf || !gs.months || gs.months.length < 2) return false;
       if (!(window.WfSnapshots && WfSnapshots.monthlyGainFromSeries)) return false;
 
-      // Everything comes from the value chart's book so the numbers reconcile:
-      //   Market  = Δgap on equity + commodity        (mark-to-market movement)
-      //   Interest = Δgap on fixed income             (Current up while
-      //             invested principal is flat = interest earned)
+      //   Market   = Δgap on equity + commodity        (mark-to-market movement,
+      //              persists across sales because invested = cash-flow view)
+      //   Interest = FD/PF/EPF interest EARNED that month, from the sheets.
+      //              Deriving it from Δgap_fi would swing negative on a
+      //              maturity/withdrawal (accrual leaves the tracked accounts,
+      //              which isn't a "loss") — interest earned is never negative.
       //   Contributions = Δ(total invested)           (Buys − Sells, net of
-      //             withdrawals; per the cash-flow invested series)
+      //              withdrawals; per the cash-flow invested series)
       // Realized is INFO-ONLY (a re-labelling of a gain already captured in
-      // the gap when it was still unrealized) — it does NOT add to the total.
+      // the equity gap when it was still unrealized) — it does NOT add to gain.
       function _byMonthDeltas(seriesArr, key) {
         var vals = {};
         (seriesArr || []).forEach(function (s) { vals[s.month] = Number(s[key]) || 0; });
@@ -20281,11 +20283,14 @@
         }
         return out;
       }
-      var eqCurDelta  = _byMonthDeltas(gs.monthsEq, "current");
-      var eqInvDelta  = _byMonthDeltas(gs.monthsEq, "invested");
-      var fiCurDelta  = _byMonthDeltas(gs.monthsFi, "current");
-      var fiInvDelta  = _byMonthDeltas(gs.monthsFi, "invested");
-      var contribs    = _byMonthDeltas(gs.months,   "invested");
+      var eqCurDelta = _byMonthDeltas(gs.monthsEq, "current");
+      var eqInvDelta = _byMonthDeltas(gs.monthsEq, "invested");
+      var contribs   = _byMonthDeltas(gs.months,   "invested");
+      // Interest — sheet-based, always ≥ 0. Walks from the first month of the
+      // series (helper takes a "YYYY-MM" start key).
+      var firstMonth = gs.months[0] && gs.months[0].month;
+      var interests = (typeof _nwmInterestByMonth === "function" && firstMonth)
+        ? _nwmInterestByMonth(firstMonth, pf) : {};
       // interest by month keyed from the first month of the series (the helper
       // walks forward from the given "YYYY-MM").
       var firstMonth = gs.months[0] && gs.months[0].month;
@@ -20310,11 +20315,9 @@
         var monthKeys = Object.keys(allMonths).sort();
         var cum = 0;
         var rows = monthKeys.map(function (m) {
-          // Market = equity/commodity gap change; Interest = FI gap change.
-          //   Δgap_eq = ΔCurrent_eq − ΔInvested_eq
-          //   Δgap_fi = ΔCurrent_fi − ΔInvested_fi   (== interest earned)
+          // Market = equity/commodity gap change; Interest = FD/PF/EPF earned.
           var market   = (eqCurDelta[m] || 0) - (eqInvDelta[m] || 0);
-          var interest = (fiCurDelta[m] || 0) - (fiInvDelta[m] || 0);
+          var interest = Number(interests[m]) || 0;
           var gain     = market + interest;              // no +realized here
           var contrib  = Number(contribs[m]) || 0;
           var realized = Number((realizedByMonth || {})[m]) || 0;
