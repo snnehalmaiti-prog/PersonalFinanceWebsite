@@ -19445,6 +19445,33 @@
     }
     if (totalsEl) totalsEl.innerHTML = "";
 
+    // Accurate mode: the month's gain is not decomposed from snapshots by
+    // category \u2014 there is nothing to break down beyond the two segments the bar
+    // already draws (mark-to-market movement + realized profit). Show them here
+    // and stop; the "no snapshot split" error is irrelevant to this path.
+    if (row._accurate) {
+      var tot0 = function (label, val, cls) {
+        return '<div class="mic-hs-tot"><span class="mic-hs-tot-label">' +
+          escapeHtml(label) + '</span><b class="' + (cls || "") + '">' + val + '</b></div>';
+      };
+      var mkt = row.market || 0, real = row.realized || 0, tot = row.delta || 0;
+      if (totalsEl) {
+        totalsEl.innerHTML =
+          tot0(mkt < 0 ? "Market loss" : "Market gain", _nwmSigned(mkt),
+               mkt < 0 ? "negative" : "mic-hs-pos") +
+          (real ? tot0("Realized", _nwmSigned(real),
+                       real < 0 ? "negative" : "mic-hs-pos") : "") +
+          tot0("Total gain", _nwmSigned(tot), tot < 0 ? "negative" : "mic-hs-pos");
+      }
+      bodyEl.innerHTML =
+        '<p class="muted small" style="padding:4px;">' +
+        "Gain = mark-to-market movement + realized profit booked this month. " +
+        "The per-category split from snapshots isn\u2019t used in the accurate mode." +
+        "</p>";
+      ov.hidden = false;
+      return;
+    }
+
     // Household only. The category columns are the household's; by_portfolio
     // records each portfolio's TOTAL, not its categories, so a per-portfolio
     // breakdown is not on record and is not invented here.
