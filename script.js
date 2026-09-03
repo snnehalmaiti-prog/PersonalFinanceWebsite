@@ -19408,6 +19408,10 @@
   // from. There is no second derivation to reconcile, which is the whole reason
   // this works at category level.
   var __nwmDrillCtx = null;   // set by the render: the series feeding the bars
+  // Snapshot fallback is deferred on first render so the accurate path (which
+  // depends on the async value-chart series) has a chance to paint first
+  // without a visible flash of the older snapshot-based card.
+  var _nwmSnapshotFallbackArmed = false;
 
   function _nwmDrillClose() {
     var ov = document.getElementById("nwm-drill-overlay");
@@ -20249,6 +20253,24 @@
     // from snapshots. Falls through to the snapshot path if unavailable or on
     // any error, so the card can never end up worse off than before.
     if (_nwmTryAccurate()) return;
+    // On the first render the Account Value chart is usually still building the
+    // series — it re-triggers this render when done. Painting snapshots now
+    // would show the old card for a few seconds then flash to the accurate one.
+    // Show a brief loading state instead; only fall back to snapshots if the
+    // series still hasn't arrived after a grace period (long enough for a slow
+    // NAV fetch, short enough that a user with no equity data isn't left waiting
+    // on an empty card).
+    if (!_nwmSnapshotFallbackArmed) {
+      _nwmSnapshotFallbackArmed = true;
+      if (statusEl) { statusEl.hidden = false; statusEl.textContent = "Loading…"; }
+      setTimeout(function () {
+        // The series capture re-calls renderNetWorthMonthly the moment it lands;
+        // if it did already, we're done. Otherwise, resume with snapshots.
+        if (_nwmTryAccurate()) return;
+        renderNetWorthMonthly();
+      }, 7000);
+      return;
+    }
     WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
       .then(function (rows) {
         var list = rows || [];
