@@ -20242,13 +20242,22 @@
       if (!gs || gs.portfolio !== pf || !gs.months || gs.months.length < 2) return false;
       if (!(window.WfSnapshots && WfSnapshots.monthlyGainFromSeries)) return false;
 
-      // These snapshot-independent helpers give us the two figures the accurate
-      // formula collapses into the gap-change: what you put in each month
-      // (contributions) and what interest was booked (FD/PF/etc). Interest is
-      // subtracted from the gap-change to leave "Market (pure)", so the header
-      // labels are separately displayed without inflating the total gain.
-      var contribs = (typeof _nwmContributionsByMonth === "function")
-        ? _nwmContributionsByMonth(pf) : {};
+      // Interest by month — snapshot-independent helper is fine here since it
+      // has nothing to do with the value-chart's cost-basis series.
+      // Contributions, however, MUST come from the same book the invested
+      // series uses (equity/MF cost basis + FI principal). Using a different
+      // helper (buildMonthlyInvestCatData) gave a different number and the two
+      // stopped reconciling: change ≠ contributions + gain. Derive it here
+      // directly from the invested series — the month-over-month increase in
+      // invested IS the contribution (net of withdrawals).
+      var invByMonth = {};
+      gs.months.forEach(function (s) { invByMonth[s.month] = Number(s.invested) || 0; });
+      var invKeys = Object.keys(invByMonth).sort();
+      var contribs = {};
+      for (var _ci = 0; _ci < invKeys.length; _ci++) {
+        var _prevInv = _ci > 0 ? invByMonth[invKeys[_ci - 1]] : 0;
+        contribs[invKeys[_ci]] = invByMonth[invKeys[_ci]] - _prevInv;
+      }
       // interest by month keyed from the first month of the series (the helper
       // walks forward from the given "YYYY-MM").
       var firstMonth = gs.months[0] && gs.months[0].month;
