@@ -20007,6 +20007,17 @@
     var closing = rows[0].total;                       // rows are newest first
     if (!comp.length) return { closing: closing };
     var oldest = comp[comp.length - 1];
+    // Accurate-mode Closing: prefer today's tail-snapped live value when the
+    // period extends to the current month (current year OR "all time"). The
+    // current-month row is dropped from the visible bars, so `rows[0].total`
+    // is the previous month's close — stale for a "how did I do this year"
+    // headline. See __nwmDrillCtx.latestCurrent (set in _nwmTryAccurate).
+    var _now2 = new Date();
+    var _thisYr = String(_now2.getFullYear());
+    var _includesNow = __nwmAllTime || String(__nwmYear || "") === _thisYr;
+    if (_includesNow && __nwmDrillCtx && typeof __nwmDrillCtx.latestCurrent === "number") {
+      closing = __nwmDrillCtx.latestCurrent;
+    }
     // A period is "accurate" if every row in it came from the accurate path;
     // used by the header to drop labels that don't apply to that formula.
     var allAccurate = comp.every(function (r) { return r && r._accurate; });
@@ -20327,8 +20338,20 @@
         });
         // Drill-down is a snapshot-attribution feature; in accurate mode there is
         // no per-category breakdown, so give it empty context (it renders nothing
-        // rather than throwing).
-        __nwmDrillCtx = { contribByCat: {}, allRows: rows };
+        // rather than throwing). Also carry today's row separately so
+        // _nwmPeriodStats can use it as Closing — the current-month row is
+        // filtered out of the visible bars, and the last VISIBLE bar (last
+        // completed month) is stale for a "closing balance" question about
+        // "how did I do this year". Today's row is tail-snapped to the live
+        // Overview total, which is what the user actually expects to see.
+        var _now = new Date();
+        var _curMk = _now.getFullYear() + "-" + String(_now.getMonth() + 1).padStart(2, "0");
+        var _todayRow = rows.filter(function (r) { return r.month === _curMk; })[0] || null;
+        __nwmDrillCtx = {
+          contribByCat: {},
+          allRows: rows,
+          latestCurrent: _todayRow ? _todayRow.total : null
+        };
         var statusEl = document.getElementById("nwm-status");
         if (statusEl) statusEl.hidden = true;
         _nwmRender(rows);
