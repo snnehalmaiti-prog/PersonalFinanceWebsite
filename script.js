@@ -19987,6 +19987,73 @@
 
   }
 
+  // Flatten buildRealizedByMonthInstrument's {month:{pf:{instr:{cost,proceeds}}}}
+  // to {month: realizedProfit}. Covers equity + stocks/ETF sells (the classes
+  // that source has); MF / commodity / FD realized-on-withdrawal is not included
+  // yet, so a month with such a withdrawal understates its gain until added.
+  function _nwmRealizedByMonth(nested) {
+    var out = {};
+    Object.keys(nested || {}).forEach(function (mk) {
+      var byPf = nested[mk] || {}, tot = 0;
+      Object.keys(byPf).forEach(function (pf) {
+        var byInstr = byPf[pf] || {};
+        Object.keys(byInstr).forEach(function (instr) {
+          var e = byInstr[instr] || {};
+          tot += (Number(e.proceeds) || 0) - (Number(e.cost) || 0);
+        });
+      });
+      out[mk] = tot;
+    });
+    return out;
+  }
+
+  // Build and render the accurate monthly-gain bars from window.__wfGainSeries.
+  // Returns true if it took over the card, false to let the snapshot path run.
+  function _nwmTryAccurate() {
+    try {
+      var gs = window.__wfGainSeries;
+      var pf = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+      if (!gs || gs.portfolio !== pf || !gs.months || gs.months.length < 2) return false;
+      if (!(window.WfSnapshots && WfSnapshots.monthlyGainFromSeries)) return false;
+
+      function renderWith(realizedByMonth) {
+        var gainRows = WfSnapshots.monthlyGainFromSeries(gs.months, realizedByMonth || {});
+        var cum = 0;
+        var rows = gainRows.map(function (g) {
+          cum += g.gain;
+          // Shape the accurate gain into the fields _nwmRender/_nwmDrawChart read:
+          // the whole gain lives in `market` (drawn as the gain/loss bar); the
+          // snapshot-only terms are zero here.
+          return {
+            month: g.month, delta: g.gain, total: cum, market: g.gain,
+            interest: 0, idle: 0, contributions: 0, estimated: false, _accurate: true
+          };
+        });
+        // Drill-down is a snapshot-attribution feature; in accurate mode there is
+        // no per-category breakdown, so give it empty context (it renders nothing
+        // rather than throwing).
+        __nwmDrillCtx = { contribByCat: {}, allRows: rows };
+        var statusEl = document.getElementById("nwm-status");
+        if (statusEl) statusEl.hidden = true;
+        _nwmRender(rows);
+      }
+
+      // Take over now; fetch realized asynchronously and render (mark-to-market
+      // only if it fails, never falling back to the slower snapshot estimate).
+      if (typeof buildRealizedByMonthInstrument === "function") {
+        buildRealizedByMonthInstrument(pf)
+          .then(function (nested) { renderWith(_nwmRealizedByMonth(nested)); })
+          .catch(function () { renderWith({}); });
+      } else {
+        renderWith({});
+      }
+      return true;
+    } catch (e) {
+      dbg && dbg("[nwm] accurate path failed, using snapshots:", e && e.message);
+      return false;
+    }
+  }
+
   function renderNetWorthMonthly() {
     var card = document.getElementById("net-worth-monthly-card");
     if (!card) return;
@@ -20004,6 +20071,12 @@
       var nwmPort = localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
       nwmPortNameEl.textContent = nwmPort === "all" ? "" : " · " + nwmPort;
     }
+    // Accurate path: when the Account Value chart has published its monthly
+    // Current+Invested series for THIS portfolio, compute each month's true gain
+    // from it (Δ(current−invested)+realized) instead of reconstructing history
+    // from snapshots. Falls through to the snapshot path if unavailable or on
+    // any error, so the card can never end up worse off than before.
+    if (_nwmTryAccurate()) return;
     WfDb.select(SNAP_TABLE, "select=*&order=snapshot_date.asc")
       .then(function (rows) {
         var list = rows || [];
