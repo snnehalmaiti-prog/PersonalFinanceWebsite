@@ -746,7 +746,42 @@
     return out;
   }
 
+  // ── Accurate monthly gain from the value-chart's cost-basis series ──────────
+  // Given monthly [{month:"YYYY-MM", current, invested}] (market value and
+  // cumulative cost basis) plus realizedByMonth {"YYYY-MM": realizedProfit}, the
+  // gain earned IN a month is the change in the unrealized gap plus any profit
+  // realized (and thus removed from the gap) that month:
+  //     gain(m) = (current−invested)(m) − (current−invested)(m−1) + realized(m)
+  // This does not double-count: a sale drops the gap by the position's gain, and
+  // realized(m) adds exactly that back in the month it was booked. The first
+  // month has no prior gap so it opens from 0. Returns
+  // [{month, gain, gapChange, realized, current, invested}] oldest-first.
+  function monthlyGainFromSeries(months, realizedByMonth) {
+    var rb = realizedByMonth || {};
+    var sorted = (months || []).slice().sort(function (a, b) {
+      return String(a.month).localeCompare(String(b.month));
+    });
+    var out = [], prevGap = null;
+    for (var i = 0; i < sorted.length; i++) {
+      var r = sorted[i];
+      var gap = (Number(r.current) || 0) - (Number(r.invested) || 0);
+      var gapChange = prevGap == null ? gap : gap - prevGap;
+      var realized = Number(rb[r.month]) || 0;
+      out.push({
+        month: r.month,
+        gain: gapChange + realized,
+        gapChange: gapChange,
+        realized: realized,
+        current: Number(r.current) || 0,
+        invested: Number(r.invested) || 0
+      });
+      prevGap = gap;
+    }
+    return out;
+  }
+
   root.WfSnapshots = {
+    monthlyGainFromSeries: monthlyGainFromSeries,
     monthEndSeries: monthEndSeries,
     categoryChange: categoryChange,
     previousRecorded: previousRecorded,
