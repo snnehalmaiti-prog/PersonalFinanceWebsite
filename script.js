@@ -20205,6 +20205,14 @@
   function _nwmRender(rows) {
     var statusEl = document.getElementById("nwm-status");
 
+    // The current month is still running, so any figure for it would be a
+    // partial-month snapshot masquerading as a completed month's gain. Drop it
+    // from the card — the September bar reappears on 1 October, once the month
+    // is closed. Applies to both the accurate and snapshot paths.
+    var _now = new Date();
+    var _currentMk = _now.getFullYear() + "-" + String(_now.getMonth() + 1).padStart(2, "0");
+    rows = (rows || []).filter(function (r) { return r && r.month !== _currentMk; });
+
     if (!rows.length) {
       if (statusEl) {
         statusEl.hidden = false;
