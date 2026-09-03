@@ -12215,6 +12215,32 @@
           }
         })();
 
+        // Capture the monthly Current + Invested series for the accurate
+        // GAIN · MONTHLY card. Keyed by month (YYYY-MM); the last sample of a
+        // month wins (the trailing "today" point overrides that month's start).
+        // The card reads this instead of reconstructing history from snapshots.
+        try {
+          var _gainMonths = {};
+          for (var _gi = 0; _gi < pointsAll.length; _gi++) {
+            var _gd = pointsAll[_gi] && pointsAll[_gi].x;
+            if (!_gd) continue;
+            var _gk = _gd.getFullYear() + "-" + String(_gd.getMonth() + 1).padStart(2, "0");
+            _gainMonths[_gk] = {
+              month: _gk,
+              current: pointsAll[_gi].y,
+              invested: (investedAll[_gi] && investedAll[_gi].y) || 0
+            };
+          }
+          window.__wfGainSeries = {
+            portfolio: selectedPortfolio,
+            months: Object.keys(_gainMonths).sort().map(function (k) { return _gainMonths[k]; }),
+            builtAt: Date.now()
+          };
+          if (typeof window.renderNetWorthMonthly === "function") {
+            try { window.renderNetWorthMonthly(); } catch (e) {}
+          }
+        } catch (e) { /* series capture is best-effort; card falls back to snapshots */ }
+
         // Render the raw Account Value (₹) chart next to Growth-of-₹100.
         try {
           _renderPortfolioValueChart(pointsAll, _netOfLiabilityPoints(pointsAll, selectedPortfolio), investedAll);
