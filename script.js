@@ -12280,37 +12280,52 @@
           }
         })();
 
-        // Capture the monthly Current + Invested series for the accurate
-        // GAIN · MONTHLY card. Every non-last sample sits on the 1st of a
-        // month, which represents the END of the PREVIOUS month — key it that
-        // way so a bar's month-over-month change actually falls on the month
-        // whose activity produced it. The last sample is "today" (partial
-        // current month) and stays keyed as the current month.
+        // Capture two monthly Current+Invested series for the accurate
+        // GAIN · MONTHLY card, split by asset class so Market (equity+commodity)
+        // and Interest (fixed income) each read from their own book. Every
+        // non-last sample sits on the 1st of a month, which represents the END
+        // of the PREVIOUS month — key it that way so a bar's month-over-month
+        // change lands on the month whose activity produced it. The last
+        // sample is "today" (partial current month) and keeps its own month.
         try {
-          var _gainMonths = {};
+          function _mkey(_d, isLast) {
+            if (!_d) return null;
+            if (isLast) return _d.getFullYear() + "-" + String(_d.getMonth() + 1).padStart(2, "0");
+            // handles Jan: new Date(y, -1, 1) rolls to Dec of previous year
+            var _p = new Date(_d.getFullYear(), _d.getMonth() - 1, 1);
+            return _p.getFullYear() + "-" + String(_p.getMonth() + 1).padStart(2, "0");
+          }
           var _gLast = pointsAll.length - 1;
+          var _eq = {}, _fi = {}, _all = {};
+          var _investedRunEq = 0;
           for (var _gi = 0; _gi <= _gLast; _gi++) {
             var _gd = pointsAll[_gi] && pointsAll[_gi].x;
             if (!_gd) continue;
-            var _gky, _gkm;
-            if (_gi < _gLast) {
-              // Start-of-month M → end-of-month (M-1). new Date(y, m-1, 1)
-              // handles January by rolling to December of the previous year.
-              var _prev = new Date(_gd.getFullYear(), _gd.getMonth() - 1, 1);
-              _gky = _prev.getFullYear(); _gkm = _prev.getMonth() + 1;
-            } else {
-              _gky = _gd.getFullYear(); _gkm = _gd.getMonth() + 1;
-            }
-            var _gk = _gky + "-" + String(_gkm).padStart(2, "0");
-            _gainMonths[_gk] = {
+            var _gk = _mkey(_gd, _gi === _gLast);
+            if (!_gk) continue;
+            _investedRunEq += investedFlowAt[_gi] || 0;
+            // Equity + commodity: value from `points`, invested from FIFO flows.
+            var _eqCur = (points[_gi] && points[_gi].y) || 0;
+            var _eqInv = _investedRunEq;
+            // Fixed income: value = EPF + FD + accruals; invested = principal
+            // only (EPF deposits + FD principal), so gap == interest earned.
+            var _fiCur = (epfAllAt[_gi] || 0) + (fdAllAt[_gi] || 0)
+                       + (fdAccrAt[_gi] || 0) + (pfAccrAt[_gi] || 0);
+            var _fiInv = (epfDepositAllAt[_gi] || 0) + (fdAllAt[_gi] || 0);
+            _eq[_gk]  = { month: _gk, current: _eqCur, invested: _eqInv };
+            _fi[_gk]  = { month: _gk, current: _fiCur, invested: _fiInv };
+            _all[_gk] = {
               month: _gk,
               current: pointsAll[_gi].y,
               invested: (investedAll[_gi] && investedAll[_gi].y) || 0
             };
           }
+          function _srt(o) { return Object.keys(o).sort().map(function (k) { return o[k]; }); }
           window.__wfGainSeries = {
             portfolio: selectedPortfolio,
-            months: Object.keys(_gainMonths).sort().map(function (k) { return _gainMonths[k]; }),
+            months: _srt(_all),        // combined — for contributions (net)
+            monthsEq: _srt(_eq),       // for Market gain/loss
+            monthsFi: _srt(_fi),       // for Interest
             builtAt: Date.now()
           };
           if (typeof window.renderNetWorthMonthly === "function") {
@@ -19470,19 +19485,26 @@
         return '<div class="mic-hs-tot"><span class="mic-hs-tot-label">' +
           escapeHtml(label) + '</span><b class="' + (cls || "") + '">' + val + '</b></div>';
       };
-      var mkt = row.market || 0, real = row.realized || 0, tot = row.delta || 0;
+      var mkt = row.market || 0, intr = row.interest || 0,
+          real = row.realized || 0, tot = row.delta || 0;
       if (totalsEl) {
         totalsEl.innerHTML =
           tot0(mkt < 0 ? "Market loss" : "Market gain", _nwmSigned(mkt),
                mkt < 0 ? "negative" : "mic-hs-pos") +
-          (real ? tot0("Realized", _nwmSigned(real),
-                       real < 0 ? "negative" : "mic-hs-pos") : "") +
-          tot0("Total gain", _nwmSigned(tot), tot < 0 ? "negative" : "mic-hs-pos");
+          (intr ? tot0("Interest", _nwmSigned(intr),
+                       intr < 0 ? "negative" : "mic-hs-pos") : "") +
+          tot0("Total gain", _nwmSigned(tot), tot < 0 ? "negative" : "mic-hs-pos") +
+          // Realized is info only \u2014 a re-labelling of gains already inside the
+          // mark-to-market total. Shown for context, not added.
+          (real ? tot0("Realized (info)", _nwmSigned(real),
+                       real < 0 ? "negative" : "mic-hs-pos") : "");
       }
       bodyEl.innerHTML =
         '<p class="muted small" style="padding:4px;">' +
-        "Gain = mark-to-market movement + realized profit booked this month. " +
-        "The per-category split from snapshots isn\u2019t used in the accurate mode." +
+        "Gain = Market (equity + commodity) + Interest (fixed income). " +
+        "Realized shows how much of the accumulated gain was locked in this " +
+        "month by a sale/withdrawal \u2014 it is already included in the market " +
+        "line above, not an additional amount." +
         "</p>";
       ov.hidden = false;
       return;
@@ -19876,13 +19898,10 @@
     var nonZero = function (arr) {
       return arr.some(function (v) { return v != null && Math.abs(v) > 0.005; });
     };
-    // Realized profit booked that month (accurate mode only; snapshot rows have
-    // no `realized`, so this series is simply absent there). One dataset carries
-    // both signs — a realized loss stacks below the axis like any other.
-    var realized = bars.map(function (r) { return r.delta == null ? null : (r.realized || 0); });
+    // Realized is info-only in accurate mode — it re-labels a gain the gap
+    // already carries, so stacking it would double-count. Don't build a
+    // dataset for it; the header still shows the figure.
     var anyInterest = nonZero(interest), anyGain = nonZero(gain), anyLoss = nonZero(loss);
-    var anyRealized = nonZero(realized);
-    var realizedColors = bars.map(function (r) { return _nwmFade(NWM_REAL, r.estimated); });
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
@@ -19896,8 +19915,7 @@
     var series = [
       { key: "Interest", present: anyInterest, data: interest, colors: intColors, swatch: NWM_INT },
       { key: "Market gain", present: anyGain, data: gain, colors: gainColors, swatch: NWM_UP },
-      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, swatch: NWM_DOWN },
-      { key: "Realized", present: anyRealized, data: realized, colors: realizedColors, swatch: NWM_REAL }
+      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, swatch: NWM_DOWN }
     ].filter(function (s) { return s.present; });
     _nwmRenderLegend(legend, series);
 
@@ -20071,10 +20089,13 @@
       rest = tot("Invested", _nwmSigned(st.invested)) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
-             // Realized only appears when there is some — most months have none.
-             (st.realized ? tot("Realized", _nwmSigned(st.realized),
-                 st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
              tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+             // Realized in accurate mode is INFO-ONLY (it re-labels gains
+             // already inside Market). Snapshot mode still shows it as a term.
+             (st.realized
+                 ? tot(st._accurate ? "Realized (info)" : "Realized",
+                       _nwmSigned(st.realized),
+                       st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
              (st._accurate ? "" : cash("Idle Cash", st.idle));
     }
     // Three rows, always — the label, then the two figure lines. Rendered even
@@ -20242,22 +20263,29 @@
       if (!gs || gs.portfolio !== pf || !gs.months || gs.months.length < 2) return false;
       if (!(window.WfSnapshots && WfSnapshots.monthlyGainFromSeries)) return false;
 
-      // Interest by month — snapshot-independent helper is fine here since it
-      // has nothing to do with the value-chart's cost-basis series.
-      // Contributions, however, MUST come from the same book the invested
-      // series uses (equity/MF cost basis + FI principal). Using a different
-      // helper (buildMonthlyInvestCatData) gave a different number and the two
-      // stopped reconciling: change ≠ contributions + gain. Derive it here
-      // directly from the invested series — the month-over-month increase in
-      // invested IS the contribution (net of withdrawals).
-      var invByMonth = {};
-      gs.months.forEach(function (s) { invByMonth[s.month] = Number(s.invested) || 0; });
-      var invKeys = Object.keys(invByMonth).sort();
-      var contribs = {};
-      for (var _ci = 0; _ci < invKeys.length; _ci++) {
-        var _prevInv = _ci > 0 ? invByMonth[invKeys[_ci - 1]] : 0;
-        contribs[invKeys[_ci]] = invByMonth[invKeys[_ci]] - _prevInv;
+      // Everything comes from the value chart's book so the numbers reconcile:
+      //   Market  = Δgap on equity + commodity        (mark-to-market movement)
+      //   Interest = Δgap on fixed income             (Current up while
+      //             invested principal is flat = interest earned)
+      //   Contributions = Δ(total invested)           (Buys − Sells, net of
+      //             withdrawals; per the cash-flow invested series)
+      // Realized is INFO-ONLY (a re-labelling of a gain already captured in
+      // the gap when it was still unrealized) — it does NOT add to the total.
+      function _byMonthDeltas(seriesArr, key) {
+        var vals = {};
+        (seriesArr || []).forEach(function (s) { vals[s.month] = Number(s[key]) || 0; });
+        var keys = Object.keys(vals).sort();
+        var out = {}, prev = 0;
+        for (var i = 0; i < keys.length; i++) {
+          out[keys[i]] = vals[keys[i]] - prev; prev = vals[keys[i]];
+        }
+        return out;
       }
+      var eqCurDelta  = _byMonthDeltas(gs.monthsEq, "current");
+      var eqInvDelta  = _byMonthDeltas(gs.monthsEq, "invested");
+      var fiCurDelta  = _byMonthDeltas(gs.monthsFi, "current");
+      var fiInvDelta  = _byMonthDeltas(gs.monthsFi, "invested");
+      var contribs    = _byMonthDeltas(gs.months,   "invested");
       // interest by month keyed from the first month of the series (the helper
       // walks forward from the given "YYYY-MM").
       var firstMonth = gs.months[0] && gs.months[0].month;
@@ -20265,11 +20293,7 @@
         ? _nwmInterestByMonth(firstMonth, pf) : {};
 
       function renderWith(realizedByMonth) {
-        var gainRows = WfSnapshots.monthlyGainFromSeries(gs.months, realizedByMonth || {});
-        // Map month → current value from the series, so period stats can show
-        // the REAL Opening (current at start of period) and Closing (current at
-        // end) as balances — not the misleading cumulative-gain readings the
-        // previous version showed.
+        // Real net worth Opening/Closing come from the combined series.
         var currentByMonth = {};
         gs.months.forEach(function (s) { currentByMonth[s.month] = Number(s.current) || 0; });
         var sortedKeys = Object.keys(currentByMonth).sort();
@@ -20277,20 +20301,31 @@
         for (var pk = 0; pk < sortedKeys.length; pk++) {
           prevByMonth[sortedKeys[pk]] = pk > 0 ? currentByMonth[sortedKeys[pk - 1]] : 0;
         }
+        // Union of every month keyed in any series — makes sure we don't drop
+        // a month that only has FI activity (or only equity activity).
+        var allMonths = {};
+        gs.months.forEach(function (s)   { allMonths[s.month] = 1; });
+        gs.monthsEq.forEach(function (s) { allMonths[s.month] = 1; });
+        gs.monthsFi.forEach(function (s) { allMonths[s.month] = 1; });
+        var monthKeys = Object.keys(allMonths).sort();
         var cum = 0;
-        var rows = gainRows.map(function (g) {
-          cum += g.gain;
-          var contrib = Number(contribs[g.month]) || 0;
-          var interest = Number(interests[g.month]) || 0;
-          // Split the gap-change into "Market (pure)" + "Interest", so both
-          // labels can be displayed without changing the total gain. Realized is
-          // its own segment. delta = market + interest + realized = gap + realized.
+        var rows = monthKeys.map(function (m) {
+          // Market = equity/commodity gap change; Interest = FI gap change.
+          //   Δgap_eq = ΔCurrent_eq − ΔInvested_eq
+          //   Δgap_fi = ΔCurrent_fi − ΔInvested_fi   (== interest earned)
+          var market   = (eqCurDelta[m] || 0) - (eqInvDelta[m] || 0);
+          var interest = (fiCurDelta[m] || 0) - (fiInvDelta[m] || 0);
+          var gain     = market + interest;              // no +realized here
+          var contrib  = Number(contribs[m]) || 0;
+          var realized = Number((realizedByMonth || {})[m]) || 0;
+          cum += gain;
           return {
-            month: g.month, delta: g.gain,
-            total: currentByMonth[g.month] || 0,     // real balance at month end
-            openingCurrent: prevByMonth[g.month] || 0,
-            market: g.gapChange - interest, interest: interest,
-            realized: g.realized, contributions: contrib,
+            month: m, delta: gain,
+            total: currentByMonth[m] || 0,
+            openingCurrent: prevByMonth[m] || 0,
+            market: market, interest: interest,
+            realized: realized,                           // info only
+            contributions: contrib,
             idle: 0, estimated: false, _accurate: true,
             _cumGain: cum
           };

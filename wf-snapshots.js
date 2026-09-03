@@ -748,14 +748,16 @@
 
   // ── Accurate monthly gain from the value-chart's cost-basis series ──────────
   // Given monthly [{month:"YYYY-MM", current, invested}] (market value and
-  // cumulative cost basis) plus realizedByMonth {"YYYY-MM": realizedProfit}, the
-  // gain earned IN a month is the change in the unrealized gap plus any profit
-  // realized (and thus removed from the gap) that month:
-  //     gain(m) = (current−invested)(m) − (current−invested)(m−1) + realized(m)
-  // This does not double-count: a sale drops the gap by the position's gain, and
-  // realized(m) adds exactly that back in the month it was booked. The first
-  // month has no prior gap so it opens from 0. Returns
-  // [{month, gain, gapChange, realized, current, invested}] oldest-first.
+  // cumulative NET-contribution invested), the gain earned IN a month is the
+  // change in the gap: gain(m) = (current−invested)(m) − (current−invested)(m−1).
+  //
+  // Because Kosha's invested series is CASH-FLOW view (a sale subtracts sale
+  // proceeds, not the cost basis), the gap PERSISTS after a sale — the previously
+  // unrealized gain now sits in the gap as a permanent accounting artifact. So
+  // realized amounts are ALREADY captured in the gap and must NOT be added again.
+  // realizedByMonth is passed through as info only; callers can display it but it
+  // does not contribute to `gain`. Returns [{month, gain, realized, current,
+  // invested}] oldest-first. The first month has no prior gap and opens from 0.
   function monthlyGainFromSeries(months, realizedByMonth) {
     var rb = realizedByMonth || {};
     var sorted = (months || []).slice().sort(function (a, b) {
@@ -766,12 +768,11 @@
       var r = sorted[i];
       var gap = (Number(r.current) || 0) - (Number(r.invested) || 0);
       var gapChange = prevGap == null ? gap : gap - prevGap;
-      var realized = Number(rb[r.month]) || 0;
       out.push({
         month: r.month,
-        gain: gapChange + realized,
+        gain: gapChange,
         gapChange: gapChange,
-        realized: realized,
+        realized: Number(rb[r.month]) || 0,   // info only, not added to gain
         current: Number(r.current) || 0,
         invested: Number(r.invested) || 0
       });
