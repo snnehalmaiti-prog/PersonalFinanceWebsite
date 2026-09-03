@@ -19470,6 +19470,9 @@
   // Invested and idle cash are no longer charted here — they are CASH FLOW ·
   // MONTHLY's subject — so only these three have segments.
   var NWM_UP = "#10B981", NWM_DOWN = "#E8623A", NWM_INT = "#8B5CF6";
+  // Realized gains (booked on a sale/withdrawal) get their own colour so they
+  // read apart from the mark-to-market (unrealized) movement in the same bar.
+  var NWM_REAL = "#F59E0B";
   var __nwmYear = null;          // selected year, as a string
   var __nwmAllTime = false;      // "All time" pressed
   var _nwmChart = null;
@@ -19684,7 +19687,13 @@
     var nonZero = function (arr) {
       return arr.some(function (v) { return v != null && Math.abs(v) > 0.005; });
     };
+    // Realized profit booked that month (accurate mode only; snapshot rows have
+    // no `realized`, so this series is simply absent there). One dataset carries
+    // both signs — a realized loss stacks below the axis like any other.
+    var realized = bars.map(function (r) { return r.delta == null ? null : (r.realized || 0); });
     var anyInterest = nonZero(interest), anyGain = nonZero(gain), anyLoss = nonZero(loss);
+    var anyRealized = nonZero(realized);
+    var realizedColors = bars.map(function (r) { return _nwmFade(NWM_REAL, r.estimated); });
     // A month measured from a reconstruction is faded rather than dropped:
     // hiding it would leave an unexplained hole, and drawing it solid would
     // claim it was observed.
@@ -19698,7 +19707,8 @@
     var series = [
       { key: "Interest", present: anyInterest, data: interest, colors: intColors, swatch: NWM_INT },
       { key: "Market gain", present: anyGain, data: gain, colors: gainColors, swatch: NWM_UP },
-      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, swatch: NWM_DOWN }
+      { key: "Market loss", present: anyLoss, data: loss, colors: lossColors, swatch: NWM_DOWN },
+      { key: "Realized", present: anyRealized, data: realized, colors: realizedColors, swatch: NWM_REAL }
     ].filter(function (s) { return s.present; });
     _nwmRenderLegend(legend, series);
 
@@ -19798,10 +19808,11 @@
     if (!comp.length) return { closing: closing };
     var oldest = comp[comp.length - 1];
     var out = { opening: oldest.total - oldest.delta, closing: closing,
-                invested: 0, interest: 0, idle: 0, market: 0 };
+                invested: 0, interest: 0, idle: 0, market: 0, realized: 0 };
     comp.forEach(function (r) {
       out.invested += r.contributions || 0;
       out.interest += r.interest || 0;
+      out.realized += r.realized || 0;
       out.idle += r.idle || 0;
       out.market += r.market || 0;
     });
@@ -19839,6 +19850,9 @@
       rest = tot("Invested", _nwmSigned(st.invested)) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
+             // Realized only appears when there is some — most months have none.
+             (st.realized ? tot("Realized", _nwmSigned(st.realized),
+                 st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
              tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
              cash("Idle Cash", st.idle);
     }
@@ -19872,7 +19886,7 @@
     el.innerHTML = _nwmSplitHtml(label, {
       opening: r.total - r.delta, closing: r.total,
       invested: r.contributions || 0, interest: r.interest || 0,
-      idle: r.idle || 0, market: r.market || 0
+      idle: r.idle || 0, market: r.market || 0, realized: r.realized || 0
     });
   }
 
@@ -20025,7 +20039,11 @@
           // the whole gain lives in `market` (drawn as the gain/loss bar); the
           // snapshot-only terms are zero here.
           return {
-            month: g.month, delta: g.gain, total: cum, market: g.gain,
+            // market = unrealized (mark-to-market) movement; realized = profit
+            // booked on sales/withdrawals that month, drawn as its own segment.
+            // delta (the month's total gain) = market + realized.
+            month: g.month, delta: g.gain, total: cum,
+            market: g.gapChange, realized: g.realized,
             interest: 0, idle: 0, contributions: 0, estimated: false, _accurate: true
           };
         });
