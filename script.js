@@ -19984,8 +19984,12 @@
     var closing = rows[0].total;                       // rows are newest first
     if (!comp.length) return { closing: closing };
     var oldest = comp[comp.length - 1];
+    // A period is "accurate" if every row in it came from the accurate path;
+    // used by the header to drop labels that don't apply to that formula.
+    var allAccurate = comp.every(function (r) { return r && r._accurate; });
     var out = { opening: oldest.total - oldest.delta, closing: closing,
-                invested: 0, interest: 0, idle: 0, market: 0, realized: 0 };
+                invested: 0, interest: 0, idle: 0, market: 0, realized: 0,
+                _accurate: allAccurate };
     comp.forEach(function (r) {
       out.invested += r.contributions || 0;
       out.interest += r.interest || 0;
@@ -20024,14 +20028,20 @@
       lead = tot("Opening", formatCurrency(st.opening)) +
              tot("Closing", formatCurrency(st.closing)) +
              tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
-      rest = tot("Invested", _nwmSigned(st.invested)) +
+      // In accurate mode the gain formula (Δcurrent−Δinvested+realized) already
+      // absorbs contributions and interest (a deposit lifts both curves equally
+      // so contributions don't move the gap; interest lifts Current while
+      // Invested stays flat, so it lives inside Market gain). Drop the labels
+      // rather than showing misleading zeros.
+      rest = (st._accurate ? "" : tot("Invested", _nwmSigned(st.invested))) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
              // Realized only appears when there is some — most months have none.
              (st.realized ? tot("Realized", _nwmSigned(st.realized),
                  st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
-             tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
-             cash("Idle Cash", st.idle);
+             (st._accurate ? "" :
+                 tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "")) +
+             (st._accurate ? "" : cash("Idle Cash", st.idle));
     }
     // Three rows, always — the label, then the two figure lines. Rendered even
     // when empty so that hovering never changes the block's height and slides
@@ -20063,7 +20073,8 @@
     el.innerHTML = _nwmSplitHtml(label, {
       opening: r.total - r.delta, closing: r.total,
       invested: r.contributions || 0, interest: r.interest || 0,
-      idle: r.idle || 0, market: r.market || 0, realized: r.realized || 0
+      idle: r.idle || 0, market: r.market || 0, realized: r.realized || 0,
+      _accurate: !!r._accurate
     });
   }
 
