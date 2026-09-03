@@ -12281,15 +12281,27 @@
         })();
 
         // Capture the monthly Current + Invested series for the accurate
-        // GAIN · MONTHLY card. Keyed by month (YYYY-MM); the last sample of a
-        // month wins (the trailing "today" point overrides that month's start).
-        // The card reads this instead of reconstructing history from snapshots.
+        // GAIN · MONTHLY card. Every non-last sample sits on the 1st of a
+        // month, which represents the END of the PREVIOUS month — key it that
+        // way so a bar's month-over-month change actually falls on the month
+        // whose activity produced it. The last sample is "today" (partial
+        // current month) and stays keyed as the current month.
         try {
           var _gainMonths = {};
-          for (var _gi = 0; _gi < pointsAll.length; _gi++) {
+          var _gLast = pointsAll.length - 1;
+          for (var _gi = 0; _gi <= _gLast; _gi++) {
             var _gd = pointsAll[_gi] && pointsAll[_gi].x;
             if (!_gd) continue;
-            var _gk = _gd.getFullYear() + "-" + String(_gd.getMonth() + 1).padStart(2, "0");
+            var _gky, _gkm;
+            if (_gi < _gLast) {
+              // Start-of-month M → end-of-month (M-1). new Date(y, m-1, 1)
+              // handles January by rolling to December of the previous year.
+              var _prev = new Date(_gd.getFullYear(), _gd.getMonth() - 1, 1);
+              _gky = _prev.getFullYear(); _gkm = _prev.getMonth() + 1;
+            } else {
+              _gky = _gd.getFullYear(); _gkm = _gd.getMonth() + 1;
+            }
+            var _gk = _gky + "-" + String(_gkm).padStart(2, "0");
             _gainMonths[_gk] = {
               month: _gk,
               current: pointsAll[_gi].y,
@@ -20025,9 +20037,17 @@
       // rather than as seven unrelated numbers — which is also why they are not
       // on one row: at anything narrower than a desktop that ran off the card.
       var change = st.closing - st.opening;
-      lead = tot("Opening", formatCurrency(st.opening)) +
-             tot("Closing", formatCurrency(st.closing)) +
-             tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
+      if (st._accurate) {
+        // In accurate mode `total` is cumulative gain, not net worth, so an
+        // "Opening/Closing balance" reading would mislead. The card is about
+        // gain — one honest figure: the total gain over the shown period.
+        lead = tot("Total gain", _nwmSigned(change),
+                   change < 0 ? "negative" : "mic-hs-pos");
+      } else {
+        lead = tot("Opening", formatCurrency(st.opening)) +
+               tot("Closing", formatCurrency(st.closing)) +
+               tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
+      }
       // Both modes now populate Invested and Interest — accurate mode reuses the
       // same _nwmContributionsByMonth / _nwmInterestByMonth helpers the snapshot
       // path uses, and decomposes gap-change into Market(pure)+Interest so the
