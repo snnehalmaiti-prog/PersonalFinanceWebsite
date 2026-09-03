@@ -19999,13 +19999,23 @@
     // A period is "accurate" if every row in it came from the accurate path;
     // used by the header to drop labels that don't apply to that formula.
     var allAccurate = comp.every(function (r) { return r && r._accurate; });
-    var out = { opening: oldest.total - oldest.delta, closing: closing,
+    // Opening: in snapshot mode the row before the period IS its opening
+    // balance, so `oldest.total - oldest.delta` recovers it. In accurate mode
+    // `delta` is monthly gain (not net worth change), so that formula would
+    // mislead — use the current value at the start of the oldest month, which
+    // the row carries explicitly for exactly this reason.
+    var openingBal = allAccurate
+      ? (oldest.openingCurrent || 0)
+      : (oldest.total - oldest.delta);
+    var out = { opening: openingBal, closing: closing,
                 invested: 0, interest: 0, idle: 0, market: 0, realized: 0,
+                totalGain: 0,
                 _accurate: allAccurate };
     comp.forEach(function (r) {
       out.invested += r.contributions || 0;
       out.interest += r.interest || 0;
       out.realized += r.realized || 0;
+      out.totalGain += r.delta || 0;
       out.idle += r.idle || 0;
       out.market += r.market || 0;
     });
@@ -20038,11 +20048,16 @@
       // on one row: at anything narrower than a desktop that ran off the card.
       var change = st.closing - st.opening;
       if (st._accurate) {
-        // In accurate mode `total` is cumulative gain, not net worth, so an
-        // "Opening/Closing balance" reading would mislead. The card is about
-        // gain — one honest figure: the total gain over the shown period.
-        lead = tot("Total gain", _nwmSigned(change),
-                   change < 0 ? "negative" : "mic-hs-pos");
+        // Opening/Closing are the real net worth at the boundaries of the
+        // period (from the value series). Change is their difference: it
+        // includes contributions, withdrawals, and interest, so it is not the
+        // same as "Total gain" — hence both are shown side by side. Total gain
+        // is the sum of the monthly gain bars (Market + Interest + Realized).
+        var gainTot = st.totalGain || 0;
+        lead = tot("Opening", formatCurrency(st.opening)) +
+               tot("Closing", formatCurrency(st.closing)) +
+               tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos") +
+               tot("Total gain", _nwmSigned(gainTot), gainTot < 0 ? "negative" : "mic-hs-pos");
       } else {
         lead = tot("Opening", formatCurrency(st.opening)) +
                tot("Closing", formatCurrency(st.closing)) +
@@ -20090,9 +20105,11 @@
     var label = _nwmMonthLabel(r.month) +
       (r.gapMonths > 1 ? " · covers " + r.gapMonths + " months" : "");
     el.innerHTML = _nwmSplitHtml(label, {
-      opening: r.total - r.delta, closing: r.total,
+      opening: r._accurate ? (r.openingCurrent || 0) : (r.total - r.delta),
+      closing: r.total,
       invested: r.contributions || 0, interest: r.interest || 0,
       idle: r.idle || 0, market: r.market || 0, realized: r.realized || 0,
+      totalGain: r._accurate ? (r.delta || 0) : 0,
       _accurate: !!r._accurate
     });
   }
@@ -20232,6 +20249,17 @@
 
       function renderWith(realizedByMonth) {
         var gainRows = WfSnapshots.monthlyGainFromSeries(gs.months, realizedByMonth || {});
+        // Map month → current value from the series, so period stats can show
+        // the REAL Opening (current at start of period) and Closing (current at
+        // end) as balances — not the misleading cumulative-gain readings the
+        // previous version showed.
+        var currentByMonth = {};
+        gs.months.forEach(function (s) { currentByMonth[s.month] = Number(s.current) || 0; });
+        var sortedKeys = Object.keys(currentByMonth).sort();
+        var prevByMonth = {};
+        for (var pk = 0; pk < sortedKeys.length; pk++) {
+          prevByMonth[sortedKeys[pk]] = pk > 0 ? currentByMonth[sortedKeys[pk - 1]] : 0;
+        }
         var cum = 0;
         var rows = gainRows.map(function (g) {
           cum += g.gain;
@@ -20241,10 +20269,13 @@
           // labels can be displayed without changing the total gain. Realized is
           // its own segment. delta = market + interest + realized = gap + realized.
           return {
-            month: g.month, delta: g.gain, total: cum,
+            month: g.month, delta: g.gain,
+            total: currentByMonth[g.month] || 0,     // real balance at month end
+            openingCurrent: prevByMonth[g.month] || 0,
             market: g.gapChange - interest, interest: interest,
             realized: g.realized, contributions: contrib,
-            idle: 0, estimated: false, _accurate: true
+            idle: 0, estimated: false, _accurate: true,
+            _cumGain: cum
           };
         });
         // Drill-down is a snapshot-attribution feature; in accurate mode there is
