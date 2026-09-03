@@ -20028,19 +20028,18 @@
       lead = tot("Opening", formatCurrency(st.opening)) +
              tot("Closing", formatCurrency(st.closing)) +
              tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
-      // In accurate mode the gain formula (Δcurrent−Δinvested+realized) already
-      // absorbs contributions and interest (a deposit lifts both curves equally
-      // so contributions don't move the gap; interest lifts Current while
-      // Invested stays flat, so it lives inside Market gain). Drop the labels
-      // rather than showing misleading zeros.
-      rest = (st._accurate ? "" : tot("Invested", _nwmSigned(st.invested))) +
+      // Both modes now populate Invested and Interest — accurate mode reuses the
+      // same _nwmContributionsByMonth / _nwmInterestByMonth helpers the snapshot
+      // path uses, and decomposes gap-change into Market(pure)+Interest so the
+      // total gain stays right when both are shown. Idle Cash is a snapshot-only
+      // decomposition, so it's still hidden in accurate mode.
+      rest = tot("Invested", _nwmSigned(st.invested)) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
              // Realized only appears when there is some — most months have none.
              (st.realized ? tot("Realized", _nwmSigned(st.realized),
                  st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
-             (st._accurate ? "" :
-                 tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "")) +
+             tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
              (st._accurate ? "" : cash("Idle Cash", st.idle));
     }
     // Three rows, always — the label, then the two figure lines. Rendered even
@@ -20198,21 +20197,34 @@
       if (!gs || gs.portfolio !== pf || !gs.months || gs.months.length < 2) return false;
       if (!(window.WfSnapshots && WfSnapshots.monthlyGainFromSeries)) return false;
 
+      // These snapshot-independent helpers give us the two figures the accurate
+      // formula collapses into the gap-change: what you put in each month
+      // (contributions) and what interest was booked (FD/PF/etc). Interest is
+      // subtracted from the gap-change to leave "Market (pure)", so the header
+      // labels are separately displayed without inflating the total gain.
+      var contribs = (typeof _nwmContributionsByMonth === "function")
+        ? _nwmContributionsByMonth(pf) : {};
+      // interest by month keyed from the first month of the series (the helper
+      // walks forward from the given "YYYY-MM").
+      var firstMonth = gs.months[0] && gs.months[0].month;
+      var interests = (typeof _nwmInterestByMonth === "function" && firstMonth)
+        ? _nwmInterestByMonth(firstMonth, pf) : {};
+
       function renderWith(realizedByMonth) {
         var gainRows = WfSnapshots.monthlyGainFromSeries(gs.months, realizedByMonth || {});
         var cum = 0;
         var rows = gainRows.map(function (g) {
           cum += g.gain;
-          // Shape the accurate gain into the fields _nwmRender/_nwmDrawChart read:
-          // the whole gain lives in `market` (drawn as the gain/loss bar); the
-          // snapshot-only terms are zero here.
+          var contrib = Number(contribs[g.month]) || 0;
+          var interest = Number(interests[g.month]) || 0;
+          // Split the gap-change into "Market (pure)" + "Interest", so both
+          // labels can be displayed without changing the total gain. Realized is
+          // its own segment. delta = market + interest + realized = gap + realized.
           return {
-            // market = unrealized (mark-to-market) movement; realized = profit
-            // booked on sales/withdrawals that month, drawn as its own segment.
-            // delta (the month's total gain) = market + realized.
             month: g.month, delta: g.gain, total: cum,
-            market: g.gapChange, realized: g.realized,
-            interest: 0, idle: 0, contributions: 0, estimated: false, _accurate: true
+            market: g.gapChange - interest, interest: interest,
+            realized: g.realized, contributions: contrib,
+            idle: 0, estimated: false, _accurate: true
           };
         });
         // Drill-down is a snapshot-attribution feature; in accurate mode there is
