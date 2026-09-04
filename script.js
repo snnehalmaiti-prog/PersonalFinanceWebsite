@@ -15824,9 +15824,9 @@
     if (statsEl) {
       var hasOut = totalOut > 0;
       statsEl.innerHTML =
-        '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
+        '<div class="mic-stat"><span class="mic-stat-label">Invested</span><span class="mic-stat-value">' + formatCurrency(totalInvested) + '</span></div>' +
         (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Withdrawn</span><span class="mic-stat-value negative">&minus;' + formatCurrency(totalOut) + '</span></div>' : '') +
-        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Net</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '');
+        (hasOut ? '<div class="mic-stat"><span class="mic-stat-label">Total Invested</span><span class="mic-stat-value ' + (totalNet >= 0 ? 'positive' : 'negative') + '">' + (totalNet >= 0 ? '+' : '−') + formatCurrency(Math.abs(totalNet)) + '</span></div>' : '');
     }
 
     // ── Hovered-month split, shown under the stats row ──────────────────────
@@ -20328,7 +20328,7 @@
         // reconciles: Invested + Market + Interest + Idle Cash + remainder = Change.
         var _remainder = change - (st.invested || 0) - (st.market || 0)
                        - (st.interest || 0) - (st.idle || 0);
-        rest = tot("Invested", _nwmSigned(st.invested),
+        rest = tot("Total Invested", _nwmSigned(st.invested),
                    st.invested < 0 ? "negative" : "mic-hs-pos") +
                tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                    st.market < 0 ? "negative" : "mic-hs-pos") +
@@ -20340,7 +20340,7 @@
                    : "");
       } else {
         // Snapshot mode keeps its existing decomposition (with Realized).
-        rest = tot("Invested", _nwmSigned(st.invested)) +
+        rest = tot("Total Invested", _nwmSigned(st.invested)) +
                tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                    st.market < 0 ? "negative" : "mic-hs-pos") +
                tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
