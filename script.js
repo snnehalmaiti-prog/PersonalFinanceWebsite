@@ -20264,10 +20264,24 @@
       // path uses, and decomposes gap-change into Market(pure)+Interest so the
       // total gain stays right when both are shown. Idle Cash is a snapshot-only
       // decomposition, so it's still hidden in accurate mode.
+      // Reconciling residual (accurate mode): Change is the real balance move,
+      // and Invested + Market + Interest is what the card otherwise attributes.
+      // Whatever is left is money that LEFT the book without being a market/
+      // interest event and without being caught by the net-contributions series
+      // — chiefly matured FD / PF payouts and redemptions taken as cash. Showing
+      // it as "Withdrawn" is what makes the line reconcile: Opening + Invested +
+      // Market + Interest − Withdrawn = Closing. Only rendered when it actually
+      // moved (most months of most portfolios have none), same rule as Idle Cash.
+      var _resid = change - (st.invested || 0) - (st.market || 0) - (st.interest || 0);
+      var _withdrawnHtml = (st._accurate && Math.abs(_resid) >= 1)
+        ? tot(_resid < 0 ? "Withdrawn" : "Net added", _nwmSigned(_resid),
+              _resid < 0 ? "negative" : "mic-hs-pos")
+        : "";
       rest = tot("Invested", _nwmSigned(st.invested)) +
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
              tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+             _withdrawnHtml +
              // Realized lives on CASH FLOW · MONTHLY — not shown here in
              // accurate mode. Snapshot mode keeps it if any is present.
              (!st._accurate && st.realized
