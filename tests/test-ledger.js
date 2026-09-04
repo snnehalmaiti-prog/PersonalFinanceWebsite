@@ -204,5 +204,58 @@ function F(eqComm, fi) { return { eqComm: eqComm, fi: fi }; }
   eq("unsorted input sorted internally", b[0].market, a[0].market);
 })();
 
+// ── 11. assembleLedgerInput: series + contributions → engine input ────────
+var assemble = WfLedger.assembleLedgerInput;
+
+// Shapes the app publishes: value from series, flows split by Instrument Category.
+(function () {
+  var series = {
+    monthsEq:     [{ month: "2025-01", current: 1000000 }, { month: "2025-02", current: 1050000 }],
+    monthsFiCore: [{ month: "2025-01", value: 500000 },    { month: "2025-02", value: 504000 }],
+    monthsParked: [{ month: "2025-01", value: 100000 },    { month: "2025-02", value: 150000 }]
+  };
+  var contrib = {
+    // Feb: bought 20k equity, deposited 100k into an FD.
+    "2025-02": { "Equity": { in: 20000, out: 0 }, "Fixed Income": { in: 100000, out: 0 } }
+  };
+  var input = assemble(series, contrib);
+  eq("assemble → 2 months", input.length, 2);
+  eq("assemble → Feb eqComm value", input[1].value.eqComm, 1050000);
+  eq("assemble → Feb fi value", input[1].value.fi, 504000);
+  eq("assemble → Feb parked value", input[1].value.parked, 150000);
+  eq("assemble → Feb eq flow", input[1].flows.eqComm, 20000);
+  eq("assemble → Feb fi flow", input[1].flows.fi, 100000);
+  // Commodity category folds into the equity book (non-fixed-income).
+  var input2 = assemble(series, { "2025-02": { "Commodity": { in: 5000, out: 0 } } });
+  eq("assemble → commodity folds into eqComm flow", input2[1].flows.eqComm, 5000);
+  // "fixed income" match is case/space-insensitive.
+  var input3 = assemble(series, { "2025-02": { "  Fixed Income  ": { in: 7000, out: 0 } } });
+  eq("assemble → FI match trims/lowercases", input3[1].flows.fi, 7000);
+})();
+
+// ── 12. End-to-end: assemble → buildMonthlyLedger reconciles ──────────────
+(function () {
+  var series = {
+    monthsEq:     [{ month: "2024-12", current: 1000000 }, { month: "2025-01", current: 1050000 },
+                   { month: "2025-02", current: 1035000 }],
+    monthsFiCore: [{ month: "2024-12", value: 500000 },    { month: "2025-01", value: 504000 },
+                   { month: "2025-02", value: 608000 }],
+    monthsParked: [{ month: "2024-12", value: 100000 },    { month: "2025-01", value: 150000 },
+                   { month: "2025-02", value: 130000 }]
+  };
+  var contrib = {
+    "2025-01": { "Equity": { in: 20000, out: 0 } },
+    "2025-02": { "Fixed Income": { in: 100000, out: 0 } }
+  };
+  var rows = build(assemble(series, contrib));
+  eq("e2e Jan market", rows[0].market, 30000);    // Δeq 50k − buy 20k
+  eq("e2e Jan interest", rows[0].interest, 4000);  // Δfi 4k − 0
+  eq("e2e Jan idle", rows[0].idle, 50000);         // Δparked
+  eq("e2e Feb market", rows[1].market, -15000);
+  eq("e2e Feb interest", rows[1].interest, 4000);  // Δfi 104k − deposit 100k
+  eq("e2e Feb idle", rows[1].idle, -20000);
+  assertReconciles("assemble → engine", rows);
+})();
+
 console.log("\n" + (failures ? failures + " FAILED" : "all passed"));
 if (failures) process.exit(1);
