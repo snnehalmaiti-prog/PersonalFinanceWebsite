@@ -12484,10 +12484,14 @@
             var _fiInv = (epfDepositAllAt[_gi] || 0) + (fdAllAt[_gi] || 0);
             _eq[_gk]  = { month: _gk, current: _eqCur, invested: _eqInv };
             _fi[_gk]  = { month: _gk, current: _fiCur, invested: _fiInv };
+            // Combined invested for the card is the CASH-FLOW view (_eqInv is the
+            // cash-flow run, _fiInv the FI principal) — its month-over-month delta
+            // is Contributions (Buys − Sells, net). NOT investedAll, which is the
+            // FIFO cost-basis series used only for the Invested LINE on the chart.
             _all[_gk] = {
               month: _gk,
               current: pointsAll[_gi].y,
-              invested: (investedAll[_gi] && investedAll[_gi].y) || 0
+              invested: _eqInv + _fiInv
             };
           }
           function _srt(o) { return Object.keys(o).sort().map(function (k) { return o[k]; }); }
