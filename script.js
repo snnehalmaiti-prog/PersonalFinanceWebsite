@@ -20396,21 +20396,30 @@
       // Derive Invested as the residual of the three measured terms so the
       // identity Invested + Market + Interest + Idle Cash = Change always holds.
       if (st._accurate) {
-        // Four named buckets, each its own real measure:
+        // Named buckets, each its own real measure:
         //   Total Invested = transaction net (same engine as CASH FLOW · MONTHLY)
         //   Market         = equity/commodity mark-to-market
         //   Interest       = fixed-income interest earned (sheet-based, ≥ 0)
         //   Idle Cash      = parked-cash (Investment Corpus / Savings) movement
-        // The small reconciling remainder (fixed-income value-vs-flow measurement
-        // timing) is deliberately NOT shown: per request, only these four appear.
-        // As the card's own footnote notes, Opening/Closing are recorded values,
-        // so these four are the attribution and need not sum to Change to the rupee.
+        //   Delta          = the reconciling remainder that makes the row close:
+        //                    Total Invested + Market + Interest + Idle Cash + Delta
+        //                    = Change. It's the part of the balance move the four
+        //                    measured terms don't capture — chiefly fixed-income
+        //                    value-vs-flow measurement timing (e.g. an FD's accrued
+        //                    interest leaving at maturity, or a deposit valued on a
+        //                    different schedule than it was booked). Shown only when
+        //                    non-zero; explained in the card footnote.
+        var _delta = change - (st.invested || 0) - (st.market || 0)
+                   - (st.interest || 0) - (st.idle || 0);
         rest = tot("Total Invested", _nwmSigned(st.invested),
                    st.invested < 0 ? "negative" : "mic-hs-pos") +
                tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                    st.market < 0 ? "negative" : "mic-hs-pos") +
                tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
-               cash("Idle Cash", st.idle);
+               cash("Idle Cash", st.idle) +
+               (Math.abs(_delta) >= 1
+                   ? tot("Delta", _nwmSigned(_delta), _delta < 0 ? "negative" : "mic-hs-pos")
+                   : "");
       } else {
         // Snapshot mode keeps its existing decomposition (with Realized).
         rest = tot("Total Invested", _nwmSigned(st.invested)) +
