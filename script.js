@@ -12437,6 +12437,15 @@
         // reflects total portfolio worth respecting the exclusion toggles.
         var epfAllAt = _ff(epfEventsAll, timeline, "cumulativeValue");
         var fdAllAt = _ff(fdValueEventsAll, timeline, "cumulativeValue");
+        // Parked-cash (Investment Corpus / Savings) value per point, from the SAME
+        // buildFdValueEvents source as fdAllAt: (with balance rows) − (without).
+        // The unified ledger (wf-ledger.js, Option B) uses this ONE parked figure
+        // for both the value total and the Idle bucket, so they cancel exactly and
+        // the two-computation mismatch that made Interest swing cannot occur.
+        // fdValueEventsAll already drops parked under Exclude Savings/Investment,
+        // in which case this is 0 (both sides exclude it).
+        var fdNoParkedAt = isFixedIncomeExcluded() ? []
+          : _ff(buildFdValueEvents(selectedPortfolio, true, false), timeline, "cumulativeValue");
         var fdAccrAt = isFixedIncomeExcluded() ? [] : buildFdAccrualAt(timeline, selectedPortfolio);
         var pfAccrAt = isFixedIncomeExcluded() ? [] : buildPfAccrualAt(timeline, selectedPortfolio);
         var pointsAll = points.map(function (p, i) {
@@ -12512,7 +12521,7 @@
             return _p.getFullYear() + "-" + String(_p.getMonth() + 1).padStart(2, "0");
           }
           var _gLast = pointsAll.length - 1;
-          var _eq = {}, _fi = {}, _all = {};
+          var _eq = {}, _fi = {}, _all = {}, _parkedM = {}, _fiCoreM = {};
           var _investedRunEq = 0;
           for (var _gi = 0; _gi <= _gLast; _gi++) {
             var _gd = pointsAll[_gi] && pointsAll[_gi].x;
@@ -12530,6 +12539,11 @@
             var _fiInv = (epfDepositAllAt[_gi] || 0) + (fdAllAt[_gi] || 0);
             _eq[_gk]  = { month: _gk, current: _eqCur, invested: _eqInv };
             _fi[_gk]  = { month: _gk, current: _fiCur, invested: _fiInv };
+            // Unified-ledger series (Option B): parked-cash value, and FI value
+            // EXCLUDING parked, both from the one buildFdValueEvents source above.
+            var _parkedVal = (fdAllAt[_gi] || 0) - (fdNoParkedAt[_gi] || 0);
+            _parkedM[_gk] = { month: _gk, value: _parkedVal };
+            _fiCoreM[_gk] = { month: _gk, value: _fiCur - _parkedVal };
             // Combined invested for the card is the CASH-FLOW view (_eqInv is the
             // cash-flow run, _fiInv the FI principal) — its month-over-month delta
             // is Contributions (Buys − Sells, net). NOT investedAll, which is the
@@ -12546,6 +12560,10 @@
             months: _srt(_all),        // combined — for contributions (net)
             monthsEq: _srt(_eq),       // for Market gain/loss
             monthsFi: _srt(_fi),       // for Interest
+            // Unified-ledger inputs (Option B, phase 2): value split so parked
+            // cash is one consistent figure. eqComm value is monthsEq[].current.
+            monthsParked: _srt(_parkedM),   // [{month, value}] parked-cash value
+            monthsFiCore: _srt(_fiCoreM),   // [{month, value}] FI value EXCLUDING parked
             builtAt: Date.now()
           };
           if (typeof window.renderNetWorthMonthly === "function") {
@@ -19432,6 +19450,46 @@
     } catch (e) {}
     return out;
   }
+
+  // ── Unified ledger (Option B, phase 2): verification only, card NOT switched ──
+  // Assemble the exact-reconciling monthly ledger for a portfolio from the value
+  // chart's published series (value: one valuation) plus the transaction
+  // contributions (flows), and report the per-month residual. This lets us prove
+  // the residual is ~0 on REAL data before phase 3 wires the card to it.
+  // Call window.__wfVerifyLedger() in the console.
+  function buildLedgerInputForPortfolio(portfolio) {
+    if (!(window.WfLedger && WfLedger.assembleLedgerInput)) return [];
+    var gs = window.__wfGainSeries;
+    if (!gs || !gs.monthsEq) return [];
+    var pf = portfolio || gs.portfolio || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    return WfLedger.assembleLedgerInput(gs, _nwmContribByCategory(pf));
+  }
+  window.__wfVerifyLedger = function (portfolio) {
+    if (!(window.WfLedger && WfLedger.buildMonthlyLedger)) {
+      console.warn("[ledger] WfLedger not loaded"); return null;
+    }
+    var gs = window.__wfGainSeries;
+    var pf = portfolio || (gs && gs.portfolio) || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
+    var rows = WfLedger.buildMonthlyLedger(buildLedgerInputForPortfolio(pf));
+    var worst = 0, worstMonth = null;
+    rows.forEach(function (r) {
+      if (Math.abs(r.residual) > Math.abs(worst)) { worst = r.residual; worstMonth = r.month; }
+    });
+    var sum = WfLedger.summarize(rows);
+    console.log("[ledger] " + pf + ": " + rows.length + " months · worst monthly residual " +
+      Math.round(worst) + " @ " + worstMonth + " · period residual " +
+      (sum ? Math.round(sum.residual) : "n/a"));
+    if (console.table) {
+      console.table(rows.map(function (r) {
+        return {
+          month: r.month, change: Math.round(r.change), invested: Math.round(r.invested),
+          market: Math.round(r.market), interest: Math.round(r.interest),
+          idle: Math.round(r.idle), residual: Math.round(r.residual)
+        };
+      }));
+    }
+    return rows;
+  };
 
   function _nwmContributionsByMonth(portfolio) {
     var out = {};

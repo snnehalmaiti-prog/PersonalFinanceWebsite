@@ -120,8 +120,46 @@
     return out;
   }
 
+  // Assemble the buildMonthlyLedger input from the value-chart's published series
+  // and the transaction contributions, keyed by month. This is the bridge from
+  // the app's data to the pure engine — kept pure (no globals) so it is tested in
+  // Node with synthetic inputs.
+  //
+  //   series.monthsEq     : [{month, current}]  equity+commodity value (from __wfGainSeries)
+  //   series.monthsFiCore : [{month, value}]    fixed-income value EXCLUDING parked
+  //   series.monthsParked : [{month, value}]    parked-cash value (one consistent source)
+  //   contribByCat        : { "YYYY-MM": { <category>: {in, out} } }  (net investable flows;
+  //                          parked is NOT in here — buildMonthlyInvestCatData excludes it)
+  //
+  // Value comes from the series (one valuation); flows from the ledger, split into
+  // fixed-income vs everything-else by the sheet's Instrument Category. Returns the
+  // oldest-first [{month, value:{eqComm,fi,parked}, flows:{eqComm,fi}}] the engine wants.
+  function assembleLedgerInput(series, contribByCat) {
+    series = series || {};
+    var byMonth = {};
+    function slot(m) {
+      return byMonth[m] || (byMonth[m] = {
+        month: m, value: { eqComm: 0, fi: 0, parked: 0 }, flows: { eqComm: 0, fi: 0 }
+      });
+    }
+    (series.monthsEq || []).forEach(function (r) { slot(r.month).value.eqComm = num(r.current); });
+    (series.monthsFiCore || []).forEach(function (r) { slot(r.month).value.fi = num(r.value); });
+    (series.monthsParked || []).forEach(function (r) { slot(r.month).value.parked = num(r.value); });
+    var cb = contribByCat || {};
+    Object.keys(cb).forEach(function (m) {
+      var s = slot(m), g = cb[m] || {};
+      Object.keys(g).forEach(function (c) {
+        var net = num(g[c] && g[c].in) - num(g[c] && g[c].out);
+        if (String(c).trim().toLowerCase() === "fixed income") s.flows.fi += net;
+        else s.flows.eqComm += net;
+      });
+    });
+    return Object.keys(byMonth).sort().map(function (k) { return byMonth[k]; });
+  }
+
   root.WfLedger = {
     buildMonthlyLedger: buildMonthlyLedger,
+    assembleLedgerInput: assembleLedgerInput,
     summarize: summarize,
     totalValue: totalValue
   };
