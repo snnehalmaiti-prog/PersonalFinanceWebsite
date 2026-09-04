@@ -20558,16 +20558,12 @@
       var idles = (typeof isSavingsInvestmentExcluded === "function" && isSavingsInvestmentExcluded())
         ? {}
         : (typeof _nwmIdleByMonth === "function" ? _nwmIdleByMonth(pf) : {});
-      // Interest — sheet-based, always ≥ 0. Walks from the first month of the
-      // series (helper takes a "YYYY-MM" start key).
-      var firstMonth = gs.months[0] && gs.months[0].month;
-      var interests = (typeof _nwmInterestByMonth === "function" && firstMonth)
-        ? _nwmInterestByMonth(firstMonth, pf) : {};
-      // interest by month keyed from the first month of the series (the helper
-      // walks forward from the given "YYYY-MM").
-      var firstMonth = gs.months[0] && gs.months[0].month;
-      var interests = (typeof _nwmInterestByMonth === "function" && firstMonth)
-        ? _nwmInterestByMonth(firstMonth, pf) : {};
+      // Interest is derived from the VALUE series inside renderWith (the month's
+      // real balance change, minus contributions, market and idle cash) rather
+      // than from the sheet helper. Sourcing it from the same series that drives
+      // Closing makes the four buckets reconcile to Change exactly — no residual —
+      // and it stays ≥ 0 because FD/PF maturity payouts are already counted as
+      // withdrawals in contributions, so what's left is pure fixed-income accrual.
 
       function renderWith(realizedByMonth) {
         // Real net worth Opening/Closing come from the combined series.
@@ -20587,11 +20583,17 @@
         var monthKeys = Object.keys(allMonths).sort();
         var cum = 0;
         var rows = monthKeys.map(function (m) {
-          // Market = equity/commodity gap change; Interest = FD/PF/EPF earned.
+          // Market = equity/commodity gap change (mark-to-market).
           var market   = (eqCurDelta[m] || 0) - (eqInvDelta[m] || 0);
-          var interest = Number(interests[m]) || 0;
-          var gain     = market + interest;              // no +realized here
           var contrib  = Number(contribs[m]) || 0;
+          var idleM    = Number(idles[m]) || 0;
+          // Interest = the fixed-income value growth, derived from the value
+          // series so the row reconciles exactly: the month's real balance move
+          // (Δcurrent) minus what contributions, market and idle already explain.
+          // Payouts are withdrawals (in contrib), so this is pure accrual (≥0).
+          var monthChange = (currentByMonth[m] || 0) - (prevByMonth[m] || 0);
+          var interest = monthChange - contrib - market - idleM;
+          var gain     = market + interest;              // total gain = market + FI accrual
           var realized = Number((realizedByMonth || {})[m]) || 0;
           cum += gain;
           return {
@@ -20601,7 +20603,7 @@
             market: market, interest: interest,
             realized: realized,                           // info only
             contributions: contrib,
-            idle: Number(idles[m]) || 0, estimated: false, _accurate: true,
+            idle: idleM, estimated: false, _accurate: true,
             _cumGain: cum
           };
         });
