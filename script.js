@@ -20485,7 +20485,17 @@
       }
       var eqCurDelta = _byMonthDeltas(gs.monthsEq, "current");
       var eqInvDelta = _byMonthDeltas(gs.monthsEq, "invested");
-      var contribs   = _byMonthDeltas(gs.months,   "invested");
+      // Contributions: use the SAME transaction cash-flow engine CASH FLOW ·
+      // MONTHLY uses (_nwmContributionsByMonth → buildMonthlyInvestCatData:
+      // buys − sells/withdrawals, net, per real transaction month), so the two
+      // cards' Invested figures agree. Deriving it from the value-series invested
+      // delta instead gave a different number and pushed the difference into the
+      // residual line. The month keys align: a card row keyed "YYYY-MM" is that
+      // month's activity, which is exactly how the contributions map is keyed.
+      // Fall back to the series delta only if the helper is unavailable.
+      var contribs = (typeof _nwmContributionsByMonth === "function")
+        ? _nwmContributionsByMonth(pf)
+        : _byMonthDeltas(gs.months, "invested");
       // Interest — sheet-based, always ≥ 0. Walks from the first month of the
       // series (helper takes a "YYYY-MM" start key).
       var firstMonth = gs.months[0] && gs.months[0].month;
