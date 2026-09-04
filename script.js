@@ -10444,6 +10444,26 @@
       if (!amfiDate || !amfiNav) return data;
       var latest = data.length ? data[data.length - 1] : null;
       if (latest && latest.date.getTime() >= amfiDate.getTime()) return data;
+      // The AMFI daily point is newer than our base history. If the base is more
+      // than a day behind (a stale per-scheme cache), appending this lone point
+      // leaves a gap: previous_nav_for / the holdings day-change take the
+      // second-to-last ENTRY, which would then be a several-days-old NAV — so the
+      // "day change" silently spans that gap (e.g. 03-09 vs 31-08) and reads
+      // wrong, often negative on an up day. Fill the gap from the freshly-built
+      // bundle (in-memory cached, and it also re-caches the scheme) so the day
+      // change spans a single day before appending today's point.
+      var _gapDays = latest ? (amfiDate.getTime() - latest.date.getTime()) / 86400000 : Infinity;
+      if (_gapDays > 1.5) {
+        return _navFetchFromBundle(schemeCode).then(function (bundle) {
+          var base = (bundle && bundle.length &&
+                      (!latest || bundle[bundle.length - 1].date.getTime() >= latest.date.getTime()))
+            ? bundle : data;
+          var bl = base.length ? base[base.length - 1] : null;
+          if (bl && bl.date.getTime() >= amfiDate.getTime()) return base;
+          dbg("[NAV] scheme " + schemeCode + ": filled stale gap from bundle, then AMFI NAV");
+          return base.concat([{ date: amfiDate, nav: amfiNav }]);
+        }).catch(function () { return data.concat([{ date: amfiDate, nav: amfiNav }]); });
+      }
       dbg("[NAV] scheme " + schemeCode + ": applying newer AMFI NAV", { date: amfiDate, nav: amfiNav });
       return data.concat([{ date: amfiDate, nav: amfiNav }]);
     });
