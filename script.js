@@ -12156,6 +12156,21 @@
         var mfNavByIdx = instruments.map(function (name) { return navAtByName[name]; });
         var mfTradedByIdx = instruments.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
         var mfTradedCostByIdx = instruments.map(function (name) { return mfTradedCost[normalizeText(name)] || null; });
+        // Mutual funds dropped from `instruments` for lack of an AMFI scheme code
+        // — typically Debt / Fixed-Income funds. Their VALUE line can't be drawn
+        // (no NAV history), but their INVESTED cost basis is known from the
+        // Transactions sheet (units × price) exactly like every other fund, so it
+        // must still feed the Invested line. Without this their cost only appeared
+        // as the tail-snap jump to the Overview total. Names already in
+        // `instruments` are excluded here so their cost is never counted twice.
+        var _mfSchemeMapped = {};
+        instruments.forEach(function (n) { _mfSchemeMapped[normalizeText(n)] = true; });
+        var mfCostOnly = Object.keys(unitEvents)
+          .filter(function (name) { return !_mfSchemeMapped[normalizeText(name)]; })
+          .map(function (name) {
+            return { hidden: _vcHidden(name), cost: mfTradedCost[normalizeText(name)] || null };
+          })
+          .filter(function (m) { return !!m.cost; });
         var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
         var seMeta = seTickers.map(function (ticker) {
           var hist = stockHistoryAll[ticker] || null;
@@ -12223,6 +12238,12 @@
             if (traded && traded[dk]) {
               flowAt[i] += traded[dk] * nav;
             }
+          }
+          // Debt / Fixed-Income mutual funds with no scheme code: cost basis only
+          // (no value line), so the Invested curve reflects money actually put in.
+          for (var ci = 0; ci < mfCostOnly.length; ci++) {
+            var mc = mfCostOnly[ci];
+            if (mc.cost[dk] && !mc.hidden) investedFlowAt[i] += mc.cost[dk];
           }
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
