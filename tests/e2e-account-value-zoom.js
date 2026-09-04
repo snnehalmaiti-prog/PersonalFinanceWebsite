@@ -133,8 +133,8 @@ const pctOf = (t) => String(t || "").match(/\(([+\u2212-]?)([\d.]+)%\)/);
   }
 
   ok(seen[30].spanDays === 30, "C1 a 30-day window is 30 days wide", seen[30].spanDays);
-  ok(seen[30].name === "Value",
-     "C2 zoomed, the legend label does not repeat the month — the period line has it", seen[30].name);
+  ok(seen[30].name === "Current Value",
+     "C2 the legend label stays 'Current Value' when zoomed — the period line and change carry the window", seen[30].name);
   ok(/^FROM \d{4} · TO [A-Z]{3} \d{4}$/.test(seen[30].period || ""),
      "C2b and the period line names the window", seen[30].period);
   ok(seen[30].change && seen[30].change.indexOf("₹") !== -1,

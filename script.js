@@ -11653,7 +11653,7 @@
       showInvested(investedAtIndex(points.indexOf(endPt)));
       // The period line under the title already names the window, so the legend
       // label stays a plain noun rather than repeating the month.
-      if (nameEl) nameEl.textContent = full ? "Current Value" : "Value";
+      if (nameEl) nameEl.textContent = "Current Value";
       var pvcPeriodEl = document.getElementById("pvc-period");
       if (pvcPeriodEl) {
         // The year the visible window opens in — taken from the first plotted
@@ -11726,7 +11726,7 @@
       if (lastEl) lastEl.textContent = "₹" + Math.round(pt.y).toLocaleString("en-IN");
       showNet(netAtIndex(idx));
       showInvested(investedAtIndex(idx));
-      if (nameEl) nameEl.textContent = "Value";
+      if (nameEl) nameEl.textContent = "Current Value";
       var per = document.getElementById("pvc-period");
       if (per) per.textContent = _pvcDayFmt.format(pt.x).toUpperCase();
       if (changeEl) changeEl.hidden = true;
