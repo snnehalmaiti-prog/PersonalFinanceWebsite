@@ -12156,13 +12156,16 @@
         var mfNavByIdx = instruments.map(function (name) { return navAtByName[name]; });
         var mfTradedByIdx = instruments.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
         var mfTradedCostByIdx = instruments.map(function (name) { return mfTradedCost[normalizeText(name)] || null; });
-        // Mutual funds dropped from `instruments` for lack of an AMFI scheme code
-        // — typically Debt / Fixed-Income funds. Their VALUE line can't be drawn
-        // (no NAV history), but their INVESTED cost basis is known from the
-        // Transactions sheet (units × price) exactly like every other fund, so it
-        // must still feed the Invested line. Without this their cost only appeared
-        // as the tail-snap jump to the Overview total. Names already in
-        // `instruments` are excluded here so their cost is never counted twice.
+        // Equity-sheet holdings dropped from `instruments` for lack of an AMFI
+        // scheme code — Debt / Fixed-Income funds AND Commodity ETFs (gold ETFs
+        // and the like) both sit here, since neither carries an AMFI code. Their
+        // VALUE line can't be drawn (no NAV history), but their INVESTED cost
+        // basis is known from the Transactions sheet (units × price) exactly like
+        // every other holding, so it must still feed the Invested line. Without
+        // this their cost only appeared as the tail-snap jump to the Overview
+        // total. Category is irrelevant here — the cost basis is the money put in
+        // regardless of asset class. Names already in `instruments` are excluded
+        // so their cost is never counted twice.
         var _mfSchemeMapped = {};
         instruments.forEach(function (n) { _mfSchemeMapped[normalizeText(n)] = true; });
         var mfCostOnly = Object.keys(unitEvents)
@@ -12239,8 +12242,9 @@
               flowAt[i] += traded[dk] * nav;
             }
           }
-          // Debt / Fixed-Income mutual funds with no scheme code: cost basis only
-          // (no value line), so the Invested curve reflects money actually put in.
+          // Non-scheme-mapped equity-sheet holdings (Debt/FI funds, Commodity
+          // ETFs): cost basis only (no value line), so the Invested curve
+          // reflects the money actually put in via units × price.
           for (var ci = 0; ci < mfCostOnly.length; ci++) {
             var mc = mfCostOnly[ci];
             if (mc.cost[dk] && !mc.hidden) investedFlowAt[i] += mc.cost[dk];
