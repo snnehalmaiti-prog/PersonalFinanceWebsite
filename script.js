@@ -20284,8 +20284,8 @@
                    st.market < 0 ? "negative" : "mic-hs-pos") +
                tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
                (Math.abs(_remainder) >= 1
-                   ? tot(_remainder < 0 ? "Withdrawn" : "Net added",
-                         _nwmSigned(_remainder), _remainder < 0 ? "negative" : "mic-hs-pos")
+                   ? tot("Idle Cash", _nwmSigned(_remainder),
+                         _remainder < 0 ? "negative" : "mic-hs-pos")
                    : "");
       } else {
         // Snapshot mode keeps its existing decomposition (with Realized).
