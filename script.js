@@ -12167,6 +12167,7 @@
             livePrice: live ? live.price : null,
             isUsd: hist ? hist.currency === "USD" : !!(live && live.currency === "USD"),
             traded: seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
+            tradedCost: seTradedCost[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
           };
         });
 
@@ -12228,6 +12229,16 @@
           for (var si = 0; si < seMeta.length; si++) {
             var meta = seMeta[si];
             var seUnits = meta.units[i] || 0;
+            // Invested (cost basis) from the TRANSACTION SHEET (units × price),
+            // added BEFORE any market-price lookup so it never depends on price
+            // coverage. US holdings' cost is in USD on the sheet, so convert at
+            // this date's USD/INR rate to keep the Invested line in INR.
+            var seTC = meta.tradedCost;
+            if (seTC && seTC[dk] && !meta.hidden) {
+              investedFlowAt[i] += meta.isUsd
+                ? seTC[dk] * (usdInrHistMap[dateStr] || usdInrToday)
+                : seTC[dk];
+            }
             var price = meta.histPrices ? lookupIndexPrice(meta.histPrices, dateStr) : null;
             if (!price) price = meta.livePrice;
             // Carry the last price forward rather than dropping the holding.
@@ -12250,15 +12261,15 @@
               growthValueAt[i] += seVal;
               if (!meta.hidden) total += seVal;
             }
-            // Same rule, and the same INR price: the flow can never disagree with
-            // the valuation, in magnitude or in currency. Deliberately NOT gated on
-            // still holding units — the sale that takes a position to zero is
-            // exactly the flow that must be counted, or the value would vanish with
-            // nothing to explain it and the curve would read it as a total loss.
+            // Growth series' flow is valued at THIS date's market price (so a
+            // purchase changes the unit count, never the unit price). Invested
+            // is handled above from the transaction cost, so only the growth
+            // flow remains here. NOT gated on still holding units — the sale
+            // that takes a position to zero is exactly the flow that must be
+            // counted, or the value would vanish with nothing to explain it.
             var seTraded = meta.traded;
             if (seTraded && seTraded[dk]) {
               flowAt[i] += seTraded[dk] * priceInr;
-              if (!meta.hidden) investedFlowAt[i] += seTraded[dk] * priceInr;
             }
           }
           return { x: date, y: total };
