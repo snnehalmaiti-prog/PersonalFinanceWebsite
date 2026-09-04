@@ -10472,6 +10472,24 @@
       if (!amfiDate || !amfiNav) return base;
       var latest = base.length ? base[base.length - 1] : null;
       if (latest && latest.date.getTime() >= amfiDate.getTime()) return base;
+      // AMFI's date is the freshest thing we have (its file has a short cache).
+      // If the best cached history (per-scheme cache OR the 12h-cached bundle) is
+      // still more than a day behind it, that cache is stale and appending today's
+      // point would leave a gap — day change would span it (e.g. 03-09 vs a
+      // late-August entry) and read wrong. Fetch this scheme fresh from the
+      // network so yesterday's NAV is actually present, then append today.
+      var _gapDays = latest ? (amfiDate.getTime() - latest.date.getTime()) / 86400000 : Infinity;
+      if (_gapDays > 1.5) {
+        return _navFetchFromNetwork(schemeCode).then(function (net) {
+          var b = (net && net.length &&
+                   (!latest || net[net.length - 1].date.getTime() >= latest.date.getTime()))
+            ? net : base;
+          var bl = b.length ? b[b.length - 1] : null;
+          if (bl && bl.date.getTime() >= amfiDate.getTime()) return b;
+          dbg("[NAV] scheme " + schemeCode + ": stale cache, refetched network + AMFI daily");
+          return b.concat([{ date: amfiDate, nav: amfiNav }]);
+        }).catch(function () { return base.concat([{ date: amfiDate, nav: amfiNav }]); });
+      }
       dbg("[NAV] scheme " + schemeCode + ": bundle history + AMFI daily latest", { date: amfiDate, nav: amfiNav });
       return base.concat([{ date: amfiDate, nav: amfiNav }]);
     });
