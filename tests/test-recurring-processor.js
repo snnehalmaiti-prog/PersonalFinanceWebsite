@@ -79,12 +79,18 @@ function item(id, opts) {
 }
 
 function isoMonthsAgo(n) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
+  // Anchor to the 1ST of the month n months back. The 1st is the only day
+  // guaranteed to be on-or-before "today" whatever day the suite runs, so the
+  // CURRENT month's instalment is always already due — making the count of due
+  // instalments exactly n+1 (the n missed months plus this month) on any run
+  // day. Pinning to a later day (e.g. the 5th) fails when the suite runs earlier
+  // in the month than that day: this month's instalment isn't due yet, so the
+  // processor correctly posts one fewer and the hard-coded expectations break.
+  // Built from Date(year, month-n, 1) so there is no day-overflow either.
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - n, 1);
   const p = (x) => String(x).padStart(2, "0");
-  // Pin to the 5th: a day that exists in every month, so the count of due
-  // instalments is exactly n regardless of when the suite runs.
-  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-05";
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-01";
 }
 
 (async () => {
