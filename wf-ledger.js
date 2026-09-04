@@ -128,13 +128,17 @@
   //   series.monthsEq     : [{month, current}]  equity+commodity value (from __wfGainSeries)
   //   series.monthsFiCore : [{month, value}]    fixed-income value EXCLUDING parked
   //   series.monthsParked : [{month, value}]    parked-cash value (one consistent source)
-  //   contribByCat        : { "YYYY-MM": { <category>: {in, out} } }  (net investable flows;
-  //                          parked is NOT in here — buildMonthlyInvestCatData excludes it)
+  //   flowsByMonth        : { "YYYY-MM": { eqComm, fi } }  net investable flows, ALREADY
+  //                          split into the SAME two books as the value (by source/sheet,
+  //                          NOT by Instrument Category — a debt mutual fund lives in the
+  //                          equity sheet so its value is in eqComm, hence its flow must be
+  //                          too, even though its category is "Fixed Income"). Parked is
+  //                          not a flow.
   //
-  // Value comes from the series (one valuation); flows from the ledger, split into
-  // fixed-income vs everything-else by the sheet's Instrument Category. Returns the
-  // oldest-first [{month, value:{eqComm,fi,parked}, flows:{eqComm,fi}}] the engine wants.
-  function assembleLedgerInput(series, contribByCat) {
+  // Value comes from the series (one valuation); flows from the transaction ledger,
+  // pre-split by the caller to match the value's books. Returns the oldest-first
+  // [{month, value:{eqComm,fi,parked}, flows:{eqComm,fi}}] the engine wants.
+  function assembleLedgerInput(series, flowsByMonth) {
     series = series || {};
     var byMonth = {};
     function slot(m) {
@@ -145,14 +149,11 @@
     (series.monthsEq || []).forEach(function (r) { slot(r.month).value.eqComm = num(r.current); });
     (series.monthsFiCore || []).forEach(function (r) { slot(r.month).value.fi = num(r.value); });
     (series.monthsParked || []).forEach(function (r) { slot(r.month).value.parked = num(r.value); });
-    var cb = contribByCat || {};
-    Object.keys(cb).forEach(function (m) {
-      var s = slot(m), g = cb[m] || {};
-      Object.keys(g).forEach(function (c) {
-        var net = num(g[c] && g[c].in) - num(g[c] && g[c].out);
-        if (String(c).trim().toLowerCase() === "fixed income") s.flows.fi += net;
-        else s.flows.eqComm += net;
-      });
+    var fb = flowsByMonth || {};
+    Object.keys(fb).forEach(function (m) {
+      var s = slot(m), f = fb[m] || {};
+      s.flows.eqComm += num(f.eqComm);
+      s.flows.fi += num(f.fi);
     });
     return Object.keys(byMonth).sort().map(function (k) { return byMonth[k]; });
   }
