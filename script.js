@@ -8188,6 +8188,40 @@
     return out;
   }
 
+  // Like buildTradedUnitsByDate, but stores the actual money moved per date —
+  // signed cost basis (units × the transaction PRICE from the sheet), buys +ve
+  // and sells -ve. This is the cash-flow cost basis, and it needs no market NAV:
+  // the Invested line is built from it so a fund without historical NAV coverage
+  // still contributes its cost from the day it was bought, instead of appearing
+  // only when the tail snaps to the Overview total.
+  function buildTradedCostByDate(rows, portfolioFilter) {
+    var out = {};
+    if (!rows || !rows.length) return out;
+    var h = rows[0].map(normalizeText);
+    var pI = h.indexOf("portfolio name"), iI = h.indexOf("instrument name"),
+        tI = h.indexOf("transaction type"), uI = h.indexOf("units"),
+        cI = h.indexOf("price"), dI = h.indexOf("transaction date");
+    if (pI === -1 || iI === -1 || tI === -1 || uI === -1 || cI === -1 || dI === -1) return out;
+    rows.slice(1).forEach(function (row) {
+      if (portfolioFilter !== "all" &&
+          normalizeText((row[pI] || "").trim()) !== normalizeText(portfolioFilter)) return;
+      var type = normalizeText(row[tI] || "");
+      if (type === "split" || type === "bonus") return;
+      var isBuy = type.indexOf("buy") !== -1, isSell = type.indexOf("sell") !== -1;
+      if (!isBuy && !isSell) return;
+      var units = parseNumber(row[uI]);
+      var price = parseNumber(row[cI]);
+      if (!units || !price) return;
+      var d = parseFlexibleDate(row[dI]);
+      if (!d) return;
+      var key = normalizeText((row[iI] || "").trim());
+      var byDate = out[key] || (out[key] = {});
+      var cost = units * price;
+      byDate[dateKey(d)] = (byDate[dateKey(d)] || 0) + (isBuy ? cost : -cost);
+    });
+    return out;
+  }
+
   // Units traded in a half-open period (after `from`, up to and including `to`),
   // for one instrument. Used to value a period's flow at that period's own price.
   function tradedUnitsInRange(byDate, from, to) {
@@ -12080,6 +12114,10 @@
 
         var mfTradedUnits = buildTradedUnitsByDate(getSheetRows("equity"), selectedPortfolio);
         var seTradedUnits = buildTradedUnitsByDate(getSheetRows("stocksetf"), selectedPortfolio);
+        // Actual cost-basis flows (units × transaction price) — used for the
+        // Invested line so it doesn't depend on market NAV/price coverage.
+        var mfTradedCost = buildTradedCostByDate(getSheetRows("equity"), selectedPortfolio);
+        var seTradedCost = buildTradedCostByDate(getSheetRows("stocksetf"), selectedPortfolio);
 
         // Everything below is loop-invariant: normalizeText() per (instrument ×
         // timeline point) and a fresh Object.keys() per point were the dominant
@@ -12117,6 +12155,7 @@
         var mfUnitsByIdx = instruments.map(function (name) { return unitsAtByName[name]; });
         var mfNavByIdx = instruments.map(function (name) { return navAtByName[name]; });
         var mfTradedByIdx = instruments.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
+        var mfTradedCostByIdx = instruments.map(function (name) { return mfTradedCost[normalizeText(name)] || null; });
         var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
         var seMeta = seTickers.map(function (ticker) {
           var hist = stockHistoryAll[ticker] || null;
@@ -12166,16 +12205,22 @@
               growthValueAt[i] += mfVal;
               if (!mfHiddenByIdx[mi]) total += mfVal;
             }
-            // The flow is valued at the SAME nav this instrument was just valued at,
-            // so a purchase changes the unit count and never the unit price. Skipped
-            // when there is no nav: the value series cannot see this instrument on
-            // this date either, and counting money against value that is not there
-            // is what put a permanent hole in the curve.
+            // Invested (cost basis) comes from the TRANSACTION SHEET (units ×
+            // price), not from market NAV — so it is added here UNGATED by nav.
+            // A fund with no historical NAV coverage still contributes its cost
+            // from its buy date, keeping the Invested line continuous (no jump
+            // where the tail used to snap to the Overview's invested total).
+            var tradedCost = mfTradedCostByIdx[mi];
+            if (tradedCost && tradedCost[dk] && !mfHiddenByIdx[mi]) {
+              investedFlowAt[i] += tradedCost[dk];
+            }
+            // The growth series' flow IS valued at this instrument's nav (so a
+            // purchase changes unit count, never unit price). That one genuinely
+            // needs nav, so it stays gated.
             if (!nav) continue;
             var traded = mfTradedByIdx[mi];
             if (traded && traded[dk]) {
               flowAt[i] += traded[dk] * nav;
-              if (!mfHiddenByIdx[mi]) investedFlowAt[i] += traded[dk] * nav;
             }
           }
           // Stocks/ETF: use historical price from stock_history when available, else current price.
