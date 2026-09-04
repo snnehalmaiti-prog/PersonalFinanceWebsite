@@ -20251,55 +20251,41 @@
       // terms below it, so the two lines read as a figure and its explanation
       // rather than as seven unrelated numbers — which is also why they are not
       // on one row: at anything narrower than a desktop that ran off the card.
+      // Line 1: where the period stood and how far it moved — nothing else.
+      // Change is exactly Closing − Opening.
       var change = st.closing - st.opening;
+      lead = tot("Opening", formatCurrency(st.opening)) +
+             tot("Closing", formatCurrency(st.closing)) +
+             tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
+      // Line 2: Change split into exactly four buckets that SUM to Change, so the
+      // two lines read as a figure and its complete explanation:
+      //   Invested  = net money in/out (contributions − withdrawals), and it
+      //               absorbs the reconciling remainder (e.g. matured-FD payouts
+      //               with no explicit sell row) so the four terms close exactly.
+      //   Market    = equity/commodity mark-to-market gain or loss.
+      //   Interest  = fixed-income interest earned (FD/PF/EPF).
+      //   Idle Cash = parked-cash (Investment Corpus / Savings) movement.
+      // Derive Invested as the residual of the three measured terms so the
+      // identity Invested + Market + Interest + Idle Cash = Change always holds.
       if (st._accurate) {
-        // Opening/Closing are the real net worth at the boundaries of the
-        // period (from the value series). Change is their difference: it
-        // includes contributions, withdrawals, and interest, so it is not the
-        // same as "Total gain" — hence both are shown side by side. Total gain
-        // is the sum of the monthly gain bars (Market + Interest + Realized).
-        var gainTot = st.totalGain || 0;
-        lead = tot("Opening", formatCurrency(st.opening)) +
-               tot("Closing", formatCurrency(st.closing)) +
-               tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos") +
-               tot("Total gain", _nwmSigned(gainTot), gainTot < 0 ? "negative" : "mic-hs-pos");
+        var _investedNet = change - (st.market || 0) - (st.interest || 0) - (st.idle || 0);
+        rest = tot("Invested", _nwmSigned(_investedNet),
+                   _investedNet < 0 ? "negative" : "mic-hs-pos") +
+               tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
+                   st.market < 0 ? "negative" : "mic-hs-pos") +
+               tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+               cash("Idle Cash", st.idle);
       } else {
-        lead = tot("Opening", formatCurrency(st.opening)) +
-               tot("Closing", formatCurrency(st.closing)) +
-               tot("Change", _nwmSigned(change), change < 0 ? "negative" : "mic-hs-pos");
+        // Snapshot mode keeps its existing decomposition (with Realized).
+        rest = tot("Invested", _nwmSigned(st.invested)) +
+               tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
+                   st.market < 0 ? "negative" : "mic-hs-pos") +
+               tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+               (st.realized
+                   ? tot("Realized", _nwmSigned(st.realized),
+                         st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
+               cash("Idle Cash", st.idle);
       }
-      // Both modes now populate Invested and Interest — accurate mode reuses the
-      // same _nwmContributionsByMonth / _nwmInterestByMonth helpers the snapshot
-      // path uses, and decomposes gap-change into Market(pure)+Interest so the
-      // total gain stays right when both are shown. Idle Cash is a snapshot-only
-      // decomposition, so it's still hidden in accurate mode.
-      // Reconciling residual (accurate mode): Change is the real balance move,
-      // and Invested + Market + Interest is what the card otherwise attributes.
-      // Whatever is left is money that LEFT the book without being a market/
-      // interest event and without being caught by the net-contributions series
-      // — chiefly matured FD / PF payouts and redemptions taken as cash. Showing
-      // it as "Withdrawn" is what makes the line reconcile: Opening + Invested +
-      // Market + Interest − Withdrawn = Closing. Only rendered when it actually
-      // moved (most months of most portfolios have none), same rule as Idle Cash.
-      // Idle Cash (parked cash) is now a named term in BOTH modes, so it comes
-      // out of the residual: Opening + Invested + Market + Interest + Idle Cash
-      // − Withdrawn(residual) = Closing.
-      var _resid = change - (st.invested || 0) - (st.market || 0) - (st.interest || 0) - (st.idle || 0);
-      var _withdrawnHtml = (st._accurate && Math.abs(_resid) >= 1)
-        ? tot(_resid < 0 ? "Withdrawn" : "Net added", _nwmSigned(_resid),
-              _resid < 0 ? "negative" : "mic-hs-pos")
-        : "";
-      rest = tot("Invested", _nwmSigned(st.invested)) +
-             tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
-                 st.market < 0 ? "negative" : "mic-hs-pos") +
-             tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
-             cash("Idle Cash", st.idle) +
-             _withdrawnHtml +
-             // Realized lives on CASH FLOW · MONTHLY — not shown here in
-             // accurate mode. Snapshot mode keeps it if any is present.
-             (!st._accurate && st.realized
-                 ? tot("Realized", _nwmSigned(st.realized),
-                       st.realized < 0 ? "negative" : "mic-hs-pos") : "");
     }
     // Three rows, always — the label, then the two figure lines. Rendered even
     // when empty so that hovering never changes the block's height and slides
