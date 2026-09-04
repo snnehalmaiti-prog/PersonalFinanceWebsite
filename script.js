@@ -20268,13 +20268,25 @@
       // Derive Invested as the residual of the three measured terms so the
       // identity Invested + Market + Interest + Idle Cash = Change always holds.
       if (st._accurate) {
-        var _investedNet = change - (st.market || 0) - (st.interest || 0) - (st.idle || 0);
-        rest = tot("Invested", _nwmSigned(_investedNet),
-                   _investedNet < 0 ? "negative" : "mic-hs-pos") +
+        // Invested is the transaction net (same _nwmContributionsByMonth engine
+        // CASH FLOW · MONTHLY uses), so the two cards' figures agree exactly.
+        // Market / Interest / Idle Cash are the measured gains and parked-cash
+        // move. The remainder is the balance change transactions don't explain —
+        // fixed-income balance growth (EPF/PF employer credits, reinvested
+        // interest) and any untracked flow — shown as its own line so the buckets
+        // still sum to Change. Rendered only when it actually moved.
+        var _remainder = change - (st.invested || 0) - (st.market || 0)
+                       - (st.interest || 0) - (st.idle || 0);
+        rest = tot("Invested", _nwmSigned(st.invested),
+                   st.invested < 0 ? "negative" : "mic-hs-pos") +
                tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                    st.market < 0 ? "negative" : "mic-hs-pos") +
                tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
-               cash("Idle Cash", st.idle);
+               cash("Idle Cash", st.idle) +
+               (Math.abs(_remainder) >= 1
+                   ? tot(_remainder < 0 ? "Other outflow" : "Other inflow",
+                         _nwmSigned(_remainder), _remainder < 0 ? "negative" : "mic-hs-pos")
+                   : "");
       } else {
         // Snapshot mode keeps its existing decomposition (with Realized).
         rest = tot("Invested", _nwmSigned(st.invested)) +
