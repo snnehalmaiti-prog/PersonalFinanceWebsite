@@ -20178,13 +20178,22 @@
   function _nwmPeriodStats(rows) {
     if (!rows.length) return null;
     var comp = rows.filter(function (r) { return r.delta != null; });
-    var closing = rows[0].total;                       // rows are newest first
-    if (!comp.length) return { closing: closing };
-    var oldest = comp[comp.length - 1];
+    if (!comp.length) return { closing: rows[0] && rows[0].total };
+    // Identify the period boundaries by MONTH KEY, never by array position: the
+    // accurate path emits rows oldest-first and the snapshot path newest-first,
+    // and reading rows[0] as "newest" swapped Opening and Closing for the
+    // accurate path — which, whenever the portfolio grew over the period, read
+    // as "Closing < Opening" for every year.
+    var _byMk = comp.slice().sort(function (a, b) {
+      return a.month < b.month ? -1 : (a.month > b.month ? 1 : 0);
+    });
+    var oldest = _byMk[0];
+    var newest = _byMk[_byMk.length - 1];
+    var closing = newest.total;
     // Accurate-mode Closing: prefer today's tail-snapped live value when the
     // period extends to the current month (current year OR "all time"). The
-    // current-month row is dropped from the visible bars, so `rows[0].total`
-    // is the previous month's close — stale for a "how did I do this year"
+    // current-month row is dropped from the visible bars, so the newest row's
+    // total is the previous month's close — stale for a "how did I do this year"
     // headline. See __nwmDrillCtx.latestCurrent (set in _nwmTryAccurate).
     var _now2 = new Date();
     var _thisYr = String(_now2.getFullYear());
