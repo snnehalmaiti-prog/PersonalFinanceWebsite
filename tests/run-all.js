@@ -33,6 +33,7 @@ const guards = [
   { name: "syntax: wf-math.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-math.js")] },
   { name: "syntax: wf-overview.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-overview.js")] },
   { name: "syntax: wf-snapshots.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-snapshots.js")] },
+  { name: "syntax: wf-ledger.js", cmd: "node", args: ["--check", path.join(ROOT, "wf-ledger.js")] },
   { name: "syntax: expense.js", cmd: "node", args: ["--check", path.join(ROOT, "expense.js")] },
   { name: "syntax: supabase-client.js", cmd: "node", args: ["--check", path.join(ROOT, "supabase-client.js")] },
   { name: "syntax: sw.js", cmd: "node", args: ["--check", path.join(ROOT, "sw.js")] },
