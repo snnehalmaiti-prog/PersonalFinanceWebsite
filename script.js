@@ -19451,6 +19451,30 @@
     return out;
   }
 
+  // Net investable flows per month, split into the SAME two books the value
+  // series uses — by transaction SOURCE (which sheet), not Instrument Category.
+  // This is the fix for the debt-fund seam: a debt/arbitrage mutual fund lives in
+  // the equity sheet, so its value is counted in eqComm (monthsEq); its buy/sell
+  // flow must therefore also be eqComm, even though its category is "Fixed
+  // Income". Splitting by category routed it to fi and produced phantom −interest
+  // / +market of the same size. Fixed income here is ONLY the FD/PF/EPF sheets.
+  function _nwmFlowsBySource(portfolio) {
+    var out = {};
+    try {
+      var d = buildMonthlyInvestCatData(portfolio || "all");
+      if (!d || !d.byMonthTxns) return out;
+      Object.keys(d.byMonthTxns).forEach(function (m) {
+        var acc = out[m] || (out[m] = { eqComm: 0, fi: 0 });
+        d.byMonthTxns[m].forEach(function (t) {
+          var signed = t.out ? -(t.amount || 0) : (t.amount || 0);
+          if (normalizeText(t.source || "") === "fixed income") acc.fi += signed;
+          else acc.eqComm += signed;
+        });
+      });
+    } catch (e) {}
+    return out;
+  }
+
   // ── Unified ledger (Option B, phase 2): verification only, card NOT switched ──
   // Assemble the exact-reconciling monthly ledger for a portfolio from the value
   // chart's published series (value: one valuation) plus the transaction
@@ -19462,7 +19486,7 @@
     var gs = window.__wfGainSeries;
     if (!gs || !gs.monthsEq) return [];
     var pf = portfolio || gs.portfolio || localStorage.getItem(SELECTED_PORTFOLIO_KEY) || "all";
-    return WfLedger.assembleLedgerInput(gs, _nwmContribByCategory(pf));
+    return WfLedger.assembleLedgerInput(gs, _nwmFlowsBySource(pf));
   }
   window.__wfVerifyLedger = function (portfolio) {
     if (!(window.WfLedger && WfLedger.buildMonthlyLedger)) {
