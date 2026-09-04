@@ -20281,7 +20281,10 @@
       // it as "Withdrawn" is what makes the line reconcile: Opening + Invested +
       // Market + Interest − Withdrawn = Closing. Only rendered when it actually
       // moved (most months of most portfolios have none), same rule as Idle Cash.
-      var _resid = change - (st.invested || 0) - (st.market || 0) - (st.interest || 0);
+      // Idle Cash (parked cash) is now a named term in BOTH modes, so it comes
+      // out of the residual: Opening + Invested + Market + Interest + Idle Cash
+      // − Withdrawn(residual) = Closing.
+      var _resid = change - (st.invested || 0) - (st.market || 0) - (st.interest || 0) - (st.idle || 0);
       var _withdrawnHtml = (st._accurate && Math.abs(_resid) >= 1)
         ? tot(_resid < 0 ? "Withdrawn" : "Net added", _nwmSigned(_resid),
               _resid < 0 ? "negative" : "mic-hs-pos")
@@ -20290,13 +20293,13 @@
              tot(st.market < 0 ? "Market loss" : "Market gain", _nwmSigned(st.market),
                  st.market < 0 ? "negative" : "mic-hs-pos") +
              tot("Interest", _nwmSigned(st.interest), st.interest > 0 ? "mic-hs-pos" : "") +
+             cash("Idle Cash", st.idle) +
              _withdrawnHtml +
              // Realized lives on CASH FLOW · MONTHLY — not shown here in
              // accurate mode. Snapshot mode keeps it if any is present.
              (!st._accurate && st.realized
                  ? tot("Realized", _nwmSigned(st.realized),
-                       st.realized < 0 ? "negative" : "mic-hs-pos") : "") +
-             (st._accurate ? "" : cash("Idle Cash", st.idle));
+                       st.realized < 0 ? "negative" : "mic-hs-pos") : "");
     }
     // Three rows, always — the label, then the two figure lines. Rendered even
     // when empty so that hovering never changes the block's height and slides
@@ -20496,6 +20499,16 @@
       var contribs = (typeof _nwmContributionsByMonth === "function")
         ? _nwmContributionsByMonth(pf)
         : _byMonthDeltas(gs.months, "invested");
+      // Parked cash (Investment Corpus / Savings Account) sits INSIDE net worth,
+      // so its balance changes move Closing — but it is neither a contribution
+      // (deliberately excluded, it is not an investment) nor interest nor a
+      // market move. The snapshot path names that flow "Idle Cash"; the accurate
+      // path used to zero it, leaving it to fall into the reconciling residual.
+      // Name it here too, but only when parked cash is actually in the totals
+      // (it is dropped from the value series under Exclude Savings/Investment).
+      var idles = (typeof isSavingsInvestmentExcluded === "function" && isSavingsInvestmentExcluded())
+        ? {}
+        : (typeof _nwmIdleByMonth === "function" ? _nwmIdleByMonth(pf) : {});
       // Interest — sheet-based, always ≥ 0. Walks from the first month of the
       // series (helper takes a "YYYY-MM" start key).
       var firstMonth = gs.months[0] && gs.months[0].month;
@@ -20539,7 +20552,7 @@
             market: market, interest: interest,
             realized: realized,                           // info only
             contributions: contrib,
-            idle: 0, estimated: false, _accurate: true,
+            idle: Number(idles[m]) || 0, estimated: false, _accurate: true,
             _cumGain: cum
           };
         });
