@@ -10435,37 +10435,45 @@
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
+  // Session memo of each scheme's bundle series (parsed once per load). The
+  // bundle is the freshly-built nightly history; parsing its per-scheme object
+  // into the [{date,nav}] shape is cheap but repeated across render passes.
+  var _bundleSeriesMemo = {};
+  function _bundleSeriesFor(schemeCode) {
+    return fetchMfHistoryBundle().then(function (map) {
+      if (_bundleSeriesMemo[schemeCode]) return _bundleSeriesMemo[schemeCode];
+      var byIso = map && map[schemeCode];
+      var series = byIso ? _navSeriesFromBundle(byIso) : [];
+      _bundleSeriesMemo[schemeCode] = series;
+      return series;
+    }).catch(function () { return []; });
+  }
+
   function withAmfiNavOverride(schemeCode, data) {
-    return fetchAmfiNavMap().then(function (navMap) {
+    // Day change (and the recent chart) must not depend on the per-scheme
+    // IndexedDB cache, which can lag by days. Build the series from the two
+    // freshly-built nightly files instead: the BUNDLE for history (whenever it is
+    // at least as fresh as the cached base — which, being nightly, it normally
+    // is), and the AMFI DAILY file for today's latest NAV appended on top. So the
+    // last two points are always (bundle's prior day, AMFI's today) and the
+    // day-change spans a single day. Funds absent from the bundle keep `data`
+    // (their history comes from mfapi over the network).
+    return Promise.all([fetchAmfiNavMap(), _bundleSeriesFor(schemeCode)]).then(function (r) {
+      var navMap = r[0], bundle = r[1];
+      var base = data || [];
+      if (bundle && bundle.length) {
+        var dLast = base.length ? base[base.length - 1].date.getTime() : -Infinity;
+        if (bundle[bundle.length - 1].date.getTime() >= dLast) base = bundle;
+      }
       var entry = navMap && navMap[schemeCode];
-      if (!entry) return data;
+      if (!entry) return base;
       var amfiDate = parseAmfiNavDate(entry.date);
       var amfiNav = parseNumber(entry.nav);
-      if (!amfiDate || !amfiNav) return data;
-      var latest = data.length ? data[data.length - 1] : null;
-      if (latest && latest.date.getTime() >= amfiDate.getTime()) return data;
-      // The AMFI daily point is newer than our base history. If the base is more
-      // than a day behind (a stale per-scheme cache), appending this lone point
-      // leaves a gap: previous_nav_for / the holdings day-change take the
-      // second-to-last ENTRY, which would then be a several-days-old NAV — so the
-      // "day change" silently spans that gap (e.g. 03-09 vs 31-08) and reads
-      // wrong, often negative on an up day. Fill the gap from the freshly-built
-      // bundle (in-memory cached, and it also re-caches the scheme) so the day
-      // change spans a single day before appending today's point.
-      var _gapDays = latest ? (amfiDate.getTime() - latest.date.getTime()) / 86400000 : Infinity;
-      if (_gapDays > 1.5) {
-        return _navFetchFromBundle(schemeCode).then(function (bundle) {
-          var base = (bundle && bundle.length &&
-                      (!latest || bundle[bundle.length - 1].date.getTime() >= latest.date.getTime()))
-            ? bundle : data;
-          var bl = base.length ? base[base.length - 1] : null;
-          if (bl && bl.date.getTime() >= amfiDate.getTime()) return base;
-          dbg("[NAV] scheme " + schemeCode + ": filled stale gap from bundle, then AMFI NAV");
-          return base.concat([{ date: amfiDate, nav: amfiNav }]);
-        }).catch(function () { return data.concat([{ date: amfiDate, nav: amfiNav }]); });
-      }
-      dbg("[NAV] scheme " + schemeCode + ": applying newer AMFI NAV", { date: amfiDate, nav: amfiNav });
-      return data.concat([{ date: amfiDate, nav: amfiNav }]);
+      if (!amfiDate || !amfiNav) return base;
+      var latest = base.length ? base[base.length - 1] : null;
+      if (latest && latest.date.getTime() >= amfiDate.getTime()) return base;
+      dbg("[NAV] scheme " + schemeCode + ": bundle history + AMFI daily latest", { date: amfiDate, nav: amfiNav });
+      return base.concat([{ date: amfiDate, nav: amfiNav }]);
     });
   }
 
