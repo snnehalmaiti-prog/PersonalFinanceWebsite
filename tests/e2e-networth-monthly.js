@@ -253,7 +253,7 @@ const money = (t) => {
   // Opening and Closing always; the movement terms in between appear only when
   // they moved, so the row stays readable rather than carrying dead zeros.
   eq(Object.keys(julH).join(","),
-     "Opening,Closing,Change,Invested,Market loss,Interest,Idle Cash",
+     "Opening,Closing,Change,Total Invested,Market loss,Interest,Idle Cash",
      "N3 where the month stood and how far it moved, then what accounts for the move");
   // Totals are net of parked cash: Jun's ₹12,00,000 less the ₹7,00,000 held in
   // the two savings accounts, Jul's ₹11,50,000 less ₹7,50,000 after the ₹50,000
@@ -262,9 +262,9 @@ const money = (t) => {
   // Overview. The cash MOVEMENT is named separately instead.
   eq(julH.Opening, "₹12,00,000", "N4 opening is the previous month's stored total");
   eq(julH.Closing, "₹11,50,000", "N5 closing is this month's");
-  ok(/^\+₹1,30,000$/.test(julH.Invested),
+  ok(/^\+₹1,30,000$/.test(julH["Total Invested"]),
      "N8 contributions are the fund buy and the new deposit — NOT the ₹50,000 that " +
-     "merely moved into savings", julH.Invested);
+     "merely moved into savings", julH["Total Invested"]);
   // The ₹10L deposit at 8% accrues ~₹10,300 a month and the two provident funds
   // at 8.25% about ₹16,500 between them. Bounded
   // rather than pinned: both accrue to "now", so an exact figure would drift
@@ -487,7 +487,7 @@ const money = (t) => {
      "L2 the period is named on its own line, above the figures", lines[0]);
   eq(lines[1].labels.join(","), "Opening,Closing,Change",
      "L3 where the period stood and how far it moved, on the first figure line");
-  ok(lines[2].labels.indexOf("Invested") === 0 &&
+  ok(lines[2].labels.indexOf("Total Invested") === 0 &&
      /^Market (gain|loss)$/.test(lines[2].labels[1]),
      "L4 and what accounts for that move on the second, investing first",
      lines[2].labels);
@@ -501,7 +501,7 @@ const money = (t) => {
   // ended with.
   const stats = await readStats();
   console.log("  stats: " + JSON.stringify(stats));
-  ok(Object.keys(stats).join(",").indexOf("Opening,Closing,Change,Invested") === 0,
+  ok(Object.keys(stats).join(",").indexOf("Opening,Closing,Change,Total Invested") === 0,
      "H1 the figures in order: the period, its movement, then the movement explained",
      Object.keys(stats));
 
@@ -511,7 +511,7 @@ const money = (t) => {
      "H2 opening is the close of the month before the first bar");
   eq(stats.Closing, "₹11,50,000", "H3 closing is the newest month's stored total");
 
-  const moved = num(stats.Invested) + num(stats.Interest) + num(stats["Idle Cash"] || 0) +
+  const moved = num(stats["Total Invested"]) + num(stats.Interest) + num(stats["Idle Cash"] || 0) +
                 num(stats["Market loss"] ?? stats["Market gain"]);
   ok(Math.abs((num(stats.Opening) + moved) - num(stats.Closing)) < 1,
      "H4 and they reconcile: opening plus everything that moved is closing", stats);
@@ -531,7 +531,7 @@ const money = (t) => {
   // Cash is IN the totals and named among the movements. Counted in only one of
   // those places, the ₹50,000 moved into savings in July would either break the
   // reconciliation or resurface in Market as a price move that never happened.
-  const julSum = num(julH.Opening) + num(julH.Invested) + num(julH.Interest) +
+  const julSum = num(julH.Opening) + num(julH["Total Invested"]) + num(julH.Interest) +
                  num(julH["Idle Cash"] || 0) + num(julH["Market loss"]);
   ok(Math.abs(julSum - num(julH.Closing)) < 1,
      "K1 a hovered month reconciles with cash counted in the totals and named " +
@@ -715,8 +715,8 @@ const money = (t) => {
   ok(!(await p.evaluate(() => (window.__wfNwmChart.data.datasets || [])
         .some((d) => /Idle|Invested/.test(d.label)))),
      "C1b and is not a bar here, where it would be a second telling of CASH FLOW");
-  ok(/^\+₹1,30,000$/.test(julH.Invested),
-     "C2 and is not counted as investing", julH.Invested);
+  ok(/^\+₹1,30,000$/.test(julH["Total Invested"]),
+     "C2 and is not counted as investing", julH["Total Invested"]);
   // No explanatory note: the totals reconcile with the Overview, so there is
   // nothing left for one to explain away. Asserted so a future change does not
   // quietly reintroduce prose the card no longer needs.
