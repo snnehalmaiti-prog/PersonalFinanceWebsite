@@ -8222,6 +8222,49 @@
     return out;
   }
 
+  // FIFO cost-basis DELTA per date for one instrument's transactions (sorted,
+  // as groupUnitTransactionsByInstrument returns them). A buy adds units × price
+  // (× FX). A sell removes the COST of the units sold, drawn from the oldest lots
+  // first — NOT the sale proceeds. Summed cumulatively this is the remaining cost
+  // basis of the units still held, which equals the Overview's Invested total
+  // (same FIFO engine as computeInstrumentRealizedDetail). This is what the
+  // ACCOUNT VALUE Invested line must accumulate: a cash-flow view (proceeds out)
+  // ends the run short of the Invested total by the realized gain, forcing the
+  // tail to snap up. Corporate actions arrive as price-0 buys → zero-cost lots,
+  // matching how the holdings tables treat splits/bonuses.
+  //
+  // fxAt(date) → INR multiplier (buy-date rate, so basis is locked at purchase);
+  // pass null for INR instruments.
+  function fifoCostBasisDeltaByDate(txns, fxAt) {
+    var out = {};
+    if (!txns || !txns.length) return out;
+    var lots = [];
+    for (var i = 0; i < txns.length; i++) {
+      var t = txns[i];
+      if (!t.date) continue;
+      var units = t.units || 0;
+      if (!units) continue;
+      var dk = dateKey(t.date);
+      var rate = fxAt ? (fxAt(t.date) || 1) : 1;
+      if (t.type === "buy") {
+        var unitCost = (t.price || 0) * rate;   // corp action price 0 → zero-cost lot
+        lots.push({ units: units, unitCost: unitCost });
+        out[dk] = (out[dk] || 0) + units * unitCost;
+      } else if (t.type === "sell") {
+        var toMatch = units, removed = 0;
+        while (toMatch > 1e-9 && lots.length) {
+          var lot = lots[0];
+          var m = Math.min(toMatch, lot.units);
+          removed += m * lot.unitCost;
+          lot.units -= m; toMatch -= m;
+          if (lot.units <= 1e-9) lots.shift();
+        }
+        out[dk] = (out[dk] || 0) - removed;
+      }
+    }
+    return out;
+  }
+
   // Units traded in a half-open period (after `from`, up to and including `to`),
   // for one instrument. Used to value a period's flow at that period's own price.
   function tradedUnitsInRange(byDate, from, to) {
@@ -12118,6 +12161,17 @@
         // Invested line so it doesn't depend on market NAV/price coverage.
         var mfTradedCost = buildTradedCostByDate(getSheetRows("equity"), selectedPortfolio);
         var seTradedCost = buildTradedCostByDate(getSheetRows("stocksetf"), selectedPortfolio);
+        // FIFO remaining-cost-basis deltas per instrument, keyed by normalized
+        // name. Feeds the Invested LINE so it lands on the Overview's Invested
+        // total without a tail-snap jump (a cash-flow run ends short by the
+        // realized gain). The cash-flow maps above stay in use for the
+        // GAIN · MONTHLY series, which needs the gap to persist after a sale.
+        var _mfTxnsG = groupUnitTransactionsByInstrument(getSheetRows("equity"), selectedPortfolio) || {};
+        var _seTxnsG = groupUnitTransactionsByInstrument(getSheetRows("stocksetf"), selectedPortfolio) || {};
+        var mfCostBasis = {};
+        Object.keys(_mfTxnsG).forEach(function (n) {
+          mfCostBasis[normalizeText(n)] = fifoCostBasisDeltaByDate(_mfTxnsG[n], null);
+        });
 
         // Everything below is loop-invariant: normalizeText() per (instrument ×
         // timeline point) and a fresh Object.keys() per point were the dominant
@@ -12156,6 +12210,7 @@
         var mfNavByIdx = instruments.map(function (name) { return navAtByName[name]; });
         var mfTradedByIdx = instruments.map(function (name) { return mfTradedUnits[normalizeText(name)] || null; });
         var mfTradedCostByIdx = instruments.map(function (name) { return mfTradedCost[normalizeText(name)] || null; });
+        var mfCostBasisByIdx = instruments.map(function (name) { return mfCostBasis[normalizeText(name)] || null; });
         // Equity-sheet holdings dropped from `instruments` for lack of an AMFI
         // scheme code — Debt / Fixed-Income funds AND Commodity ETFs (gold ETFs
         // and the like) both sit here, since neither carries an AMFI code. Their
@@ -12171,21 +12226,32 @@
         var mfCostOnly = Object.keys(unitEvents)
           .filter(function (name) { return !_mfSchemeMapped[normalizeText(name)]; })
           .map(function (name) {
-            return { hidden: _vcHidden(name), cost: mfTradedCost[normalizeText(name)] || null };
+            return {
+              hidden: _vcHidden(name),
+              cost: mfTradedCost[normalizeText(name)] || null,
+              costBasis: mfCostBasis[normalizeText(name)] || null
+            };
           })
           .filter(function (m) { return !!m.cost; });
         var stockHistoryAll = (stockPricesData && stockPricesData.stock_history) || {};
         var seMeta = seTickers.map(function (ticker) {
           var hist = stockHistoryAll[ticker] || null;
           var live = allPrices[ticker] || null;
+          var _isUsd = hist ? hist.currency === "USD" : !!(live && live.currency === "USD");
+          var _instr = seUnitEventsByTicker[ticker].instrument || "";
           return {
             hidden: _vcHidden((seUnitEventsByTicker[ticker] || {}).instrument || ""),
             units: seUnitsAtByTicker[ticker],
             histPrices: hist ? hist.prices : null,
             livePrice: live ? live.price : null,
-            isUsd: hist ? hist.currency === "USD" : !!(live && live.currency === "USD"),
-            traded: seTradedUnits[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
-            tradedCost: seTradedCost[normalizeText(seUnitEventsByTicker[ticker].instrument || "")] || null,
+            isUsd: _isUsd,
+            traded: seTradedUnits[normalizeText(_instr)] || null,
+            tradedCost: seTradedCost[normalizeText(_instr)] || null,
+            // FIFO cost basis, USD buys locked at their own buy-date rate.
+            costBasis: fifoCostBasisDeltaByDate(
+              _seTxnsG[_instr] || [],
+              _isUsd ? function (d) { return usdInrHistMap[formatDateISO(d)] || usdInrToday; } : null
+            ),
           };
         });
 
@@ -12200,6 +12266,11 @@
         // sells subtract, each marked at the price it happened at — filtered by the
         // same exclusions as the value line so the two curves describe the same book.
         var investedFlowAt = new Array(timeline.length).fill(0);
+        // FIFO remaining-cost-basis flow for the Invested LINE (parallels
+        // investedFlowAt, which stays cash-flow for the GAIN card). A sale removes
+        // the sold units' cost, not the proceeds, so the cumulative run equals the
+        // Overview Invested total at the tail — no snap jump.
+        var investedCostAt = new Array(timeline.length).fill(0);
         var _prevCommGrams = 0;
 
         var points = timeline.map(function (date, i) {
@@ -12214,7 +12285,10 @@
           // Commodity cost basis: the grams bought since the last point, priced at
           // this point's gold price. Zero under the Commodity/FI exclusion (grams=0).
           var _gramsDelta = activeGrams - _prevCommGrams;
-          if (_gramsDelta !== 0 && goldPriceAtDate) investedFlowAt[i] += _gramsDelta * goldPriceAtDate;
+          if (_gramsDelta !== 0 && goldPriceAtDate) {
+            investedFlowAt[i] += _gramsDelta * goldPriceAtDate;
+            investedCostAt[i] += _gramsDelta * goldPriceAtDate;
+          }
           _prevCommGrams = activeGrams;
           for (var mi = 0; mi < mfUnitsByIdx.length; mi++) {
             var units = mfUnitsByIdx[mi][i] || 0;
@@ -12233,6 +12307,10 @@
             if (tradedCost && tradedCost[dk] && !mfHiddenByIdx[mi]) {
               investedFlowAt[i] += tradedCost[dk];
             }
+            var mfCB = mfCostBasisByIdx[mi];
+            if (mfCB && mfCB[dk] && !mfHiddenByIdx[mi]) {
+              investedCostAt[i] += mfCB[dk];
+            }
             // The growth series' flow IS valued at this instrument's nav (so a
             // purchase changes unit count, never unit price). That one genuinely
             // needs nav, so it stays gated.
@@ -12248,6 +12326,7 @@
           for (var ci = 0; ci < mfCostOnly.length; ci++) {
             var mc = mfCostOnly[ci];
             if (mc.cost[dk] && !mc.hidden) investedFlowAt[i] += mc.cost[dk];
+            if (mc.costBasis && mc.costBasis[dk] && !mc.hidden) investedCostAt[i] += mc.costBasis[dk];
           }
           // Stocks/ETF: use historical price from stock_history when available, else current price.
           var dateStr = formatDateISO(date);
@@ -12263,6 +12342,11 @@
               investedFlowAt[i] += meta.isUsd
                 ? seTC[dk] * (usdInrHistMap[dateStr] || usdInrToday)
                 : seTC[dk];
+            }
+            // Cost basis is already INR (USD locked at each buy's own rate).
+            var seCB = meta.costBasis;
+            if (seCB && seCB[dk] && !meta.hidden) {
+              investedCostAt[i] += seCB[dk];
             }
             var price = meta.histPrices ? lookupIndexPrice(meta.histPrices, dateStr) : null;
             if (!price) price = meta.livePrice;
@@ -12322,9 +12406,14 @@
         // left out — they are gains, not money put in. The gap between this and
         // pointsAll is the portfolio's total gain.
         var epfDepositAllAt = _ff(epfDepositEventsAll, timeline, "cumulativeValue");
+        // Invested line uses the FIFO remaining-cost-basis run (investedCostAt),
+        // NOT the cash-flow run — so a profitable sale leaves the sold units' cost
+        // behind rather than removing the whole proceeds. The cumulative basis
+        // lands on the Overview Invested total at the tail, so the snap below is a
+        // no-op safeguard instead of a multi-lakh jump.
         var _investedRun = 0;
         var investedAll = points.map(function (p, i) {
-          _investedRun += investedFlowAt[i] || 0;
+          _investedRun += investedCostAt[i] || 0;
           var fiPrincipal = (epfDepositAllAt[i] || 0) + (fdAllAt[i] || 0);
           return { x: p.x, y: _investedRun + fiPrincipal };
         });
