@@ -781,8 +781,48 @@
     return out;
   }
 
+  // GAIN · MONTHLY exact decomposition. Splits a month's real net-worth change
+  // into four buckets that ALWAYS sum back to it, so the card never needs a
+  // residual line:
+  //
+  //   change   = eqCurDelta + fiCurDelta            (the month's value move)
+  //   Invested = eqContrib + fiContrib              (transaction net, = CASH FLOW)
+  //   Market   = eqCurDelta − eqContrib             (equity/commodity mark-to-market)
+  //   Interest = fiCurDelta − idle − fiContrib      (fixed-income accrual)
+  //   Idle     = idle                               (parked-cash balance move)
+  //
+  // The design point: Interest is built from FIXED-INCOME terms only (fiCurDelta,
+  // fiContrib, idle) — it contains no equity quantity — so any equity ledger-vs-
+  // value drift can only surface in Market (where price movement is expected),
+  // never as a nonsensical ±lakh "interest". fiCurDelta is the FI value INCLUDING
+  // parked cash, and `idle` removes the parked-cash part, leaving pure accrual;
+  // FD maturity payouts (principal + interest) arrive in fiContrib as withdrawals,
+  // so a maturity nets to ~0 rather than a negative-interest spike.
+  //
+  // All five inputs are per-month numbers (the two *CurDelta are month-over-month
+  // changes in the cumulative current values; the rest are that month's flows).
+  function gainBuckets(eqCurDelta, fiCurDelta, eqContrib, fiContrib, idle) {
+    eqCurDelta = Number(eqCurDelta) || 0;
+    fiCurDelta = Number(fiCurDelta) || 0;
+    eqContrib  = Number(eqContrib)  || 0;
+    fiContrib  = Number(fiContrib)  || 0;
+    idle       = Number(idle)       || 0;
+    var market   = eqCurDelta - eqContrib;
+    var interest = fiCurDelta - idle - fiContrib;
+    var invested = eqContrib + fiContrib;
+    return {
+      invested: invested,
+      market: market,
+      interest: interest,
+      idle: idle,
+      gain: market + interest,               // the monthly gain bar (Market + Interest)
+      change: eqCurDelta + fiCurDelta         // == invested + market + interest + idle
+    };
+  }
+
   root.WfSnapshots = {
     monthlyGainFromSeries: monthlyGainFromSeries,
+    gainBuckets: gainBuckets,
     monthEndSeries: monthEndSeries,
     categoryChange: categoryChange,
     previousRecorded: previousRecorded,
