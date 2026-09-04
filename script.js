@@ -12448,6 +12448,16 @@
           : _ff(buildFdValueEvents(selectedPortfolio, true, false), timeline, "cumulativeValue");
         var fdAccrAt = isFixedIncomeExcluded() ? [] : buildFdAccrualAt(timeline, selectedPortfolio);
         var pfAccrAt = isFixedIncomeExcluded() ? [] : buildPfAccrualAt(timeline, selectedPortfolio);
+        // FD PRINCIPAL over time for the Invested (cost-basis) line: same source as
+        // fdAllAt but with includeFd=true, so each FD steps its principal in at
+        // purchase and out at maturity. The value line carries the FD as it grows
+        // (fdAccrAt = principal + accrued); the Invested line must carry its
+        // principal, or FD cost is absent from every point and only surfaces as the
+        // tail-snap jump to the Overview total — the reported "Invested jumps up"
+        // under Exclude Equity, where equity no longer masks the gap. Superset of
+        // fdAllAt (adds only the FD-principal steps; parked + PF are identical).
+        var fdPrincipalAt = isFixedIncomeExcluded() ? []
+          : _ff(buildFdValueEvents(selectedPortfolio, isSavingsInvestmentExcluded(), true), timeline, "cumulativeValue");
         var pointsAll = points.map(function (p, i) {
           var extra = (epfAllAt[i] || 0) + (fdAllAt[i] || 0) + (fdAccrAt[i] || 0) + (pfAccrAt[i] || 0);
           return { x: p.x, y: p.y + extra };
@@ -12469,7 +12479,7 @@
         var _investedRun = 0;
         var investedAll = points.map(function (p, i) {
           _investedRun += investedCostAt[i] || 0;
-          var fiPrincipal = (epfDepositAllAt[i] || 0) + (fdAllAt[i] || 0);
+          var fiPrincipal = (epfDepositAllAt[i] || 0) + (fdPrincipalAt[i] || 0);
           return { x: p.x, y: _investedRun + fiPrincipal };
         });
         // Tail-snap to the Overview's authoritative Invested total, mirroring the
