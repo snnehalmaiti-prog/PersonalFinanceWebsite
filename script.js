@@ -20558,12 +20558,15 @@
       var idles = (typeof isSavingsInvestmentExcluded === "function" && isSavingsInvestmentExcluded())
         ? {}
         : (typeof _nwmIdleByMonth === "function" ? _nwmIdleByMonth(pf) : {});
-      // Interest is derived from the VALUE series inside renderWith (the month's
-      // real balance change, minus contributions, market and idle cash) rather
-      // than from the sheet helper. Sourcing it from the same series that drives
-      // Closing makes the four buckets reconcile to Change exactly — no residual —
-      // and it stays ≥ 0 because FD/PF maturity payouts are already counted as
-      // withdrawals in contributions, so what's left is pure fixed-income accrual.
+      // Interest — real FD/PF/EPF interest earned that month, from the sheets
+      // (always ≥ 0). Deriving it as a value-series residual instead made it
+      // absorb equity mark-to-market and month-alignment noise between the value
+      // series and the transaction ledger, so it swung to ±lakhs and even
+      // negative. Keep it sheet-sourced; the small measurement seam is shown as
+      // the reconciling remainder line instead.
+      var firstMonth = gs.months[0] && gs.months[0].month;
+      var interests = (typeof _nwmInterestByMonth === "function" && firstMonth)
+        ? _nwmInterestByMonth(firstMonth, pf) : {};
 
       function renderWith(realizedByMonth) {
         // Real net worth Opening/Closing come from the combined series.
@@ -20587,13 +20590,8 @@
           var market   = (eqCurDelta[m] || 0) - (eqInvDelta[m] || 0);
           var contrib  = Number(contribs[m]) || 0;
           var idleM    = Number(idles[m]) || 0;
-          // Interest = the fixed-income value growth, derived from the value
-          // series so the row reconciles exactly: the month's real balance move
-          // (Δcurrent) minus what contributions, market and idle already explain.
-          // Payouts are withdrawals (in contrib), so this is pure accrual (≥0).
-          var monthChange = (currentByMonth[m] || 0) - (prevByMonth[m] || 0);
-          var interest = monthChange - contrib - market - idleM;
-          var gain     = market + interest;              // total gain = market + FI accrual
+          var interest = Number(interests[m]) || 0;   // sheet-based, ≥ 0
+          var gain     = market + interest;           // no +realized here
           var realized = Number((realizedByMonth || {})[m]) || 0;
           cum += gain;
           return {
