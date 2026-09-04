@@ -20535,38 +20535,33 @@
         }
         return out;
       }
+      // Per-month value moves, split by book: equity+commodity and fixed income.
       var eqCurDelta = _byMonthDeltas(gs.monthsEq, "current");
-      var eqInvDelta = _byMonthDeltas(gs.monthsEq, "invested");
-      // Contributions: use the SAME transaction cash-flow engine CASH FLOW ·
-      // MONTHLY uses (_nwmContributionsByMonth → buildMonthlyInvestCatData:
-      // buys − sells/withdrawals, net, per real transaction month), so the two
-      // cards' Invested figures agree. Deriving it from the value-series invested
-      // delta instead gave a different number and pushed the difference into the
-      // residual line. The month keys align: a card row keyed "YYYY-MM" is that
-      // month's activity, which is exactly how the contributions map is keyed.
-      // Fall back to the series delta only if the helper is unavailable.
-      var contribs = (typeof _nwmContributionsByMonth === "function")
-        ? _nwmContributionsByMonth(pf)
-        : _byMonthDeltas(gs.months, "invested");
-      // Parked cash (Investment Corpus / Savings Account) sits INSIDE net worth,
-      // so its balance changes move Closing — but it is neither a contribution
-      // (deliberately excluded, it is not an investment) nor interest nor a
-      // market move. The snapshot path names that flow "Idle Cash"; the accurate
-      // path used to zero it, leaving it to fall into the reconciling residual.
-      // Name it here too, but only when parked cash is actually in the totals
-      // (it is dropped from the value series under Exclude Savings/Investment).
+      var fiCurDelta = _byMonthDeltas(gs.monthsFi, "current");
+      // Net contributions per month, kept split by book (equity+commodity vs
+      // fixed income) from the SAME transaction engine CASH FLOW · MONTHLY uses,
+      // so Total Invested still equals its Net. FD maturity payouts (principal +
+      // interest) arrive here as fixed-income withdrawals.
+      var _cbc = (typeof _nwmContribByCategory === "function") ? _nwmContribByCategory(pf) : {};
+      function _contribByBook(m, wantFi) {
+        var g = _cbc[m] || {}, s = 0;
+        Object.keys(g).forEach(function (c) {
+          var isFi = normalizeText(c) === "fixed income";
+          if (isFi === wantFi) s += (g[c].in || 0) - (g[c].out || 0);
+        });
+        return s;
+      }
+      // Parked cash (Investment Corpus / Savings) — inside net worth, so it moves
+      // Closing, but it is not a contribution, market move or interest. Named as
+      // its own bucket; only when it is actually in the totals (dropped under
+      // Exclude Savings/Investment).
       var idles = (typeof isSavingsInvestmentExcluded === "function" && isSavingsInvestmentExcluded())
         ? {}
         : (typeof _nwmIdleByMonth === "function" ? _nwmIdleByMonth(pf) : {});
-      // Interest — real FD/PF/EPF interest earned that month, from the sheets
-      // (always ≥ 0). Deriving it as a value-series residual instead made it
-      // absorb equity mark-to-market and month-alignment noise between the value
-      // series and the transaction ledger, so it swung to ±lakhs and even
-      // negative. Keep it sheet-sourced; the small measurement seam is shown as
-      // the reconciling remainder line instead.
-      var firstMonth = gs.months[0] && gs.months[0].month;
-      var interests = (typeof _nwmInterestByMonth === "function" && firstMonth)
-        ? _nwmInterestByMonth(firstMonth, pf) : {};
+      // Exact decomposition (WfSnapshots.gainBuckets, unit-tested): the four
+      // buckets always sum to the month's change, so no residual. Interest is
+      // built from fixed-income terms only, so equity noise can never appear in it.
+      var _hasBuckets = !!(window.WfSnapshots && WfSnapshots.gainBuckets);
 
       function renderWith(realizedByMonth) {
         // Real net worth Opening/Closing come from the combined series.
@@ -20586,11 +20581,20 @@
         var monthKeys = Object.keys(allMonths).sort();
         var cum = 0;
         var rows = monthKeys.map(function (m) {
-          // Market = equity/commodity gap change (mark-to-market).
-          var market   = (eqCurDelta[m] || 0) - (eqInvDelta[m] || 0);
-          var contrib  = Number(contribs[m]) || 0;
-          var idleM    = Number(idles[m]) || 0;
-          var interest = Number(interests[m]) || 0;   // sheet-based, ≥ 0
+          // Exact four-bucket split: Invested + Market + Interest + Idle = the
+          // month's change, with Interest sourced only from fixed-income terms.
+          var b = _hasBuckets
+            ? WfSnapshots.gainBuckets(eqCurDelta[m] || 0, fiCurDelta[m] || 0,
+                                      _contribByBook(m, false), _contribByBook(m, true),
+                                      Number(idles[m]) || 0)
+            : { invested: _contribByBook(m, false) + _contribByBook(m, true),
+                market: (eqCurDelta[m] || 0) - _contribByBook(m, false),
+                interest: (fiCurDelta[m] || 0) - (Number(idles[m]) || 0) - _contribByBook(m, true),
+                idle: Number(idles[m]) || 0 };
+          var market   = b.market;
+          var interest = b.interest;
+          var contrib  = b.invested;
+          var idleM    = b.idle;
           var gain     = market + interest;           // no +realized here
           var realized = Number((realizedByMonth || {})[m]) || 0;
           cum += gain;
