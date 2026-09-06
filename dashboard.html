@@ -4479,6 +4479,16 @@
           var it = find(id);
           if (!it || typeof openRecModal !== "function") return;
           var today = new Date().toISOString().slice(0, 10);
+          // Date + time come from the corresponding email. received_at is the
+          // email's full timestamp, so seed txn_at from it — the record modal
+          // uses txn_at to fill both the date and the time of the picker. When
+          // the email has no timestamp, fall back to the parsed txn_date (at
+          // midnight), then to today. txn_date is kept only as that fallback;
+          // when txn_at is present the modal derives the date from it.
+          var emailAt = it.received_at || null;
+          var dateFromEmail = emailAt
+            ? new Date(emailAt).toISOString().slice(0, 10)
+            : "";
           // Only the source tag ("Account **37") seeds the note — the user types
           // the merchant after reading the email body shown on the card.
           // If the last-2-digits are mapped (Settings → Expense → Account Mapping)
@@ -4487,7 +4497,8 @@
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
-            txn_date: it.txn_date || today,
+            txn_date: it.txn_date || dateFromEmail || today,
+            txn_at: emailAt || null,
             note: (it.source_account || "").trim(),
             account_id: mappedAccountId || (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
