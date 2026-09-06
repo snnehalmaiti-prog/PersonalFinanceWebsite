@@ -4509,10 +4509,8 @@
           var dateFromEmail = emailAt
             ? new Date(emailAt).toISOString().slice(0, 10)
             : "";
-          // The note starts empty — the user types the merchant after reading the
-          // email body shown on the card. The source tag ("Card **70") is not
-          // seeded into it: it carries no merchant information and just had to be
-          // cleared by hand on every filing.
+          // Only the source tag ("Account **37") seeds the note — the user types
+          // the merchant after reading the email body shown on the card.
           // If the last-2-digits are mapped (Settings → Expense → Account Mapping)
           // to an account name — and optionally a payment type — pre-select those
           // instead of the first account / a blank payment method.
@@ -4523,7 +4521,7 @@
             amount: it.amount != null ? it.amount : "",
             txn_date: it.txn_date || dateFromEmail || today,
             txn_at: emailAt || null,
-            note: "",
+            note: (it.source_account || "").trim(),
             account_id: mappedAccountId || (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
             subcategory_id: "",
