@@ -4474,6 +4474,26 @@
           return acct ? acct.id : "";
         }
 
+        // The payment method id mapped to the source tag's last-2-digits ("" when
+        // there is no mapping, the mapping has no payment type, or no payment
+        // method matches its name), used to pre-select it on categorise.
+        function mapSourceToPaymentMethodId(sourceTag) {
+          var m = String(sourceTag || "").match(/(\d{2})\s*$/);
+          if (!m) return "";
+          var maps;
+          try { maps = JSON.parse(localStorage.getItem("wf-account-map")) || []; }
+          catch (e) { return ""; }
+          var hit = maps.find(function (x) {
+            return x && !x._deleted && String(x.last2) === m[1];
+          });
+          var pmName = hit && hit.payment_method;
+          if (!pmName) return "";
+          var pm = (dashExpState.paymentMethods || []).find(function (p) {
+            return (p.name || "").trim().toLowerCase() === String(pmName).trim().toLowerCase();
+          });
+          return pm ? pm.id : "";
+        }
+
         // Categorise → open the record modal prefilled from the parsed email.
         function categorise(id) {
           var it = find(id);
@@ -4492,8 +4512,10 @@
           // Only the source tag ("Account **37") seeds the note — the user types
           // the merchant after reading the email body shown on the card.
           // If the last-2-digits are mapped (Settings → Expense → Account Mapping)
-          // to an account name, pre-select that account instead of the first one.
+          // to an account name — and optionally a payment type — pre-select those
+          // instead of the first account / a blank payment method.
           var mappedAccountId = mapSourceToAccountId(it.source_account);
+          var mappedPaymentMethodId = mapSourceToPaymentMethodId(it.source_account);
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
@@ -4503,7 +4525,7 @@
             account_id: mappedAccountId || (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
             subcategory_id: "",
-            payment_method_id: ""
+            payment_method_id: mappedPaymentMethodId || ""
           };
           window._inboxFilingId = id;
           openRecModal(prefill, { forceAdd: true });
