@@ -3742,7 +3742,9 @@
           setRecType(record.type || "expense");
           document.getElementById("rec-amount").value = record.amount || "";
           document.getElementById("rec-note").value = record.note || "";
-          document.getElementById("rec-payer").value = recPayer(record);
+          // A prefill (parsed inbox item) may seed the payer directly; a real
+          // record carries it in meta via recPayer.
+          document.getElementById("rec-payer").value = record.payer || recPayer(record);
           initialDt = (function () {
             if (record.txn_at) {
               var d = new Date(record.txn_at);
@@ -4568,15 +4570,16 @@
           var mappedAccountId = mapSourceToAccountId(it.source_account);
           var mappedPaymentMethodId = mapSourceToPaymentMethodId(it.source_account);
           // Vendor name pulled from the alert per the Note Extraction rules
-          // (Settings → Expense). Searches subject + body; blank when no rule
-          // matches, so the note is empty rather than carrying the source tag.
-          var extractedNote = extractNoteFromRules(it.subject || "", it.body_snippet || "");
+          // (Settings → Expense). Goes into the PAYER field; blank when no rule
+          // matches. The note stays empty.
+          var extractedPayer = extractNoteFromRules(it.subject || "", it.body_snippet || "");
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
             txn_date: it.txn_date || dateFromEmail || today,
             txn_at: emailAt || null,
-            note: extractedNote,
+            note: "",
+            payer: extractedPayer,
             account_id: mappedAccountId || (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
             subcategory_id: "",
