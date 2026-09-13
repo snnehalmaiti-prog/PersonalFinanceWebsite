@@ -18,8 +18,10 @@
  *    a time trigger so `processInbox()` runs every 10 minutes.
  * 5. New labelled emails now show up in the WealthFolio Inbox tab within ~10m.
  *
- * Processed emails get a second label ("WF-Filed") so they are never sent
- * twice. Nothing is deleted from your Gmail.
+ * Processed threads get a second label ("WF-Filed") as a visual marker only.
+ * Duplicates are prevented on the SERVER (the Edge Function ignores re-posts of
+ * the same email), not by that label — so an alert that Gmail groups into an
+ * already-marked thread is still forwarded. Nothing is deleted from your Gmail.
  */
 
 // ── CONFIG ────────────────────────────────────────────────────────────────
@@ -41,13 +43,27 @@ function setup() {
   Logger.log("Setup complete. processInbox() will run every 10 minutes.");
 }
 
+// How far back each run looks. Gmail labels are per-THREAD, and bank/UPI alerts
+// share identical subjects ("You have done a UPI txn. Check details!"), so Gmail
+// groups them into one conversation. A per-thread "done" label would therefore
+// hide every later alert that lands in an already-handled thread — which is why
+// new transactions silently stopped appearing. So we do NOT exclude by the done
+// label; we sweep the last few days of labelled mail and POST every message.
+//
+// Re-posting is safe: the Edge Function upserts with ignoreDuplicates on a
+// unique (user_id, dedupe_key), so an email that was already filed is a no-op.
+// The window bounds how many messages a run re-POSTs (quota), and must comfortably
+// exceed the trigger interval plus any pause; 3 days covers a long weekend of the
+// script being disabled without missing mail.
+var LOOKBACK = "newer_than:3d";
+
 function processInbox() {
   var owner = Session.getActiveUser().getEmail(); // your WealthFolio login email
   var done = GmailApp.getUserLabelByName(DONE_LABEL) || GmailApp.createLabel(DONE_LABEL);
 
-  // Unprocessed messages: carry the source label, not yet the done label.
-  var query = 'label:' + SOURCE_LABEL.replace(/\s+/g, "-") + ' -label:' + DONE_LABEL;
-  var threads = GmailApp.search(query, 0, 25);
+  // Recent labelled mail — NOT filtered by the done label (see LOOKBACK above).
+  var query = 'label:' + SOURCE_LABEL.replace(/\s+/g, "-") + ' ' + LOOKBACK;
+  var threads = GmailApp.search(query, 0, 50);
 
   threads.forEach(function (thread) {
     thread.getMessages().forEach(function (msg) {
@@ -67,13 +83,15 @@ function processInbox() {
         var code = res.getResponseCode();
         if (code < 200 || code >= 300) {
           Logger.log("POST failed (" + code + "): " + res.getContentText());
-          return; // leave unlabelled so the next run retries it
+          return;
         }
       } catch (e) {
         Logger.log("Error forwarding message: " + e);
         return;
       }
     });
-    thread.addLabel(done); // mark the whole thread handled
+    // A visual marker only — you can see at a glance which threads were swept.
+    // It is deliberately NOT used to skip threads on the next run (see above).
+    thread.addLabel(done);
   });
 }
