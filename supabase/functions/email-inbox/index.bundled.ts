@@ -67,6 +67,25 @@ function parseSource(text: string): string {
   return "";
 }
 
+// The UPI / bank transaction reference number, when the alert states one. Two
+// emails about the SAME payment share it, so keyed with the amount it collapses
+// duplicate alerts for one payment while telling different payments apart.
+// Returns "" when no reference is stated (caller falls back to a whole-body hash).
+function parseUpiRef(text: string): string {
+  if (!text) return "";
+  const pats = [
+    /\bupi\s*(?:transaction\s*)?(?:ref(?:erence)?|rrn)\s*(?:no\.?|number|id|#)?\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
+    /\brrn\s*(?:no\.?|number|#)?\s*(?:is|[:=.#-])?\s*([0-9]{6,25})\b/i,
+    /\b(?:transaction|txn)\s*(?:ref(?:erence)?\s*(?:no\.?|number)?|id|no\.?|number)\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
+    /\bref(?:erence)?\s*(?:no\.?|number|#)\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
+  ];
+  for (const p of pats) {
+    const m = text.match(p);
+    if (m && m[1] && /[0-9]/.test(m[1])) return m[1].toUpperCase();
+  }
+  return "";
+}
+
 function guessType(text: string): "expense" | "income" {
   return /\b(credited|received|refund|deposit|salary|cashback)\b/i.test(text || "")
     ? "income"
@@ -176,24 +195,30 @@ Deno.serve(async (req) => {
   // tracking URLs carry stray numbers that otherwise get picked up as the amount.
   const cleaned = cleanBody(email.text || "");
   const blob = `${email.subject}\n${cleaned}`;
-  // Whole-body signature, so distinct transactions that share an amount and date
-  // are still told apart by anything further down the alert.
-  const bodyHash = await sha256Hex(blob);
+  // Dedupe signature. When the alert states a UPI/transaction reference, key on
+  // reference + amount: two emails about the SAME payment (same ref, same amount)
+  // collapse to one card even if worded differently, while different payments
+  // keep different references. With no reference, fall back to a whole-body hash
+  // so distinct alerts that merely share an amount and date stay apart.
+  const amt = parseAmount(blob);
+  const upiRef = parseUpiRef(blob);
+  const dedupeKey = upiRef
+    ? `upi:${upiRef}|${amt ?? ""}`
+    : `${amt ?? ""}|${parseDate(blob) ?? ""}|${await sha256Hex(blob)}`;
   const row = {
     user_id: userId,
     from_email: fromAddr,
     subject: email.subject.slice(0, 300),
     body_snippet: cleaned.slice(0, 4000),
-    amount: parseAmount(blob),
+    amount: amt,
     merchant: parseMerchant(cleaned, email.subject),
     txn_date: parseDate(blob),
     suggested_type: guessType(blob),
     source_account: parseSource(blob),
     status: "pending",
-    // Signature of this alert — a re-post of the identical email produces the
-    // same key and is ignored by the unique (user_id, dedupe_key) index. The
-    // amount|date prefix keeps the key legible; the hash makes it whole-body.
-    dedupe_key: `${parseAmount(blob) ?? ""}|${parseDate(blob) ?? ""}|${bodyHash}`,
+    // See dedupeKey above: reference+amount when present, else whole-body hash.
+    // The unique (user_id, dedupe_key) index drops repeats.
+    dedupe_key: dedupeKey,
   };
 
   const { error } = await admin.from("expense_email_inbox")

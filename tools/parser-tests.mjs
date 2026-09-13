@@ -16,7 +16,7 @@
 // ============================================================================
 
 import {
-  parseAmount, parseMerchant, parseSource, guessType, parseDate, cleanBody,
+  parseAmount, parseMerchant, parseSource, guessType, parseDate, cleanBody, parseUpiRef,
 } from "../supabase/functions/email-inbox/parsers.mjs";
 
 // cleanBody: forwarding headers + tracking URL should reduce to the alert text.
@@ -44,6 +44,50 @@ import {
     process.exit(1);
   }
   console.log(`✓ amount from cleaned body = 140 (raw would give ${rawAmount})`);
+}
+
+// parseUpiRef: pull the transaction reference out of common phrasings, and
+// return "" when there is none (so the caller falls back to a body hash).
+{
+  const refCases = [
+    ["UPI Ref No 123456789012", "123456789012"],
+    ["Your UPI transaction reference number is 525612345678.", "525612345678"],
+    ["... towards VPA paytm@x. UPI RRN: 987654321098", "987654321098"],
+    ["Transaction ID ABC123XYZ done successfully", "ABC123XYZ"],
+    ["Reference No. 445566778899 for your payment", "445566778899"],
+    ["Rs.2.00 debited towards VPA someone@okhdfc on 12-09-26.", ""], // no stated ref
+    ["Please quote the reference number when calling.", ""],          // word, no digits
+  ];
+  let rf = 0;
+  for (const [text, want] of refCases) {
+    const got = parseUpiRef(text);
+    if (got !== want) {
+      rf++;
+      console.error(`✗ parseUpiRef ${JSON.stringify(text)}\n    expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
+    }
+  }
+  if (rf) process.exit(1);
+  console.log(`✓ parseUpiRef — ${refCases.length} phrasings`);
+}
+
+// Dedupe key behaviour (mirrors the formula in index.ts): same UPI ref + amount
+// ⇒ same key (duplicate collapses) even when the wording differs; a different
+// ref ⇒ different key; no ref ⇒ falls back to amount|date (distinct alerts stay
+// apart). Body hashing is exercised in the function itself; here the fallback is
+// represented by amount|date to keep the test synchronous.
+{
+  const key = (t) => {
+    const ref = parseUpiRef(t), amt = parseAmount(t);
+    return ref ? `upi:${ref}|${amt ?? ""}` : `${amt ?? ""}|${parseDate(t) ?? ""}`;
+  };
+  const a = "Rs.2.00 debited towards VPA a@ok on 12-09-26. UPI Ref No 100200300400";
+  const b = "INR 2.00 was debited. Ref: your payment. UPI Ref No 100200300400 — thank you";
+  const c = "Rs.2.00 debited towards VPA a@ok on 12-09-26. UPI Ref No 999888777666";
+  let df = 0;
+  if (key(a) !== key(b)) { df++; console.error(`✗ dedupe: same ref+amount should match\n    ${key(a)}\n    ${key(b)}`); }
+  if (key(a) === key(c)) { df++; console.error(`✗ dedupe: different ref should differ\n    ${key(a)} == ${key(c)}`); }
+  if (df) process.exit(1);
+  console.log("✓ dedupe key — same UPI ref+amount collapses, different ref stays distinct");
 }
 
 // Each case: a real-world email body + only the fields we want to assert.
