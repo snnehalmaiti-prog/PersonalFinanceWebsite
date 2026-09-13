@@ -584,15 +584,20 @@
             </div>
             <p class="muted small equity-desc">
               Pull the vendor name out of a transaction alert into the <strong>Note</strong> when you
-              categorise a pending transaction. Enter a <strong>first keyword</strong> and a
-              <strong>last keyword</strong>; the text <em>between</em> them is used as the note.
-              The last keyword can be a word, a full stop <code>.</code> or a <code>#</code>.
-              Words match whole-word (so <code>to</code> won't fire inside <code>towards</code>).
-              Rules are tried top to bottom; the first that finds text wins.
-              <br>Example: for “…towards <strong>PIZZA HUT</strong> on 05 Aug…”, use first
-              <code>towards</code> and last <code>on</code>.
+              categorise a pending transaction. Optionally scope a rule to an <strong>email subject</strong>
+              (the rule only fires when the alert's subject contains that text — leave blank to apply to
+              all). Then enter a <strong>first keyword</strong> and a <strong>last keyword</strong>; the
+              text <em>between</em> them is used as the note. The last keyword can be a word, a full stop
+              <code>.</code> or a <code>#</code>. Words match whole-word (so <code>to</code> won't fire
+              inside <code>towards</code>). Rules are tried top to bottom; the first that finds text wins.
+              <br>Example: subject <code>UPI txn</code>, first <code>towards</code>, last <code>on</code>
+              → “…towards <strong>PIZZA HUT</strong> on 05 Aug…” gives <code>PIZZA HUT</code>.
             </p>
             <div class="exp-acctmap-form">
+              <input type="text" id="exp-noterule-subject" placeholder="Email subject (optional — blank = all)"
+                     aria-label="Email subject" class="exp-acctmap-name" />
+            </div>
+            <div class="exp-acctmap-form" style="margin-top:8px;">
               <input type="text" id="exp-noterule-first" placeholder="First keyword (e.g. towards)"
                      aria-label="First keyword" class="exp-acctmap-name" />
               <input type="text" id="exp-noterule-last" placeholder="Last keyword (e.g. on, . or #)"
@@ -601,7 +606,7 @@
               <button type="button" class="btn btn-ghost btn-sm" id="exp-noterule-cancel" hidden>Cancel</button>
             </div>
             <div class="exp-acctmap-form" style="margin-top:8px;">
-              <input type="text" id="exp-noterule-test" placeholder="Paste a sample alert to preview the extracted note (optional)"
+              <input type="text" id="exp-noterule-test" placeholder="Preview: paste a sample alert (subject on the first line, body after)"
                      aria-label="Sample alert" class="exp-acctmap-name" style="flex:1;" />
             </div>
             <p class="muted small" id="exp-noterule-preview" hidden></p>
@@ -1033,17 +1038,21 @@
 
     function noteRuleResetForm() {
       editingNoteRuleId = null;
+      var s = document.getElementById("exp-noterule-subject");
       var f = document.getElementById("exp-noterule-first");
       var l = document.getElementById("exp-noterule-last");
       var add = document.getElementById("exp-noterule-add");
       var cancel = document.getElementById("exp-noterule-cancel");
       var err = document.getElementById("exp-noterule-error");
-      if (f) f.value = ""; if (l) l.value = "";
+      if (s) s.value = ""; if (f) f.value = ""; if (l) l.value = "";
       if (add) add.textContent = "Add";
       if (cancel) cancel.hidden = true;
       if (err) err.hidden = true;
     }
 
+    // Mirrors dashboard.html's extractNoteFromRules, including subject gating, so
+    // the preview shows exactly what categorise() would fill. The sample's FIRST
+    // LINE is treated as the subject and the rest as the body.
     function renderNoteRulePreview() {
       var esc = window.WfEsc;
       var sampleEl = document.getElementById("exp-noterule-test");
@@ -1051,10 +1060,16 @@
       if (!out) return;
       var sample = sampleEl && sampleEl.value ? sampleEl.value : "";
       if (!sample.trim()) { out.hidden = true; return; }
+      var lines = sample.split(/\r?\n/);
+      var subj = lines[0] || "";
+      var text = subj + "\n" + lines.slice(1).join("\n");
       var rules = loadNoteRules();
       var got = "";
       for (var i = 0; i < rules.length; i++) {
-        got = nrExtractBetween(sample, rules[i].first, rules[i].last || "");
+        var r = rules[i];
+        if (!r.first) continue;
+        if (r.subject && subj.toLowerCase().indexOf(String(r.subject).toLowerCase()) === -1) continue;
+        got = nrExtractBetween(text, r.first, r.last || "");
         if (got) break;
       }
       out.hidden = false;
@@ -1078,7 +1093,9 @@
             '<div class="wf-item-badge" style="background:var(--surface-alt);color:var(--text);font-size:16px;">✂️</div>' +
             '<div class="wf-item-title-wrap">' +
               '<div class="wf-item-title">' + esc(r.first || "") + ' … ' + esc(r.last || "(end of line)") + '</div>' +
-              '<div class="wf-item-sub"><span>Text between “' + esc(r.first || "") + '” and “' + esc(r.last || "end of line") + '”</span></div>' +
+              '<div class="wf-item-sub"><span>' +
+                (r.subject ? 'Subject contains “' + esc(r.subject) + '” · ' : 'Any subject · ') +
+                'between “' + esc(r.first || "") + '” and “' + esc(r.last || "end of line") + '”</span></div>' +
             '</div>' +
           '</div>' +
           '<div class="wf-item-actions">' +
@@ -1091,9 +1108,11 @@
     }
 
     function noteRuleSubmit() {
+      var s = document.getElementById("exp-noterule-subject");
       var f = document.getElementById("exp-noterule-first");
       var l = document.getElementById("exp-noterule-last");
       var err = document.getElementById("exp-noterule-error");
+      var subject = (s && s.value || "").trim();
       var first = (f && f.value || "").trim();
       var last = (l && l.value || "").trim();
       function fail(msg) { if (err) { err.textContent = msg; err.hidden = false; } }
@@ -1102,12 +1121,12 @@
       if (editingNoteRuleId) {
         raw = raw.map(function (r) {
           return r.id === editingNoteRuleId
-            ? { id: r.id, first: first, last: last, updated_at: Date.now() } : r;
+            ? { id: r.id, subject: subject, first: first, last: last, updated_at: Date.now() } : r;
         });
       } else {
         raw.push({
           id: "nr-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
-          first: first, last: last, updated_at: Date.now()
+          subject: subject, first: first, last: last, updated_at: Date.now()
         });
       }
       saveNoteRules(raw);
@@ -1119,12 +1138,13 @@
       var add = document.getElementById("exp-noterule-add");
       var cancel = document.getElementById("exp-noterule-cancel");
       var listEl = document.getElementById("exp-noterule-list");
+      var s = document.getElementById("exp-noterule-subject");
       var f = document.getElementById("exp-noterule-first");
       var l = document.getElementById("exp-noterule-last");
       var test = document.getElementById("exp-noterule-test");
       if (add) add.addEventListener("click", noteRuleSubmit);
       if (cancel) cancel.addEventListener("click", noteRuleResetForm);
-      [f, l].forEach(function (inp) {
+      [s, f, l].forEach(function (inp) {
         if (inp) inp.addEventListener("keydown", function (e) {
           if (e.key === "Enter") { e.preventDefault(); noteRuleSubmit(); }
         });
@@ -1137,11 +1157,12 @@
           var r = loadNoteRules().find(function (x) { return x.id === editId; });
           if (r) {
             editingNoteRuleId = r.id;
+            if (s) s.value = r.subject || "";
             if (f) f.value = r.first || "";
             if (l) l.value = r.last || "";
             if (add) add.textContent = "Save";
             if (cancel) cancel.hidden = false;
-            if (f) f.focus();
+            if (s) s.focus();
           }
         } else if (delId) {
           saveNoteRules(_wfTombstone(loadNoteRulesRaw(), delId));
