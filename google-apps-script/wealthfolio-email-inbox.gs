@@ -28,6 +28,12 @@
 var FUNCTION_URL = "https://<project-ref>.functions.supabase.co/email-inbox";
 var INBOUND_SECRET = "<the INBOUND_EMAIL_SECRET you set on the function>";
 var SOURCE_LABEL = "Expenses";   // Gmail label your transaction emails carry
+// The email the inbox rows are attributed to — MUST equal your WealthFolio login
+// email. Leave "" to use the Google account this script runs under; set it
+// explicitly when the mailbox that receives the alerts is a DIFFERENT account
+// from your WealthFolio login (otherwise every email is skipped as
+// "unknown_sender" and never reaches the Inbox).
+var OWNER_EMAIL = "";
 // ──────────────────────────────────────────────────────────────────────────
 
 var DONE_LABEL = "WF-Filed";     // added after a message is forwarded
@@ -58,7 +64,9 @@ function setup() {
 var LOOKBACK = "newer_than:3d";
 
 function processInbox() {
-  var owner = Session.getActiveUser().getEmail(); // your WealthFolio login email
+  // Attribution email: the explicit OWNER_EMAIL when set (mailbox account differs
+  // from the WealthFolio login), else the account this script runs under.
+  var owner = OWNER_EMAIL || Session.getActiveUser().getEmail();
   var done = GmailApp.getUserLabelByName(DONE_LABEL) || GmailApp.createLabel(DONE_LABEL);
 
   // Recent labelled mail — NOT filtered by the done label (see LOOKBACK above).
