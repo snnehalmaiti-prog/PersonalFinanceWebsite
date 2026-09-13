@@ -50,6 +50,10 @@ import {
 // return "" when there is none (so the caller falls back to a body hash).
 {
   const refCases = [
+    ["UPI Id 129537774173, amount Rs.500", "129537774173"],           // "UPI Id" phrasing
+    ["UPI ID: 129537774173", "129537774173"],
+    ["Your UPI transaction id is 129537774173.", "129537774173"],
+    ["Your UPI ID is name@okhdfc", ""],                               // VPA, not a ref
     ["UPI Ref No 123456789012", "123456789012"],
     ["Your UPI transaction reference number is 525612345678.", "525612345678"],
     ["... towards VPA paytm@x. UPI RRN: 987654321098", "987654321098"],
