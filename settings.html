@@ -437,7 +437,7 @@
           <button type="button" class="exp-nav-item" data-exp-panel="liability">Liability</button>
           <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
           <button type="button" class="exp-nav-item" data-exp-panel="account-map">Account Mapping</button>
-          <button type="button" class="exp-nav-item" data-exp-panel="note-rules">Note Extraction</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="note-rules">Payer Extraction</button>
         </nav>
 
         <!-- Right detail panels -->
@@ -580,14 +580,14 @@
           <!-- Note Extraction -->
           <div class="exp-detail-panel" id="exp-detail-note-rules" hidden>
             <div class="exp-detail-header">
-              <h3>Note Extraction</h3>
+              <h3>Payer Extraction</h3>
             </div>
             <p class="muted small equity-desc">
-              Pull the vendor name out of a transaction alert into the <strong>Note</strong> when you
+              Pull the vendor name out of a transaction alert into the <strong>Payer</strong> field when you
               categorise a pending transaction. Optionally scope a rule to an <strong>email subject</strong>
               (the rule only fires when the alert's subject contains that text — leave blank to apply to
               all). Then enter a <strong>first keyword</strong> and a <strong>last keyword</strong>; the
-              text <em>between</em> them is used as the note. The last keyword can be a word, a full stop
+              text <em>between</em> them is used as the payer. The last keyword can be a word, a full stop
               <code>.</code> or a <code>#</code>. Words match whole-word (so <code>to</code> won't fire
               inside <code>towards</code>). Rules are tried top to bottom; the first that finds text wins.
               <br>Example: subject <code>UPI txn</code>, first <code>towards</code>, last <code>on</code>
@@ -1074,7 +1074,7 @@
       }
       out.hidden = false;
       out.innerHTML = got
-        ? 'Note would be: <strong>' + esc(got) + '</strong>'
+        ? 'Payer would be: <strong>' + esc(got) + '</strong>'
         : 'No rule matched this sample.';
     }
 
