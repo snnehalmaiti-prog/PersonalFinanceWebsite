@@ -4494,6 +4494,50 @@
           return pm ? pm.id : "";
         }
 
+        // Note Extraction rules (Settings → Expense → Note Extraction): pull the
+        // vendor name out of the alert as the text BETWEEN a first keyword and a
+        // last keyword. Banks write the payee after a fixed word ("towards",
+        // "at", "to VPA") and end it with another word or punctuation ("on", ".",
+        // "#"), so a first/last pair isolates it. Rules are tried in order; the
+        // first that yields non-empty text wins. Empty → the note stays blank.
+        function _wfEscapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+        // A keyword is matched whole-word when it is alphanumeric (so "to" does
+        // not fire inside "towards") and literally when it is punctuation ("."/"#").
+        function _wfKeywordRe(kw) {
+          var e = _wfEscapeRe(kw);
+          var b = /^[A-Za-z0-9]/.test(kw) ? "\\b" : "";
+          var a = /[A-Za-z0-9]$/.test(kw) ? "\\b" : "";
+          return new RegExp(b + e + a, "i");
+        }
+        function extractNoteBetween(text, first, last) {
+          if (!text || !first) return "";
+          var fm = _wfKeywordRe(first).exec(text);
+          if (!fm) return "";
+          var rest = text.slice(fm.index + fm[0].length);
+          var out;
+          if (last) {
+            var lm = _wfKeywordRe(last).exec(rest);
+            // Last keyword present → take up to it; absent → up to end of the line
+            // so a stray missing delimiter still yields the payee, not the whole body.
+            out = lm ? rest.slice(0, lm.index) : rest.split(/\r?\n/)[0];
+          } else {
+            out = rest.split(/\r?\n/)[0];
+          }
+          return out.replace(/\s+/g, " ").trim();
+        }
+        function extractNoteFromRules(text) {
+          var rules;
+          try { rules = JSON.parse(localStorage.getItem("wf-note-rules")) || []; }
+          catch (e) { return ""; }
+          for (var i = 0; i < rules.length; i++) {
+            var r = rules[i];
+            if (!r || r._deleted || !r.first) continue;
+            var v = extractNoteBetween(text, r.first, r.last || "");
+            if (v) return v.slice(0, 200);
+          }
+          return "";
+        }
+
         // Categorise → open the record modal prefilled from the parsed email.
         function categorise(id) {
           var it = find(id);
@@ -4518,12 +4562,17 @@
           // instead of the first account / a blank payment method.
           var mappedAccountId = mapSourceToAccountId(it.source_account);
           var mappedPaymentMethodId = mapSourceToPaymentMethodId(it.source_account);
+          // Vendor name pulled from the alert per the Note Extraction rules
+          // (Settings → Expense). Searches subject + body; blank when no rule
+          // matches, so the note is empty rather than carrying the source tag.
+          var extractedNote = extractNoteFromRules(
+            (it.subject || "") + "\n" + (it.body_snippet || ""));
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
             txn_date: it.txn_date || dateFromEmail || today,
             txn_at: emailAt || null,
-            note: "",
+            note: extractedNote,
             account_id: mappedAccountId || (dashExpState.accounts[0] || {}).id || "",
             category_id: "",
             subcategory_id: "",
