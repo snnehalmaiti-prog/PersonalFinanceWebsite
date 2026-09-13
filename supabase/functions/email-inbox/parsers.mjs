@@ -86,6 +86,34 @@ export function cleanBody(s) {
     .trim();
 }
 
+// The UPI / bank transaction reference number, when the alert states one.
+// Indian UPI alerts carry a unique reference — "UPI Ref No 123456789012",
+// "UPI transaction reference number is 123…", "RRN: 123…", "Txn ID 123…". Two
+// emails about the SAME payment share this number, so it is the strongest dedupe
+// signal: keyed with the amount it collapses duplicate alerts for one payment
+// while still telling genuinely different payments apart. Returns "" when the
+// alert states no reference (then the caller falls back to a whole-body hash).
+export function parseUpiRef(text) {
+  if (!text) return "";
+  const pats = [
+    // "UPI Ref No 123…", "UPI transaction reference number is 123…", "UPI RRN 123…"
+    /\bupi\s*(?:transaction\s*)?(?:ref(?:erence)?|rrn)\s*(?:no\.?|number|id|#)?\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
+    // "RRN 123…" / "RRN: 123…"
+    /\brrn\s*(?:no\.?|number|#)?\s*(?:is|[:=.#-])?\s*([0-9]{6,25})\b/i,
+    // "Transaction ID 123…", "Txn Ref No 123…", "transaction reference 123…"
+    /\b(?:transaction|txn)\s*(?:ref(?:erence)?\s*(?:no\.?|number)?|id|no\.?|number)\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
+    // Generic "Reference No 123…" / "Ref #123…"
+    /\bref(?:erence)?\s*(?:no\.?|number|#)\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
+  ];
+  for (const p of pats) {
+    const m = text.match(p);
+    // Require at least one digit: references are numeric-ish, so this rejects a
+    // stray word ("reference number below") being read as the id.
+    if (m && m[1] && /[0-9]/.test(m[1])) return m[1].toUpperCase();
+  }
+  return "";
+}
+
 // Credited / received → income; otherwise expense.
 export function guessType(text) {
   return /\b(credited|received|refund|deposit|salary|cashback)\b/i.test(text || "")
