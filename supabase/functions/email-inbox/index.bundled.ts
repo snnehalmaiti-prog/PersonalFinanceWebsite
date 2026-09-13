@@ -16,6 +16,17 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+// SHA-256 hex of a string. Folds the WHOLE cleaned body into the dedupe key at a
+// fixed length (btree-index-safe), so two genuinely different alerts — same
+// amount and date but a different reference number / time / payee deeper in the
+// body — no longer collide on the first 200 characters and silently drop the
+// second. Identical re-posts still hash the same, so repeats stay deduped.
+async function sha256Hex(s: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function extractEmail(raw: string): string {
   if (!raw) return "";
   const m = raw.match(/<([^>]+)>/) || raw.match(/[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/);
@@ -165,6 +176,9 @@ Deno.serve(async (req) => {
   // tracking URLs carry stray numbers that otherwise get picked up as the amount.
   const cleaned = cleanBody(email.text || "");
   const blob = `${email.subject}\n${cleaned}`;
+  // Whole-body signature, so distinct transactions that share an amount and date
+  // are still told apart by anything further down the alert.
+  const bodyHash = await sha256Hex(blob);
   const row = {
     user_id: userId,
     from_email: fromAddr,
@@ -177,8 +191,9 @@ Deno.serve(async (req) => {
     source_account: parseSource(blob),
     status: "pending",
     // Signature of this alert — a re-post of the identical email produces the
-    // same key and is ignored by the unique (user_id, dedupe_key) index.
-    dedupe_key: `${parseAmount(blob) ?? ""}|${parseDate(blob) ?? ""}|${cleaned.slice(0, 200)}`,
+    // same key and is ignored by the unique (user_id, dedupe_key) index. The
+    // amount|date prefix keeps the key legible; the hash makes it whole-body.
+    dedupe_key: `${parseAmount(blob) ?? ""}|${parseDate(blob) ?? ""}|${bodyHash}`,
   };
 
   const { error } = await admin.from("expense_email_inbox")
