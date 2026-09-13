@@ -4525,13 +4525,18 @@
           }
           return out.replace(/\s+/g, " ").trim();
         }
-        function extractNoteFromRules(text) {
+        function extractNoteFromRules(subject, body) {
           var rules;
           try { rules = JSON.parse(localStorage.getItem("wf-note-rules")) || []; }
           catch (e) { return ""; }
+          var subj = String(subject || "");
+          var text = subj + "\n" + String(body || "");
           for (var i = 0; i < rules.length; i++) {
             var r = rules[i];
             if (!r || r._deleted || !r.first) continue;
+            // A rule scoped to a subject only fires when the alert's subject
+            // contains it (case-insensitive). An empty subject applies to all.
+            if (r.subject && subj.toLowerCase().indexOf(String(r.subject).toLowerCase()) === -1) continue;
             var v = extractNoteBetween(text, r.first, r.last || "");
             if (v) return v.slice(0, 200);
           }
@@ -4565,8 +4570,7 @@
           // Vendor name pulled from the alert per the Note Extraction rules
           // (Settings → Expense). Searches subject + body; blank when no rule
           // matches, so the note is empty rather than carrying the source tag.
-          var extractedNote = extractNoteFromRules(
-            (it.subject || "") + "\n" + (it.body_snippet || ""));
+          var extractedNote = extractNoteFromRules(it.subject || "", it.body_snippet || "");
           var prefill = {
             type: it.suggested_type === "income" ? "income" : "expense",
             amount: it.amount != null ? it.amount : "",
