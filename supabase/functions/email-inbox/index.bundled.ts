@@ -74,6 +74,8 @@ function parseSource(text: string): string {
 function parseUpiRef(text: string): string {
   if (!text) return "";
   const pats = [
+    // "UPI Id 129537774173" (digits only, so a VPA is not read as a reference)
+    /\bupi\s*(?:transaction\s*)?id\s*(?:no\.?|number|is|[:=.#-])?\s*([0-9]{6,25})\b/i,
     /\bupi\s*(?:transaction\s*)?(?:ref(?:erence)?|rrn)\s*(?:no\.?|number|id|#)?\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
     /\brrn\s*(?:no\.?|number|#)?\s*(?:is|[:=.#-])?\s*([0-9]{6,25})\b/i,
     /\b(?:transaction|txn)\s*(?:ref(?:erence)?\s*(?:no\.?|number)?|id|no\.?|number)\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,

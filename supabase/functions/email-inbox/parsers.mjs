@@ -96,6 +96,9 @@ export function cleanBody(s) {
 export function parseUpiRef(text) {
   if (!text) return "";
   const pats = [
+    // "UPI Id 129537774173", "UPI transaction id 123…", "UPI ID: 123…". Digits
+    // only, so a VPA ("UPI ID name@okhdfc") is NOT mistaken for a reference.
+    /\bupi\s*(?:transaction\s*)?id\s*(?:no\.?|number|is|[:=.#-])?\s*([0-9]{6,25})\b/i,
     // "UPI Ref No 123…", "UPI transaction reference number is 123…", "UPI RRN 123…"
     /\bupi\s*(?:transaction\s*)?(?:ref(?:erence)?|rrn)\s*(?:no\.?|number|id|#)?\s*(?:is|[:=.#-])?\s*([A-Za-z0-9]{6,25})\b/i,
     // "RRN 123…" / "RRN: 123…"
