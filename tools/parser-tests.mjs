@@ -54,6 +54,7 @@ import {
     ["UPI ID: 129537774173", "129537774173"],
     ["Your UPI transaction id is 129537774173.", "129537774173"],
     ["Your UPI ID is name@okhdfc", ""],                               // VPA, not a ref
+    ["Rs.500.00 debited. UPI transaction reference no.: 129537774173", "129537774173"],
     ["UPI Ref No 123456789012", "123456789012"],
     ["Your UPI transaction reference number is 525612345678.", "525612345678"],
     ["... towards VPA paytm@x. UPI RRN: 987654321098", "987654321098"],
