@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   liabilities jsonb,
   epf_interest_rates jsonb,
   account_map jsonb,
+  note_rules jsonb,
   updated_at timestamptz DEFAULT now()
 );
 
@@ -36,6 +37,10 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS liabilities jsonb;
 -- account when categorising an email-inbox pending transaction. Sync is resilient
 -- (client drops the column and retries if missing), so this only enables sync.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS account_map jsonb;
+-- Note Extraction tab: {first,last} keyword rules that pull the vendor name from
+-- an email alert into the Note when categorising. Sync is resilient (client drops
+-- the column and retries if missing), so this only enables cross-device sync.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS note_rules jsonb;
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 

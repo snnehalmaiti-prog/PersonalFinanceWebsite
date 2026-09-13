@@ -437,6 +437,7 @@
           <button type="button" class="exp-nav-item" data-exp-panel="liability">Liability</button>
           <button type="button" class="exp-nav-item" data-exp-panel="import">Bulk import</button>
           <button type="button" class="exp-nav-item" data-exp-panel="account-map">Account Mapping</button>
+          <button type="button" class="exp-nav-item" data-exp-panel="note-rules">Note Extraction</button>
         </nav>
 
         <!-- Right detail panels -->
@@ -574,6 +575,39 @@
             <p class="muted small" id="exp-acctmap-error" style="color:#EF4444;" hidden></p>
             <p class="muted small" id="exp-acctmap-status">No mappings yet.</p>
             <div id="exp-acctmap-list" class="exp-list"></div>
+          </div>
+
+          <!-- Note Extraction -->
+          <div class="exp-detail-panel" id="exp-detail-note-rules" hidden>
+            <div class="exp-detail-header">
+              <h3>Note Extraction</h3>
+            </div>
+            <p class="muted small equity-desc">
+              Pull the vendor name out of a transaction alert into the <strong>Note</strong> when you
+              categorise a pending transaction. Enter a <strong>first keyword</strong> and a
+              <strong>last keyword</strong>; the text <em>between</em> them is used as the note.
+              The last keyword can be a word, a full stop <code>.</code> or a <code>#</code>.
+              Words match whole-word (so <code>to</code> won't fire inside <code>towards</code>).
+              Rules are tried top to bottom; the first that finds text wins.
+              <br>Example: for “…towards <strong>PIZZA HUT</strong> on 05 Aug…”, use first
+              <code>towards</code> and last <code>on</code>.
+            </p>
+            <div class="exp-acctmap-form">
+              <input type="text" id="exp-noterule-first" placeholder="First keyword (e.g. towards)"
+                     aria-label="First keyword" class="exp-acctmap-name" />
+              <input type="text" id="exp-noterule-last" placeholder="Last keyword (e.g. on, . or #)"
+                     aria-label="Last keyword" class="exp-acctmap-digits" style="width:auto;min-width:120px;" />
+              <button type="button" class="btn btn-primary btn-sm" id="exp-noterule-add">Add</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="exp-noterule-cancel" hidden>Cancel</button>
+            </div>
+            <div class="exp-acctmap-form" style="margin-top:8px;">
+              <input type="text" id="exp-noterule-test" placeholder="Paste a sample alert to preview the extracted note (optional)"
+                     aria-label="Sample alert" class="exp-acctmap-name" style="flex:1;" />
+            </div>
+            <p class="muted small" id="exp-noterule-preview" hidden></p>
+            <p class="muted small" id="exp-noterule-error" style="color:#EF4444;" hidden></p>
+            <p class="muted small" id="exp-noterule-status">No rules yet.</p>
+            <div id="exp-noterule-list" class="exp-list"></div>
           </div>
 
         </div><!-- /.exp-right-panel -->
@@ -777,6 +811,13 @@
               renderAccountMap();
             }
           }
+          if (panel === "note-rules") {
+            if (window.WfAuth && WfAuth.isLoggedIn()) {
+              WfAuth.loadSettingsFromCloud().catch(function () {}).then(function () { renderNoteRules(); });
+            } else {
+              renderNoteRules();
+            }
+          }
         });
       });
     })();
@@ -952,6 +993,160 @@
           saveAcctMap(_wfTombstone(loadAcctMapRaw(), delId));
           if (editingAcctMapId === delId) acctMapResetForm();
           renderAccountMap();
+        }
+      });
+    })();
+
+    // ── Note Extraction (vendor between a first & last keyword) ────────────────
+    // A synced list like Account Mapping. The dashboard's categorise flow reads
+    // wf-note-rules and, for each rule in order, extracts the text between the
+    // first and last keyword from the alert and pre-fills it as the Note.
+    var NOTE_RULE_KEY = "wf-note-rules";
+    var editingNoteRuleId = null;
+    function loadNoteRulesRaw() { return _wfLoadListRaw(NOTE_RULE_KEY); }
+    function loadNoteRules() { return loadNoteRulesRaw().filter(function (r) { return r && !r._deleted; }); }
+    function saveNoteRules(list) { return _wfPersistList(NOTE_RULE_KEY, list); }
+
+    // Extraction — MUST mirror dashboard.html's extractNoteBetween so the preview
+    // here matches what categorise() will fill.
+    function _nrEscapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+    function _nrKeywordRe(kw) {
+      var e = _nrEscapeRe(kw);
+      var b = /^[A-Za-z0-9]/.test(kw) ? "\\b" : "";
+      var a = /[A-Za-z0-9]$/.test(kw) ? "\\b" : "";
+      return new RegExp(b + e + a, "i");
+    }
+    function nrExtractBetween(text, first, last) {
+      if (!text || !first) return "";
+      var fm = _nrKeywordRe(first).exec(text);
+      if (!fm) return "";
+      var rest = text.slice(fm.index + fm[0].length);
+      var out;
+      if (last) {
+        var lm = _nrKeywordRe(last).exec(rest);
+        out = lm ? rest.slice(0, lm.index) : rest.split(/\r?\n/)[0];
+      } else {
+        out = rest.split(/\r?\n/)[0];
+      }
+      return out.replace(/\s+/g, " ").trim();
+    }
+
+    function noteRuleResetForm() {
+      editingNoteRuleId = null;
+      var f = document.getElementById("exp-noterule-first");
+      var l = document.getElementById("exp-noterule-last");
+      var add = document.getElementById("exp-noterule-add");
+      var cancel = document.getElementById("exp-noterule-cancel");
+      var err = document.getElementById("exp-noterule-error");
+      if (f) f.value = ""; if (l) l.value = "";
+      if (add) add.textContent = "Add";
+      if (cancel) cancel.hidden = true;
+      if (err) err.hidden = true;
+    }
+
+    function renderNoteRulePreview() {
+      var esc = window.WfEsc;
+      var sampleEl = document.getElementById("exp-noterule-test");
+      var out = document.getElementById("exp-noterule-preview");
+      if (!out) return;
+      var sample = sampleEl && sampleEl.value ? sampleEl.value : "";
+      if (!sample.trim()) { out.hidden = true; return; }
+      var rules = loadNoteRules();
+      var got = "";
+      for (var i = 0; i < rules.length; i++) {
+        got = nrExtractBetween(sample, rules[i].first, rules[i].last || "");
+        if (got) break;
+      }
+      out.hidden = false;
+      out.innerHTML = got
+        ? 'Note would be: <strong>' + esc(got) + '</strong>'
+        : 'No rule matched this sample.';
+    }
+
+    function renderNoteRules() {
+      var esc = window.WfEsc;
+      var list = document.getElementById("exp-noterule-list");
+      var status = document.getElementById("exp-noterule-status");
+      if (!list) return;
+      var rows = loadNoteRules();
+      if (status) status.textContent = rows.length
+        ? (rows.length + (rows.length === 1 ? " rule" : " rules") + " · tried top to bottom")
+        : "No rules yet.";
+      list.innerHTML = '<div class="wf-card-grid">' + rows.map(function (r) {
+        return '<div class="wf-item-card">' +
+          '<div class="wf-item-card-head">' +
+            '<div class="wf-item-badge" style="background:var(--surface-alt);color:var(--text);font-size:16px;">✂️</div>' +
+            '<div class="wf-item-title-wrap">' +
+              '<div class="wf-item-title">' + esc(r.first || "") + ' … ' + esc(r.last || "(end of line)") + '</div>' +
+              '<div class="wf-item-sub"><span>Text between “' + esc(r.first || "") + '” and “' + esc(r.last || "end of line") + '”</span></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="wf-item-actions">' +
+            '<button type="button" class="wf-icon-btn" data-noterule-edit="' + esc(r.id) + '" title="Edit">✎ Edit</button>' +
+            '<button type="button" class="wf-icon-btn wf-icon-btn-danger" data-noterule-del="' + esc(r.id) + '" title="Delete">🗑 Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("") + '</div>';
+      renderNoteRulePreview();
+    }
+
+    function noteRuleSubmit() {
+      var f = document.getElementById("exp-noterule-first");
+      var l = document.getElementById("exp-noterule-last");
+      var err = document.getElementById("exp-noterule-error");
+      var first = (f && f.value || "").trim();
+      var last = (l && l.value || "").trim();
+      function fail(msg) { if (err) { err.textContent = msg; err.hidden = false; } }
+      if (!first) return fail("Enter the first keyword.");
+      var raw = loadNoteRulesRaw();
+      if (editingNoteRuleId) {
+        raw = raw.map(function (r) {
+          return r.id === editingNoteRuleId
+            ? { id: r.id, first: first, last: last, updated_at: Date.now() } : r;
+        });
+      } else {
+        raw.push({
+          id: "nr-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+          first: first, last: last, updated_at: Date.now()
+        });
+      }
+      saveNoteRules(raw);
+      noteRuleResetForm();
+      renderNoteRules();
+    }
+
+    (function initNoteRules() {
+      var add = document.getElementById("exp-noterule-add");
+      var cancel = document.getElementById("exp-noterule-cancel");
+      var listEl = document.getElementById("exp-noterule-list");
+      var f = document.getElementById("exp-noterule-first");
+      var l = document.getElementById("exp-noterule-last");
+      var test = document.getElementById("exp-noterule-test");
+      if (add) add.addEventListener("click", noteRuleSubmit);
+      if (cancel) cancel.addEventListener("click", noteRuleResetForm);
+      [f, l].forEach(function (inp) {
+        if (inp) inp.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") { e.preventDefault(); noteRuleSubmit(); }
+        });
+      });
+      if (test) test.addEventListener("input", renderNoteRulePreview);
+      if (listEl) listEl.addEventListener("click", function (e) {
+        var editId = e.target.getAttribute && e.target.getAttribute("data-noterule-edit");
+        var delId = e.target.getAttribute && e.target.getAttribute("data-noterule-del");
+        if (editId) {
+          var r = loadNoteRules().find(function (x) { return x.id === editId; });
+          if (r) {
+            editingNoteRuleId = r.id;
+            if (f) f.value = r.first || "";
+            if (l) l.value = r.last || "";
+            if (add) add.textContent = "Save";
+            if (cancel) cancel.hidden = false;
+            if (f) f.focus();
+          }
+        } else if (delId) {
+          saveNoteRules(_wfTombstone(loadNoteRulesRaw(), delId));
+          if (editingNoteRuleId === delId) noteRuleResetForm();
+          renderNoteRules();
         }
       });
     })();
