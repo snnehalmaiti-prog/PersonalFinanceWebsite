@@ -57,7 +57,7 @@ def load_tickers_from_mapping():
         identifier = col(identifier_idx)
         if not name or not region:
             continue
-        if region == "US":
+        if region.strip().lower() == "us":
             price_key = identifier or name
             yf_ticker = price_key
             currency  = "USD"

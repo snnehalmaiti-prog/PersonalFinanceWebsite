@@ -727,6 +727,16 @@
     return out;
   }
 
+  // Region predicates. The mapping sheet stores "US" / "India", but region values
+  // flow in from a user-synced sheet, so every comparison goes through these
+  // helpers (case- and whitespace-insensitive) instead of a raw `=== "US"`. This
+  // keeps the case-sensitive and normalized checks that used to be mixed across
+  // the valuation/display code from disagreeing on the same holding (which would
+  // half-convert a "us"/"Us" row: converted in the summary buckets, un-converted
+  // in the per-row LTP/current/P&L). "US" is the only non-India region handled;
+  // everything else is treated as India, matching the price fetcher's polarity.
+  function isUsRegion(region) { return normalizeText(region) === "us"; }
+
   // Resolve the app's standard sheet column positions from a NORMALIZED header row
   // (i.e. rows[0].map(normalizeText)). Replaces the 4-6 line "var xIdx =
   // header.indexOf(...)" preamble that was copy-pasted across dozens of functions —
@@ -4217,7 +4227,7 @@
       map[normalizeText(name)] = {
         ticker:   identifier || name,
         region:   region,
-        exchange: region === "India" ? "NSE" : null,
+        exchange: isUsRegion(region) ? null : "NSE",
         segment:  segmentIdx  !== -1 ? (row[segmentIdx]  || "").trim() : "",
         subCat:   subCatIdx   !== -1 ? (row[subCatIdx]   || "").trim() : "",
         category: categoryIdx !== -1 ? (row[categoryIdx] || "").trim() : "",
@@ -4412,7 +4422,7 @@
         var investedNative = 0; // native currency (USD for US, INR for India)
         h.lots.forEach(function (lot) {
           investedNative += lot.units * lot.price;
-          if (h.region === "US") {
+          if (isUsRegion(h.region)) {
             var dateStr = formatDateISO(lot.date);
             var rate = lookupUsdInrRate(usdRateMap, dateStr, usdInrToday);
             investedINR += lot.units * lot.price * rate;
@@ -5444,7 +5454,7 @@
             var hist = stockHistory[ticker];
             var price = hist ? lastPriceOnOrBefore(hist.prices, dateStr) : null;
             if (!price) return;
-            var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+            var isUsd = isUsRegion(entry.region) || (hist && hist.currency === "USD");
             var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
             // Recorded even at zero units: the sale that closes a position is the
             // flow that most needs pricing.
@@ -5669,7 +5679,7 @@
         Object.keys(seUnitEventsByTicker).forEach(function (ticker) {
           var entry = seUnitEventsByTicker[ticker];
           var hist = stockHistory[ticker];
-          var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+          var isUsd = isUsRegion(entry.region) || (hist && hist.currency === "USD");
           var unitsAtCutoff = lastAtOrBefore(entry.events, targetDate, "cumulativeUnits") || 0;
           var unitsToday = lastAtOrBefore(entry.events, today, "cumulativeUnits") || 0;
           var cur = allPrices[ticker];
@@ -5807,7 +5817,7 @@
             // Only actual historical prices — today's LTP as a proxy would distort rolling CAGRs
             var price = hist ? lookupIndexPrice(hist.prices, dateStr) : null;
             if (!price) return;
-            var isUsd = entry.region === "US" || (hist && hist.currency === "USD");
+            var isUsd = isUsRegion(entry.region) || (hist && hist.currency === "USD");
             var priceInr = isUsd ? price * (usdInrHistMap[dateStr] || usdInrToday) : price;
             priceOf["se|" + normalizeText(entry.instrument || "")] = priceInr;
             if (units > UNITS_EPSILON) total += units * priceInr;
@@ -6715,14 +6725,14 @@
           var investedForDisplay = h.investedINR;
           var avgCostForDisplay = h.avgCostINR;
           // Native-currency (USD) figures for US rows — shown under the INR values.
-          var isUs = h.region === "US";
+          var isUs = isUsRegion(h.region);
           var investedUSD = isUs ? (h.investedNative || 0) : null;
           var currentUSD = null;
           var ltpUSD = null;
           var avgCostUSD = (isUs && h.units > UNITS_EPSILON) ? (h.investedNative || 0) / h.units : null; // native USD avg cost
           if (isClosed) {
             var detail = computeInstrumentRealizedDetail(h.txns || []);
-            if (h.region === "US") {
+            if (isUsRegion(h.region)) {
               var sellDateStr = detail.lastSellDate ? formatDateISO(detail.lastSellDate) : null;
               var sellRate = (sellDateStr && usdInrHistMap[sellDateStr]) ? usdInrHistMap[sellDateStr] : usdInrToday;
               ltpINR = detail.lastSellPrice * sellRate;
@@ -6742,13 +6752,13 @@
             pnl = currentINR - investedForDisplay;
             pnlPct = investedForDisplay > 0 ? (pnl / investedForDisplay) * 100 : null;
           } else if (eodRaw !== null) {
-            ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
+            ltpINR = isUsRegion(h.region) ? eodRaw * usdInrToday : eodRaw;
             currentINR = h.units * ltpINR;
             if (isUs) { currentUSD = h.units * eodRaw; ltpUSD = eodRaw; } // native USD current + LTP
             pnl = currentINR - h.investedINR;
             pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
             if (prevRaw !== null) {
-              var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
+              var prevINR = isUsRegion(h.region) ? prevRaw * usdInrToday : prevRaw;
               dayChangeINR = (ltpINR - prevINR) * h.units;
             }
           }
@@ -6761,7 +6771,7 @@
           // and US lists showed a dash on every row: the figure was computed in
           // the other builder, but these lists are fed by this one.
           var xirrFlows = [];
-          if (h.region === "US") {
+          if (isUsRegion(h.region)) {
             (h.txns || []).forEach(function (txn) {
               if (!txn.date || !txn.units || !txn.price) return;
               var rateForDate = usdInrHistMap[formatDateISO(txn.date)] || usdInrToday;
@@ -7109,7 +7119,7 @@
       byPort[p].invested += h.investedINR || 0;
       byPort[p].current += h.currentINR || 0;
       byPort[p].day += h.dayChangeINR || 0;
-      if (h.region === "US") byPort[p].us += h.currentINR || 0;
+      if (isUsRegion(h.region)) byPort[p].us += h.currentINR || 0;
       else byPort[p].india += h.currentINR || 0;
     });
     var names = Object.keys(byPort).sort(function (a, b) { return byPort[b].current - byPort[a].current; });
@@ -7172,7 +7182,7 @@
     if (!listEl) return;
     var india = 0, us = 0, iCount = 0, uCount = 0;
     rowsData.forEach(function (h) {
-      if (h.region === "US") { us += h.currentINR || 0; uCount++; }
+      if (isUsRegion(h.region)) { us += h.currentINR || 0; uCount++; }
       else { india += h.currentINR || 0; iCount++; }
     });
     var total = india + us;
@@ -7464,7 +7474,7 @@
     // so "are there any closed positions" is answered for what the user is actually
     // looking at, and changing the portfolio pill updates the Closed segment.
     var inScope = rowsData.filter(function (h) {
-      var isUS = h.region === "US";
+      var isUS = isUsRegion(h.region);
       if (region === "us" && !isUS) return false;
       if (region === "india" && isUS) return false;
       if (regionPortfolio && regionPortfolio !== "all") {
@@ -14060,8 +14070,8 @@
         }
       });
       buyQueue.forEach(function (lot) {
-        lotsByRegion[region === "US" ? "US" : "India"].push(lot);
-        syncOut[region === "US" ? "US" : "India"] += lot.units * lot.price;
+        lotsByRegion[isUsRegion(region) ? "US" : "India"].push(lot);
+        syncOut[isUsRegion(region) ? "US" : "India"] += lot.units * lot.price;
       });
     });
     var promise = fetchAllStockPrices()
@@ -14758,7 +14768,7 @@
                 var units = 0; fifoRemainingLots(tx[nm]).forEach(function (l) { units += l.units; });
                 var pe = prices[m.ticker]; var ltp = pe ? pe.price : null;
                 if (ltp == null || units < UNITS_EPSILON) return;
-                var val = units * ltp; if (m.region === "US") val *= usdInrToday;
+                var val = units * ltp; if (isUsRegion(m.region)) val *= usdInrToday;
                 commCurrentByP[p] = (commCurrentByP[p] || 0) + val;
                 running.v += val;
               });
@@ -18569,7 +18579,7 @@
       buildStockHoldings(rows, mappingTable, ovPortfolio, false)
     ]).then(function (results) {
       var indiaHoldings = results[0].filter(function(h) { return h.region !== "US"; });
-      var usHoldings = results[1].filter(function(h) { return h.region === "US"; });
+      var usHoldings = results[1].filter(function(h) { return isUsRegion(h.region); });
       var holdings = indiaHoldings.concat(usHoldings);
       var openHoldings = results[2];
       // Overview-portfolio-filtered open positions — drives _ov.se* only.
@@ -18669,7 +18679,7 @@
           var ltpINR = null, currentINR = null, dayChangeINR = null, pnl = null, pnlPct = null;
           var investedForDisplay = h.investedINR;
           var avgCostForDisplay = h.avgCostINR;
-          var isUsRow = h.region === "US";
+          var isUsRow = isUsRegion(h.region);
           var investedUSD = isUsRow ? (h.investedNative || 0) : null; // native USD
           var currentUSD = null;
           var ltpUSD = null;
@@ -18678,7 +18688,7 @@
           if (isClosed) {
             // Mirrors MF closed position behaviour: show realized figures
             var detail = computeInstrumentRealizedDetail(h.txns || []);
-            if (h.region === "US") {
+            if (isUsRegion(h.region)) {
               var sellDateStr = detail.lastSellDate ? formatDateISO(detail.lastSellDate) : null;
               var sellRate = (sellDateStr && usdInrHistMap[sellDateStr]) ? usdInrHistMap[sellDateStr] : usdInrToday;
               ltpINR = detail.lastSellPrice * sellRate;
@@ -18699,7 +18709,7 @@
             pnlPct = investedForDisplay > 0 ? (pnl / investedForDisplay) * 100 : null;
           } else {
             if (eodRaw !== null) {
-              if (h.region === "US") {
+              if (isUsRegion(h.region)) {
                 ltpINR = eodRaw * usdInrToday;
               } else {
                 ltpINR = eodRaw;
@@ -18710,7 +18720,7 @@
               pnlPct = h.investedINR > 0 ? (pnl / h.investedINR) * 100 : null;
 
               if (prevRaw !== null) {
-                var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
+                var prevINR = isUsRegion(h.region) ? prevRaw * usdInrToday : prevRaw;
                 dayChangeINR = (ltpINR - prevINR) * h.units;
               }
             }
@@ -18718,7 +18728,7 @@
 
           // XIRR cash flows in INR (no current value added for closed positions)
           var xirrFlows = [];
-          if (h.region === "US") {
+          if (isUsRegion(h.region)) {
             (h.txns || []).forEach(function (txn) {
               if (!txn.date || !txn.units || !txn.price) return;
               var dateStr = formatDateISO(txn.date);
@@ -18793,11 +18803,11 @@
               else totalCurrentINR += h.investedINR;
               return;
             }
-            var ltpINR = h.region === "US" ? eodRaw * usdInrToday : eodRaw;
+            var ltpINR = isUsRegion(h.region) ? eodRaw * usdInrToday : eodRaw;
             var cur = h.units * ltpINR;
             var dayC = 0;
             if (prevRaw !== null) {
-              var prevINR = h.region === "US" ? prevRaw * usdInrToday : prevRaw;
+              var prevINR = isUsRegion(h.region) ? prevRaw * usdInrToday : prevRaw;
               dayC = (ltpINR - prevINR) * h.units;
             }
             if (_isDbt) {
@@ -18828,7 +18838,7 @@
           }, "renderStockEtfHoldingsTable:commodity", ovPortfolio);
 
           var indiaRowsData = rowsData.filter(function(r) { return r.region !== "US"; });
-          var usRowsData = rowsData.filter(function(r) { return r.region === "US"; });
+          var usRowsData = rowsData.filter(function(r) { return isUsRegion(r.region); });
 
           if (indiaHoldings.length) {
             renderSeHoldingsRows(indiaTbody, indiaRowsData);
